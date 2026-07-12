@@ -95,7 +95,7 @@ The following concepts belong to the CasaStudio domain:
 - Staircase;
 - Viewpoint;
 - BaseImage;
-- DesignPrompt;
+- DesignBrief;
 - RenderRequest;
 - RenderResult.
 
@@ -166,13 +166,13 @@ The Design Rendering Model describes AI-assisted design generation and its outpu
 
 It contains:
 
-- DesignPrompt;
+- DesignBrief;
 - RenderRequest;
 - RenderResult.
 
-A DesignPrompt expresses the user intent for a design exploration.
+A DesignBrief expresses the user intent for a design exploration.
 
-A RenderRequest records an attempt to generate a design image from a BaseImage and a DesignPrompt.
+A RenderRequest records an attempt to generate a design image from a BaseImage and a DesignBrief.
 
 A RenderResult records the generated artifact and associated result metadata.
 
@@ -359,6 +359,7 @@ This model is preferred because:
 For a mezzanine modeled as an elevated Room, a Staircase may connect the parent Level to itself through optional Room references when the vertical transition occurs inside the same Level. In that case, `fromLevelId` and `toLevelId` may identify the same Level, while `fromRoomId` and `toRoomId` identify the functional start and destination Rooms.
 
 A Staircase must preserve enough conceptual information for the Geometry Engine to reconstruct its derived geometry, including vertical direction, approximate footprint, and connection intent. Detailed flights, landings, step geometry, and generated meshes remain geometry concerns unless they become required domain concepts later.
+The Project Model may persist architectural staircase layout information, such as StairFlights and StairLandings, when that information represents real architectural measurements. The Geometry Engine derives renderable meshes, individual steps, risers, treads, and other geometric primitives from that persisted layout. Therefore, StairFlights and StairLandings belong to the Project Model as architectural input, while generated geometry remains outside the Core Domain.
 
 ### Viewpoint
 
@@ -402,11 +403,11 @@ A BaseImage is used as the visual reference for a RenderRequest.
 
 A BaseImage must not modify the Building model. It captures a visual state of the project at a moment in time. It may become historically important if the Building model changes later, because it documents what the RenderRequest used as its visual input.
 
-### DesignPrompt
+### DesignBrief
 
-`DesignPrompt` represents the design intent supplied by a user or future structured design tool.
+`DesignBrief` represents the design intent supplied by a user or future structured design tool.
 
-A DesignPrompt may include:
+A DesignBrief may include:
 
 - free-form prompt text;
 - style intent;
@@ -415,11 +416,11 @@ A DesignPrompt may include:
 - optional notes;
 - future structured design parameters.
 
-A DesignPrompt is provider-independent.
+A DesignBrief is provider-independent.
 
 It must not contain provider-specific payloads, SDK objects, or implementation details.
 
-A DesignPrompt expresses what the user wants to explore. It does not describe the physical truth of the Building.
+A DesignBrief expresses what the user wants to explore. It does not describe the physical truth of the Building.
 
 ### RenderRequest
 
@@ -432,7 +433,7 @@ A RenderRequest is derived from:
 - one Project;
 - one Viewpoint;
 - one BaseImage;
-- one DesignPrompt;
+- one DesignBrief;
 - generation parameters;
 - provider selection metadata when relevant.
 
@@ -464,7 +465,7 @@ A RenderResult is a derived visual interpretation.
 
 It does not modify the Building model, Room geometry, Wall definitions, Opening placement, or Staircase relationships.
 
-The render gallery and decision timeline are organized around RenderResults and their relationship to RenderRequests, Viewpoints, BaseImages, and DesignPrompts.
+The render gallery and decision timeline are organized around RenderResults and their relationship to RenderRequests, Viewpoints, BaseImages, and DesignBriefs.
 
 ## 6. Relationships
 
@@ -493,7 +494,7 @@ Project
 └── RenderRequest[]
     ├── Viewpoint reference
     ├── BaseImage reference
-    ├── DesignPrompt
+    ├── DesignBrief
     └── RenderResult[]
 ```
 
@@ -533,11 +534,11 @@ Viewpoint -> optional Room
 
 BaseImage -> Viewpoint
 
-DesignPrompt -> RenderRequest
+DesignBrief -> RenderRequest
 
 RenderRequest -> Viewpoint
 RenderRequest -> BaseImage
-RenderRequest -> DesignPrompt
+RenderRequest -> DesignBrief
 RenderRequest -> RenderResult[]
 
 RenderResult -> RenderRequest
@@ -642,19 +643,19 @@ Bidirectional navigation may be useful in derived models, but the conceptual dom
 - A BaseImage does not modify the Physical Building Model.
 - A BaseImage should preserve enough metadata to understand which Project state and Viewpoint produced it.
 
-### DesignPrompt invariants
+### DesignBrief invariants
 
-- A DesignPrompt expresses design intent.
-- A DesignPrompt is provider-independent.
-- A DesignPrompt must not contain provider SDK objects or provider-specific request payloads.
-- A DesignPrompt does not modify the Physical Building Model.
+- A DesignBrief expresses design intent.
+- A DesignBrief is provider-independent.
+- A DesignBrief must not contain provider SDK objects or provider-specific request payloads.
+- A DesignBrief does not modify the Physical Building Model.
 
 ### RenderRequest invariants
 
 - A RenderRequest is a generation request.
 - A RenderRequest references exactly one Viewpoint.
 - A RenderRequest references exactly one BaseImage.
-- A RenderRequest uses exactly one DesignPrompt.
+- A RenderRequest uses exactly one DesignBrief.
 - A RenderRequest does not modify the Physical Building Model.
 - A RenderRequest may produce zero or more RenderResults depending on provider behavior and retry strategy.
 
@@ -694,7 +695,7 @@ AI-assisted rendering is part of the application domain, but provider-specific i
 
 The domain understands:
 
-- DesignPrompt;
+- DesignBrief;
 - RenderRequest;
 - RenderResult;
 - Viewpoint;
@@ -714,7 +715,7 @@ Conceptually:
 
 ```text
 Design Rendering Model
-├── DesignPrompt
+├── DesignBrief
 ├── RenderRequest
 └── RenderResult
 
@@ -896,7 +897,7 @@ Project
 │   └── RenderRequest
 │       ├── Viewpoint reference
 │       ├── BaseImage reference
-│       ├── DesignPrompt
+│       ├── DesignBrief
 │       └── RenderResult[]
 ```
 
@@ -928,7 +929,7 @@ Viewpoints belong to Levels and may optionally reference Rooms.
 
 BaseImages are exported visual references derived from Viewpoints.
 
-DesignPrompts express design intent.
+DesignBriefs express design intent.
 
 RenderRequests record generation attempts.
 
