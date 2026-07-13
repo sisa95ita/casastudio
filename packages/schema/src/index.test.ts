@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { WorkspacePackageSchema } from "./index";
+import { IdentifierSchema, Point2DSchema, UnitsSchema } from "./index";
 
-describe("WorkspacePackageSchema", () => {
-  it("validates package metadata", () => {
-    expect(WorkspacePackageSchema.parse({ name: "@casastudio/schema" })).toEqual({
-      name: "@casastudio/schema"
-    });
+describe("package barrel exports", () => {
+  it("exports shared schemas from the package entry point", () => {
+    expect(IdentifierSchema.parse("casa-simone")).toBe("casa-simone");
+    expect(Point2DSchema.parse({ x: 0, z: 0 })).toEqual({ x: 0, z: 0 });
+    expect(UnitsSchema.parse({ length: "cm", angle: "deg" })).toEqual({ length: "cm", angle: "deg" });
   });
 });
