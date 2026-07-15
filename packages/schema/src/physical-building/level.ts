@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { IdentifierSchema } from "../primitives";
+import { StaircaseSchema } from "../staircase";
 import { RoomSchema } from "./room";
 import { MeasurementSchema, RequiredNameSchema } from "./shared";
 import { WallSchema } from "./wall";
@@ -11,7 +12,7 @@ export const LevelSchema = z.strictObject({
   elevation: MeasurementSchema,
   rooms: z.array(RoomSchema),
   walls: z.array(WallSchema),
-  staircases: z.tuple([])
+  staircases: z.array(StaircaseSchema)
 });
 
 export type Level = z.infer<typeof LevelSchema>;
