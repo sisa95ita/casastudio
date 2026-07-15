@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import { CommonMetadataSchema, Point2DSchema } from "../primitives";
+import { CommonMetadataSchema, Point2DSchema, PositiveIntegerSchema, PositiveNumberSchema } from "../primitives";
 
-const PositiveMeasurementSchema = z.number().positive();
+const PositiveMeasurementSchema = PositiveNumberSchema;
 const ElevationSchema = z.number();
 
 export const StairFlightSchema = z
@@ -11,7 +11,7 @@ export const StairFlightSchema = z
     start: Point2DSchema,
     end: Point2DSchema,
     width: PositiveMeasurementSchema,
-    stepCount: z.number().int().positive(),
+    stepCount: PositiveIntegerSchema,
     startElevation: ElevationSchema,
     endElevation: ElevationSchema
   })

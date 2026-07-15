@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import { CommonMetadataSchema, Point2DSchema } from "../primitives";
+import { CommonMetadataSchema, Point2DSchema, PositiveNumberSchema } from "../primitives";
 
-const PositiveMeasurementSchema = z.number().positive();
+const PositiveMeasurementSchema = PositiveNumberSchema;
 const ElevationSchema = z.number();
 
 export const StairLandingSchema = z.strictObject({

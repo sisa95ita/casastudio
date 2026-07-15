@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BaseImageSchema,
   BuildingSchema,
   IdentifierSchema,
   OpeningSchema,
@@ -10,9 +11,12 @@ import {
   StairLandingSchema,
   StaircaseSchema,
   UnitsSchema,
+  ViewpointSchema,
+  type BaseImage,
   type StairFlight,
   type StairLanding,
-  type Staircase
+  type Staircase,
+  type Viewpoint
 } from "./index";
 
 describe("package barrel exports", () => {
@@ -67,5 +71,27 @@ describe("package barrel exports", () => {
     expect(StairFlightSchema.parse(flight)).toEqual(flight);
     expect(StairLandingSchema.parse(landing)).toEqual(landing);
     expect(StaircaseSchema.parse(staircase)).toEqual(staircase);
+  });
+
+  it("exports observation schemas and inferred types from the package entry point", () => {
+    const viewpoint: Viewpoint = {
+      id: "living-tv-view",
+      levelId: "ground-level",
+      roomId: "living-room",
+      cameraPosition: { x: 250, y: 165, z: 320 },
+      cameraTarget: { x: 250, y: 120, z: 120 },
+      fieldOfView: 60,
+      projection: "PERSPECTIVE"
+    };
+    const baseImage: BaseImage = {
+      id: "base-image-living-tv-001",
+      viewpointId: "living-tv-view",
+      assetRef: "assets/base-images/living-tv-001.png",
+      projectRevision: 3,
+      createdAt: "2026-07-11T16:00:00+02:00"
+    };
+
+    expect(ViewpointSchema.parse(viewpoint)).toEqual(viewpoint);
+    expect(BaseImageSchema.parse(baseImage)).toEqual(baseImage);
   });
 });
