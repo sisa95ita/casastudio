@@ -869,15 +869,17 @@ One RenderRequest may produce zero or more RenderResults.
 ```text
 id
 renderRequestId
-assetRef
 status
 createdAt
 ```
+
+`assetRef` is conditionally required according to the RenderResult status, as defined in section 18.4.
 
 ### 18.2 Optional properties
 
 ```text
 name
+assetRef
 providerId
 modelId
 notes

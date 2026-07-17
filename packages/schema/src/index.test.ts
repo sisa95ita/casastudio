@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   BaseImageSchema,
   BuildingSchema,
+  DesignBriefSchema,
   IdentifierSchema,
   OpeningSchema,
   Point2DSchema,
+  RenderRequestSchema,
+  RenderResultSchema,
   RoomSchema,
   StairFlightSchema,
   StairLandingSchema,
@@ -13,6 +16,9 @@ import {
   UnitsSchema,
   ViewpointSchema,
   type BaseImage,
+  type DesignBrief,
+  type RenderRequest,
+  type RenderResult,
   type StairFlight,
   type StairLanding,
   type Staircase,
@@ -93,5 +99,34 @@ describe("package barrel exports", () => {
 
     expect(ViewpointSchema.parse(viewpoint)).toEqual(viewpoint);
     expect(BaseImageSchema.parse(baseImage)).toEqual(baseImage);
+  });
+
+  it("exports design rendering schemas and inferred types from the package entry point", () => {
+    const designBrief: DesignBrief = {
+      id: "warm-industrial-living",
+      promptText: "Design a warm industrial living room.",
+      constraints: [],
+      palette: [],
+      referenceAssetRefs: []
+    };
+    const renderRequest: RenderRequest = {
+      id: "render-request-001",
+      viewpointId: "living-tv-view",
+      baseImageId: "base-image-living-tv-001",
+      designBriefId: "warm-industrial-living",
+      status: "PENDING",
+      createdAt: "2026-07-11T16:05:00+02:00"
+    };
+    const renderResult: RenderResult = {
+      id: "render-result-001",
+      renderRequestId: "render-request-001",
+      status: "SUCCEEDED",
+      createdAt: "2026-07-11T16:05:45+02:00",
+      assetRef: "assets/renders/render-result-001.png"
+    };
+
+    expect(DesignBriefSchema.parse(designBrief)).toEqual(designBrief);
+    expect(RenderRequestSchema.parse(renderRequest)).toEqual(renderRequest);
+    expect(RenderResultSchema.parse(renderResult)).toEqual(renderResult);
   });
 });
