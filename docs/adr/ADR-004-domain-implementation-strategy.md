@@ -28,8 +28,9 @@ The implementation order is:
 5. Design Rendering Model
 6. Project aggregate schema
 7. Cross-reference validation
-8. Renderability validation
-9. First complete `project.json`
+8. Reference Consistency validation
+9. Renderability validation
+10. First complete `project.json`
 
 Each phase must:
 
@@ -41,7 +42,9 @@ Each phase must:
 
 Individual entity schemas must be stable before they are assembled into `ProjectSchema`.
 
-Cross-reference and renderability validation must remain separate from basic structural validation.
+Cross-reference, Reference Consistency, and Renderability validation must remain separate from basic structural validation.
+
+Validation responsibilities are intentionally layered. Each validation phase verifies a distinct class of invariants and builds upon the guarantees provided by the previous phase without duplicating its responsibilities.
 
 ## Consequences
 

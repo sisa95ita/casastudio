@@ -123,6 +123,40 @@ Structurally Valid
 Renderable
 ```
 
+### 2.7 Validation Pipeline
+
+`ProjectSchema` intentionally validates only the structural composition of a Project.
+
+Additional validation phases are executed after structural parsing has succeeded.
+
+The validation pipeline is organized as follows:
+
+```text
+ProjectSchema
+        │
+        ▼
+Cross-reference Validation
+        │
+        ▼
+Reference Consistency Validation
+        │
+        ▼
+Renderability Validation
+        │
+        ▼
+Geometry Validation
+```
+
+Each phase has a distinct responsibility:
+
+- **ProjectSchema** validates structural composition, required properties, types, enums, and local entity invariants.
+- **Cross-reference Validation** verifies that referenced entities exist.
+- **Reference Consistency Validation** verifies that relationships between existing entities are semantically coherent.
+- **Renderability Validation** verifies that the Project contains the minimum information required by the rendering workflow.
+- **Geometry Validation** verifies architectural and geometric correctness required by the Geometry Engine.
+
+Keeping these responsibilities separate ensures that structural validation remains deterministic while more advanced validation phases can evolve independently.
+
 These are validation outcomes, not persisted status fields.
 
 ## 3. Project File
@@ -958,11 +992,13 @@ Reasons:
 A Project is structurally valid when:
 
 - required properties exist;
-- identifiers are unique;
-- references resolve;
 - required arrays exist;
 - values use valid types and enums;
-- parent-child relationships are coherent.
+- local entity invariants are satisfied.
+
+Structural validity is intentionally limited to validation performed by `ProjectSchema`.
+
+Cross-reference resolution, relationship consistency, renderability, and geometry validation are performed by dedicated validation phases.
 
 ### 21.2 Renderable
 
@@ -1042,8 +1078,9 @@ Project
 12. RenderRequest
 13. RenderResult
 14. Cross-reference validation
-15. Renderability validation
-16. First example project.json
+15. Reference Consistency validation
+16. Renderability validation
+17. First example project.json
 ```
 
 ## 25. Expected Revisions

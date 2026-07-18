@@ -667,7 +667,66 @@ Bidirectional navigation may be useful in derived models, but the conceptual dom
 - A RenderResult is a derived visual interpretation.
 - The maximum number of RenderResults is an application policy, not a domain invariant.
 
-## 8. Geometry Engine Boundary
+## 8. Validation Architecture
+
+CasaStudio validates a Project through multiple independent phases.
+
+Each phase has a well-defined responsibility and builds upon the guarantees provided by the previous one.
+
+```text
+ProjectSchema
+        │
+        ▼
+Cross-reference Validation
+        │
+        ▼
+Reference Consistency Validation
+        │
+        ▼
+Renderability Validation
+        │
+        ▼
+Geometry Validation
+```
+
+### ProjectSchema
+
+Validates structural composition, required properties, primitive types, enums, and entity-local invariants.
+
+### Cross-reference Validation
+
+Verifies that every identifier reference resolves to an existing entity.
+
+Examples include:
+
+- Room → Wall
+- Wall → Room
+- Viewpoint → Level
+- BaseImage → Viewpoint
+- RenderRequest → BaseImage
+
+### Reference Consistency Validation
+
+Verifies that existing references are semantically coherent.
+
+Examples include:
+
+- a Viewpoint Room belongs to the referenced Level;
+- a Staircase fromRoom belongs to fromLevel;
+- a Staircase toRoom belongs to toLevel;
+- a RenderRequest BaseImage belongs to the referenced Viewpoint.
+
+### Renderability Validation
+
+Determines whether a structurally valid Project contains the minimum workflow information required for rendering.
+
+### Geometry Validation
+
+Verifies architectural and geometric correctness required by the Geometry Engine.
+
+This layered approach keeps each validator focused on a single responsibility and allows validation rules to evolve independently without increasing the complexity of the structural schemas.
+
+## 9. Geometry Engine Boundary
 
 The Geometry Engine is not part of the Core Domain.
 
@@ -689,7 +748,7 @@ The Geometry Engine must respect the coordinate, elevation, rotation, and precis
 
 The domain model defines what exists. The Geometry Engine defines how that existence is converted into geometric representations.
 
-## 9. AI Boundary
+## 10. AI Boundary
 
 AI-assisted rendering is part of the application domain, but provider-specific integrations are infrastructure concerns.
 
@@ -730,7 +789,7 @@ The provider may influence metadata recorded on a RenderRequest or RenderResult,
 
 AI-generated images are design proposals. They may influence human decisions, but they do not mutate the Project's physical Building data.
 
-## 10. MVP Constraints
+## 11. MVP Constraints
 
 The MVP intentionally supports a constrained version of the domain.
 
@@ -766,7 +825,7 @@ These constraints are implementation scope decisions.
 
 They do not redefine the core meaning of the domain entities.
 
-## 11. Future Evolution
+## 12. Future Evolution
 
 The domain should support incremental evolution.
 
@@ -805,7 +864,7 @@ Future additions should preserve the distinction between:
 - AI-generated design artifacts;
 - application and collaboration concerns.
 
-## 12. Professional Workflow
+## 13. Professional Workflow
 
 A future professional workflow may be:
 
@@ -851,7 +910,7 @@ This use case reinforces the need for:
 - provider-independent design rendering;
 - durable decision history.
 
-## 13. Final Structure
+## 14. Final Structure
 
 ```text
 Project
@@ -905,7 +964,7 @@ This structure is conceptual. Future JSON Schemas, Zod schemas, TypeScript model
 
 A project-level gallery or decision timeline may index RenderResults for retrieval and presentation. That does not change the conceptual ownership rule: a RenderResult is the output of a RenderRequest.
 
-## 14. Guiding Principles
+## 15. Guiding Principles
 
 The Project is the application root.
 
