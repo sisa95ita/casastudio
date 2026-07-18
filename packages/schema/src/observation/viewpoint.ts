@@ -5,6 +5,12 @@ import { CommonMetadataSchema, IdentifierSchema, Point3DSchema, PositiveNumberSc
 
 const FieldOfViewSchema = PositiveNumberSchema.lt(180);
 
+/**
+ * Represents a saved, reproducible observation of the Building.
+ *
+ * A Viewpoint belongs to a Level and may optionally identify a Room, while
+ * preserving enough camera data to recreate the same visual perspective.
+ */
 export const ViewpointSchema = z
   .strictObject({
     ...CommonMetadataSchema.shape,
@@ -26,4 +32,7 @@ export const ViewpointSchema = z
     }
   );
 
+/**
+ * Saved camera perspective used to derive BaseImages and design-rendering inputs.
+ */
 export type Viewpoint = z.infer<typeof ViewpointSchema>;

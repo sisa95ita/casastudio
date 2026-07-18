@@ -5,6 +5,12 @@ import { CommonMetadataSchema, IdentifierSchema, IsoDateTimeSchema, PositiveInte
 
 const NonEmptyStringSchema = z.string().min(1);
 
+/**
+ * Represents an output artifact produced by a RenderRequest.
+ *
+ * RenderResults are derived visual interpretations and must not mutate the
+ * physical Building model or become architectural source data.
+ */
 export const RenderResultSchema = z
   .strictObject({
     ...CommonMetadataSchema.shape,
@@ -56,4 +62,7 @@ export const RenderResultSchema = z
     }
   });
 
+/**
+ * Generated design artifact and result metadata for a RenderRequest.
+ */
 export type RenderResult = z.infer<typeof RenderResultSchema>;

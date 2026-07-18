@@ -5,6 +5,12 @@ import { CommonMetadataSchema, Point2DSchema, PositiveNumberSchema } from "../pr
 const PositiveMeasurementSchema = PositiveNumberSchema;
 const ElevationSchema = z.number();
 
+/**
+ * Represents an architectural landing within a Staircase layout.
+ *
+ * The landing is persisted as domain input; any renderable surface generated
+ * from it belongs to the Geometry Engine.
+ */
 export const StairLandingSchema = z.strictObject({
   ...CommonMetadataSchema.shape,
   position: Point2DSchema,
@@ -13,4 +19,7 @@ export const StairLandingSchema = z.strictObject({
   elevation: ElevationSchema
 });
 
+/**
+ * Persisted staircase landing with position, dimensions, and elevation.
+ */
 export type StairLanding = z.infer<typeof StairLandingSchema>;

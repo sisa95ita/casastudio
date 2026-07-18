@@ -9,6 +9,12 @@ import {
   PositiveMeasurementSchema
 } from "./shared";
 
+/**
+ * Represents a physical wall segment in Level coordinate space.
+ *
+ * Walls are the authoritative boundary elements for Rooms. Cross-reference
+ * consistency with Rooms is handled by the validation layer rather than here.
+ */
 export const WallSchema = z
   .strictObject({
     id: IdentifierSchema,
@@ -26,4 +32,7 @@ export const WallSchema = z
     path: ["end"]
   });
 
+/**
+ * Level-scoped wall segment with associated Rooms and owned Openings.
+ */
 export type Wall = z.infer<typeof WallSchema>;

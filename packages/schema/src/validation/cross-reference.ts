@@ -13,6 +13,13 @@ const pushError = (
   errors.push({ code, path, message });
 };
 
+/**
+ * Validates that references inside an already parsed Project resolve.
+ *
+ * This phase is separate from ProjectSchema composition and only checks
+ * cross-reference existence. It does not perform renderability, geometry,
+ * asset, or provider validation.
+ */
 export const validateProjectCrossReferences = (project: Project): ValidationResult => {
   const errors: ValidationError[] = [];
   const levelIds = toIdSet(project.building.levels);
@@ -184,4 +191,3 @@ export const validateProjectCrossReferences = (project: Project): ValidationResu
     errors
   };
 };
-

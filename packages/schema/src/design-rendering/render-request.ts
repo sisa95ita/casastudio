@@ -7,6 +7,12 @@ const NonEmptyStringSchema = z.string().min(1);
 
 const isEarlierThan = (candidate: string, reference: string) => Date.parse(candidate) < Date.parse(reference);
 
+/**
+ * Represents one AI-assisted design generation attempt.
+ *
+ * A RenderRequest records the Viewpoint, BaseImage, DesignBrief, and lifecycle
+ * metadata used to ask a rendering provider for design proposals.
+ */
 export const RenderRequestSchema = z
   .strictObject({
     ...CommonMetadataSchema.shape,
@@ -134,4 +140,7 @@ export const RenderRequestSchema = z
     }
   });
 
+/**
+ * Traceable design-rendering request and its provider-selection metadata.
+ */
 export type RenderRequest = z.infer<typeof RenderRequestSchema>;

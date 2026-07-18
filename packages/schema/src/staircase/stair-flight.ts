@@ -5,6 +5,12 @@ import { CommonMetadataSchema, Point2DSchema, PositiveIntegerSchema, PositiveNum
 const PositiveMeasurementSchema = PositiveNumberSchema;
 const ElevationSchema = z.number();
 
+/**
+ * Represents one measured run of a Staircase.
+ *
+ * A StairFlight stores architectural layout input; generated steps or meshes
+ * remain derived geometry outside the schema package.
+ */
 export const StairFlightSchema = z
   .strictObject({
     ...CommonMetadataSchema.shape,
@@ -24,4 +30,7 @@ export const StairFlightSchema = z
     path: ["endElevation"]
   });
 
+/**
+ * Measured run of a staircase between two elevations.
+ */
 export type StairFlight = z.infer<typeof StairFlightSchema>;
