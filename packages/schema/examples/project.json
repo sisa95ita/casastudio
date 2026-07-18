@@ -1,0 +1,566 @@
+{
+  "id": "casa-studio-canonical-project",
+  "name": "CasaStudio Canonical Project",
+  "schemaVersion": "1.0.0",
+  "revision": 1,
+  "createdAt": "2026-07-18T10:00:00+02:00",
+  "updatedAt": "2026-07-18T10:00:00+02:00",
+  "units": {
+    "length": "cm",
+    "angle": "deg"
+  },
+  "building": {
+    "id": "main-building",
+    "name": "Main Building",
+    "type": "HOUSE",
+    "levels": [
+      {
+        "id": "ground-floor",
+        "name": "Ground Floor",
+        "elevation": 0,
+        "rooms": [
+          {
+            "id": "living-room",
+            "name": "Living Room",
+            "type": "LIVING_ROOM",
+            "description": "Main living area at the front of the house.",
+            "wallIds": [
+              "ground-north-wall",
+              "living-east-wall",
+              "living-kitchen-partition",
+              "living-west-wall"
+            ]
+          },
+          {
+            "id": "kitchen",
+            "name": "Kitchen",
+            "type": "KITCHEN",
+            "description": "Kitchen connected to the living room through a wide internal opening.",
+            "wallIds": [
+              "living-kitchen-partition",
+              "kitchen-east-wall",
+              "ground-south-wall",
+              "kitchen-west-wall"
+            ]
+          }
+        ],
+        "walls": [
+          {
+            "id": "ground-north-wall",
+            "name": "Ground North Wall",
+            "start": {
+              "x": 0,
+              "z": 0
+            },
+            "end": {
+              "x": 600,
+              "z": 0
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "living-room"
+            ],
+            "openings": [
+              {
+                "id": "front-door",
+                "name": "Front Door",
+                "type": "DOOR",
+                "offsetFromStart": 250,
+                "width": 100,
+                "height": 220,
+                "elevation": 0,
+                "connectedRoomIds": [
+                  "living-room"
+                ]
+              },
+              {
+                "id": "living-room-window",
+                "name": "Living Room Window",
+                "type": "WINDOW",
+                "offsetFromStart": 60,
+                "width": 140,
+                "height": 130,
+                "elevation": 90
+              }
+            ]
+          },
+          {
+            "id": "living-east-wall",
+            "name": "Living East Wall",
+            "start": {
+              "x": 600,
+              "z": 0
+            },
+            "end": {
+              "x": 600,
+              "z": 400
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "living-room"
+            ],
+            "openings": []
+          },
+          {
+            "id": "living-kitchen-partition",
+            "name": "Living Kitchen Partition",
+            "start": {
+              "x": 600,
+              "z": 400
+            },
+            "end": {
+              "x": 0,
+              "z": 400
+            },
+            "height": 300,
+            "thickness": 15,
+            "roomIds": [
+              "living-room",
+              "kitchen"
+            ],
+            "openings": [
+              {
+                "id": "living-kitchen-opening",
+                "name": "Living Kitchen Opening",
+                "type": "DOOR",
+                "offsetFromStart": 240,
+                "width": 120,
+                "height": 220,
+                "elevation": 0,
+                "connectedRoomIds": [
+                  "living-room",
+                  "kitchen"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "living-west-wall",
+            "name": "Living West Wall",
+            "start": {
+              "x": 0,
+              "z": 400
+            },
+            "end": {
+              "x": 0,
+              "z": 0
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "living-room"
+            ],
+            "openings": []
+          },
+          {
+            "id": "kitchen-east-wall",
+            "name": "Kitchen East Wall",
+            "start": {
+              "x": 600,
+              "z": 400
+            },
+            "end": {
+              "x": 600,
+              "z": 700
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "kitchen"
+            ],
+            "openings": [
+              {
+                "id": "kitchen-window",
+                "name": "Kitchen Window",
+                "type": "WINDOW",
+                "offsetFromStart": 80,
+                "width": 120,
+                "height": 110,
+                "elevation": 105
+              }
+            ]
+          },
+          {
+            "id": "ground-south-wall",
+            "name": "Ground South Wall",
+            "start": {
+              "x": 600,
+              "z": 700
+            },
+            "end": {
+              "x": 0,
+              "z": 700
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "kitchen"
+            ],
+            "openings": []
+          },
+          {
+            "id": "kitchen-west-wall",
+            "name": "Kitchen West Wall",
+            "start": {
+              "x": 0,
+              "z": 700
+            },
+            "end": {
+              "x": 0,
+              "z": 400
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "kitchen"
+            ],
+            "openings": []
+          }
+        ],
+        "staircases": [
+          {
+            "id": "main-stair",
+            "name": "Main Stair",
+            "description": "Straight stair connecting the living room to the upstairs studio.",
+            "fromLevelId": "ground-floor",
+            "toLevelId": "first-floor",
+            "fromRoomId": "living-room",
+            "toRoomId": "studio",
+            "width": 90,
+            "flights": [
+              {
+                "id": "main-stair-flight",
+                "name": "Main Stair Flight",
+                "start": {
+                  "x": 500,
+                  "z": 70
+                },
+                "end": {
+                  "x": 500,
+                  "z": 320
+                },
+                "width": 90,
+                "stepCount": 16,
+                "startElevation": 0,
+                "endElevation": 320
+              }
+            ],
+            "landings": [
+              {
+                "id": "main-stair-upper-landing",
+                "name": "Main Stair Upper Landing",
+                "position": {
+                  "x": 450,
+                  "z": 280
+                },
+                "width": 100,
+                "depth": 120,
+                "elevation": 320
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "first-floor",
+        "name": "First Floor",
+        "elevation": 320,
+        "rooms": [
+          {
+            "id": "studio",
+            "name": "Studio",
+            "type": "STUDIO",
+            "description": "Upstairs work room reached from the main stair.",
+            "wallIds": [
+              "studio-north-wall",
+              "studio-bathroom-partition",
+              "studio-south-wall",
+              "first-west-wall"
+            ]
+          },
+          {
+            "id": "bathroom",
+            "name": "Bathroom",
+            "type": "BATHROOM",
+            "description": "Compact bathroom beside the studio.",
+            "wallIds": [
+              "bathroom-north-wall",
+              "first-east-wall",
+              "bathroom-south-wall",
+              "studio-bathroom-partition"
+            ]
+          }
+        ],
+        "walls": [
+          {
+            "id": "studio-north-wall",
+            "name": "Studio North Wall",
+            "start": {
+              "x": 0,
+              "z": 0
+            },
+            "end": {
+              "x": 350,
+              "z": 0
+            },
+            "height": 280,
+            "thickness": 20,
+            "roomIds": [
+              "studio"
+            ],
+            "openings": [
+              {
+                "id": "studio-window",
+                "name": "Studio Window",
+                "type": "WINDOW",
+                "offsetFromStart": 100,
+                "width": 150,
+                "height": 120,
+                "elevation": 95
+              }
+            ]
+          },
+          {
+            "id": "bathroom-north-wall",
+            "name": "Bathroom North Wall",
+            "start": {
+              "x": 350,
+              "z": 0
+            },
+            "end": {
+              "x": 600,
+              "z": 0
+            },
+            "height": 280,
+            "thickness": 20,
+            "roomIds": [
+              "bathroom"
+            ],
+            "openings": []
+          },
+          {
+            "id": "first-east-wall",
+            "name": "First East Wall",
+            "start": {
+              "x": 600,
+              "z": 0
+            },
+            "end": {
+              "x": 600,
+              "z": 500
+            },
+            "height": 280,
+            "thickness": 20,
+            "roomIds": [
+              "bathroom"
+            ],
+            "openings": [
+              {
+                "id": "bathroom-window",
+                "name": "Bathroom Window",
+                "type": "WINDOW",
+                "offsetFromStart": 180,
+                "width": 100,
+                "height": 80,
+                "elevation": 140
+              }
+            ]
+          },
+          {
+            "id": "bathroom-south-wall",
+            "name": "Bathroom South Wall",
+            "start": {
+              "x": 600,
+              "z": 500
+            },
+            "end": {
+              "x": 350,
+              "z": 500
+            },
+            "height": 280,
+            "thickness": 20,
+            "roomIds": [
+              "bathroom"
+            ],
+            "openings": []
+          },
+          {
+            "id": "studio-bathroom-partition",
+            "name": "Studio Bathroom Partition",
+            "start": {
+              "x": 350,
+              "z": 500
+            },
+            "end": {
+              "x": 350,
+              "z": 0
+            },
+            "height": 280,
+            "thickness": 15,
+            "roomIds": [
+              "studio",
+              "bathroom"
+            ],
+            "openings": [
+              {
+                "id": "bathroom-door",
+                "name": "Bathroom Door",
+                "type": "DOOR",
+                "offsetFromStart": 70,
+                "width": 80,
+                "height": 210,
+                "elevation": 0,
+                "connectedRoomIds": [
+                  "studio",
+                  "bathroom"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "studio-south-wall",
+            "name": "Studio South Wall",
+            "start": {
+              "x": 350,
+              "z": 500
+            },
+            "end": {
+              "x": 0,
+              "z": 500
+            },
+            "height": 280,
+            "thickness": 20,
+            "roomIds": [
+              "studio"
+            ],
+            "openings": []
+          },
+          {
+            "id": "first-west-wall",
+            "name": "First West Wall",
+            "start": {
+              "x": 0,
+              "z": 500
+            },
+            "end": {
+              "x": 0,
+              "z": 0
+            },
+            "height": 280,
+            "thickness": 20,
+            "roomIds": [
+              "studio"
+            ],
+            "openings": []
+          }
+        ],
+        "staircases": []
+      }
+    ]
+  },
+  "viewpoints": [
+    {
+      "id": "living-room-view",
+      "name": "Living Room View",
+      "description": "Interior view from the living room toward the front wall.",
+      "levelId": "ground-floor",
+      "roomId": "living-room",
+      "cameraPosition": {
+        "x": 300,
+        "y": 160,
+        "z": 330
+      },
+      "cameraTarget": {
+        "x": 300,
+        "y": 130,
+        "z": 40
+      },
+      "fieldOfView": 60,
+      "projection": "PERSPECTIVE"
+    },
+    {
+      "id": "front-facade-view",
+      "name": "Front Facade View",
+      "description": "Exterior view of the front facade from outside the building.",
+      "levelId": "ground-floor",
+      "cameraPosition": {
+        "x": 300,
+        "y": 180,
+        "z": -650
+      },
+      "cameraTarget": {
+        "x": 300,
+        "y": 140,
+        "z": 0
+      },
+      "fieldOfView": 55,
+      "projection": "PERSPECTIVE"
+    }
+  ],
+  "baseImages": [
+    {
+      "id": "living-room-photo",
+      "name": "Living Room Photo",
+      "description": "Base image associated with the living room viewpoint.",
+      "viewpointId": "living-room-view",
+      "assetRef": "assets/base-images/living-room-photo.png",
+      "projectRevision": 1,
+      "createdAt": "2026-07-18T10:10:00+02:00",
+      "width": 1600,
+      "height": 1200
+    },
+    {
+      "id": "front-facade-photo",
+      "name": "Front Facade Photo",
+      "description": "Base image associated with the front facade viewpoint.",
+      "viewpointId": "front-facade-view",
+      "assetRef": "assets/base-images/front-facade-photo.png",
+      "projectRevision": 1,
+      "createdAt": "2026-07-18T10:12:00+02:00",
+      "width": 1600,
+      "height": 1200
+    }
+  ],
+  "designBriefs": [
+    {
+      "id": "warm-modern-living-room",
+      "name": "Warm Modern Living Room",
+      "description": "Design direction for a calm and durable living room refresh.",
+      "promptText": "Refresh the living room with warm modern furniture, improved storage, and natural materials while preserving the existing architecture.",
+      "style": "warm modern",
+      "constraints": [
+        "Preserve wall, door, and window positions.",
+        "Keep the main stair unobstructed.",
+        "Use durable materials suitable for daily use."
+      ],
+      "palette": [
+        "warm white",
+        "natural oak",
+        "sage green",
+        "charcoal"
+      ],
+      "referenceAssetRefs": [
+        "assets/references/oak-storage-wall.png"
+      ],
+      "notes": "The design should feel calm, practical, and easy to maintain."
+    }
+  ],
+  "renderRequests": [
+    {
+      "id": "living-room-warm-modern-render",
+      "name": "Living Room Warm Modern Render",
+      "description": "Initial render request for the canonical living room design direction.",
+      "viewpointId": "living-room-view",
+      "baseImageId": "living-room-photo",
+      "designBriefId": "warm-modern-living-room",
+      "status": "PENDING",
+      "requestedProviderId": "example-render-provider",
+      "requestedModelId": "example-image-model-v1",
+      "requestedResultCount": 1,
+      "createdAt": "2026-07-18T10:20:00+02:00"
+    }
+  ],
+  "renderResults": []
+}
