@@ -6,6 +6,7 @@
   "packageManager": "pnpm@11.10.0",
   "scripts": {
     "dev": "turbo dev",
+    "generate:schema": "pnpm --filter @casastudio/schema generate:schema",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test"
