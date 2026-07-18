@@ -5,3 +5,4 @@ export * from "./physical-building";
 export * from "./primitives";
 export * from "./project";
 export * from "./staircase";
+export * from "./validation";

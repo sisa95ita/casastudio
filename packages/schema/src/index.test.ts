@@ -15,7 +15,9 @@ import {
   StairLandingSchema,
   StaircaseSchema,
   UnitsSchema,
+  ValidationErrorCode,
   ViewpointSchema,
+  validateProjectCrossReferences,
   type BaseImage,
   type DesignBrief,
   type Project,
@@ -158,5 +160,34 @@ describe("package barrel exports", () => {
     };
 
     expect(ProjectSchema.parse(project)).toEqual(project);
+  });
+
+  it("exports validation contracts and validators from the package entry point", () => {
+    const project: Project = {
+      id: "casa-simone",
+      name: "Casa Simone",
+      schemaVersion: "1.0.0",
+      revision: 1,
+      createdAt: "2026-07-11T15:30:00+02:00",
+      updatedAt: "2026-07-11T15:30:00+02:00",
+      units: {
+        length: "cm",
+        angle: "deg"
+      },
+      building: {
+        id: "main-building",
+        name: "Main Building",
+        type: "HOUSE",
+        levels: []
+      },
+      viewpoints: [],
+      baseImages: [],
+      designBriefs: [],
+      renderRequests: [],
+      renderResults: []
+    };
+
+    expect(ValidationErrorCode.ROOM_NOT_FOUND).toBe("ROOM_NOT_FOUND");
+    expect(validateProjectCrossReferences(project)).toEqual({ valid: true, errors: [] });
   });
 });
