@@ -7,6 +7,7 @@ import {
   IdentifierSchema,
   OpeningSchema,
   Point2DSchema,
+  ProjectSchema,
   RenderRequestSchema,
   RenderResultSchema,
   RoomSchema,
@@ -17,6 +18,7 @@ import {
   ViewpointSchema,
   type BaseImage,
   type DesignBrief,
+  type Project,
   type RenderRequest,
   type RenderResult,
   type StairFlight,
@@ -128,5 +130,33 @@ describe("package barrel exports", () => {
     expect(DesignBriefSchema.parse(designBrief)).toEqual(designBrief);
     expect(RenderRequestSchema.parse(renderRequest)).toEqual(renderRequest);
     expect(RenderResultSchema.parse(renderResult)).toEqual(renderResult);
+  });
+
+  it("exports ProjectSchema and inferred Project type from the package entry point", () => {
+    const project: Project = {
+      id: "casa-simone",
+      name: "Casa Simone",
+      schemaVersion: "1.0.0",
+      revision: 1,
+      createdAt: "2026-07-11T15:30:00+02:00",
+      updatedAt: "2026-07-11T15:30:00+02:00",
+      units: {
+        length: "cm",
+        angle: "deg"
+      },
+      building: {
+        id: "main-building",
+        name: "Main Building",
+        type: "HOUSE",
+        levels: []
+      },
+      viewpoints: [],
+      baseImages: [],
+      designBriefs: [],
+      renderRequests: [],
+      renderResults: []
+    };
+
+    expect(ProjectSchema.parse(project)).toEqual(project);
   });
 });
