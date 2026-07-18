@@ -36,5 +36,25 @@ export enum ValidationErrorCode {
   /**
    * A RenderRequest is missing one or more required renderability references.
    */
-  RENDER_REQUEST_NOT_RENDERABLE = "RENDER_REQUEST_NOT_RENDERABLE"
+  RENDER_REQUEST_NOT_RENDERABLE = "RENDER_REQUEST_NOT_RENDERABLE",
+
+  /**
+   * A Viewpoint references a Room that belongs to a different Level than the Viewpoint.
+   */
+  VIEWPOINT_ROOM_LEVEL_MISMATCH = "VIEWPOINT_ROOM_LEVEL_MISMATCH",
+
+  /**
+   * A Staircase fromRoomId references a Room that belongs to a different Level than fromLevelId.
+   */
+  STAIRCASE_FROM_ROOM_LEVEL_MISMATCH = "STAIRCASE_FROM_ROOM_LEVEL_MISMATCH",
+
+  /**
+   * A Staircase toRoomId references a Room that belongs to a different Level than toLevelId.
+   */
+  STAIRCASE_TO_ROOM_LEVEL_MISMATCH = "STAIRCASE_TO_ROOM_LEVEL_MISMATCH",
+
+  /**
+   * A RenderRequest references a BaseImage derived from a different Viewpoint.
+   */
+  RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH = "RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH"
 }

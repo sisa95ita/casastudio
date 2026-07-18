@@ -18,6 +18,7 @@ import {
   ValidationErrorCode,
   ViewpointSchema,
   validateProjectCrossReferences,
+  validateProjectReferenceConsistency,
   validateProjectRenderability,
   type BaseImage,
   type DesignBrief,
@@ -190,6 +191,7 @@ describe("package barrel exports", () => {
 
     expect(ValidationErrorCode.ROOM_NOT_FOUND).toBe("ROOM_NOT_FOUND");
     expect(validateProjectCrossReferences(project)).toEqual({ valid: true, errors: [] });
+    expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
     expect(validateProjectRenderability(project)).toMatchObject({
       valid: false,
       errors: [
