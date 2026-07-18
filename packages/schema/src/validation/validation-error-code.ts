@@ -56,5 +56,40 @@ export enum ValidationErrorCode {
   /**
    * A RenderRequest references a BaseImage derived from a different Viewpoint.
    */
-  RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH = "RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH"
+  RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH = "RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH",
+
+  /**
+   * A Wall has identical start and end coordinates.
+   */
+  WALL_ZERO_LENGTH = "WALL_ZERO_LENGTH",
+
+  /**
+   * An Opening starts before the Wall or extends beyond the Wall length.
+   */
+  OPENING_OUTSIDE_WALL = "OPENING_OUTSIDE_WALL",
+
+  /**
+   * A StairFlight has identical start and end coordinates.
+   */
+  STAIR_FLIGHT_ZERO_LENGTH = "STAIR_FLIGHT_ZERO_LENGTH",
+
+  /**
+   * A StairLanding width is zero or negative.
+   */
+  STAIR_LANDING_NON_POSITIVE_WIDTH = "STAIR_LANDING_NON_POSITIVE_WIDTH",
+
+  /**
+   * A StairLanding depth is zero or negative.
+   */
+  STAIR_LANDING_NON_POSITIVE_DEPTH = "STAIR_LANDING_NON_POSITIVE_DEPTH",
+
+  /**
+   * A StairFlight end elevation is not greater than its start elevation.
+   */
+  STAIR_FLIGHT_NOT_ASCENDING = "STAIR_FLIGHT_NOT_ASCENDING",
+
+  /**
+   * A Level contains multiple Walls with identical start and end coordinates.
+   */
+  DUPLICATE_WALL_GEOMETRY = "DUPLICATE_WALL_GEOMETRY"
 }

@@ -21,6 +21,7 @@ import {
   validateProjectCrossReferences,
   validateProjectReferenceConsistency,
   validateProjectRenderability,
+  validateProjectGeometry,
   type Project
 } from "@casastudio/schema";
 ```
@@ -77,7 +78,8 @@ import {
   ProjectSchema,
   validateProjectCrossReferences,
   validateProjectReferenceConsistency,
-  validateProjectRenderability
+  validateProjectRenderability,
+  validateProjectGeometry
 } from "@casastudio/schema";
 
 const parsed = ProjectSchema.safeParse(projectJson);
@@ -91,6 +93,7 @@ const project = parsed.data;
 const crossReferences = validateProjectCrossReferences(project);
 const referenceConsistency = validateProjectReferenceConsistency(project);
 const renderability = validateProjectRenderability(project);
+const geometry = validateProjectGeometry(project);
 ```
 
 ## Domain Validation
@@ -105,6 +108,7 @@ ProjectSchema
 -> validateProjectCrossReferences
 -> validateProjectReferenceConsistency
 -> validateProjectRenderability
+-> validateProjectGeometry
 ```
 
 Responsibilities:
@@ -118,6 +122,17 @@ Responsibilities:
 - `validateProjectRenderability` checks the minimum workflow data required for a
   project to be renderable, such as viewpoints, base images, design briefs, and
   render requests.
+- `validateProjectGeometry` checks first-layer physical-model geometry and
+  topology invariants, such as non-zero wall and stair-flight lengths, opening
+  placement within walls, positive stair-landing dimensions, ascending stair
+  flights, and exact duplicate wall geometry within a level.
+
+Geometry Validation currently assumes `ProjectSchema` parsing has already
+succeeded and intentionally does not perform room polygon reconstruction, room
+perimeter validation, wall connectivity graphs, shared wall topology
+validation, polygon area computation, computational geometry, or staircase
+continuity validation. It is limited to local geometric consistency checks and
+serves as the architectural foundation for future Geometry Validation phases.
 
 Each validator returns a `ValidationResult`:
 
@@ -141,7 +156,8 @@ import {
   type ValidationError,
   validateProjectCrossReferences,
   validateProjectReferenceConsistency,
-  validateProjectRenderability
+  validateProjectRenderability,
+  validateProjectGeometry
 } from "@casastudio/schema";
 
 const parsed = ProjectSchema.safeParse(projectJson);
@@ -154,7 +170,8 @@ const project = parsed.data;
 const validationErrors: ValidationError[] = [
   ...validateProjectCrossReferences(project).errors,
   ...validateProjectReferenceConsistency(project).errors,
-  ...validateProjectRenderability(project).errors
+  ...validateProjectRenderability(project).errors,
+  ...validateProjectGeometry(project).errors
 ];
 
 if (validationErrors.length > 0) {
@@ -182,9 +199,8 @@ packages/schema/examples/project.json
 It is a realistic golden sample for the current domain model and is used by
 regression tests. It is not a minimal unit-test fixture.
 
-The example satisfies `ProjectSchema` and all current domain validators. It is
-not yet a geometrically certified model because Geometry Validation has not been
-implemented.
+The example satisfies `ProjectSchema` and all current domain validators,
+including the first Geometry Validation layer.
 
 In repository scripts or tests, load it as JSON and then parse it:
 
@@ -195,7 +211,8 @@ import {
   ProjectSchema,
   validateProjectCrossReferences,
   validateProjectReferenceConsistency,
-  validateProjectRenderability
+  validateProjectRenderability,
+  validateProjectGeometry
 } from "@casastudio/schema";
 
 const projectJson = JSON.parse(
@@ -207,7 +224,8 @@ const project = ProjectSchema.parse(projectJson);
 const results = [
   validateProjectCrossReferences(project),
   validateProjectReferenceConsistency(project),
-  validateProjectRenderability(project)
+  validateProjectRenderability(project),
+  validateProjectGeometry(project)
 ];
 
 if (results.every((result) => result.valid)) {
@@ -309,6 +327,7 @@ Validation:
 - `validateProjectCrossReferences`
 - `validateProjectReferenceConsistency`
 - `validateProjectRenderability`
+- `validateProjectGeometry`
 - `ValidationErrorCode`
 - `type ValidationError`
 - `type ValidationResult`
@@ -317,12 +336,14 @@ Validation:
 
 - `ProjectSchema` is structural. It does not perform full domain validation.
 - Domain validators must be called explicitly by application code after parsing.
-- Geometry Validation and the Geometry Engine are out of scope for this package
-  today.
+- Geometry Validation currently covers only first-layer local geometric
+  consistency. It does not reconstruct room polygons, validate room perimeters,
+  build wall connectivity graphs, validate shared wall topology, compute
+  polygon areas, run computational geometry, or validate staircase continuity.
 - Renderability validation checks first-layer workflow prerequisites. It does
   not validate provider payloads, prompt quality, image assets, render lifecycle
   transitions, or generated output quality.
-- The canonical project is a golden domain sample, not proof of geometric
-  correctness.
+- The canonical project is a golden domain sample that passes the current
+  geometry layer, not proof of full geometric correctness.
 - The generated JSON Schema is structural and does not replace the TypeScript
   domain validators.

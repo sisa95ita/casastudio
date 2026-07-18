@@ -18,6 +18,7 @@ import {
   ValidationErrorCode,
   ViewpointSchema,
   validateProjectCrossReferences,
+  validateProjectGeometry,
   validateProjectReferenceConsistency,
   validateProjectRenderability,
   type BaseImage,
@@ -190,8 +191,10 @@ describe("package barrel exports", () => {
     };
 
     expect(ValidationErrorCode.ROOM_NOT_FOUND).toBe("ROOM_NOT_FOUND");
+    expect(ValidationErrorCode.WALL_ZERO_LENGTH).toBe("WALL_ZERO_LENGTH");
     expect(validateProjectCrossReferences(project)).toEqual({ valid: true, errors: [] });
     expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
     expect(validateProjectRenderability(project)).toMatchObject({
       valid: false,
       errors: [

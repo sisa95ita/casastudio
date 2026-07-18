@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   validateProjectCrossReferences,
+  validateProjectGeometry,
   validateProjectReferenceConsistency,
   validateProjectRenderability
 } from "../validation";
@@ -26,6 +27,10 @@ describe("canonical project example", () => {
       errors: []
     });
     expect(validateProjectRenderability(project)).toEqual({
+      valid: true,
+      errors: []
+    });
+    expect(validateProjectGeometry(project)).toEqual({
       valid: true,
       errors: []
     });
