@@ -18,6 +18,7 @@ import {
   ValidationErrorCode,
   ViewpointSchema,
   validateProjectCrossReferences,
+  validateProjectRenderability,
   type BaseImage,
   type DesignBrief,
   type Project,
@@ -189,5 +190,22 @@ describe("package barrel exports", () => {
 
     expect(ValidationErrorCode.ROOM_NOT_FOUND).toBe("ROOM_NOT_FOUND");
     expect(validateProjectCrossReferences(project)).toEqual({ valid: true, errors: [] });
+    expect(validateProjectRenderability(project)).toMatchObject({
+      valid: false,
+      errors: [
+        {
+          code: ValidationErrorCode.PROJECT_HAS_NO_VIEWPOINTS,
+          path: "viewpoints"
+        },
+        {
+          code: ValidationErrorCode.PROJECT_HAS_NO_DESIGN_BRIEFS,
+          path: "designBriefs"
+        },
+        {
+          code: ValidationErrorCode.PROJECT_HAS_NO_RENDER_REQUESTS,
+          path: "renderRequests"
+        }
+      ]
+    });
   });
 });
