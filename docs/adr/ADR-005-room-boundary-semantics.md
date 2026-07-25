@@ -104,7 +104,31 @@ type Room = {
 
 The stable persisted model SHALL NOT keep `wallIds` and `boundary` as equivalent long-term representations of the same topology.
 
-Legacy input may be migrated or handled by an explicit compatibility layer, but `boundary` is the canonical representation.
+`boundary` is the canonical room-boundary representation for schema version `2.0.0` and later.
+
+Projects using the previous `wallIds` representation SHALL be migrated before canonical schema validation.
+
+---
+
+## Schema Version
+
+Replacing `Room.wallIds` with `Room.boundary` is a breaking persisted-schema change.
+
+The first canonical schema version requiring `Room.boundary` SHALL be:
+
+```text
+2.0.0
+```
+
+A project declaring schema version `2.0.0` or later:
+
+- SHALL use `Room.boundary`;
+- SHALL NOT use `Room.wallIds`;
+- SHALL fail canonical schema validation if both fields are present.
+
+Legacy project versions MAY be accepted only by an explicit migration or compatibility entry point.
+
+Canonical parsing SHALL emit and expose only the latest persisted representation.
 
 ---
 
@@ -164,9 +188,51 @@ REVERSE:
 
 ---
 
+## Same-Level Ownership
+
+Every `RoomBoundaryEdge.wallId` SHALL resolve to a `Wall` owned by the same `Level` that owns the `Room`.
+
+Cross-level room boundaries are invalid in the initial model.
+
+The Geometry Engine SHALL NOT construct a room loop from walls belonging to different levels.
+
+---
+
+## Draft and Buildable Room States
+
+A project may contain structurally valid draft rooms that do not yet define buildable geometry.
+
+The persisted schema SHALL allow:
+
+```text
+boundary.length == 0
+```
+
+for an incomplete draft room.
+
+A geometry-buildable room SHALL contain at least three boundary entries:
+
+```text
+boundary.length >= 3
+```
+
+Boundary lengths of one or two entries are invalid.
+
+This distinction preserves the ability to save incomplete editing states without treating them as valid room polygons.
+
+Conceptually:
+
+```text
+structurally valid room
+    !=
+geometry-buildable room
+```
+
+---
+
 ## Continuity and Closure
 
-A valid room boundary SHALL form one closed and continuous loop.
+A geometry-buildable room boundary SHALL form one closed and continuous loop.
 
 For every consecutive pair of boundary entries:
 
@@ -178,12 +244,6 @@ The final boundary entry SHALL connect back to the first:
 
 ```text
 last.traversalEnd == first.traversalStart
-```
-
-A valid room boundary SHALL contain at least three entries:
-
-```text
-boundary.length >= 3
 ```
 
 For the initial simple-loop model:
@@ -220,6 +280,10 @@ The Geometry Engine SHALL NOT silently:
 
 A boundary with invalid winding SHALL produce an explicit validation or geometry-build error.
 
+Winding normalization is permitted only inside an explicit migration or import-normalization operation that produces a new canonical project representation.
+
+Ordinary project loading and Geometry Engine construction SHALL validate and reject invalid winding rather than normalize it.
+
 ---
 
 ## Shared Wall Semantics
@@ -249,6 +313,49 @@ The persisted schema does not duplicate a wall merely because multiple rooms ref
 
 ---
 
+## Bidirectional Room and Wall Consistency
+
+The persisted model retains bidirectional room-wall references through:
+
+```text
+Room.boundary[].wallId
+Wall.roomIds[]
+```
+
+These references SHALL remain consistent.
+
+If a room boundary references a wall:
+
+```text
+Room.boundary contains Wall.id
+```
+
+then that wall SHALL reference the room:
+
+```text
+Wall.roomIds contains Room.id
+```
+
+If a wall references a room:
+
+```text
+Wall.roomIds contains Room.id
+```
+
+then that room SHALL reference the wall in its boundary unless a future adjacency model explicitly permits non-boundary room references.
+
+For the initial model:
+
+```text
+Wall.roomIds.length <= 2
+```
+
+More than two room references indicate non-manifold room topology.
+
+This cardinality is a semantic consistency rule rather than a purely structural schema rule.
+
+---
+
 ## Validation Responsibilities
 
 Validation is divided by responsibility.
@@ -257,13 +364,15 @@ Validation is divided by responsibility.
 
 Structural schema validation SHALL verify:
 
-- `boundary` exists when required;
+- `boundary` exists;
 - `boundary` is an array;
-- the minimum cardinality is satisfied;
+- an empty boundary is allowed for draft rooms;
+- a non-empty boundary does not contain only one or two entries;
 - every entry contains `wallId`;
 - every entry contains a valid traversal direction;
 - traversal directions are limited to `FORWARD` and `REVERSE`;
-- duplicate wall references within the same boundary are rejected for the initial model.
+- duplicate wall references within the same boundary are rejected for the initial model;
+- canonical schema version `2.0.0` does not accept `wallIds`.
 
 Structural validation does not need to reconstruct geometric topology.
 
@@ -272,25 +381,75 @@ Structural validation does not need to reconstruct geometric topology.
 Cross-reference validation SHALL verify:
 
 - every `RoomBoundaryEdge.wallId` references an existing wall;
-- referenced walls belong to the appropriate project context;
-- referenced walls belong to the room's level when level ownership requires it.
+- every referenced wall belongs to the same level as the room;
+- every `Wall.roomIds` entry references an existing room in the same level.
 
-### Geometry Validation and Geometry Build Validation
+Cross-reference validation answers whether referenced entities exist in the correct scope.
 
-Geometry validation or Geometry Engine build validation SHALL verify:
+### Reference-Consistency Validation
+
+Reference-consistency validation SHALL verify:
+
+- `Room.boundary[].wallId` and `Wall.roomIds` are bidirectionally consistent;
+- a wall does not reference more than two rooms in the initial model;
+- a wall is not used by more room boundaries than declared by `Wall.roomIds`;
+- a room referenced by a wall also uses that wall in its boundary.
+
+Reference-consistency validation answers whether existing references agree semantically.
+
+### Persisted Geometry Validation
+
+Persisted geometry validation MAY verify geometry that does not require construction of the complete runtime topology, including:
+
+- degenerate walls;
+- exact duplicate wall geometry;
+- reversed duplicate wall geometry;
+- invalid opening placement;
+- obvious unsupported coincident or partially overlapping walls.
+
+### Geometry Engine Build Validation
+
+Geometry Engine build validation SHALL verify:
 
 - traversal continuity;
 - loop closure;
 - canonical winding;
-- non-degenerate walls;
 - non-degenerate polygons;
 - self-intersection;
-- supported shared-wall cardinality;
-- adjacency consistency;
-- unsupported coincident or partially overlapping boundaries;
-- any geometric relationship that cannot be validated structurally.
+- invalid boundary order;
+- valid-enum directions that nevertheless produce discontinuity;
+- adjacency assignment;
+- supported `BoundaryEdgeUse` cardinality;
+- non-manifold runtime topology;
+- any geometric relationship requiring the constructed runtime graph.
 
 Schema validation errors and Geometry Engine build errors remain separate contracts, even when they describe related failures.
+
+---
+
+## Expected Diagnostics
+
+The validation and Geometry Engine layers SHALL expose stable diagnostics for room-boundary failures.
+
+Expected diagnostic categories include:
+
+```text
+DUPLICATE_ROOM_BOUNDARY_WALL
+MISSING_ROOM_BOUNDARY_WALL
+CROSS_LEVEL_ROOM_BOUNDARY
+ROOM_WALL_REFERENCE_MISMATCH
+OPEN_ROOM_BOUNDARY
+INVALID_ROOM_BOUNDARY_ORDER
+INVALID_ROOM_BOUNDARY_DIRECTION
+CLOCKWISE_OUTER_ROOM_BOUNDARY
+SELF_INTERSECTING_ROOM_BOUNDARY
+DEGENERATE_ROOM_BOUNDARY
+PARTIAL_BOUNDARY_OVERLAP
+NON_MANIFOLD_WALL_REFERENCE
+LEGACY_ROOM_BOUNDARY_MIGRATION_FAILED
+```
+
+The exact division between persisted validation codes and Geometry Engine build-error codes may differ, but callers SHALL receive precise and stable diagnostics rather than generic failures.
 
 ---
 
@@ -343,6 +502,8 @@ Runtime geometry objects are derived data and SHALL never be persisted as replac
 
 Renderers and exporters SHALL consume the runtime Geometry Model and SHALL NOT reconstruct room boundaries directly from `ProjectSchema`.
 
+Runtime polygon adjacency SHALL be derived from validated room-loop traversal and shared boundary use, not from the ordering of `Wall.roomIds`.
+
 ---
 
 ## Editing Semantics
@@ -355,22 +516,91 @@ The editor SHALL provide a dedicated **Reverse Wall Direction** operation when t
 
 Executing this operation SHALL:
 
-1. swap the `start` and `end` endpoints of the `Wall`;
-2. locate every `RoomBoundaryEdge` referencing that wall;
-3. invert each traversal direction:
+1. record the wall length;
+2. swap the `start` and `end` endpoints of the `Wall`;
+3. locate every `RoomBoundaryEdge` referencing that wall;
+4. invert each traversal direction:
    - `FORWARD` → `REVERSE`;
-   - `REVERSE` → `FORWARD`.
+   - `REVERSE` → `FORWARD`;
+5. transform every opening offset measured from the wall start.
 
-Reversing a wall and updating all referencing room-boundary directions SHALL be performed as one atomic domain operation.
+For an opening with:
 
-The operation SHALL NOT expose or persist an intermediate state in which:
+```text
+oldOffsetFromStart
+opening.width
+wallLength
+```
 
-- the wall endpoints have been swapped;
-- referencing room boundaries have not yet been updated.
+the transformed offset SHALL be:
 
-This guarantees that reversing the internal orientation of a wall does not alter the topological meaning of any room boundary.
+```text
+newOffsetFromStart =
+    wallLength
+    - oldOffsetFromStart
+    - opening.width
+```
 
-As a consequence, room topology remains stable while only the wall's internal geometric representation changes.
+This preserves the physical location of the opening after the wall's canonical direction is reversed.
+
+Any future wall-relative metadata SHALL either:
+
+- be transformed by the same domain operation; or
+- be explicitly defined as invariant under wall-direction reversal.
+
+Reversing a wall and updating all referencing room boundaries, openings, and wall-relative data SHALL be performed as one atomic domain operation.
+
+The operation SHALL:
+
+- validate the complete post-operation state;
+- fail without partial persistence;
+- be represented as one undoable editor command;
+- avoid exposing intermediate inconsistent states.
+
+This guarantees that reversing the internal orientation of a wall does not alter:
+
+- room topology;
+- opening placement;
+- other wall-relative geometric meaning.
+
+---
+
+## Migration Ownership
+
+Migration from legacy project schemas SHALL live in the schema package or in a schema-owned migration entry point.
+
+Conceptually:
+
+```text
+Raw project document
+        │
+        ▼
+Schema-version detection
+        │
+        ▼
+Versioned migration
+        │
+        ▼
+Latest ProjectSchema validation
+```
+
+A preferred package structure is:
+
+```text
+packages/schema/src/migrations/
+├── migrate-project.ts
+├── v1-to-v2.ts
+└── migration-error.ts
+```
+
+The Geometry Engine SHALL receive only projects already migrated to and validated against the current canonical schema.
+
+Migration SHALL NOT be performed by:
+
+- renderers;
+- exporters;
+- the Geometry Engine;
+- arbitrary downstream consumers.
 
 ---
 
@@ -388,14 +618,17 @@ These projects require an explicit migration to:
 boundary: RoomBoundaryEdge[]
 ```
 
-The preferred migration strategy is:
+The migration from schema version `1.x` to `2.0.0` SHALL:
 
-1. resolve referenced walls;
+1. resolve referenced walls in the room's owning level;
 2. reconstruct one deterministic closed traversal;
 3. assign `FORWARD` or `REVERSE` for each wall;
 4. normalize the resulting outer boundary to counter-clockwise winding;
-5. persist `boundary`;
-6. remove `wallIds`.
+5. verify room-wall bidirectional consistency or migrate it coherently;
+6. persist `boundary`;
+7. remove `wallIds`;
+8. update `schemaVersion` to `2.0.0`;
+9. validate the complete migrated project against the latest canonical schema.
 
 Migration SHALL fail explicitly when:
 
@@ -404,20 +637,49 @@ Migration SHALL fail explicitly when:
 - wall order is ambiguous;
 - wall direction is ambiguous;
 - referenced walls are missing;
+- referenced walls belong to another level;
 - the loop self-intersects;
-- the result violates the canonical winding or topology rules.
+- topology is non-manifold;
+- room-wall references cannot be reconciled deterministically;
+- opening or wall-relative data cannot be preserved;
+- the result violates canonical topology rules.
+
+Winding normalization and boundary reordering are permitted during this explicit migration because the operation creates a new canonical project representation.
+
+They are not permitted during ordinary Geometry Engine construction.
+
+### Legacy Compatibility Resolver
 
 A temporary `LegacyRoomBoundaryResolver` MAY be used during transition.
 
 Such a resolver SHALL:
 
 - be isolated from the canonical Geometry Engine contract;
+- be invoked only by migration or import-normalization code;
 - produce deterministic output only;
 - reject ambiguous input;
 - report explicit migration or compatibility errors;
-- never silently choose between multiple valid loops.
+- never silently choose between multiple valid loops;
+- emit canonical `boundary` data only.
 
 The compatibility resolver is transitional and SHALL NOT redefine `wallIds` as a supported canonical room-boundary model.
+
+### Both-Present Input
+
+Canonical schema version `2.0.0` SHALL reject a room containing both:
+
+```text
+wallIds
+boundary
+```
+
+An explicit migration parser MAY accept both fields only to:
+
+- verify that they describe the same wall membership;
+- reject inconsistent data;
+- emit canonical `boundary` only.
+
+No ordinary consumer may choose one field and ignore the other.
 
 ---
 
@@ -433,17 +695,47 @@ The chosen representation provides:
 - easier validation;
 - easier shared-wall analysis;
 - stable editing semantics;
+- preservation of opening placement during wall reversal;
 - easier interoperability with CAD-like algorithms;
-- direct mapping to runtime `BoundaryEdgeUse` objects.
+- direct mapping to runtime `BoundaryEdgeUse` objects;
+- clear distinction between draft validity and geometry buildability;
+- versioned migration from legacy persisted data.
 
 The cost is:
 
 - a more verbose persisted model;
+- a breaking schema-version change;
+- migration infrastructure in the schema package;
 - migration work for legacy projects;
-- additional structural and geometric validation rules;
-- editor responsibilities for maintaining boundary consistency;
+- additional structural, cross-reference, consistency, and geometric validation rules;
+- editor responsibilities for maintaining boundary and wall-relative consistency;
 - atomic update requirements when wall direction changes;
-- explicit failure handling for ambiguous legacy topology.
+- explicit failure handling for ambiguous legacy topology;
+- updates to fixtures, tests, generated JSON Schema, and documentation.
+
+---
+
+## Implementation Impact
+
+Implementing this ADR affects at least:
+
+- `packages/schema/src/physical-building/room.ts`;
+- `packages/schema/src/physical-building/wall.ts`;
+- schema-inferred TypeScript types;
+- cross-reference validation;
+- reference-consistency validation;
+- geometry validation;
+- validation error codes;
+- schema migrations and schema-version handling;
+- project fixtures and examples;
+- generated JSON Schema;
+- schema tests;
+- project-schema documentation;
+- any consumer of `Room.wallIds`.
+
+The implementation SHALL update canonical examples and generated artifacts so that schema version `2.0.0` consistently uses `Room.boundary`.
+
+Legacy `wallIds` examples SHOULD be retained only as migration fixtures.
 
 ---
 
