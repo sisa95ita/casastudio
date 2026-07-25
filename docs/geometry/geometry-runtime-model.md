@@ -44,6 +44,14 @@ The `GeometryModel` is the public contract between the Geometry Engine and every
 
 Renderers, exporters, and external geometric algorithms must consume the `GeometryModel` and must not access `ProjectSchema` directly.
 
+The conceptual `BoundaryEdge ↔ Loop` relationship described by ADR-006 is represented concretely through `BoundaryEdgeUse`:
+
+```text
+BoundaryEdge ↔ BoundaryEdgeUse ↔ Loop
+```
+
+This preserves one physical boundary identity while allowing different loops to traverse it in different directions.
+
 ---
 
 # Document Status
@@ -66,12 +74,13 @@ For example:
 
 - a domain `Room` produces a runtime `Polygon`;
 - a domain `Wall` produces a runtime `BoundaryEdge`;
+- a domain `Opening` produces a runtime `OpeningGeometry`;
 - a domain `Level` produces a runtime `LevelGeometry`;
 - a domain `Staircase` produces runtime staircase geometry.
 
 The runtime model is optimized for geometric and topological reasoning.
 
-Architectural objects may be retained as traceability references, but they do not define the runtime topology.
+Architectural objects may be retained as traceability references, but they do not define runtime topology.
 
 ---
 
@@ -120,6 +129,28 @@ The `GeometryEngine` is responsible for producing a coherent runtime object grap
 
 ---
 
+## Immutable Public Runtime
+
+The Geometry Engine may use mutable builders or intermediate data structures while constructing the runtime graph.
+
+After construction, public runtime objects are read-only.
+
+Topology mutation is an internal concern of the Geometry Engine and is not part of the initial public runtime API.
+
+Conceptually:
+
+```text
+ProjectSchema
+    │
+    ▼
+Mutable Geometry Builders
+    │
+    ▼
+Immutable GeometryModel
+```
+
+---
+
 ## Renderer Neutrality
 
 The Geometry Model contains geometric and topological information, not renderer-specific data.
@@ -136,6 +167,10 @@ It must not contain:
 
 A renderer may derive those resources from the Geometry Model.
 
+Renderer-required domain-derived measurements must be exposed by the Geometry Model in a technology-independent form.
+
+Renderers must not compensate for missing runtime data by reading `ProjectSchema` directly.
+
 ---
 
 ## One Model for 2D and 3D
@@ -148,6 +183,7 @@ A 3D renderer additionally consumes:
 
 - level elevations;
 - wall heights;
+- wall thicknesses;
 - opening elevations;
 - staircase geometry;
 - other vertical information.
@@ -166,6 +202,7 @@ GeometryModel
 ├── LevelGeometry
 │   ├── Vertex
 │   ├── BoundaryEdge
+│   ├── OpeningGeometry
 │   ├── BoundaryEdgeUse
 │   ├── Loop
 │   └── Polygon
@@ -195,11 +232,17 @@ Polygon
 
 `BoundaryEdgeUse` separates physical edge identity from loop traversal direction.
 
+`OpeningGeometry` is associated with a `BoundaryEdge` and does not split boundary topology.
+
 ---
 
 # GeometryModel
 
 Represents the complete in-memory geometric model of one project.
+
+The `GeometryModel` is the root aggregate of the runtime geometry graph.
+
+Every runtime object ultimately belongs to exactly one `GeometryModel` instance.
 
 ## Responsibilities
 
@@ -208,6 +251,7 @@ Represents the complete in-memory geometric model of one project.
 - own staircase geometry connecting or spanning levels;
 - provide model-level lookup and traversal;
 - retain project-level traceability;
+- retain the source project revision;
 - define the lifetime of all runtime objects.
 
 ## Typical Properties
@@ -215,6 +259,7 @@ Represents the complete in-memory geometric model of one project.
 ```text
 id
 sourceProjectId
+sourceRevision
 levels
 staircases
 ```
@@ -222,13 +267,16 @@ staircases
 Possible future properties:
 
 ```text
-sourceRevision
 metadata
 ```
 
 ## Expected API
 
 ```text
+sourceProjectId()
+
+sourceRevision()
+
 levels()
 
 staircases()
@@ -239,16 +287,26 @@ getVertex(id)
 
 getBoundaryEdge(id)
 
+getBoundaryEdgeUse(id)
+
+getOpeningGeometry(id)
+
 getLoop(id)
 
 getPolygon(id)
+
+getStairGeometry(id)
 
 findPolygonByRoomId(roomId)
 
 findBoundaryEdgeByWallId(wallId)
 
+findOpeningGeometryBySourceId(openingId)
+
 findStairGeometryByStaircaseId(staircaseId)
 ```
+
+All model-level lookup methods rely on the invariant that every runtime object identifier is unique within one `GeometryModel`.
 
 The Geometry Model owns runtime objects even when those objects contain bidirectional references to one another.
 
@@ -273,19 +331,30 @@ sourceLevelId
 elevation
 vertices
 boundaryEdges
+openingGeometries
 boundaryEdgeUses
 loops
 polygons
 ```
 
+`id` is the runtime identifier.
+
+`sourceLevelId` is the persisted domain identifier from which the runtime level geometry was derived.
+
 ## Expected API
 
 ```text
+sourceLevelId()
+
 elevation()
 
 vertices()
 
 boundaryEdges()
+
+openingGeometries()
+
+boundaryEdgeUses()
 
 loops()
 
@@ -294,6 +363,10 @@ polygons()
 getVertex(id)
 
 getBoundaryEdge(id)
+
+getOpeningGeometry(id)
+
+getBoundaryEdgeUse(id)
 
 getLoop(id)
 
@@ -307,6 +380,8 @@ findBoundaryEdgeByWallId(wallId)
 A 2D blueprint renderer may consume one `LevelGeometry`.
 
 A whole-building 3D renderer may consume all level geometries from the `GeometryModel`.
+
+All returned collections are read-only.
 
 ---
 
@@ -358,16 +433,14 @@ position()
 
 level()
 
-addIncidentEdge(edge)
-
-removeIncidentEdge(edge)
-
 incidentEdges()
 
 degree()
 ```
 
 A vertex has no knowledge of architectural concepts such as rooms or walls.
+
+Vertex adjacency is populated internally by the Geometry Engine during construction and is read-only afterward.
 
 ---
 
@@ -383,6 +456,7 @@ A `BoundaryEdge` commonly derives from one domain `Wall`, but it remains a runti
 - represent one physical boundary only once;
 - reference adjacent polygons;
 - provide geometric measurements;
+- expose renderer-neutral wall dimensions;
 - preserve traceability to the source wall;
 - provide access to opening geometry associated with the boundary.
 
@@ -395,10 +469,19 @@ endVertex
 leftPolygon
 rightPolygon
 sourceWallId
+height
+thickness
 openings
 ```
 
-The exact interpretation of `leftPolygon` and `rightPolygon` depends on the canonical direction from `startVertex` to `endVertex`.
+The interpretation of `leftPolygon` and `rightPolygon` depends on the canonical direction from `startVertex` to `endVertex`.
+
+Given a `BoundaryEdge` directed from `startVertex` to `endVertex` in level-local XZ space:
+
+- `leftPolygon` is the polygon whose interior lies to the mathematical left of the directed segment;
+- `rightPolygon` is the polygon whose interior lies to the mathematical right of the directed segment.
+
+The exact interpretation of mathematical left and right follows the project's coordinate-system specification and its XZ orientation convention.
 
 An exterior boundary has only one adjacent polygon.
 
@@ -417,16 +500,31 @@ leftPolygon()
 
 rightPolygon()
 
+adjacency()
+
 adjacentPolygons()
 
 isExterior()
 
 length()
 
+height()
+
+thickness()
+
 sourceWallId()
 
 openings()
 ```
+
+`adjacency()` returns side-aware adjacency:
+
+```text
+left
+right
+```
+
+`adjacentPolygons()` returns the non-null adjacent polygons without side metadata.
 
 ## Constraints
 
@@ -435,15 +533,98 @@ A `BoundaryEdge`:
 - must not own a single `parentLoop`;
 - may participate in multiple loops;
 - must not be duplicated merely because different loops traverse it in different directions;
-- must not be split solely because it contains a door or window.
+- must not be split solely because it contains a door or window;
+- must reference exactly two valid endpoint vertices;
+- must contain zero, one, or two adjacent polygons in the initial manifold model.
 
 Future extensions may include:
 
 - direction vector;
 - normal calculation;
-- wall thickness;
-- wall height;
-- geometric offset helpers.
+- geometric offset helpers;
+- richer wall profile geometry.
+
+---
+
+# OpeningGeometry
+
+Represents one renderer-neutral opening associated with a `BoundaryEdge`.
+
+An opening may derive from a domain door, window, or another wall opening type.
+
+Opening geometry does not split boundary topology.
+
+## Responsibilities
+
+- preserve source opening traceability;
+- preserve source wall traceability;
+- represent placement along a boundary edge;
+- expose horizontal and vertical dimensions;
+- provide technology-independent data required by 2D renderers, 3D renderers, and exporters.
+
+## Typical Properties
+
+```text
+id
+sourceOpeningId
+sourceWallId
+type
+edge
+offsetFromStart
+width
+height
+elevation
+startPositionOnEdge
+endPositionOnEdge
+```
+
+`offsetFromStart` is measured from the canonical `BoundaryEdge.startVertex` toward `BoundaryEdge.endVertex`.
+
+`elevation` represents the opening's vertical offset relative to the owning level or wall reference frame, according to the project coordinate-system specification.
+
+## Expected API
+
+```text
+sourceOpeningId()
+
+sourceWallId()
+
+type()
+
+edge()
+
+offsetFromStart()
+
+width()
+
+height()
+
+elevation()
+
+startPositionOnEdge()
+
+endPositionOnEdge()
+```
+
+The opening type is renderer-neutral and may reflect a domain-level category such as:
+
+```text
+DOOR
+WINDOW
+GENERIC
+```
+
+The exact set of opening types may evolve with the persisted schema.
+
+## Constraints
+
+An `OpeningGeometry`:
+
+- belongs to exactly one `BoundaryEdge`;
+- must lie within the usable length of its boundary edge;
+- must not change loop closure;
+- must not create additional vertices or boundary edges solely to represent the opening;
+- must retain enough data that renderers do not need to read `ProjectSchema`.
 
 ---
 
@@ -515,6 +696,18 @@ The physical boundary exists once.
 
 Its traversal exists once per participating loop.
 
+## Constraints
+
+For the initial implementation:
+
+- an exterior boundary normally participates in one `BoundaryEdgeUse`;
+- an interior shared boundary normally participates in two `BoundaryEdgeUse` instances;
+- more than two uses indicate a non-manifold boundary and must produce `NON_MANIFOLD_BOUNDARY`;
+- the same `BoundaryEdgeUse` instance must not appear more than once in a loop;
+- a simple loop must not traverse the same physical `BoundaryEdge` more than once.
+
+More complex non-simple topology requires a separate design decision.
+
 ---
 
 # Loop
@@ -570,7 +763,9 @@ signedArea()
 area()
 ```
 
-`edges()` may return the underlying `BoundaryEdge` objects in traversal order.
+`edgeUses()` is the primary directional traversal API.
+
+`edges()` returns the underlying physical `BoundaryEdge` objects in loop order but intentionally discards traversal direction. Consumers that need ordered geometry must use `edgeUses()` or `vertices()`.
 
 `vertices()` must respect each `BoundaryEdgeUse.direction`.
 
@@ -607,6 +802,30 @@ The specific convention must remain consistent across:
 - area calculation;
 - renderer consumption;
 - exporter consumption.
+
+`orientation()` returns one of:
+
+```text
+CLOCKWISE
+COUNTER_CLOCKWISE
+COLLINEAR
+```
+
+A valid non-degenerate polygon loop must not be `COLLINEAR`.
+
+`signedArea()` follows the project XZ winding convention.
+
+`area()` returns the absolute planar area of the loop.
+
+## Constraints
+
+A valid loop:
+
+- is closed;
+- contains at least three non-degenerate edge uses;
+- does not self-intersect;
+- does not contain an edge-use discontinuity;
+- does not traverse the same physical boundary twice in the initial simple-loop model.
 
 Future extensions may include:
 
@@ -658,6 +877,8 @@ innerLoops()
 
 loops()
 
+edgeUses()
+
 edges()
 
 vertices()
@@ -673,7 +894,20 @@ area()
 centroid()
 ```
 
-The initial `containsPoint` contract should operate on a geometric point rather than a `Vertex`, because point containment is not limited to existing topology vertices.
+`edgeUses()` returns ordered traversal uses from the polygon loops.
+
+`edges()` returns physical boundaries and must not be used when traversal direction is required.
+
+The initial `containsPoint` contract operates on a level-local planar `Point2D` rather than a `Vertex`, because point containment is not limited to existing topology vertices.
+
+Unless otherwise specified by a later algorithm contract:
+
+- the input point uses the owning level's coordinate frame;
+- a point on the outer boundary is considered contained;
+- a point on an inner-loop boundary is not considered contained;
+- the method assumes the polygon has already passed runtime geometry validation.
+
+`area()` returns the outer-loop area minus all inner-loop areas.
 
 Future extensions may include:
 
@@ -695,6 +929,7 @@ Staircases are independent geometric elements and do not participate in room bou
 ## Responsibilities
 
 - preserve source staircase traceability;
+- preserve level and optional room connectivity;
 - represent geometry connecting or spanning levels;
 - own runtime stair flights and landings;
 - provide all staircase information required by renderers and exporters.
@@ -704,15 +939,28 @@ Staircases are independent geometric elements and do not participate in room bou
 ```text
 id
 sourceStaircaseId
+fromLevelId
+toLevelId
+fromRoomId
+toRoomId
 flights
 landings
-connectedLevelIds
 ```
+
+`fromRoomId` and `toRoomId` may be absent when the source schema does not define room connectivity.
 
 ## Expected API
 
 ```text
 sourceStaircaseId()
+
+fromLevelId()
+
+toLevelId()
+
+fromRoomId()
+
+toRoomId()
 
 flights()
 
@@ -724,6 +972,10 @@ startLevelId()
 
 endLevelId()
 ```
+
+`startLevelId()` maps to `fromLevelId()`.
+
+`endLevelId()` maps to `toLevelId()`.
 
 Stair geometry belongs to the `GeometryModel`, not directly to one polygon.
 
@@ -753,6 +1005,8 @@ endElevation
 width
 stepCount
 ```
+
+`startPosition` and `endPosition` are planar XZ coordinates in the staircase's source coordinate frame as defined by the project coordinate-system specification.
 
 ## Expected API
 
@@ -817,7 +1071,7 @@ sourceLandingId()
 
 # Openings
 
-Doors and windows belong to domain walls and are projected onto runtime `BoundaryEdge` objects.
+Doors and windows belong to domain walls and are projected onto runtime `BoundaryEdge` objects as `OpeningGeometry`.
 
 Openings do not split boundary topology.
 
@@ -825,13 +1079,12 @@ Openings do not split boundary topology.
 
 - a wall with one opening still produces one `BoundaryEdge`;
 - an opening is represented as geometry associated with that edge;
-- opening placement is measured relative to the edge;
-- opening geometry may contain horizontal and vertical information;
-- renderers may use opening geometry to generate gaps, symbols, or wall cut-outs.
+- opening placement is measured relative to the edge's canonical direction;
+- opening geometry contains horizontal and vertical information;
+- renderers may use opening geometry to generate gaps, symbols, or wall cut-outs;
+- renderers must not read `ProjectSchema` to reconstruct opening placement or dimensions.
 
-The detailed runtime opening representation may be introduced when opening rendering is implemented.
-
-Until then, `BoundaryEdge` may retain validated source opening information or lightweight derived opening geometry.
+Detailed wall-cut solid generation remains renderer-specific or belongs to a future solid-geometry layer.
 
 ---
 
@@ -843,6 +1096,7 @@ classDiagram
     class LevelGeometry
     class Vertex
     class BoundaryEdge
+    class OpeningGeometry
     class BoundaryEdgeUse
     class Loop
     class Polygon
@@ -855,11 +1109,13 @@ classDiagram
 
     LevelGeometry "1" *-- "*" Vertex
     LevelGeometry "1" *-- "*" BoundaryEdge
+    LevelGeometry "1" *-- "*" OpeningGeometry
     LevelGeometry "1" *-- "*" BoundaryEdgeUse
     LevelGeometry "1" *-- "*" Loop
     LevelGeometry "1" *-- "*" Polygon
 
     Vertex "*" -- "*" BoundaryEdge : incident edges
+    BoundaryEdge "1" *-- "*" OpeningGeometry : openings
     BoundaryEdge "1" <-- "*" BoundaryEdgeUse : edge
     Loop "1" *-- "*" BoundaryEdgeUse : ordered traversal
     Polygon "1" *-- "1" Loop : outer loop
@@ -882,6 +1138,7 @@ GeometryModel
 LevelGeometry
  ├── Vertex
  ├── BoundaryEdge
+ ├── OpeningGeometry
  ├── BoundaryEdgeUse
  ├── Loop
  └── Polygon
@@ -894,7 +1151,16 @@ BoundaryEdge
  ├── endVertex
  ├── leftPolygon
  ├── rightPolygon
+ ├── height
+ ├── thickness
+ ├── OpeningGeometry[]
  └── referenced by BoundaryEdgeUses
+
+OpeningGeometry
+ ├── BoundaryEdge
+ ├── sourceOpeningId
+ ├── dimensions
+ └── placement
 
 BoundaryEdgeUse
  ├── BoundaryEdge
@@ -917,7 +1183,7 @@ StairGeometry
 
 Relationships are direct object references where runtime traversal benefits from them.
 
-Identifiers remain available for lookup, diagnostics, serialization of debug output, and traceability.
+Identifiers remain available for lookup, diagnostics, explicit debug serialization, and traceability.
 
 ---
 
@@ -931,6 +1197,7 @@ GeometryModel
 ├── LevelGeometry
 │   ├── Vertices
 │   ├── BoundaryEdges
+│   ├── OpeningGeometries
 │   ├── BoundaryEdgeUses
 │   ├── Loops
 │   └── Polygons
@@ -946,11 +1213,27 @@ Removing or rebuilding a `GeometryModel` invalidates all runtime references belo
 
 Runtime objects must not be shared between different Geometry Model instances.
 
+Application state may temporarily hold runtime object references during a single render or update pass.
+
+Durable UI state should store:
+
+- source-domain identifiers;
+- deterministic runtime identifiers;
+- the source revision or another model revision token.
+
+Durable UI state should not retain direct runtime object references across Geometry Model rebuilds.
+
+Because the runtime graph contains cycles, debug serialization must be explicit and ID-based.
+
+Runtime objects must not be serialized by naïvely applying generic JSON serialization to the object graph.
+
 ---
 
 # Identity
 
 Every runtime object owns a stable runtime identifier.
+
+Every runtime object identifier is unique within one `GeometryModel`.
 
 Runtime identifiers are not persisted as replacements for domain identifiers.
 
@@ -963,6 +1246,7 @@ Examples:
 ```text
 level:<level-id>
 edge:<wall-id>
+opening:<opening-id>
 polygon:<room-id>
 stair:<staircase-id>
 stair-flight:<flight-id>
@@ -979,11 +1263,25 @@ loop:<polygon-id>:inner:<index>
 edge-use:<loop-id>:<index>
 ```
 
+Vertex identity must include level context.
+
+A typical deterministic vertex identifier is:
+
+```text
+vertex:<level-id>:<coordinate-key>
+```
+
 Vertex identity may be derived from:
 
 - canonical source information;
 - a deterministic coordinate key within a level;
 - another deterministic strategy defined by the Geometry Engine.
+
+For authored MVP integer-coordinate data, exact coordinate keys are acceptable.
+
+If decimal imports or normalization are introduced later, the Geometry Engine must define an explicit tolerance and normalization policy.
+
+Coordinates must not be silently snapped or altered without a documented rule.
 
 ## Goals
 
@@ -993,7 +1291,9 @@ Deterministic runtime identifiers improve:
 - diagnostics;
 - selection mapping;
 - rebuild comparison;
-- domain-to-runtime traceability.
+- domain-to-runtime traceability;
+- cache invalidation;
+- debug serialization.
 
 They remain runtime identifiers and must not become persisted domain identity by accident.
 
@@ -1024,7 +1324,7 @@ Elements with vertical extent, such as:
 - stair flights;
 - stair landings;
 
-may store additional elevation or height information when required.
+store additional elevation, height, or thickness information when required.
 
 The Geometry Runtime Model must follow the coordinate system established by the project coordinate-system documentation.
 
@@ -1076,6 +1376,12 @@ The Geometry Engine must detect duplicated wall geometry, including duplicates w
 
 Shared geometry must not be represented by two coincident `BoundaryEdge` objects.
 
+For the initial manifold topology:
+
+- an exterior edge has one use;
+- a shared interior edge has two uses;
+- an edge with more than two uses is non-manifold.
+
 ---
 
 # Inner Loops
@@ -1109,23 +1415,27 @@ The Geometry Engine should conceptually construct the model in phases.
 sequenceDiagram
     participant Schema as ProjectSchema
     participant Engine as GeometryEngine
+    participant Builder as Mutable Builders
     participant Model as GeometryModel
 
     Schema->>Engine: build(project)
-    Engine->>Model: create GeometryModel
-    Engine->>Model: create LevelGeometry objects
-    Engine->>Model: create and deduplicate Vertices
-    Engine->>Model: create shared BoundaryEdges
-    Engine->>Model: create Polygons
-    Engine->>Model: create BoundaryEdgeUses
-    Engine->>Model: create and validate Loops
-    Engine->>Model: assign polygon adjacency
-    Engine->>Model: create StairGeometry
+    Engine->>Builder: create project and level builders
+    Engine->>Builder: create and deduplicate vertices
+    Engine->>Builder: create shared boundary edges
+    Engine->>Builder: create opening geometry
+    Engine->>Builder: create polygons
+    Engine->>Builder: create boundary edge uses
+    Engine->>Builder: create and validate loops
+    Engine->>Builder: assign polygon adjacency
+    Engine->>Builder: create staircase geometry
+    Engine->>Model: finalize immutable runtime graph
     Engine-->>Schema: input remains unchanged
-    Engine-->>Model: return completed runtime graph
+    Engine-->>Model: return completed GeometryModel
 ```
 
-The exact implementation may use intermediate builders or adapters, but the resulting object graph must respect the ownership and topology rules in this document.
+The exact implementation may use intermediate builders, factories, adapters, or internal mutable classes.
+
+The resulting public object graph must respect the ownership, identity, immutability, and topology rules in this document.
 
 ---
 
@@ -1153,6 +1463,7 @@ DUPLICATE_BOUNDARY
 UNKNOWN_WALL_REFERENCE
 DEGENERATE_EDGE
 DEGENERATE_POLYGON
+SELF_INTERSECTING_LOOP
 NON_MANIFOLD_BOUNDARY
 INVALID_ADJACENCY
 INVALID_OPENING_PLACEMENT
@@ -1167,6 +1478,46 @@ Build errors should retain enough source identifiers and context to support:
 - migration tooling.
 
 Geometry build errors may map to schema validation errors when useful, but the two error contracts remain distinct.
+
+No geometry build error may be hidden by silently altering persisted coordinates or topology.
+
+---
+
+# Legacy Room Boundary Transition
+
+The runtime model requires ordered and oriented room boundaries.
+
+The preferred persisted representation is defined by ADR-005 and conceptually follows:
+
+```text
+RoomBoundaryEdge
+├── wallId
+└── direction
+```
+
+with:
+
+```text
+Room.boundary: RoomBoundaryEdge[]
+```
+
+The current legacy persisted schema may still expose unordered `Room.wallIds`.
+
+That representation is insufficient for fully deterministic loop construction.
+
+Before production Geometry Engine implementation, the project should choose one of these approaches:
+
+1. implement ADR-005 first and migrate persisted room boundaries; or
+2. introduce a temporary `LegacyRoomBoundaryResolver`.
+
+A temporary legacy resolver must:
+
+- attempt deterministic ordering and orientation;
+- reject ambiguous or non-unique solutions;
+- report explicit legacy-boundary inference errors;
+- never silently choose between multiple valid loops.
+
+The preferred implementation path is to complete ADR-005 before relying on the Geometry Engine for production rendering or exporting.
 
 ---
 
@@ -1185,7 +1536,8 @@ Complete rebuilding provides:
 - simpler lifecycle rules;
 - fewer stale references;
 - deterministic results;
-- easier testing.
+- easier testing;
+- clear source-revision tracking.
 
 ---
 
@@ -1200,7 +1552,10 @@ Downstream consumers may depend on:
 - documented geometric measurements;
 - level grouping;
 - source traceability;
-- deterministic construction.
+- source revision;
+- deterministic construction;
+- read-only collections;
+- post-construction immutability.
 
 Downstream consumers must not depend on:
 
@@ -1208,11 +1563,14 @@ Downstream consumers must not depend on:
 - mutable internal collections;
 - renderer-specific representations;
 - undocumented private caches;
-- direct access to `ProjectSchema`.
+- direct access to `ProjectSchema`;
+- direct object references surviving a Geometry Model rebuild.
 
-Public collections should normally be exposed as read-only views.
+Public collections are exposed as read-only views.
 
-Mutating topology after model construction is outside the initial runtime API.
+Public runtime objects are immutable after construction.
+
+Mutable topology exists only inside the Geometry Engine during model construction.
 
 ---
 
@@ -1224,17 +1582,26 @@ The initial implementation should include:
 - `LevelGeometry`;
 - `Vertex`;
 - `BoundaryEdge`;
+- `OpeningGeometry`;
 - `BoundaryEdgeUse`;
 - `Loop`;
 - `Polygon`;
-- staircase runtime ownership;
+- `StairGeometry`;
+- `StairFlightGeometry`;
+- `StairLandingGeometry`;
+- source project revision tracking;
+- globally unique runtime identifiers;
 - deterministic runtime identifiers;
 - outer room loops;
 - empty `innerLoops`;
 - shared boundary representation;
 - exterior boundary detection;
+- wall height and thickness;
+- minimal renderer-neutral opening geometry;
 - source-domain traceability;
-- geometry-specific build results and errors.
+- geometry-specific build results and errors;
+- immutable/read-only public runtime objects;
+- explicit support for ADR-005 ordered and oriented room boundaries.
 
 The initial implementation does not need to include every future geometric algorithm.
 
@@ -1274,7 +1641,9 @@ Possible future runtime additions include:
 - vertical adjacency;
 - multi-level voids;
 - polygon holes;
-- geometric query services.
+- geometric query services;
+- explicit partial-edge splitting;
+- tolerance-aware import normalization.
 
 ---
 
@@ -1295,7 +1664,9 @@ This document intentionally does not define:
 - editor commands;
 - undo and redo behavior;
 - incremental synchronization;
-- detailed migration from legacy room boundaries.
+- detailed migration from legacy room boundaries;
+- detailed wall-solid construction;
+- renderer-specific opening cut generation.
 
 Those concerns belong to other architectural or implementation documents.
 
@@ -1307,16 +1678,26 @@ The following invariants must hold for a valid Geometry Model:
 
 1. Every runtime object belongs to exactly one `GeometryModel`.
 2. Every planar runtime object belongs to exactly one `LevelGeometry`.
-3. Every `BoundaryEdge` references two valid endpoint vertices.
-4. Every `BoundaryEdgeUse` references exactly one boundary edge and one loop.
-5. Every loop contains ordered boundary edge uses.
-6. Every valid loop is closed.
-7. Every polygon has exactly one outer loop.
-8. Every shared physical boundary exists as one `BoundaryEdge`.
-9. A shared boundary may be traversed by different loops in different directions.
-10. Openings do not split boundary topology.
-11. Stair geometry is owned by the Geometry Model and does not require renderer access to `ProjectSchema`.
-12. Runtime objects are not persisted.
-13. Runtime geometry is not the source of truth.
-14. Renderers and exporters consume the Geometry Model rather than `ProjectSchema`.
-15. Renderer-specific objects are not part of the Geometry Model.
+3. Every runtime object identifier is unique within one `GeometryModel`.
+4. Every `BoundaryEdge` references two valid endpoint vertices.
+5. Every `OpeningGeometry` belongs to exactly one `BoundaryEdge`.
+6. Every `BoundaryEdgeUse` references exactly one boundary edge and one loop.
+7. Every loop contains ordered boundary edge uses.
+8. Every valid loop is closed.
+9. Every valid polygon loop is non-self-intersecting.
+10. Every polygon has exactly one outer loop.
+11. Every shared physical boundary exists as one `BoundaryEdge`.
+12. A shared boundary may be traversed by different loops in different directions.
+13. A boundary with more than two loop uses is non-manifold in the initial model.
+14. Openings do not split boundary topology.
+15. Wall height, wall thickness, and opening placement required by renderers are exposed through renderer-neutral runtime objects.
+16. Stair geometry is owned by the Geometry Model and does not require renderer access to `ProjectSchema`.
+17. Runtime objects are not persisted.
+18. Runtime geometry is not the source of truth.
+19. Public runtime objects are immutable after model construction.
+20. Public runtime collections are read-only.
+21. Renderers and exporters consume the Geometry Model rather than `ProjectSchema`.
+22. Renderer-specific objects are not part of the Geometry Model.
+23. Rebuilding a `GeometryModel` invalidates all runtime object references from the previous model.
+24. Debug serialization of the runtime graph is explicit and ID-based.
+25. Geometry construction must not silently alter persisted coordinates or topology.
