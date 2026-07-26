@@ -1,0 +1,118 @@
+{
+  "id": "casa-studio-legacy-project",
+  "name": "CasaStudio Legacy Project",
+  "schemaVersion": "1.0.0",
+  "revision": 7,
+  "createdAt": "2026-07-18T10:00:00+02:00",
+  "updatedAt": "2026-07-19T12:30:00+02:00",
+  "units": {
+    "length": "cm",
+    "angle": "deg"
+  },
+  "building": {
+    "id": "main-building",
+    "name": "Main Building",
+    "type": "HOUSE",
+    "levels": [
+      {
+        "id": "ground-floor",
+        "name": "Ground Floor",
+        "elevation": 0,
+        "rooms": [
+          {
+            "id": "living-room",
+            "name": "Living Room",
+            "type": "LIVING_ROOM",
+            "description": "Main living area at the front of the house.",
+            "wallIds": [
+              "ground-north-wall",
+              "living-east-wall",
+              "living-south-wall",
+              "living-west-wall"
+            ]
+          }
+        ],
+        "walls": [
+          {
+            "id": "ground-north-wall",
+            "name": "Ground North Wall",
+            "start": {
+              "x": 0,
+              "z": 0
+            },
+            "end": {
+              "x": 600,
+              "z": 0
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "living-room"
+            ],
+            "openings": []
+          },
+          {
+            "id": "living-east-wall",
+            "name": "Living East Wall",
+            "start": {
+              "x": 600,
+              "z": 0
+            },
+            "end": {
+              "x": 600,
+              "z": 400
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "living-room"
+            ],
+            "openings": []
+          },
+          {
+            "id": "living-south-wall",
+            "name": "Living South Wall",
+            "start": {
+              "x": 600,
+              "z": 400
+            },
+            "end": {
+              "x": 0,
+              "z": 400
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "living-room"
+            ],
+            "openings": []
+          },
+          {
+            "id": "living-west-wall",
+            "name": "Living West Wall",
+            "start": {
+              "x": 0,
+              "z": 400
+            },
+            "end": {
+              "x": 0,
+              "z": 0
+            },
+            "height": 300,
+            "thickness": 20,
+            "roomIds": [
+              "living-room"
+            ],
+            "openings": []
+          }
+        ],
+        "staircases": []
+      }
+    ]
+  },
+  "viewpoints": [],
+  "baseImages": [],
+  "designBriefs": [],
+  "renderRequests": [],
+  "renderResults": []
+}

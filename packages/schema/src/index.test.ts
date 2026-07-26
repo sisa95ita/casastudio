@@ -6,6 +6,9 @@ import {
   CURRENT_PROJECT_SCHEMA_VERSION,
   DesignBriefSchema,
   IdentifierSchema,
+  LegacyRoomBoundaryMigrationFailureReason,
+  migrateProject,
+  MigrationErrorCode,
   OpeningSchema,
   Point2DSchema,
   ProjectSchema,
@@ -29,6 +32,8 @@ import {
   type BaseImage,
   type DesignBrief,
   type Project,
+  type ProjectMigrationError,
+  type ProjectMigrationResult,
   type RenderRequest,
   type RenderResult,
   type RoomBoundaryDirection,
@@ -186,6 +191,26 @@ describe("package barrel exports", () => {
     expect(ProjectSchemaVersionSchema.parse("2.0.0")).toBe("2.0.0");
     expect(RoomBoundaryDirectionSchema.parse(direction)).toBe(direction);
     expect(RoomBoundaryEdgeSchema.parse(edge)).toEqual(edge);
+  });
+
+  it("exports migration contracts from the package entry point", () => {
+    const error: ProjectMigrationError = {
+      code: MigrationErrorCode.UNSUPPORTED_PROJECT_SCHEMA_VERSION,
+      message: "Unsupported.",
+      reason: LegacyRoomBoundaryMigrationFailureReason.INVALID_LEGACY_SHAPE
+    };
+    const result: ProjectMigrationResult = {
+      ok: false,
+      errors: [error]
+    };
+
+    expect(MigrationErrorCode.MISSING_SCHEMA_VERSION).toBe("MISSING_SCHEMA_VERSION");
+    expect(LegacyRoomBoundaryMigrationFailureReason.OPEN_LOOP).toBe("OPEN_LOOP");
+    expect(result.errors).toEqual([error]);
+    expect(migrateProject({ schemaVersion: "9.9.9" })).toMatchObject({
+      ok: false,
+      errors: [{ code: MigrationErrorCode.UNSUPPORTED_PROJECT_SCHEMA_VERSION }]
+    });
   });
 
   it("exports validation contracts and validators from the package entry point", () => {
