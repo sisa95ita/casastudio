@@ -4,6 +4,7 @@ import { DesignBriefSchema, RenderRequestSchema, RenderResultSchema } from "../d
 import { BaseImageSchema, ViewpointSchema } from "../observation";
 import { BuildingSchema } from "../physical-building";
 import { IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema, UnitsSchema } from "../primitives";
+import { ProjectSchemaVersionSchema } from "./schema-version";
 
 /**
  * Represents the root aggregate of a CasaStudio project file.
@@ -16,7 +17,7 @@ import { IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema, UnitsSchema
 export const ProjectSchema = z.strictObject({
   id: IdentifierSchema,
   name: z.string().min(1),
-  schemaVersion: z.string().min(1),
+  schemaVersion: ProjectSchemaVersionSchema,
   revision: PositiveIntegerSchema,
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,

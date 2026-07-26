@@ -3,17 +3,22 @@ import { describe, expect, it } from "vitest";
 import {
   BaseImageSchema,
   BuildingSchema,
+  CURRENT_PROJECT_SCHEMA_VERSION,
   DesignBriefSchema,
   IdentifierSchema,
   OpeningSchema,
   Point2DSchema,
   ProjectSchema,
+  ProjectSchemaVersionSchema,
   RenderRequestSchema,
   RenderResultSchema,
+  RoomBoundaryDirectionSchema,
+  RoomBoundaryEdgeSchema,
   RoomSchema,
   StairFlightSchema,
   StairLandingSchema,
   StaircaseSchema,
+  SUPPORTED_PROJECT_SCHEMA_VERSIONS,
   UnitsSchema,
   ValidationErrorCode,
   ViewpointSchema,
@@ -26,9 +31,12 @@ import {
   type Project,
   type RenderRequest,
   type RenderResult,
+  type RoomBoundaryDirection,
+  type RoomBoundaryEdge,
   type StairFlight,
   type StairLanding,
   type Staircase,
+  type SupportedProjectSchemaVersion,
   type Viewpoint
 } from "./index";
 
@@ -40,7 +48,7 @@ describe("package barrel exports", () => {
     expect(BuildingSchema.parse({ id: "main-building", name: "Main Building", type: "HOUSE", levels: [] }).id).toBe(
       "main-building"
     );
-    expect(RoomSchema.parse({ id: "living-room", name: "Living Room", type: "LIVING_ROOM", wallIds: [] }).id).toBe(
+    expect(RoomSchema.parse({ id: "living-room", name: "Living Room", type: "LIVING_ROOM", boundary: [] }).id).toBe(
       "living-room"
     );
     expect(
@@ -141,7 +149,7 @@ describe("package barrel exports", () => {
     const project: Project = {
       id: "casa-simone",
       name: "Casa Simone",
-      schemaVersion: "1.0.0",
+      schemaVersion: "2.0.0",
       revision: 1,
       createdAt: "2026-07-11T15:30:00+02:00",
       updatedAt: "2026-07-11T15:30:00+02:00",
@@ -165,11 +173,26 @@ describe("package barrel exports", () => {
     expect(ProjectSchema.parse(project)).toEqual(project);
   });
 
+  it("exports schema version and room boundary contracts from the package entry point", () => {
+    const schemaVersion: SupportedProjectSchemaVersion = "2.0.0";
+    const direction: RoomBoundaryDirection = "FORWARD";
+    const edge: RoomBoundaryEdge = {
+      wallId: "living-wall-tv",
+      direction
+    };
+
+    expect(CURRENT_PROJECT_SCHEMA_VERSION).toBe(schemaVersion);
+    expect(SUPPORTED_PROJECT_SCHEMA_VERSIONS).toEqual(["2.0.0"]);
+    expect(ProjectSchemaVersionSchema.parse("2.0.0")).toBe("2.0.0");
+    expect(RoomBoundaryDirectionSchema.parse(direction)).toBe(direction);
+    expect(RoomBoundaryEdgeSchema.parse(edge)).toEqual(edge);
+  });
+
   it("exports validation contracts and validators from the package entry point", () => {
     const project: Project = {
       id: "casa-simone",
       name: "Casa Simone",
-      schemaVersion: "1.0.0",
+      schemaVersion: "2.0.0",
       revision: 1,
       createdAt: "2026-07-11T15:30:00+02:00",
       updatedAt: "2026-07-11T15:30:00+02:00",

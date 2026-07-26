@@ -7,7 +7,7 @@ import { ValidationErrorCode } from "./validation-error-code";
 const createGeometricallyValidProject = (): Project => ({
   id: "geometry-fixture",
   name: "Geometry Fixture",
-  schemaVersion: "1.0.0",
+  schemaVersion: "2.0.0",
   revision: 1,
   createdAt: "2026-07-18T10:00:00+02:00",
   updatedAt: "2026-07-18T10:00:00+02:00",
@@ -29,7 +29,7 @@ const createGeometricallyValidProject = (): Project => ({
             id: "living-room",
             name: "Living Room",
             type: "LIVING_ROOM",
-            wallIds: ["north-wall", "east-wall"]
+            boundary: []
           }
         ],
         walls: [

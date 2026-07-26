@@ -1,7 +1,7 @@
 {
   "id": "casa-studio-canonical-project",
   "name": "CasaStudio Canonical Project",
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "revision": 1,
   "createdAt": "2026-07-18T10:00:00+02:00",
   "updatedAt": "2026-07-18T10:00:00+02:00",
@@ -24,11 +24,23 @@
             "name": "Living Room",
             "type": "LIVING_ROOM",
             "description": "Main living area at the front of the house.",
-            "wallIds": [
-              "ground-north-wall",
-              "living-east-wall",
-              "living-kitchen-partition",
-              "living-west-wall"
+            "boundary": [
+              {
+                "wallId": "ground-north-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "living-east-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "living-kitchen-partition",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "living-west-wall",
+                "direction": "FORWARD"
+              }
             ]
           },
           {
@@ -36,11 +48,23 @@
             "name": "Kitchen",
             "type": "KITCHEN",
             "description": "Kitchen connected to the living room through a wide internal opening.",
-            "wallIds": [
-              "living-kitchen-partition",
-              "kitchen-east-wall",
-              "ground-south-wall",
-              "kitchen-west-wall"
+            "boundary": [
+              {
+                "wallId": "living-kitchen-partition",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "kitchen-east-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "ground-south-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "kitchen-west-wall",
+                "direction": "FORWARD"
+              }
             ]
           }
         ],
@@ -273,11 +297,23 @@
             "name": "Studio",
             "type": "STUDIO",
             "description": "Upstairs work room reached from the main stair.",
-            "wallIds": [
-              "studio-north-wall",
-              "studio-bathroom-partition",
-              "studio-south-wall",
-              "first-west-wall"
+            "boundary": [
+              {
+                "wallId": "studio-north-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "studio-bathroom-partition",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "studio-south-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "first-west-wall",
+                "direction": "FORWARD"
+              }
             ]
           },
           {
@@ -285,11 +321,23 @@
             "name": "Bathroom",
             "type": "BATHROOM",
             "description": "Compact bathroom beside the studio.",
-            "wallIds": [
-              "bathroom-north-wall",
-              "first-east-wall",
-              "bathroom-south-wall",
-              "studio-bathroom-partition"
+            "boundary": [
+              {
+                "wallId": "bathroom-north-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "first-east-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "bathroom-south-wall",
+                "direction": "FORWARD"
+              },
+              {
+                "wallId": "studio-bathroom-partition",
+                "direction": "FORWARD"
+              }
             ]
           }
         ],

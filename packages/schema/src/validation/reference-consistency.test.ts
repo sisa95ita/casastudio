@@ -7,7 +7,7 @@ import { ValidationErrorCode } from "./validation-error-code";
 const createConsistentProject = (): Project => ({
   id: "casa-simone",
   name: "Casa Simone",
-  schemaVersion: "1.0.0",
+  schemaVersion: "2.0.0",
   revision: 1,
   createdAt: "2026-07-11T15:30:00+02:00",
   updatedAt: "2026-07-11T15:30:00+02:00",
@@ -29,13 +29,13 @@ const createConsistentProject = (): Project => ({
             id: "living-room",
             name: "Living Room",
             type: "LIVING_ROOM",
-            wallIds: []
+            boundary: []
           },
           {
             id: "corridor",
             name: "Corridor",
             type: "CORRIDOR",
-            wallIds: []
+            boundary: []
           }
         ],
         walls: [],
@@ -61,13 +61,13 @@ const createConsistentProject = (): Project => ({
             id: "bedroom",
             name: "Bedroom",
             type: "BEDROOM",
-            wallIds: []
+            boundary: []
           },
           {
             id: "bathroom",
             name: "Bathroom",
             type: "BATHROOM",
-            wallIds: []
+            boundary: []
           }
         ],
         walls: [],

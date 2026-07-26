@@ -7,7 +7,7 @@ import { ValidationErrorCode } from "./validation-error-code";
 const createValidProject = (): Project => ({
   id: "casa-simone",
   name: "Casa Simone",
-  schemaVersion: "1.0.0",
+  schemaVersion: "2.0.0",
   revision: 1,
   createdAt: "2026-07-11T15:30:00+02:00",
   updatedAt: "2026-07-11T15:30:00+02:00",
@@ -29,13 +29,39 @@ const createValidProject = (): Project => ({
             id: "living-room",
             name: "Living Room",
             type: "LIVING_ROOM",
-            wallIds: ["living-wall-tv"]
+            boundary: [
+              {
+                wallId: "living-wall-tv",
+                direction: "FORWARD"
+              },
+              {
+                wallId: "living-wall-west",
+                direction: "FORWARD"
+              },
+              {
+                wallId: "living-wall-south",
+                direction: "FORWARD"
+              }
+            ]
           },
           {
             id: "corridor",
             name: "Corridor",
             type: "CORRIDOR",
-            wallIds: ["living-wall-tv"]
+            boundary: [
+              {
+                wallId: "living-wall-tv",
+                direction: "REVERSE"
+              },
+              {
+                wallId: "corridor-wall-south",
+                direction: "FORWARD"
+              },
+              {
+                wallId: "corridor-wall-west",
+                direction: "FORWARD"
+              }
+            ]
           }
         ],
         walls: [
@@ -65,6 +91,42 @@ const createValidProject = (): Project => ({
                 elevation: 90
               }
             ]
+          },
+          {
+            id: "living-wall-west",
+            start: { x: 0, z: 0 },
+            end: { x: 0, z: 400 },
+            height: 390,
+            thickness: 15,
+            roomIds: ["living-room"],
+            openings: []
+          },
+          {
+            id: "living-wall-south",
+            start: { x: 0, z: 400 },
+            end: { x: 488, z: 400 },
+            height: 390,
+            thickness: 15,
+            roomIds: ["living-room"],
+            openings: []
+          },
+          {
+            id: "corridor-wall-south",
+            start: { x: 0, z: 400 },
+            end: { x: 488, z: 400 },
+            height: 390,
+            thickness: 15,
+            roomIds: ["corridor"],
+            openings: []
+          },
+          {
+            id: "corridor-wall-west",
+            start: { x: 0, z: 0 },
+            end: { x: 0, z: 400 },
+            height: 390,
+            thickness: 15,
+            roomIds: ["corridor"],
+            openings: []
           }
         ],
         staircases: [
@@ -150,12 +212,12 @@ describe("validateProjectCrossReferences", () => {
     expect(result.errors).toEqual([]);
   });
 
-  it("reports a missing Wall referenced by Room.wallIds", () => {
+  it("reports a missing Wall referenced by Room.boundary", () => {
     const project = createValidProject();
     const level = getFirst(project.building.levels, "level");
     const room = getFirst(level.rooms, "room");
 
-    room.wallIds[0] = "missing-wall";
+    getFirst(room.boundary, "boundary edge").wallId = "missing-wall";
 
     const result = validateProjectCrossReferences(project);
 
@@ -163,7 +225,7 @@ describe("validateProjectCrossReferences", () => {
     expect(result.errors).toMatchObject([
       {
         code: ValidationErrorCode.WALL_NOT_FOUND,
-        path: "building.levels[0].rooms[0].wallIds[0]"
+        path: "building.levels[0].rooms[0].boundary[0].wallId"
       }
     ]);
   });
@@ -325,7 +387,7 @@ describe("validateProjectCrossReferences", () => {
     const renderRequest = getFirst(project.renderRequests, "renderRequest");
     const renderResult = getFirst(project.renderResults, "renderResult");
 
-    room.wallIds[0] = "missing-wall";
+    getFirst(room.boundary, "boundary edge").wallId = "missing-wall";
     viewpoint.levelId = "missing-level";
     baseImage.viewpointId = "missing-viewpoint";
     renderRequest.baseImageId = "missing-base-image";
@@ -346,7 +408,7 @@ describe("validateProjectCrossReferences", () => {
       ValidationErrorCode.RENDER_REQUEST_NOT_FOUND
     ]);
     expect(result.errors.map((error) => error.path)).toEqual([
-      "building.levels[0].rooms[0].wallIds[0]",
+      "building.levels[0].rooms[0].boundary[0].wallId",
       "viewpoints[0].levelId",
       "baseImages[0].viewpointId",
       "renderRequests[0].baseImageId",

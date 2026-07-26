@@ -9,6 +9,13 @@ import {
   PositiveMeasurementSchema
 } from "./shared";
 
+const WallRoomIdsSchema = IdentifierArraySchema.max(2, "A wall may reference at most two rooms.").refine(
+  (roomIds) => new Set(roomIds).size === roomIds.length,
+  {
+    message: "A wall must not reference the same room more than once."
+  }
+);
+
 /**
  * Represents a physical wall segment in Level coordinate space.
  *
@@ -24,7 +31,7 @@ export const WallSchema = z
     end: Point2DSchema,
     height: PositiveMeasurementSchema,
     thickness: PositiveMeasurementSchema,
-    roomIds: IdentifierArraySchema,
+    roomIds: WallRoomIdsSchema,
     openings: z.array(OpeningSchema)
   })
   .refine((wall) => wall.start.x !== wall.end.x || wall.start.z !== wall.end.z, {

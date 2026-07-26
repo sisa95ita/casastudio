@@ -36,6 +36,31 @@ describe("WallSchema", () => {
     expect(WallSchema.parse(wallWithOpening).openings).toHaveLength(1);
   });
 
+  it("accepts zero room IDs", () => {
+    expect(WallSchema.parse({ ...validWall, roomIds: [] }).roomIds).toEqual([]);
+  });
+
+  it("accepts one room ID", () => {
+    expect(WallSchema.parse({ ...validWall, roomIds: ["living-room"] }).roomIds).toEqual(["living-room"]);
+  });
+
+  it("accepts two unique room IDs", () => {
+    expect(WallSchema.parse({ ...validWall, roomIds: ["living-room", "corridor"] }).roomIds).toEqual([
+      "living-room",
+      "corridor"
+    ]);
+  });
+
+  it("rejects three room IDs", () => {
+    expect(WallSchema.safeParse({ ...validWall, roomIds: ["living-room", "corridor", "kitchen"] }).success).toBe(
+      false
+    );
+  });
+
+  it("rejects duplicate room IDs", () => {
+    expect(WallSchema.safeParse({ ...validWall, roomIds: ["living-room", "living-room"] }).success).toBe(false);
+  });
+
   it("requires positive wall height and thickness", () => {
     expect(WallSchema.safeParse({ ...validWall, height: 0 }).success).toBe(false);
     expect(WallSchema.safeParse({ ...validWall, thickness: -1 }).success).toBe(false);

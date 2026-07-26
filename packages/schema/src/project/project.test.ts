@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ProjectSchema } from "./project";
+import { ProjectSchemaVersionSchema } from "./schema-version";
 
 const validBuilding = {
   id: "main-building",
@@ -54,7 +55,7 @@ const validRenderResult = {
 const validMinimalProject = {
   id: "casa-simone",
   name: "Casa Simone",
-  schemaVersion: "1.0.0",
+  schemaVersion: "2.0.0",
   revision: 1,
   createdAt: "2026-07-11T15:30:00+02:00",
   updatedAt: "2026-07-11T15:30:00+02:00",
@@ -95,6 +96,16 @@ describe("ProjectSchema", () => {
     };
 
     expect(ProjectSchema.parse(project)).toEqual(project);
+  });
+
+  it("accepts only the current schema version", () => {
+    expect(ProjectSchemaVersionSchema.parse("2.0.0")).toBe("2.0.0");
+    expect(ProjectSchema.parse(validMinimalProject).schemaVersion).toBe("2.0.0");
+  });
+
+  it.each(["1.0.0", "2.0.1", "", "not-a-version"])("rejects unsupported schema version %s", (schemaVersion) => {
+    expect(ProjectSchema.safeParse({ ...validMinimalProject, schemaVersion }).success).toBe(false);
+    expect(ProjectSchemaVersionSchema.safeParse(schemaVersion).success).toBe(false);
   });
 
   it("rejects invalid units", () => {

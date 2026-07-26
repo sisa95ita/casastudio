@@ -34,13 +34,13 @@ export const validateProjectCrossReferences = (project: Project): ValidationResu
     const levelWallIds = toIdSet(level.walls);
 
     level.rooms.forEach((room, roomIndex) => {
-      room.wallIds.forEach((wallId, wallIdIndex) => {
-        if (!levelWallIds.has(wallId)) {
+      room.boundary.forEach((boundaryEdge, boundaryEdgeIndex) => {
+        if (!levelWallIds.has(boundaryEdge.wallId)) {
           pushError(
             errors,
             ValidationErrorCode.WALL_NOT_FOUND,
-            `building.levels[${levelIndex}].rooms[${roomIndex}].wallIds[${wallIdIndex}]`,
-            `Room "${room.id}" references wall "${wallId}", but no wall with that id exists in level "${level.id}".`
+            `building.levels[${levelIndex}].rooms[${roomIndex}].boundary[${boundaryEdgeIndex}].wallId`,
+            `Room "${room.id}" references wall "${boundaryEdge.wallId}", but no wall with that id exists in level "${level.id}".`
           );
         }
       });
