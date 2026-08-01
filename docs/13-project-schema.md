@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document defines the planned data contract for CasaStudio project files.
+This document defines the canonical data contract for CasaStudio project files.
 
 The target file name is:
 
@@ -12,16 +12,14 @@ project.json
 
 The file represents the `Project` root directly. It does not wrap the Project inside an additional `project` property.
 
-This document is not yet a JSON Schema, a Zod implementation, or a TypeScript model.
-
 It defines:
 
-- the planned JSON structure;
+- the canonical JSON structure;
 - required and optional properties;
 - ownership and reference rules;
 - validation expectations;
 - draft versus renderable states;
-- the contract from which schemas and models will be implemented.
+- the contract implemented by the current schema package.
 
 The following artifacts must derive from this document:
 
@@ -32,7 +30,7 @@ The following artifacts must derive from this document:
 - future persistence mappings;
 - Geometry Engine input validation.
 
-This specification is intentionally expected to evolve as the implementation reveals additional constraints.
+This specification evolves through explicit schema-version changes.
 
 ## 2. Design Principles
 
@@ -44,7 +42,7 @@ The JSON document is the Project.
 {
   "id": "casa-simone",
   "name": "Casa Simone",
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "building": {}
 }
 ```
@@ -153,11 +151,13 @@ Each phase has a distinct responsibility:
 - **Cross-reference Validation** verifies that referenced entities exist.
 - **Reference Consistency Validation** verifies that relationships between existing entities are semantically coherent.
 - **Renderability Validation** verifies that the Project contains the minimum information required by the rendering workflow.
-- **Geometry Validation** verifies architectural and geometric correctness required by the Geometry Engine.
+- **Geometry Validation** verifies persisted architectural and geometric correctness that can be checked before constructing future Geometry Engine runtime objects.
 
 Keeping these responsibilities separate ensures that structural validation remains deterministic while more advanced validation phases can evolve independently.
 
 These are validation outcomes, not persisted status fields.
+
+Future Geometry Engine build validation may perform additional checks while deriving runtime geometry. Those runtime classes are not part of the canonical project schema.
 
 ## 3. Project File
 
@@ -306,13 +306,13 @@ renderRequests
 renderResults
 ```
 
-### 5.2 Planned shape
+### 5.2 Canonical shape
 
 ```json
 {
   "id": "casa-simone",
   "name": "Casa Simone",
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "revision": 1,
   "createdAt": "2026-07-11T15:30:00+02:00",
   "updatedAt": "2026-07-11T15:30:00+02:00",
@@ -333,10 +333,19 @@ renderResults
 
 - The JSON document represents exactly one Project.
 - A Project contains exactly one Building in the MVP.
-- `schemaVersion` is required.
+- `schemaVersion` is required and the canonical version is `2.0.0`.
+- Legacy `1.0.0` projects require explicit migration before canonical parsing.
 - `revision` is required.
 - identifiers must be unique across the entire Project.
 - all Project-level collections are always present, even when empty.
+
+### 5.4 Schema version and migration
+
+`ProjectSchema` accepts only canonical version `2.0.0`.
+
+Legacy version `1.0.0` used `Room.wallIds` and is accepted only through the explicit migration entry point. Migration reconstructs deterministic ordered and oriented `Room.boundary` entries from legacy wall references and may perform migration-only winding normalization.
+
+Migration preserves `revision`, `createdAt`, and `updatedAt`. Expected migration failures are returned as structured results rather than thrown exceptions.
 
 ## 6. Building
 
@@ -359,7 +368,7 @@ OFFICE
 OTHER
 ```
 
-### 6.3 Planned shape
+### 6.3 Canonical shape
 
 ```json
 {
@@ -398,7 +407,7 @@ Every Level conceptually defines its own local coordinate system. For the MVP, i
 
 An optional `origin` field may be introduced later for CAD import or advanced transformations.
 
-### 7.3 Planned shape
+### 7.3 Canonical shape
 
 ```json
 {
@@ -427,7 +436,7 @@ The normal UI flow should encourage creating a Room immediately after creating a
 id
 name
 type
-wallIds
+boundary
 ```
 
 ### 8.2 Optional properties
@@ -462,7 +471,7 @@ It represents the Room floor elevation relative to its parent Level.
   "name": "Mezzanine Studio",
   "type": "STUDIO",
   "elevation": 195,
-  "wallIds": []
+  "boundary": []
 }
 ```
 
@@ -478,13 +487,51 @@ Its ownership is defined by its position inside:
 Building → Level → Room
 ```
 
-### 8.6 Wall references
+### 8.6 Persisted room boundary
 
-The order of `wallIds` is not geometrically authoritative.
+The canonical schema version `2.0.0` represents a Room boundary as ordered and oriented wall references.
 
-The Geometry Engine derives or validates the Room boundary from the Wall definitions.
+```ts
+type RoomBoundaryDirection = "FORWARD" | "REVERSE";
 
-Bidirectional references between `Room.wallIds` and `Wall.roomIds` must remain consistent. If a Room references a Wall, that Wall must reference the Room, and vice versa. Any mismatch makes the Project structurally invalid.
+type RoomBoundaryEdge = {
+  wallId: Identifier;
+  direction: RoomBoundaryDirection;
+};
+
+type Room = {
+  boundary: RoomBoundaryEdge[];
+};
+```
+
+Array order is the canonical traversal order of the persisted room boundary.
+
+Direction is relative to the referenced Wall:
+
+```text
+FORWARD = Wall.start -> Wall.end
+REVERSE = Wall.end -> Wall.start
+```
+
+`boundary: []` represents a draft room. A geometry-buildable room requires at least three boundary edges. One- and two-edge non-empty boundaries are structurally invalid.
+
+A Room boundary must not reference the same Wall more than once in the MVP simple-loop model.
+
+Boundary Walls must belong to the Room's owning Level. Cross-level Room boundaries are invalid.
+
+Outer Room boundaries must be persisted counter-clockwise in the owning Level's XZ plane. Canonical validation does not reorder, reverse, or normalize persisted boundaries.
+
+### 8.7 Room-wall consistency
+
+Room and Wall references must agree:
+
+```text
+Room.boundary contains Wall.id
+    <=>
+Wall.roomIds contains Room.id
+```
+
+Any mismatch is rejected by reference-consistency validation.
 
 
 ## 9. Wall
@@ -508,7 +555,7 @@ name
 description
 ```
 
-### 9.3 Planned shape
+### 9.3 Canonical shape
 
 ```json
 {
@@ -531,9 +578,34 @@ description
 
 ### 9.5 Room associations
 
-A shared Wall is represented once and may reference multiple Rooms.
+A shared Wall is represented once and may reference two Rooms.
 
 The MVP does not introduce an explicit `EXTERIOR` spatial reference.
+
+`Wall.roomIds` contains at most two unique Room identifiers:
+
+- zero Room IDs is valid for an unassigned or draft Wall;
+- one Room ID is valid for an exterior Wall;
+- two Room IDs is valid for a shared Wall.
+
+Reference-consistency validation enforces reciprocal agreement between `Wall.roomIds` and `Room.boundary`.
+
+### 9.6 Reversing wall direction
+
+Reversing a Wall changes only its internal canonical orientation. It swaps `start` and `end` while preserving the physical segment, Room boundary traversal in world coordinates, Room topology, and Room winding.
+
+Every referencing Room boundary edge must invert its direction when the Wall direction is reversed.
+
+Opening placement is also wall-relative, so each Opening offset is transformed as:
+
+```text
+newOffsetFromStart =
+    wallLength
+    - oldOffsetFromStart
+    - opening.width
+```
+
+This preserves the physical location of the Opening along the unchanged Wall segment.
 
 ## 10. Opening
 
@@ -570,7 +642,7 @@ name
 description
 ```
 
-### 10.5 Planned shape
+### 10.5 Canonical shape
 
 ```json
 {
@@ -616,7 +688,7 @@ fromRoomId
 toRoomId
 ```
 
-### 11.3 Planned shape
+### 11.3 Canonical shape
 
 ```json
 {
@@ -647,7 +719,7 @@ startElevation
 endElevation
 ```
 
-### 12.2 Planned shape
+### 12.2 Canonical shape
 
 ```json
 {
@@ -674,7 +746,7 @@ depth
 elevation
 ```
 
-### 13.2 Planned shape
+### 13.2 Canonical shape
 
 ```json
 {
@@ -716,7 +788,7 @@ PERSPECTIVE
 ORTHOGRAPHIC
 ```
 
-### 14.4 Planned shape
+### 14.4 Canonical shape
 
 ```json
 {
@@ -754,7 +826,7 @@ width
 height
 ```
 
-### 15.3 Planned shape
+### 15.3 Canonical shape
 
 ```json
 {
@@ -797,7 +869,7 @@ style
 notes
 ```
 
-### 16.4 Planned shape
+### 16.4 Canonical shape
 
 ```json
 {
@@ -876,7 +948,7 @@ FAILED
 CANCELLED
 ```
 
-### 17.4 Planned shape
+### 17.4 Canonical shape
 
 ```json
 {
@@ -923,7 +995,7 @@ width
 height
 ```
 
-### 18.3 Planned shape
+### 18.3 Canonical shape
 
 ```json
 {
@@ -1008,7 +1080,7 @@ Renderability rules may include:
 
 - at least one Level;
 - at least one Room;
-- sufficient Walls to derive a boundary;
+- geometry-buildable Room boundaries with at least three ordered and oriented edges;
 - non-zero Wall dimensions;
 - valid Opening placement;
 - coherent Staircase geometry where present.
@@ -1029,7 +1101,7 @@ A Level may temporarily contain empty collections and still be valid as a draft.
 
 The normal application flow should guide users toward creating a Room immediately after creating a Level.
 
-## 23. Planned Top-Level Structure
+## 23. Canonical Top-Level Structure
 
 ```text
 Project

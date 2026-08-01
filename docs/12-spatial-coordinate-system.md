@@ -149,7 +149,7 @@ For MVP scenarios, the Building reference elevation may be treated as zero unles
 
 Walls are defined in Level coordinate space.
 
-Rooms belong to a Level and derive their boundary from Walls defined in that Level.
+Rooms belong to a Level and persist ordered and oriented boundary references to Walls defined in that Level.
 
 Viewpoints belong to a Level and use that Level as their primary spatial frame.
 
@@ -157,7 +157,7 @@ Viewpoints belong to a Level and use that Level as their primary spatial frame.
 
 A Room belongs to exactly one Level.
 
-Room boundaries are derived from, or validated against, the Walls associated with the Room.
+Room boundaries are persisted as ordered and oriented references to Walls owned by the same Level.
 
 The Room does not replace the Level coordinate system. For the MVP, Room geometry should be expressed through Level-scoped Walls rather than independent duplicated Room coordinates.
 
@@ -211,7 +211,7 @@ This direction is important for:
 
 Walls are the authoritative source describing room boundaries.
 
-Room outlines must be derived from, or validated against, the collection of Walls associated with the Room.
+Room outlines are derived from the Room's persisted ordered and oriented boundary references and the referenced Level-scoped Walls.
 
 ## 10. Opening Coordinate Space
 
@@ -322,7 +322,7 @@ For example:
 
 - a Wall's orientation is derived from its start and end points;
 - an Opening's orientation is derived from its Wall;
-- a Room boundary is derived from Walls.
+- a Room boundary is derived from ordered and oriented references to Walls.
 
 Persist rotation only when the domain concept requires independent orientation, such as a Viewpoint camera orientation or future object placement.
 

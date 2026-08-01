@@ -244,7 +244,7 @@ Examples include:
 
 Each Room belongs to exactly one Level.
 
-A Room is not the authoritative source for its physical boundary geometry. Walls are the authoritative source describing room boundaries. Room boundaries are derived from, or validated against, the Walls associated with the Room.
+A Room is not the authoritative source for physical wall geometry. Walls are the authoritative source describing wall segments. A Room persists an ordered and oriented boundary that references Walls owned by the same Level.
 
 A Room may define functional metadata and an optional local elevation relative to its parent Level.
 
@@ -279,8 +279,9 @@ Walls are the authoritative source describing room boundaries.
 
 A Wall belongs to exactly one Level.
 
-A Wall may be associated with one or more Rooms:
+A Wall may be associated with zero, one, or two Rooms in the MVP:
 
+- an unassigned Wall may temporarily reference no Rooms;
 - an external Wall may delimit one Room;
 - an internal Wall may be shared by two Rooms;
 - future cases may associate a Wall with circulation, exterior space, or other spatial concepts.
@@ -585,16 +586,16 @@ Bidirectional navigation may be useful in derived models, but the conceptual dom
 - A Room belongs to exactly one Level.
 - A Room represents a functional architectural space.
 - A Room may define an optional local elevation.
-- A Room may reference one or more Walls.
-- A Room boundary is derived from, or validated against, its associated Walls.
+- A Room may persist an empty draft boundary or a geometry-buildable ordered and oriented boundary.
+- A geometry-buildable Room boundary references Walls owned by the same Level.
 - A mezzanine is represented as a Room with optional elevation.
 - A mezzanine is not represented as a Level.
 
 ### Wall invariants
 
 - A Wall belongs to exactly one Level.
-- A Wall is associated with one or more Rooms.
-- A shared Wall must be represented once and referenced by multiple Rooms.
+- A Wall is associated with zero, one, or two Rooms in the MVP.
+- A shared Wall must be represented once and referenced by two Rooms in the MVP.
 - Walls are the authoritative source describing room boundaries.
 - A Wall is defined by a start point and an end point in Level coordinate space.
 - Openings belong to Walls, not directly to Rooms.
