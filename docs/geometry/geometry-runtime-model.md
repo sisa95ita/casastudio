@@ -1483,11 +1483,11 @@ No geometry build error may be hidden by silently altering persisted coordinates
 
 ---
 
-# Legacy Room Boundary Transition
+# Canonical Room Boundary Input
 
 The runtime model requires ordered and oriented room boundaries.
 
-The preferred persisted representation is defined by ADR-005 and conceptually follows:
+The canonical persisted representation is defined by ADR-005 and conceptually follows:
 
 ```text
 RoomBoundaryEdge
@@ -1501,23 +1501,7 @@ with:
 Room.boundary: RoomBoundaryEdge[]
 ```
 
-The current legacy persisted schema may still expose unordered `Room.wallIds`.
-
-That representation is insufficient for fully deterministic loop construction.
-
-Before production Geometry Engine implementation, the project should choose one of these approaches:
-
-1. implement ADR-005 first and migrate persisted room boundaries; or
-2. introduce a temporary `LegacyRoomBoundaryResolver`.
-
-A temporary legacy resolver must:
-
-- attempt deterministic ordering and orientation;
-- reject ambiguous or non-unique solutions;
-- report explicit legacy-boundary inference errors;
-- never silently choose between multiple valid loops.
-
-The preferred implementation path is to complete ADR-005 before relying on the Geometry Engine for production rendering or exporting.
+Geometry Engine construction should consume canonical `Room.boundary` data only. Legacy `Room.wallIds` input belongs to schema-owned migration before canonical project validation, not to runtime topology construction.
 
 ---
 
