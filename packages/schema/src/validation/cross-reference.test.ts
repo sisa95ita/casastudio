@@ -141,6 +141,24 @@ const createValidProject = (): Project => ({
             landings: []
           }
         ]
+      },
+      {
+        id: "upper-level",
+        name: "Upper Level",
+        elevation: 320,
+        rooms: [],
+        walls: [
+          {
+            id: "upper-only-wall",
+            start: { x: 0, z: 0 },
+            end: { x: 300, z: 0 },
+            height: 300,
+            thickness: 15,
+            roomIds: [],
+            openings: []
+          }
+        ],
+        staircases: []
       }
     ]
   },
@@ -224,10 +242,41 @@ describe("validateProjectCrossReferences", () => {
     expect(result.valid).toBe(false);
     expect(result.errors).toMatchObject([
       {
-        code: ValidationErrorCode.WALL_NOT_FOUND,
+        code: ValidationErrorCode.MISSING_ROOM_BOUNDARY_WALL,
         path: "building.levels[0].rooms[0].boundary[0].wallId"
       }
     ]);
+  });
+
+  it("reports room boundaries that reference walls from another level", () => {
+    const project = createValidProject();
+    const level = getFirst(project.building.levels, "level");
+    const room = getFirst(level.rooms, "room");
+
+    getFirst(room.boundary, "boundary edge").wallId = "upper-only-wall";
+
+    const result = validateProjectCrossReferences(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.CROSS_LEVEL_ROOM_BOUNDARY,
+        path: "building.levels[0].rooms[0].boundary[0].wallId"
+      }
+    ]);
+  });
+
+  it("allows draft rooms with empty boundaries", () => {
+    const project = createValidProject();
+    const level = getFirst(project.building.levels, "level");
+    const room = getFirst(level.rooms, "room");
+
+    room.boundary = [];
+
+    const result = validateProjectCrossReferences(project);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
   });
 
   it("reports missing Rooms referenced by Wall.roomIds and Opening.connectedRoomIds", () => {
@@ -400,7 +449,7 @@ describe("validateProjectCrossReferences", () => {
     expect(result.errors).toHaveLength(6);
     expect(result.errors[0]?.message).toContain('missing-wall');
     expect(result.errors.map((error) => error.code)).toEqual([
-      ValidationErrorCode.WALL_NOT_FOUND,
+      ValidationErrorCode.MISSING_ROOM_BOUNDARY_WALL,
       ValidationErrorCode.LEVEL_NOT_FOUND,
       ValidationErrorCode.VIEWPOINT_NOT_FOUND,
       ValidationErrorCode.BASE_IMAGE_NOT_FOUND,

@@ -143,9 +143,329 @@ const getFirst = <Item>(items: Item[], label: string): Item => {
   return item;
 };
 
+const addReciprocalExteriorWalls = (project: Project) => {
+  const level = getFirst(project.building.levels, "level");
+  const room = getFirst(level.rooms, "room");
+
+  room.boundary = [
+    { wallId: "living-wall-north", direction: "FORWARD" },
+    { wallId: "living-wall-east", direction: "FORWARD" },
+    { wallId: "living-wall-south", direction: "FORWARD" }
+  ];
+  level.walls = [
+    {
+      id: "living-wall-north",
+      start: { x: 0, z: 0 },
+      end: { x: 400, z: 0 },
+      height: 280,
+      thickness: 15,
+      roomIds: ["living-room"],
+      openings: []
+    },
+    {
+      id: "living-wall-east",
+      start: { x: 400, z: 0 },
+      end: { x: 400, z: 300 },
+      height: 280,
+      thickness: 15,
+      roomIds: ["living-room"],
+      openings: []
+    },
+    {
+      id: "living-wall-south",
+      start: { x: 400, z: 300 },
+      end: { x: 0, z: 300 },
+      height: 280,
+      thickness: 15,
+      roomIds: ["living-room"],
+      openings: []
+    }
+  ];
+
+  return { level, room };
+};
+
 describe("validateProjectReferenceConsistency", () => {
   it("returns valid true for a completely consistent Project", () => {
     const result = validateProjectReferenceConsistency(createConsistentProject());
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("accepts reciprocal room-wall boundary relationships", () => {
+    const project = createConsistentProject();
+
+    addReciprocalExteriorWalls(project);
+
+    expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("reports when a room boundary references a wall that omits the room", () => {
+    const project = createConsistentProject();
+    const { level } = addReciprocalExteriorWalls(project);
+    const wall = getFirst(level.walls, "wall");
+
+    wall.roomIds = [];
+
+    const result = validateProjectReferenceConsistency(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.ROOM_WALL_REFERENCE_MISMATCH,
+        path: "building.levels[0].rooms[0].boundary[0].wallId"
+      }
+    ]);
+    expect(result.errors[0]?.message).toContain("living-room");
+    expect(result.errors[0]?.message).toContain("living-wall-north");
+  });
+
+  it("reports when a wall references a room that omits the wall", () => {
+    const project = createConsistentProject();
+    const level = getFirst(project.building.levels, "level");
+    const room = getFirst(level.rooms, "room");
+
+    room.boundary = [];
+    level.walls = [
+      {
+        id: "living-wall-north",
+        start: { x: 0, z: 0 },
+        end: { x: 400, z: 0 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["living-room"],
+        openings: []
+      }
+    ];
+
+    const result = validateProjectReferenceConsistency(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.ROOM_WALL_REFERENCE_MISMATCH,
+        path: "building.levels[0].walls[0].roomIds[0]"
+      }
+    ]);
+  });
+
+  it("allows draft rooms when no wall declares the draft room", () => {
+    const project = createConsistentProject();
+
+    expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("rejects draft rooms listed by a wall", () => {
+    const project = createConsistentProject();
+    const level = getFirst(project.building.levels, "level");
+
+    level.walls = [
+      {
+        id: "draft-wall",
+        start: { x: 0, z: 0 },
+        end: { x: 100, z: 0 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["living-room"],
+        openings: []
+      }
+    ];
+
+    const result = validateProjectReferenceConsistency(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.ROOM_WALL_REFERENCE_MISMATCH,
+        path: "building.levels[0].walls[0].roomIds[0]"
+      }
+    ]);
+  });
+
+  it("allows exterior walls with one reciprocal room", () => {
+    const project = createConsistentProject();
+
+    addReciprocalExteriorWalls(project);
+
+    expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("allows unassigned walls with zero room IDs", () => {
+    const project = createConsistentProject();
+    const level = getFirst(project.building.levels, "level");
+
+    level.walls = [
+      {
+        id: "unassigned-wall",
+        start: { x: 0, z: 0 },
+        end: { x: 100, z: 0 },
+        height: 280,
+        thickness: 15,
+        roomIds: [],
+        openings: []
+      }
+    ];
+
+    expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("rejects room boundaries that reference walls with zero rooms", () => {
+    const project = createConsistentProject();
+    const { level } = addReciprocalExteriorWalls(project);
+
+    getFirst(level.walls, "wall").roomIds = [];
+
+    const result = validateProjectReferenceConsistency(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.ROOM_WALL_REFERENCE_MISMATCH,
+        path: "building.levels[0].rooms[0].boundary[0].wallId"
+      }
+    ]);
+  });
+
+  it("allows shared walls with two reciprocal rooms", () => {
+    const project = createConsistentProject();
+    const level = getFirst(project.building.levels, "level");
+    const livingRoom = getFirst(level.rooms, "room");
+    const corridor = level.rooms[1];
+
+    if (!corridor) {
+      throw new Error("Test fixture is missing corridor.");
+    }
+
+    livingRoom.boundary = [
+      { wallId: "shared-wall", direction: "FORWARD" },
+      { wallId: "living-wall-east", direction: "FORWARD" },
+      { wallId: "living-wall-south", direction: "FORWARD" }
+    ];
+    corridor.boundary = [
+      { wallId: "shared-wall", direction: "FORWARD" },
+      { wallId: "corridor-wall-east", direction: "FORWARD" },
+      { wallId: "corridor-wall-south", direction: "FORWARD" }
+    ];
+    level.walls = [
+      {
+        id: "shared-wall",
+        start: { x: 0, z: 0 },
+        end: { x: 300, z: 0 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["living-room", "corridor"],
+        openings: []
+      },
+      {
+        id: "living-wall-east",
+        start: { x: 300, z: 0 },
+        end: { x: 300, z: 300 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["living-room"],
+        openings: []
+      },
+      {
+        id: "living-wall-south",
+        start: { x: 300, z: 300 },
+        end: { x: 0, z: 300 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["living-room"],
+        openings: []
+      },
+      {
+        id: "corridor-wall-east",
+        start: { x: 300, z: 0 },
+        end: { x: 300, z: -300 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["corridor"],
+        openings: []
+      },
+      {
+        id: "corridor-wall-south",
+        start: { x: 300, z: -300 },
+        end: { x: 0, z: -300 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["corridor"],
+        openings: []
+      }
+    ];
+
+    expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("defensively reports duplicate room IDs on a wall", () => {
+    const project = createConsistentProject();
+    const { level } = addReciprocalExteriorWalls(project);
+
+    getFirst(level.walls, "wall").roomIds = ["living-room", "living-room"];
+
+    const result = validateProjectReferenceConsistency(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.DUPLICATE_WALL_ROOM_REFERENCE,
+        path: "building.levels[0].walls[0].roomIds"
+      }
+    ]);
+  });
+
+  it("defensively reports walls that reference more than two rooms", () => {
+    const project = createConsistentProject();
+    const { level } = addReciprocalExteriorWalls(project);
+    const thirdRoom = {
+      id: "library",
+      name: "Library",
+      type: "STUDIO" as const,
+      boundary: [{ wallId: "living-wall-north", direction: "FORWARD" as const }]
+    };
+
+    level.rooms.push(thirdRoom);
+    getFirst(level.walls, "wall").roomIds = ["living-room", "corridor", "library"];
+
+    const result = validateProjectReferenceConsistency(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.NON_MANIFOLD_WALL_REFERENCE,
+        path: "building.levels[0].walls[0].roomIds"
+      }
+    ]);
+  });
+
+  it("does not report consistency mismatch for missing boundary walls", () => {
+    const project = createConsistentProject();
+    const level = getFirst(project.building.levels, "level");
+    const room = getFirst(level.rooms, "room");
+
+    room.boundary = [{ wallId: "missing-wall", direction: "FORWARD" }];
+
+    const result = validateProjectReferenceConsistency(project);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("does not report consistency mismatch for missing wall rooms", () => {
+    const project = createConsistentProject();
+    const level = getFirst(project.building.levels, "level");
+
+    level.walls = [
+      {
+        id: "orphan-wall",
+        start: { x: 0, z: 0 },
+        end: { x: 100, z: 0 },
+        height: 280,
+        thickness: 15,
+        roomIds: ["missing-room"],
+        openings: []
+      }
+    ];
+
+    const result = validateProjectReferenceConsistency(project);
 
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);

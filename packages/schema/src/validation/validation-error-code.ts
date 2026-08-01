@@ -7,6 +7,8 @@
 export enum ValidationErrorCode {
   ROOM_NOT_FOUND = "ROOM_NOT_FOUND",
   WALL_NOT_FOUND = "WALL_NOT_FOUND",
+  MISSING_ROOM_BOUNDARY_WALL = "MISSING_ROOM_BOUNDARY_WALL",
+  CROSS_LEVEL_ROOM_BOUNDARY = "CROSS_LEVEL_ROOM_BOUNDARY",
   LEVEL_NOT_FOUND = "LEVEL_NOT_FOUND",
   VIEWPOINT_NOT_FOUND = "VIEWPOINT_NOT_FOUND",
   BASE_IMAGE_NOT_FOUND = "BASE_IMAGE_NOT_FOUND",
@@ -57,6 +59,21 @@ export enum ValidationErrorCode {
    * A RenderRequest references a BaseImage derived from a different Viewpoint.
    */
   RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH = "RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH",
+
+  /**
+   * Room.boundary and Wall.roomIds disagree about a room-wall relationship.
+   */
+  ROOM_WALL_REFERENCE_MISMATCH = "ROOM_WALL_REFERENCE_MISMATCH",
+
+  /**
+   * A Wall references more than two Rooms.
+   */
+  NON_MANIFOLD_WALL_REFERENCE = "NON_MANIFOLD_WALL_REFERENCE",
+
+  /**
+   * A Wall references the same Room more than once.
+   */
+  DUPLICATE_WALL_ROOM_REFERENCE = "DUPLICATE_WALL_ROOM_REFERENCE",
 
   /**
    * A Wall has identical start and end coordinates.

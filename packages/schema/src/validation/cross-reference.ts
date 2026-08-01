@@ -28,6 +28,13 @@ export const validateProjectCrossReferences = (project: Project): ValidationResu
   const designBriefIds = toIdSet(project.designBriefs);
   const renderRequestIds = toIdSet(project.renderRequests);
   const projectRoomIds = new Set(project.building.levels.flatMap((level) => level.rooms.map((room) => room.id)));
+  const wallLevelIds = new Map<string, string>();
+
+  project.building.levels.forEach((level) => {
+    level.walls.forEach((wall) => {
+      wallLevelIds.set(wall.id, level.id);
+    });
+  });
 
   project.building.levels.forEach((level, levelIndex) => {
     const levelRoomIds = toIdSet(level.rooms);
@@ -36,11 +43,18 @@ export const validateProjectCrossReferences = (project: Project): ValidationResu
     level.rooms.forEach((room, roomIndex) => {
       room.boundary.forEach((boundaryEdge, boundaryEdgeIndex) => {
         if (!levelWallIds.has(boundaryEdge.wallId)) {
+          const wallLevelId = wallLevelIds.get(boundaryEdge.wallId);
+          const isCrossLevelBoundary = wallLevelId !== undefined && wallLevelId !== level.id;
+
           pushError(
             errors,
-            ValidationErrorCode.WALL_NOT_FOUND,
+            isCrossLevelBoundary
+              ? ValidationErrorCode.CROSS_LEVEL_ROOM_BOUNDARY
+              : ValidationErrorCode.MISSING_ROOM_BOUNDARY_WALL,
             `building.levels[${levelIndex}].rooms[${roomIndex}].boundary[${boundaryEdgeIndex}].wallId`,
-            `Room "${room.id}" references wall "${boundaryEdge.wallId}", but no wall with that id exists in level "${level.id}".`
+            isCrossLevelBoundary
+              ? `Room "${room.id}" references wall "${boundaryEdge.wallId}", but that wall belongs to level "${wallLevelId}" instead of level "${level.id}".`
+              : `Room "${room.id}" references wall "${boundaryEdge.wallId}", but no wall with that id exists in level "${level.id}".`
           );
         }
       });
