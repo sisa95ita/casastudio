@@ -103,7 +103,11 @@ importers:
 
   packages/ai: {}
 
-  packages/geometry: {}
+  packages/geometry:
+    dependencies:
+      '@casastudio/schema':
+        specifier: workspace:*
+        version: link:../schema
 
   packages/schema:
     dependencies:
