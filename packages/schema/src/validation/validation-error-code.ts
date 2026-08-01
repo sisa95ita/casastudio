@@ -16,6 +16,16 @@ export enum ValidationErrorCode {
   WALL_NOT_FOUND = "WALL_NOT_FOUND",
 
   /**
+   * A domain operation found more than one Wall with the requested identifier.
+   */
+  DUPLICATE_WALL_ID = "DUPLICATE_WALL_ID",
+
+  /**
+   * A domain operation produced a Project that no longer satisfies the structural schema.
+   */
+  PROJECT_SCHEMA_VALIDATION_FAILED = "PROJECT_SCHEMA_VALIDATION_FAILED",
+
+  /**
    * A Room boundary references a Wall missing from the owning Level.
    */
   MISSING_ROOM_BOUNDARY_WALL = "MISSING_ROOM_BOUNDARY_WALL",

@@ -15,6 +15,7 @@ import {
   ProjectSchemaVersionSchema,
   RenderRequestSchema,
   RenderResultSchema,
+  reverseWallDirection,
   RoomBoundaryDirectionSchema,
   RoomBoundaryEdgeSchema,
   RoomSchema,
@@ -36,6 +37,7 @@ import {
   type ProjectMigrationResult,
   type RenderRequest,
   type RenderResult,
+  type ReverseWallDirectionResult,
   type RoomBoundaryDirection,
   type RoomBoundaryEdge,
   type StairFlight,
@@ -239,6 +241,8 @@ describe("package barrel exports", () => {
     };
 
     expect(ValidationErrorCode.ROOM_NOT_FOUND).toBe("ROOM_NOT_FOUND");
+    expect(ValidationErrorCode.DUPLICATE_WALL_ID).toBe("DUPLICATE_WALL_ID");
+    expect(ValidationErrorCode.PROJECT_SCHEMA_VALIDATION_FAILED).toBe("PROJECT_SCHEMA_VALIDATION_FAILED");
     expect(ValidationErrorCode.WALL_ZERO_LENGTH).toBe("WALL_ZERO_LENGTH");
     expect(validateProjectCrossReferences(project)).toEqual({ valid: true, errors: [] });
     expect(validateProjectReferenceConsistency(project)).toEqual({ valid: true, errors: [] });
@@ -259,6 +263,38 @@ describe("package barrel exports", () => {
           path: "renderRequests"
         }
       ]
+    });
+  });
+
+  it("exports physical-building domain operations from the package entry point", () => {
+    const project: Project = {
+      id: "casa-simone",
+      name: "Casa Simone",
+      schemaVersion: "2.0.0",
+      revision: 1,
+      createdAt: "2026-07-11T15:30:00+02:00",
+      updatedAt: "2026-07-11T15:30:00+02:00",
+      units: {
+        length: "cm",
+        angle: "deg"
+      },
+      building: {
+        id: "main-building",
+        name: "Main Building",
+        type: "HOUSE",
+        levels: []
+      },
+      viewpoints: [],
+      baseImages: [],
+      designBriefs: [],
+      renderRequests: [],
+      renderResults: []
+    };
+    const result: ReverseWallDirectionResult = reverseWallDirection(project, "missing-wall");
+
+    expect(result).toMatchObject({
+      ok: false,
+      errors: [{ code: ValidationErrorCode.WALL_NOT_FOUND }]
     });
   });
 });
