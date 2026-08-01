@@ -148,6 +148,14 @@ const parseCanonicalProject = (input: unknown): ProjectMigrationResult => {
   };
 };
 
+/**
+ * Migrates a raw schema version `1.0.0` Project document to canonical `2.0.0`.
+ *
+ * The migration clones the source input, replaces legacy Room `wallIds` with
+ * canonical ordered and oriented `boundary` entries, removes `wallIds`, and
+ * leaves revision and timestamps unchanged. Expected legacy-shape and topology
+ * failures are returned as migration errors.
+ */
 export const migrateV1ToV2 = (input: unknown): ProjectMigrationResult => {
   const clonedInput = cloneInput(input);
 

@@ -5,11 +5,31 @@
  * translate, or act on validation failures without parsing human messages.
  */
 export enum ValidationErrorCode {
+  /**
+   * A reference to a Room does not resolve during cross-reference validation.
+   */
   ROOM_NOT_FOUND = "ROOM_NOT_FOUND",
+
+  /**
+   * A reference to a Wall does not resolve during cross-reference validation.
+   */
   WALL_NOT_FOUND = "WALL_NOT_FOUND",
+
+  /**
+   * A Room boundary references a Wall missing from the owning Level.
+   */
   MISSING_ROOM_BOUNDARY_WALL = "MISSING_ROOM_BOUNDARY_WALL",
+
+  /**
+   * A Room boundary references a Wall owned by a different Level.
+   */
   CROSS_LEVEL_ROOM_BOUNDARY = "CROSS_LEVEL_ROOM_BOUNDARY",
+
+  /**
+   * A reference to a Level does not resolve during cross-reference validation.
+   */
   LEVEL_NOT_FOUND = "LEVEL_NOT_FOUND",
+
   VIEWPOINT_NOT_FOUND = "VIEWPOINT_NOT_FOUND",
   BASE_IMAGE_NOT_FOUND = "BASE_IMAGE_NOT_FOUND",
   DESIGN_BRIEF_NOT_FOUND = "DESIGN_BRIEF_NOT_FOUND",
@@ -61,17 +81,17 @@ export enum ValidationErrorCode {
   RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH = "RENDER_REQUEST_VIEWPOINT_BASE_IMAGE_MISMATCH",
 
   /**
-   * Room.boundary and Wall.roomIds disagree about a room-wall relationship.
+   * Room.boundary and Wall.roomIds disagree during reference-consistency validation.
    */
   ROOM_WALL_REFERENCE_MISMATCH = "ROOM_WALL_REFERENCE_MISMATCH",
 
   /**
-   * A Wall references more than two Rooms.
+   * A Wall references more than two Rooms during reference-consistency validation.
    */
   NON_MANIFOLD_WALL_REFERENCE = "NON_MANIFOLD_WALL_REFERENCE",
 
   /**
-   * A Wall references the same Room more than once.
+   * A Wall references the same Room more than once during reference-consistency validation.
    */
   DUPLICATE_WALL_ROOM_REFERENCE = "DUPLICATE_WALL_ROOM_REFERENCE",
 
@@ -81,17 +101,17 @@ export enum ValidationErrorCode {
   WALL_ZERO_LENGTH = "WALL_ZERO_LENGTH",
 
   /**
-   * A Room boundary traversal does not close back to its starting point.
+   * A persisted Room boundary traversal does not close back to its starting point.
    */
   OPEN_ROOM_BOUNDARY = "OPEN_ROOM_BOUNDARY",
 
   /**
-   * A Room boundary uses a wall order that does not form a continuous traversal.
+   * A persisted Room boundary uses a wall order that does not form a continuous traversal.
    */
   INVALID_ROOM_BOUNDARY_ORDER = "INVALID_ROOM_BOUNDARY_ORDER",
 
   /**
-   * A Room boundary edge direction prevents an otherwise ordered traversal from connecting.
+   * A persisted Room boundary edge direction prevents an otherwise ordered traversal from connecting.
    */
   INVALID_ROOM_BOUNDARY_DIRECTION = "INVALID_ROOM_BOUNDARY_DIRECTION",
 
@@ -101,17 +121,17 @@ export enum ValidationErrorCode {
   CLOCKWISE_OUTER_ROOM_BOUNDARY = "CLOCKWISE_OUTER_ROOM_BOUNDARY",
 
   /**
-   * A Room boundary intersects itself.
+   * A persisted Room boundary intersects itself.
    */
   SELF_INTERSECTING_ROOM_BOUNDARY = "SELF_INTERSECTING_ROOM_BOUNDARY",
 
   /**
-   * A Room boundary produces a zero-area polygon.
+   * A persisted Room boundary produces a zero-area polygon.
    */
   DEGENERATE_ROOM_BOUNDARY = "DEGENERATE_ROOM_BOUNDARY",
 
   /**
-   * A Room boundary contains unsupported overlapping collinear segments.
+   * A persisted Room boundary contains unsupported overlapping collinear segments.
    */
   PARTIAL_BOUNDARY_OVERLAP = "PARTIAL_BOUNDARY_OVERLAP",
 
@@ -141,7 +161,7 @@ export enum ValidationErrorCode {
   STAIR_FLIGHT_NOT_ASCENDING = "STAIR_FLIGHT_NOT_ASCENDING",
 
   /**
-   * A Level contains multiple Walls with identical start and end coordinates.
+   * A Level contains multiple Walls with identical geometry in either orientation.
    */
   DUPLICATE_WALL_GEOMETRY = "DUPLICATE_WALL_GEOMETRY"
 }

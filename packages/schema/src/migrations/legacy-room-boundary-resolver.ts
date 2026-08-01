@@ -100,6 +100,12 @@ const getSignedArea = (edges: readonly TraversedEdge[]): number => {
 const invertDirection = (direction: "FORWARD" | "REVERSE"): "FORWARD" | "REVERSE" =>
   direction === "FORWARD" ? "REVERSE" : "FORWARD";
 
+/**
+ * Normalizes reconstructed legacy room loops to counter-clockwise winding.
+ *
+ * This is migration-only normalization. Canonical validation rejects clockwise
+ * persisted boundaries rather than rewriting them.
+ */
 const normalizeWinding = (edges: readonly TraversedEdge[]): RoomBoundaryEdge[] => {
   const signedArea = getSignedArea(edges);
   const orientedEdges =
@@ -203,6 +209,14 @@ const validateIntersections = (
   return undefined;
 };
 
+/**
+ * Reconstructs a deterministic canonical Room boundary from legacy `wallIds`.
+ *
+ * The resolver uses exact endpoint equality in level-local XZ coordinates,
+ * treats selected walls as an undirected graph, rejects ambiguous or invalid
+ * topology, and returns ordered/oriented boundary edges without mutating source
+ * walls or room data.
+ */
 export const resolveLegacyRoomBoundary = (
   input: ResolveLegacyRoomBoundaryInput
 ): ResolveLegacyRoomBoundaryResult => {

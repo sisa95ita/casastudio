@@ -24,6 +24,7 @@ const hasSamePoint = (first: Point2D, second: Point2D): boolean => first.x === s
 
 const getPointKey = (point: Point2D): string => `${point.x}:${point.z}`;
 
+// Canonicalizes wall geometry so same-direction and reversed duplicates share a key.
 const getUndirectedWallGeometryKey = (wall: Wall): string => {
   const startKey = getPointKey(wall.start);
   const endKey = getPointKey(wall.end);
@@ -37,6 +38,7 @@ const getTraversalStart = (boundaryEdge: RoomBoundaryEdge, wall: Wall): Point2D 
 const getTraversalEnd = (boundaryEdge: RoomBoundaryEdge, wall: Wall): Point2D =>
   boundaryEdge.direction === "FORWARD" ? wall.end : wall.start;
 
+// Positive signed area corresponds to counter-clockwise winding in level-local XZ.
 const getSignedArea = (vertices: readonly Point2D[]): number => {
   let signedArea = 0;
 
@@ -64,6 +66,7 @@ const isOnSegment = (a: Point2D, b: Point2D, c: Point2D): boolean =>
 
 const areCollinear = (a: Point2D, b: Point2D, c: Point2D): boolean => orientation(a, b, c) === 0;
 
+// Partial overlap means collinear segments share non-zero length, not just an endpoint.
 const segmentsPartiallyOverlap = (aStart: Point2D, aEnd: Point2D, bStart: Point2D, bEnd: Point2D): boolean => {
   if (!areCollinear(aStart, bStart, aEnd) || !areCollinear(aStart, bEnd, aEnd)) {
     return false;
@@ -79,6 +82,7 @@ const segmentsPartiallyOverlap = (aStart: Point2D, aEnd: Point2D, bStart: Point2
   return overlapX > 0 || overlapZ > 0;
 };
 
+// Non-adjacent endpoint touches count as intersections for the simple-loop MVP.
 const segmentsIntersect = (aStart: Point2D, aEnd: Point2D, bStart: Point2D, bEnd: Point2D): boolean => {
   const firstOrientation = orientation(aStart, aEnd, bStart);
   const secondOrientation = orientation(aStart, aEnd, bEnd);
@@ -140,6 +144,8 @@ const getSingleFlippedContinuityFixIndex = (
 ): number | undefined => {
   const fixIndexes: number[] = [];
 
+  // This is diagnostic classification only; canonical boundaries are never
+  // repaired or normalized by persisted geometry validation.
   boundary.forEach((boundaryEdge, boundaryIndex) => {
     const flippedBoundary = boundary.map((edge, edgeIndex) =>
       edgeIndex === boundaryIndex ? { ...edge, direction: invertBoundaryDirection(edge.direction) } : edge

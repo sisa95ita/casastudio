@@ -8,8 +8,17 @@ import {
   RequiredNameSchema
 } from "./shared";
 
+/**
+ * Validates how a Room boundary traverses a referenced Wall.
+ *
+ * Direction is interpreted relative to the referenced Wall's persisted `start`
+ * and `end` endpoints.
+ */
 export const RoomBoundaryDirectionSchema = z.enum(["FORWARD", "REVERSE"]);
 
+/**
+ * Validates one ordered and oriented wall reference in a persisted room boundary.
+ */
 export const RoomBoundaryEdgeSchema = z.strictObject({
   wallId: IdentifierSchema,
   direction: RoomBoundaryDirectionSchema
@@ -18,8 +27,10 @@ export const RoomBoundaryEdgeSchema = z.strictObject({
 /**
  * Represents a functional architectural space within a Level.
  *
- * Room boundaries are referenced through level-scoped Walls; geometric
- * renderability and boundary correctness are validated outside this schema.
+ * The canonical persisted boundary is ordered and oriented. Empty boundaries
+ * are allowed for draft rooms; geometry-buildable rooms must provide at least
+ * three boundary edges. Cross-reference, reference-consistency, and persisted
+ * geometry validation are handled outside this structural schema.
  */
 export const RoomSchema = z
   .strictObject({
@@ -39,8 +50,14 @@ export const RoomSchema = z
     path: ["boundary"]
   });
 
+/**
+ * Direction used by a Room while traversing a referenced Wall.
+ */
 export type RoomBoundaryDirection = z.infer<typeof RoomBoundaryDirectionSchema>;
 
+/**
+ * Ordered and oriented Wall reference inside a Room boundary.
+ */
 export type RoomBoundaryEdge = z.infer<typeof RoomBoundaryEdgeSchema>;
 
 /**

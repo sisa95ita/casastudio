@@ -4,6 +4,13 @@ import { CURRENT_PROJECT_SCHEMA_VERSION } from "../project/schema-version";
 import { MigrationErrorCode, type ProjectMigrationError } from "./migration-error";
 import { migrateV1ToV2 } from "./v1-to-v2";
 
+/**
+ * Result returned by schema-owned Project migration.
+ *
+ * Expected document failures are represented as `ok: false` with stable
+ * migration errors. Successful results always return the canonical parsed
+ * Project and record both source and target versions.
+ */
 export type ProjectMigrationResult =
   | {
       ok: true;
@@ -46,6 +53,19 @@ const canonicalValidationErrors = (input: unknown, sourceVersion: string): Proje
   };
 };
 
+/**
+ * Parses or migrates raw Project input into the canonical Project schema.
+ *
+ * Canonical `2.0.0` input is validated with `ProjectSchema`. Legacy `1.0.0`
+ * input is migrated to `2.0.0`, preserving revision and timestamps while
+ * emitting a new immutable output object. Unsupported versions and invalid
+ * documents return `ok: false` instead of throwing; exceptions are reserved for
+ * unexpected internal faults.
+ *
+ * @param input - Raw Project-like data from persistence or import.
+ * @returns A discriminated migration result containing either a canonical
+ * Project or migration errors.
+ */
 export function migrateProject(input: unknown): ProjectMigrationResult {
   if (!isRecord(input) || !("schemaVersion" in input)) {
     return {

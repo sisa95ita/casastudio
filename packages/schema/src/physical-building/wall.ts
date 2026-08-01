@@ -19,8 +19,9 @@ const WallRoomIdsSchema = IdentifierArraySchema.max(2, "A wall may reference at 
 /**
  * Represents a physical wall segment in Level coordinate space.
  *
- * Walls are the authoritative boundary elements for Rooms. Cross-reference
- * consistency with Rooms is handled by the validation layer rather than here.
+ * Walls are the authoritative boundary elements for Rooms. `roomIds` is locally
+ * constrained to at most two unique adjacent Rooms, while cross-reference and
+ * bidirectional Room boundary consistency are handled by validation layers.
  */
 export const WallSchema = z
   .strictObject({
