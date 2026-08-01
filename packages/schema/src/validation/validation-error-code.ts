@@ -81,6 +81,41 @@ export enum ValidationErrorCode {
   WALL_ZERO_LENGTH = "WALL_ZERO_LENGTH",
 
   /**
+   * A Room boundary traversal does not close back to its starting point.
+   */
+  OPEN_ROOM_BOUNDARY = "OPEN_ROOM_BOUNDARY",
+
+  /**
+   * A Room boundary uses a wall order that does not form a continuous traversal.
+   */
+  INVALID_ROOM_BOUNDARY_ORDER = "INVALID_ROOM_BOUNDARY_ORDER",
+
+  /**
+   * A Room boundary edge direction prevents an otherwise ordered traversal from connecting.
+   */
+  INVALID_ROOM_BOUNDARY_DIRECTION = "INVALID_ROOM_BOUNDARY_DIRECTION",
+
+  /**
+   * A Room outer boundary is persisted clockwise instead of counter-clockwise.
+   */
+  CLOCKWISE_OUTER_ROOM_BOUNDARY = "CLOCKWISE_OUTER_ROOM_BOUNDARY",
+
+  /**
+   * A Room boundary intersects itself.
+   */
+  SELF_INTERSECTING_ROOM_BOUNDARY = "SELF_INTERSECTING_ROOM_BOUNDARY",
+
+  /**
+   * A Room boundary produces a zero-area polygon.
+   */
+  DEGENERATE_ROOM_BOUNDARY = "DEGENERATE_ROOM_BOUNDARY",
+
+  /**
+   * A Room boundary contains unsupported overlapping collinear segments.
+   */
+  PARTIAL_BOUNDARY_OVERLAP = "PARTIAL_BOUNDARY_OVERLAP",
+
+  /**
    * An Opening starts before the Wall or extends beyond the Wall length.
    */
   OPENING_OUTSIDE_WALL = "OPENING_OUTSIDE_WALL",

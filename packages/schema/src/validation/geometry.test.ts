@@ -119,6 +119,70 @@ const getGroundLevel = (project: Project) => {
   return level;
 };
 
+const setRoomBoundaryWalls = (
+  project: Project,
+  walls: Project["building"]["levels"][number]["walls"],
+  boundary: Project["building"]["levels"][number]["rooms"][number]["boundary"]
+) => {
+  const level = getGroundLevel(project);
+  const room = level.rooms[0];
+
+  if (!room) {
+    throw new Error("Test fixture is missing a room.");
+  }
+
+  level.walls = walls;
+  room.boundary = boundary;
+
+  return { level, room };
+};
+
+const rectangleWalls: Project["building"]["levels"][number]["walls"] = [
+  {
+    id: "north-wall",
+    start: { x: 0, z: 0 },
+    end: { x: 500, z: 0 },
+    height: 280,
+    thickness: 20,
+    roomIds: ["living-room"],
+    openings: []
+  },
+  {
+    id: "east-wall",
+    start: { x: 500, z: 0 },
+    end: { x: 500, z: 350 },
+    height: 280,
+    thickness: 20,
+    roomIds: ["living-room"],
+    openings: []
+  },
+  {
+    id: "south-wall",
+    start: { x: 500, z: 350 },
+    end: { x: 0, z: 350 },
+    height: 280,
+    thickness: 20,
+    roomIds: ["living-room"],
+    openings: []
+  },
+  {
+    id: "west-wall",
+    start: { x: 0, z: 350 },
+    end: { x: 0, z: 0 },
+    height: 280,
+    thickness: 20,
+    roomIds: ["living-room"],
+    openings: []
+  }
+];
+
+const ccwRectangleBoundary: Project["building"]["levels"][number]["rooms"][number]["boundary"] = [
+  { wallId: "north-wall", direction: "FORWARD" },
+  { wallId: "east-wall", direction: "FORWARD" },
+  { wallId: "south-wall", direction: "FORWARD" },
+  { wallId: "west-wall", direction: "FORWARD" }
+];
+
 describe("validateProjectGeometry", () => {
   it("returns valid true for a geometrically valid Project", () => {
     const result = validateProjectGeometry(createGeometricallyValidProject());
@@ -271,30 +335,19 @@ describe("validateProjectGeometry", () => {
     ]);
   });
 
-  it("reports duplicate Wall geometry in the same Level without treating reversed Walls as duplicates", () => {
+  it("reports same-direction duplicate Wall geometry in the same Level", () => {
     const project = createGeometricallyValidProject();
     const level = getGroundLevel(project);
 
-    level.walls.push(
-      {
-        id: "duplicate-north-wall",
-        start: { x: 0, z: 0 },
-        end: { x: 500, z: 0 },
-        height: 280,
-        thickness: 20,
-        roomIds: ["living-room"],
-        openings: []
-      },
-      {
-        id: "reversed-north-wall",
-        start: { x: 500, z: 0 },
-        end: { x: 0, z: 0 },
-        height: 280,
-        thickness: 20,
-        roomIds: ["living-room"],
-        openings: []
-      }
-    );
+    level.walls.push({
+      id: "duplicate-north-wall",
+      start: { x: 0, z: 0 },
+      end: { x: 500, z: 0 },
+      height: 280,
+      thickness: 20,
+      roomIds: ["living-room"],
+      openings: []
+    });
 
     const result = validateProjectGeometry(project);
 
@@ -306,6 +359,323 @@ describe("validateProjectGeometry", () => {
         path: "building.levels[0].walls[2]"
       }
     ]);
+  });
+
+  it("reports reversed duplicate Wall geometry in the same Level", () => {
+    const project = createGeometricallyValidProject();
+    const level = getGroundLevel(project);
+
+    level.walls.push({
+      id: "reversed-north-wall",
+      start: { x: 500, z: 0 },
+      end: { x: 0, z: 0 },
+      height: 280,
+      thickness: 20,
+      roomIds: ["living-room"],
+      openings: []
+    });
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.DUPLICATE_WALL_GEOMETRY,
+        path: "building.levels[0].walls[2]"
+      }
+    ]);
+  });
+
+  it("accepts valid counter-clockwise Room boundaries", () => {
+    const project = createGeometricallyValidProject();
+
+    setRoomBoundaryWalls(project, structuredClone(rectangleWalls), structuredClone(ccwRectangleBoundary));
+
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("skips Room polygon validation for draft boundaries", () => {
+    const project = createGeometricallyValidProject();
+
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("reports Room boundaries with invalid persisted wall order", () => {
+    const project = createGeometricallyValidProject();
+
+    setRoomBoundaryWalls(project, structuredClone(rectangleWalls), [
+      { wallId: "north-wall", direction: "FORWARD" },
+      { wallId: "south-wall", direction: "FORWARD" },
+      { wallId: "east-wall", direction: "FORWARD" },
+      { wallId: "west-wall", direction: "FORWARD" }
+    ]);
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.INVALID_ROOM_BOUNDARY_ORDER,
+        path: "building.levels[0].rooms[0].boundary[1]"
+      }
+    ]);
+  });
+
+  it("reports enum-valid Room boundary directions that break continuity", () => {
+    const project = createGeometricallyValidProject();
+
+    setRoomBoundaryWalls(project, structuredClone(rectangleWalls), [
+      { wallId: "north-wall", direction: "FORWARD" },
+      { wallId: "east-wall", direction: "REVERSE" },
+      { wallId: "south-wall", direction: "FORWARD" },
+      { wallId: "west-wall", direction: "FORWARD" }
+    ]);
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.INVALID_ROOM_BOUNDARY_DIRECTION,
+        path: "building.levels[0].rooms[0].boundary[1]"
+      }
+    ]);
+  });
+
+  it("reports internally continuous Room boundaries that do not close", () => {
+    const project = createGeometricallyValidProject();
+    const walls = [
+      ...structuredClone(rectangleWalls.slice(0, 3)),
+      {
+        id: "west-wall",
+        start: { x: 0, z: 350 },
+        end: { x: 0, z: 40 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      }
+    ];
+
+    setRoomBoundaryWalls(project, walls, structuredClone(ccwRectangleBoundary));
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.OPEN_ROOM_BOUNDARY,
+        path: "building.levels[0].rooms[0].boundary"
+      }
+    ]);
+  });
+
+  it("skips Room geometry cascades when a boundary wall is missing", () => {
+    const project = createGeometricallyValidProject();
+
+    setRoomBoundaryWalls(project, structuredClone(rectangleWalls), [
+      { wallId: "missing-wall", direction: "FORWARD" },
+      { wallId: "east-wall", direction: "FORWARD" },
+      { wallId: "south-wall", direction: "FORWARD" },
+      { wallId: "west-wall", direction: "FORWARD" }
+    ]);
+
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("reports clockwise Room boundaries", () => {
+    const project = createGeometricallyValidProject();
+
+    setRoomBoundaryWalls(project, structuredClone(rectangleWalls), [
+      { wallId: "west-wall", direction: "REVERSE" },
+      { wallId: "south-wall", direction: "REVERSE" },
+      { wallId: "east-wall", direction: "REVERSE" },
+      { wallId: "north-wall", direction: "REVERSE" }
+    ]);
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.CLOCKWISE_OUTER_ROOM_BOUNDARY,
+        path: "building.levels[0].rooms[0].boundary"
+      }
+    ]);
+  });
+
+  it("reports zero-area Room boundaries", () => {
+    const project = createGeometricallyValidProject();
+    const walls = [
+      {
+        id: "wall-a",
+        start: { x: 0, z: 0 },
+        end: { x: 100, z: 0 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      },
+      {
+        id: "wall-b",
+        start: { x: 100, z: 0 },
+        end: { x: 200, z: 0 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      },
+      {
+        id: "wall-c",
+        start: { x: 200, z: 0 },
+        end: { x: 0, z: 0 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      }
+    ];
+
+    setRoomBoundaryWalls(project, walls, [
+      { wallId: "wall-a", direction: "FORWARD" },
+      { wallId: "wall-b", direction: "FORWARD" },
+      { wallId: "wall-c", direction: "FORWARD" }
+    ]);
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.DEGENERATE_ROOM_BOUNDARY,
+        path: "building.levels[0].rooms[0].boundary"
+      }
+    ]);
+  });
+
+  it("reports self-intersecting Room boundaries", () => {
+    const project = createGeometricallyValidProject();
+    const walls = [
+      {
+        id: "wall-a",
+        start: { x: 0, z: 0 },
+        end: { x: 500, z: 350 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      },
+      {
+        id: "wall-b",
+        start: { x: 500, z: 350 },
+        end: { x: 0, z: 350 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      },
+      {
+        id: "wall-c",
+        start: { x: 0, z: 350 },
+        end: { x: 500, z: 0 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      },
+      {
+        id: "wall-d",
+        start: { x: 500, z: 0 },
+        end: { x: 0, z: 0 },
+        height: 280,
+        thickness: 20,
+        roomIds: ["living-room"],
+        openings: []
+      }
+    ];
+
+    setRoomBoundaryWalls(project, walls, [
+      { wallId: "wall-a", direction: "FORWARD" },
+      { wallId: "wall-b", direction: "FORWARD" },
+      { wallId: "wall-c", direction: "FORWARD" },
+      { wallId: "wall-d", direction: "FORWARD" }
+    ]);
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.SELF_INTERSECTING_ROOM_BOUNDARY,
+        path: "building.levels[0].rooms[0].boundary[2]"
+      }
+    ]);
+  });
+
+  it("allows valid concave simple Room boundaries", () => {
+    const project = createGeometricallyValidProject();
+    const walls = [
+      { id: "wall-a", start: { x: 0, z: 0 }, end: { x: 500, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-b", start: { x: 500, z: 0 }, end: { x: 500, z: 300 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-c", start: { x: 500, z: 300 }, end: { x: 300, z: 300 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-d", start: { x: 300, z: 300 }, end: { x: 300, z: 150 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-e", start: { x: 300, z: 150 }, end: { x: 0, z: 150 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-f", start: { x: 0, z: 150 }, end: { x: 0, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] }
+    ];
+
+    setRoomBoundaryWalls(project, walls, [
+      { wallId: "wall-a", direction: "FORWARD" },
+      { wallId: "wall-b", direction: "FORWARD" },
+      { wallId: "wall-c", direction: "FORWARD" },
+      { wallId: "wall-d", direction: "FORWARD" },
+      { wallId: "wall-e", direction: "FORWARD" },
+      { wallId: "wall-f", direction: "FORWARD" }
+    ]);
+
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("reports partially overlapping Room boundary segments", () => {
+    const project = createGeometricallyValidProject();
+    const walls = [
+      { id: "wall-a", start: { x: 0, z: 0 }, end: { x: 500, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-b", start: { x: 500, z: 0 }, end: { x: 250, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-c", start: { x: 250, z: 0 }, end: { x: 250, z: 300 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-d", start: { x: 250, z: 300 }, end: { x: 0, z: 300 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-e", start: { x: 0, z: 300 }, end: { x: 0, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] }
+    ];
+
+    setRoomBoundaryWalls(project, walls, [
+      { wallId: "wall-a", direction: "FORWARD" },
+      { wallId: "wall-b", direction: "FORWARD" },
+      { wallId: "wall-c", direction: "FORWARD" },
+      { wallId: "wall-d", direction: "FORWARD" },
+      { wallId: "wall-e", direction: "FORWARD" }
+    ]);
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.PARTIAL_BOUNDARY_OVERLAP,
+        path: "building.levels[0].rooms[0].boundary[1]"
+      }
+    ]);
+  });
+
+  it("allows consecutive collinear Room boundary segments that meet at one endpoint", () => {
+    const project = createGeometricallyValidProject();
+    const walls = [
+      { id: "wall-a", start: { x: 0, z: 0 }, end: { x: 250, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-b", start: { x: 250, z: 0 }, end: { x: 500, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-c", start: { x: 500, z: 0 }, end: { x: 500, z: 300 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-d", start: { x: 500, z: 300 }, end: { x: 0, z: 300 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] },
+      { id: "wall-e", start: { x: 0, z: 300 }, end: { x: 0, z: 0 }, height: 280, thickness: 20, roomIds: ["living-room"], openings: [] }
+    ];
+
+    setRoomBoundaryWalls(project, walls, [
+      { wallId: "wall-a", direction: "FORWARD" },
+      { wallId: "wall-b", direction: "FORWARD" },
+      { wallId: "wall-c", direction: "FORWARD" },
+      { wallId: "wall-d", direction: "FORWARD" },
+      { wallId: "wall-e", direction: "FORWARD" }
+    ]);
+
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
   });
 
   it("collects multiple geometry errors deterministically", () => {

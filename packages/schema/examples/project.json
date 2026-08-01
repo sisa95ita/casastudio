@@ -51,7 +51,7 @@
             "boundary": [
               {
                 "wallId": "living-kitchen-partition",
-                "direction": "FORWARD"
+                "direction": "REVERSE"
               },
               {
                 "wallId": "kitchen-east-wall",
@@ -304,7 +304,7 @@
               },
               {
                 "wallId": "studio-bathroom-partition",
-                "direction": "FORWARD"
+                "direction": "REVERSE"
               },
               {
                 "wallId": "studio-south-wall",
