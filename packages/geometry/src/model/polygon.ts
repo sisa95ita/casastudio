@@ -1,9 +1,10 @@
-import type { Room } from "@casastudio/schema";
+import type { Point2D, Room } from "@casastudio/schema";
 
 import type { BoundaryEdge } from "./boundary-edge";
 import type { BoundaryEdgeUse } from "./boundary-edge-use";
 import type { GeometryId } from "./index";
 import type { Loop } from "./loop";
+import type { BoundingBox, PolygonMetrics, PolygonWinding } from "./polygon-metrics";
 import type { Vertex } from "./vertex";
 
 /**
@@ -15,6 +16,39 @@ import type { Vertex } from "./vertex";
  */
 export class Polygon {
   readonly innerLoops: readonly Loop[];
+  /**
+   * Signed planar area in the level-local XZ plane.
+   *
+   * Positive values indicate counter-clockwise traversal and negative values
+   * indicate clockwise traversal. The value is derived from runtime vertices
+   * and is not persisted.
+   */
+  readonly signedArea: number;
+  /**
+   * Absolute planar area in square project length units.
+   *
+   * The current schema uses centimeters, so this value is square centimeters
+   * for canonical MVP projects.
+   */
+  readonly area: number;
+  /**
+   * Winding derived from the runtime outer-loop traversal order.
+   *
+   * The Geometry Engine does not normalize winding; this reports the order
+   * represented by the source room boundary.
+   */
+  readonly winding: PolygonWinding;
+  /**
+   * Immutable XZ bounds derived from the polygon's traversal vertices.
+   */
+  readonly bounds: BoundingBox;
+  /**
+   * Immutable centroid for a non-degenerate simple polygon.
+   *
+   * Degenerate polygons are rejected by the builder, so successful runtime
+   * polygons always expose a real centroid.
+   */
+  readonly centroid: Readonly<Point2D>;
 
   /**
    * Creates an immutable polygon associated with a source Room.
@@ -23,9 +57,15 @@ export class Polygon {
     readonly id: GeometryId,
     readonly sourceRoomId: Room["id"],
     readonly outerLoop: Loop,
-    innerLoops: readonly Loop[]
+    innerLoops: readonly Loop[],
+    metrics: PolygonMetrics & { readonly centroid: Point2D }
   ) {
     this.innerLoops = Object.freeze([...innerLoops]);
+    this.signedArea = metrics.signedArea;
+    this.area = metrics.area;
+    this.winding = metrics.winding;
+    this.bounds = Object.freeze({ ...metrics.bounds });
+    this.centroid = Object.freeze({ ...metrics.centroid });
     Object.freeze(this);
   }
 

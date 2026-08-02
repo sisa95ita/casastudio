@@ -2,8 +2,10 @@ import { ProjectSchema, type Project } from "@casastudio/schema";
 import { describe, expect, it } from "vitest";
 
 import {
+  type BoundingBox,
   GeometryBuildErrorCode,
   GeometryEngine,
+  type PolygonWinding,
   type BoundaryEdge,
   type BoundaryEdgeUse,
   type GeometryBuildResult,
@@ -14,7 +16,11 @@ import {
   type Vertex
 } from "./index";
 
-const buildRectangularRoomProject = (): Project =>
+type RectangleFixtureOptions = {
+  readonly clockwise?: boolean;
+};
+
+const buildRectangularRoomProject = ({ clockwise = false }: RectangleFixtureOptions = {}): Project =>
   ProjectSchema.parse({
     id: "geometry-slice-project",
     name: "Geometry Slice Project",
@@ -40,12 +46,19 @@ const buildRectangularRoomProject = (): Project =>
               id: "living-room",
               name: "Living Room",
               type: "LIVING_ROOM",
-              boundary: [
-                { wallId: "north-wall", direction: "FORWARD" },
-                { wallId: "east-wall", direction: "FORWARD" },
-                { wallId: "south-wall", direction: "REVERSE" },
-                { wallId: "west-wall", direction: "FORWARD" }
-              ]
+              boundary: clockwise
+                ? [
+                    { wallId: "west-wall", direction: "REVERSE" },
+                    { wallId: "south-wall", direction: "FORWARD" },
+                    { wallId: "east-wall", direction: "REVERSE" },
+                    { wallId: "north-wall", direction: "REVERSE" }
+                  ]
+                : [
+                    { wallId: "north-wall", direction: "FORWARD" },
+                    { wallId: "east-wall", direction: "FORWARD" },
+                    { wallId: "south-wall", direction: "REVERSE" },
+                    { wallId: "west-wall", direction: "FORWARD" }
+                  ]
             }
           ],
           walls: [
@@ -83,6 +96,89 @@ const buildRectangularRoomProject = (): Project =>
               height: 300,
               thickness: 20,
               roomIds: ["living-room"],
+              openings: []
+            }
+          ],
+          staircases: []
+        }
+      ]
+    },
+    viewpoints: [],
+    baseImages: [],
+    designBriefs: [],
+    renderRequests: [],
+    renderResults: []
+  });
+
+const buildDegenerateRoomProject = (): Project =>
+  ProjectSchema.parse({
+    id: "degenerate-room-project",
+    name: "Degenerate Room Project",
+    schemaVersion: "2.0.0",
+    revision: 2,
+    createdAt: "2026-07-20T10:00:00+02:00",
+    updatedAt: "2026-07-20T10:00:00+02:00",
+    units: {
+      length: "cm",
+      angle: "deg"
+    },
+    building: {
+      id: "main-building",
+      name: "Main Building",
+      type: "HOUSE",
+      levels: [
+        {
+          id: "ground-level",
+          name: "Ground Level",
+          elevation: 0,
+          rooms: [
+            {
+              id: "line-room",
+              name: "Line Room",
+              type: "OTHER",
+              boundary: [
+                { wallId: "line-a", direction: "FORWARD" },
+                { wallId: "line-b", direction: "FORWARD" },
+                { wallId: "line-c", direction: "FORWARD" },
+                { wallId: "line-d", direction: "FORWARD" }
+              ]
+            }
+          ],
+          walls: [
+            {
+              id: "line-a",
+              start: { x: 0, z: 0 },
+              end: { x: 100, z: 0 },
+              height: 300,
+              thickness: 20,
+              roomIds: ["line-room"],
+              openings: []
+            },
+            {
+              id: "line-b",
+              start: { x: 100, z: 0 },
+              end: { x: 200, z: 0 },
+              height: 300,
+              thickness: 20,
+              roomIds: ["line-room"],
+              openings: []
+            },
+            {
+              id: "line-c",
+              start: { x: 200, z: 0 },
+              end: { x: 100, z: 0 },
+              height: 300,
+              thickness: 20,
+              roomIds: ["line-room"],
+              openings: []
+            },
+            {
+              id: "line-d",
+              start: { x: 100, z: 0 },
+              end: { x: 0, z: 0 },
+              height: 300,
+              thickness: 20,
+              roomIds: ["line-room"],
               openings: []
             }
           ],
@@ -199,6 +295,46 @@ describe("GeometryEngine", () => {
     expect(polygon.innerLoops).toEqual([]);
   });
 
+  it("derives polygon metrics from counter-clockwise runtime vertex order", () => {
+    const polygon = getOnlyPolygon(getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject()))));
+    const expectedBounds: BoundingBox = {
+      minX: 0,
+      minZ: 0,
+      maxX: 400,
+      maxZ: 300
+    };
+    const expectedWinding: PolygonWinding = "COUNTER_CLOCKWISE";
+
+    expect(polygon.signedArea).toBe(120000);
+    expect(polygon.area).toBe(120000);
+    expect(polygon.winding).toBe(expectedWinding);
+    expect(polygon.bounds).toEqual(expectedBounds);
+    expect(polygon.centroid).toEqual({ x: 200, z: 150 });
+  });
+
+  it("derives clockwise polygon winding and preserves signed area without normalization", () => {
+    const polygon = getOnlyPolygon(
+      getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject({ clockwise: true }))))
+    );
+
+    expect(polygon.vertices.map((vertex) => vertex.id)).toEqual([
+      "vertex:ground-level:0:0",
+      "vertex:ground-level:0:300",
+      "vertex:ground-level:400:300",
+      "vertex:ground-level:400:0"
+    ]);
+    expect(polygon.signedArea).toBe(-120000);
+    expect(polygon.area).toBe(120000);
+    expect(polygon.winding).toBe("CLOCKWISE");
+    expect(polygon.bounds).toEqual({
+      minX: 0,
+      minZ: 0,
+      maxX: 400,
+      maxZ: 300
+    });
+    expect(polygon.centroid).toEqual({ x: 200, z: 150 });
+  });
+
   it("preserves persisted room-boundary order and traversal relationships", () => {
     const level = getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject())));
     const polygon = getOnlyPolygon(level);
@@ -289,6 +425,20 @@ describe("GeometryEngine", () => {
     );
     expect(second.loops.map((loop) => loop.id)).toEqual(first.loops.map((loop) => loop.id));
     expect(second.polygons.map((polygon) => polygon.id)).toEqual(first.polygons.map((polygon) => polygon.id));
+    expect(second.polygons.map((polygon) => polygon.vertices.map((vertex) => vertex.id))).toEqual(
+      first.polygons.map((polygon) => polygon.vertices.map((vertex) => vertex.id))
+    );
+    expect(second.polygons.map((polygon) => polygon.signedArea)).toEqual(
+      first.polygons.map((polygon) => polygon.signedArea)
+    );
+    expect(second.polygons.map((polygon) => polygon.area)).toEqual(first.polygons.map((polygon) => polygon.area));
+    expect(second.polygons.map((polygon) => polygon.winding)).toEqual(
+      first.polygons.map((polygon) => polygon.winding)
+    );
+    expect(second.polygons.map((polygon) => polygon.bounds)).toEqual(first.polygons.map((polygon) => polygon.bounds));
+    expect(second.polygons.map((polygon) => polygon.centroid)).toEqual(
+      first.polygons.map((polygon) => polygon.centroid)
+    );
   });
 
   it("exposes immutable runtime collections and does not alias source arrays", () => {
@@ -302,6 +452,8 @@ describe("GeometryEngine", () => {
     expect(() => (model.levels as LevelGeometry[]).push(level)).toThrow(TypeError);
     expect(() => (level.vertices as Vertex[]).push(level.vertices[0] as Vertex)).toThrow(TypeError);
     expect(() => (getOnlyPolygon(level).innerLoops as Loop[]).push(getOnlyPolygon(level).outerLoop)).toThrow(TypeError);
+    expect(() => ((getOnlyPolygon(level).bounds as { minX: number }).minX = -1)).toThrow(TypeError);
+    expect(() => ((getOnlyPolygon(level).centroid as { x: number }).x = -1)).toThrow(TypeError);
   });
 
   it("returns geometry build errors instead of throwing for missing source entities", () => {
@@ -318,6 +470,22 @@ describe("GeometryEngine", () => {
           message: 'Room "living-room" boundary references missing wall "west-wall".',
           path: "building.levels[0].rooms[0].boundary[3].wallId",
           sourceId: "west-wall"
+        }
+      ]
+    });
+  });
+
+  it("returns an invalid geometry build result for degenerate polygons instead of inventing metrics", () => {
+    const result = GeometryEngine.build(buildDegenerateRoomProject());
+
+    expect(result).toEqual({
+      ok: false,
+      errors: [
+        {
+          code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+          message: 'Room "line-room" boundary produces a zero-area polygon.',
+          path: "building.levels[0].rooms[0].boundary",
+          sourceId: "line-room"
         }
       ]
     });

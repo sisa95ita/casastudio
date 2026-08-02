@@ -11,6 +11,7 @@ import {
   Polygon,
   Vertex
 } from "../model";
+import { calculatePolygonMetrics } from "../model/polygon-metrics";
 import { coordinateKey, runtimeId } from "./runtime-id";
 
 type MutableVertexEntry = {
@@ -182,10 +183,25 @@ export class GeometryModelBuilder {
         return;
       }
 
+      const metrics = calculatePolygonMetrics(roomEdgeUses.map((edgeUse) => edgeUse.startVertex));
+
+      if (metrics.centroid === undefined || metrics.winding === "DEGENERATE") {
+        this.addError({
+          code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+          message: `Room "${room.id}" boundary produces a zero-area polygon.`,
+          path: `building.levels[${levelIndex}].rooms[${roomIndex}].boundary`,
+          sourceId: room.id
+        });
+        return;
+      }
+
       loopCell.value = new Loop(runtimeId.outerLoop(room), "OUTER", roomEdgeUses, () =>
         this.requireBuilt(polygonCell.value, "Loop.polygon")
       );
-      polygonCell.value = new Polygon(runtimeId.polygon(room), room.id, loopCell.value, []);
+      polygonCell.value = new Polygon(runtimeId.polygon(room), room.id, loopCell.value, [], {
+        ...metrics,
+        centroid: metrics.centroid
+      });
 
       boundaryEdgeUses.push(...roomEdgeUses);
       loops.push(loopCell.value);

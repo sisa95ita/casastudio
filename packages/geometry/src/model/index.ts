@@ -4,6 +4,7 @@ export { GeometryModel } from "./geometry-model";
 export { LevelGeometry } from "./level-geometry";
 export { Loop, type LoopKind } from "./loop";
 export { Polygon } from "./polygon";
+export type { BoundingBox, PolygonMetrics, PolygonWinding } from "./polygon-metrics";
 export { Vertex } from "./vertex";
 
 /**

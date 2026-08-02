@@ -9,7 +9,9 @@ export {
   Loop,
   Polygon,
   Vertex,
+  type BoundingBox,
   type BoundaryEdgeUseDirection,
   type GeometryId,
-  type LoopKind
+  type LoopKind,
+  type PolygonWinding
 } from "./model";
