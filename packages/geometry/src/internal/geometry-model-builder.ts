@@ -68,6 +68,7 @@ export class GeometryModelBuilder {
     const loops: Loop[] = [];
     const polygons: Polygon[] = [];
     const wallsById = new Map(level.walls.map((wall) => [wall.id, wall]));
+    const wallIndexesById = new Map(level.walls.map((wall, wallIndex) => [wall.id, wallIndex]));
 
     const getOrCreateVertex = (x: number, z: number): MutableVertexEntry => {
       const key = coordinateKey(x, z);
@@ -208,6 +209,8 @@ export class GeometryModelBuilder {
       polygons.push(polygonCell.value);
     });
 
+    this.validateBoundaryEdgeUseCounts(boundaryEdgeUses, wallIndexesById, levelIndex);
+
     if (this.errors.length > 0) {
       return undefined;
     }
@@ -236,6 +239,44 @@ export class GeometryModelBuilder {
 
   private addError(error: GeometryBuildError): void {
     this.errors.push(error);
+  }
+
+  /**
+   * Defends the initial manifold runtime topology invariant.
+   *
+   * A physical boundary edge may be used by one exterior room or by two rooms
+   * sharing that wall. More than two `BoundaryEdgeUse` instances for the same
+   * source wall would require an adjacency/topology design that this phase
+   * intentionally does not introduce.
+   */
+  private validateBoundaryEdgeUseCounts(
+    boundaryEdgeUses: readonly BoundaryEdgeUse[],
+    wallIndexesById: ReadonlyMap<string, number>,
+    levelIndex: number
+  ): void {
+    const useCountsByWallId = new Map<string, number>();
+
+    boundaryEdgeUses.forEach((edgeUse) => {
+      const sourceWallId = edgeUse.boundaryEdge.sourceWallId;
+      useCountsByWallId.set(sourceWallId, (useCountsByWallId.get(sourceWallId) ?? 0) + 1);
+    });
+
+    useCountsByWallId.forEach((useCount, sourceWallId) => {
+      if (useCount <= 2) {
+        return;
+      }
+
+      const wallIndex = wallIndexesById.get(sourceWallId);
+      this.addError({
+        code: GeometryBuildErrorCode.NON_MANIFOLD_BOUNDARY_EDGE,
+        message: `Boundary edge "${sourceWallId}" is used by ${useCount} room boundaries, but at most 2 are supported.`,
+        path:
+          wallIndex === undefined
+            ? `building.levels[${levelIndex}].walls`
+            : `building.levels[${levelIndex}].walls[${wallIndex}]`,
+        sourceId: sourceWallId
+      });
+    });
   }
 
   private requireBuilt<Value>(value: Value | undefined, name: string): Value {
