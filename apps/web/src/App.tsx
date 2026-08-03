@@ -1,33 +1,52 @@
+import { CssBaseline, ThemeProvider } from "@mui/material";
+import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
+
+import { AppShell } from "./app-shell/AppShell";
 import { GeometryPlaygroundPage } from "./geometry-playground/GeometryPlaygroundPage";
+import { HomePage } from "./pages/HomePage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import "./styles.css";
+import { casaStudioTheme } from "./theme/casaStudioTheme";
 
 /**
- * Props for the CasaStudio web application shell.
+ * Props for bootstrapping the CasaStudio web application.
  */
 export type AppProps = {
-  readonly pathname?: string;
+  readonly initialEntries?: readonly string[];
 };
 
 /**
- * Renders the current frontend route inside the existing Vite application.
+ * Renders the themed React Router application.
  *
- * The app is still a development shell, so routing stays deliberately small:
- * `/geometry-playground` mounts the technical runtime viewer while `/` keeps
- * the foundation screen and a direct development link.
+ * BrowserRouter is used in production, while tests can pass `initialEntries`
+ * to exercise the same nested route tree with MemoryRouter.
  */
-export function App({ pathname }: AppProps) {
-  const currentPath =
-    pathname ?? (typeof window === "undefined" ? "/" : window.location.pathname);
-
-  if (currentPath === "/geometry-playground") {
-    return <GeometryPlaygroundPage />;
-  }
+export function App({ initialEntries }: AppProps) {
+  const routes = <AppRoutes />;
 
   return (
-    <main className="foundation-page">
-      <h1>CasaStudio</h1>
-      <p>Monorepo foundation ready.</p>
-      <a href="/geometry-playground">Open Geometry Playground</a>
-    </main>
+    <ThemeProvider theme={casaStudioTheme}>
+      <CssBaseline />
+      {initialEntries ? (
+        <MemoryRouter initialEntries={[...initialEntries]}>{routes}</MemoryRouter>
+      ) : (
+        <BrowserRouter>{routes}</BrowserRouter>
+      )}
+    </ThemeProvider>
+  );
+}
+
+/**
+ * Declarative nested route tree for the CasaStudio SPA.
+ */
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route index element={<HomePage />} />
+        <Route path="geometry-playground" element={<GeometryPlaygroundPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
   );
 }

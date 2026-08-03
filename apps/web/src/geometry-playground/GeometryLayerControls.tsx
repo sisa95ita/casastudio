@@ -1,3 +1,4 @@
+import { Checkbox, FormControlLabel, FormGroup, Stack, Typography } from "@mui/material";
 import type { ChangeEvent } from "react";
 
 import type { GeometryDisplayOptions } from "./GeometrySvgViewer";
@@ -42,18 +43,24 @@ export function GeometryLayerControls({
     };
 
   return (
-    <fieldset className="geometry-controls" aria-label="Geometry debug layers">
-      <legend>Layers</legend>
+    <Stack spacing={1} aria-label="Geometry debug layers">
+      <Typography variant="subtitle2" component="h2">
+        Layers
+      </Typography>
       {controlLabels.map((control) => (
-        <label key={control.option} className="geometry-control">
-          <input
-            type="checkbox"
-            checked={options[control.option]}
-            onChange={handleChange(control.option)}
+        <FormGroup key={control.option}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={options[control.option]}
+                onChange={handleChange(control.option)}
+                slotProps={{ input: { "aria-label": control.label } }}
+              />
+            }
+            label={control.label}
           />
-          <span>{control.label}</span>
-        </label>
+        </FormGroup>
       ))}
-    </fieldset>
+    </Stack>
   );
 }

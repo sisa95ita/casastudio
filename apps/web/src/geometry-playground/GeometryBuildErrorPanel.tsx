@@ -1,4 +1,5 @@
 import type { GeometryBuildError } from "@casastudio/geometry";
+import { Alert, AlertTitle, Box, Stack, Typography } from "@mui/material";
 
 /**
  * Props for the technical Geometry Engine build-error panel.
@@ -16,18 +17,30 @@ export type GeometryBuildErrorPanelProps = {
  */
 export function GeometryBuildErrorPanel({ errors }: GeometryBuildErrorPanelProps) {
   return (
-    <section className="geometry-error-panel" role="alert" aria-labelledby="geometry-error-heading">
-      <h2 id="geometry-error-heading">Geometry build failed</h2>
-      <ul>
+    <Alert
+      severity="error"
+      variant="outlined"
+      role="alert"
+      aria-labelledby="geometry-error-heading"
+      sx={{ alignItems: "flex-start" }}
+    >
+      <AlertTitle id="geometry-error-heading">Geometry build failed</AlertTitle>
+      <Stack component="ul" spacing={1.5} sx={{ m: 0, pl: 2.5 }}>
         {errors.map((error, index) => (
-          <li key={`${error.code}-${error.sourceId ?? "unknown"}-${index}`}>
-            <strong>{error.code}</strong>
-            <p>{error.message}</p>
-            {error.path ? <p>Path: {error.path}</p> : null}
-            {error.sourceId ? <p>Source ID: {error.sourceId}</p> : null}
-          </li>
+          <Box component="li" key={`${error.code}-${error.sourceId ?? "unknown"}-${index}`}>
+            <Typography component="strong" variant="body2">
+              {error.code}
+            </Typography>
+            <Typography variant="body2">{error.message}</Typography>
+            {error.path ? <Typography variant="caption">Path: {error.path}</Typography> : null}
+            {error.sourceId ? (
+              <Typography variant="caption" sx={{ display: "block" }}>
+                Source ID: {error.sourceId}
+              </Typography>
+            ) : null}
+          </Box>
         ))}
-      </ul>
-    </section>
+      </Stack>
+    </Alert>
   );
 }
