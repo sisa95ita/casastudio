@@ -27,7 +27,7 @@ describe("App routing and shell", () => {
 
     expect(await screen.findByRole("heading", { name: "Geometry Playground" })).toBeTruthy();
     expect(screen.getByRole("banner").textContent).toContain("Technical preview");
-    expect(screen.getByRole("main").textContent).toContain("SVG Debug Viewer");
+    expect(screen.getByRole("main").textContent).toContain("SVG Technical Viewer");
     expect(screen.getByRole("complementary", { name: "Inspector" }).textContent).toContain(
       "Layers"
     );

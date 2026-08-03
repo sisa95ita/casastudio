@@ -1,17 +1,38 @@
 import type { LevelGeometry } from "@casastudio/geometry";
+import { useMemo, useRef, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 
+import { createGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
+import {
+  clearGeometrySelection,
+  selectBoundaryEdge,
+  selectPolygon,
+  selectVertex,
+  type GeometryHoverState,
+  type GeometrySelection
+} from "./geometry-selection-state";
 import {
   collectLevelBounds,
-  countBoundaryEdgeUses,
   formatSvgNumber,
-  getPolygonPointString,
   getScreenBoundsRect
 } from "./geometry-svg-helpers";
-import { createFitToViewTransform } from "./viewport-transform-2d";
+import {
+  createFitViewportState,
+  createViewportTransform2D,
+  defaultViewportState,
+  panViewportState,
+  zoomViewportState,
+  type ScreenPoint,
+  type ViewportState
+} from "./viewport-transform-2d";
 
-const VIEWPORT_WIDTH = 800;
-const VIEWPORT_HEIGHT = 520;
-const VIEWPORT_PADDING = 40;
+/**
+ * Fixed internal SVG viewport dimensions for the technical geometry viewer.
+ */
+export const geometrySvgViewport = Object.freeze({
+  width: 800,
+  height: 520,
+  padding: 40
+});
 
 /**
  * Read-only diagnostic SVG layer visibility flags.
@@ -30,7 +51,7 @@ export type GeometryDisplayOptions = {
 };
 
 /**
- * Default debug layers for the Phase 1 geometry playground.
+ * Default debug layers for the geometry playground.
  */
 export const defaultGeometryDisplayOptions: GeometryDisplayOptions = Object.freeze({
   polygons: true,
@@ -42,23 +63,65 @@ export const defaultGeometryDisplayOptions: GeometryDisplayOptions = Object.free
 });
 
 /**
- * Props for the read-only runtime geometry SVG viewer.
+ * Props for the interactive runtime geometry SVG viewer.
  */
 export type GeometrySvgViewerProps = {
   readonly level: LevelGeometry;
   readonly options: GeometryDisplayOptions;
+  readonly viewport?: ViewportState;
+  readonly selection?: GeometrySelection;
+  readonly hover?: GeometryHoverState;
+  readonly onSelectionChange?: (selection: GeometrySelection | undefined) => void;
+  readonly onHoverChange?: (hover: GeometryHoverState) => void;
+  readonly onViewportChange?: (viewport: ViewportState) => void;
 };
 
 /**
- * Renders one immutable `LevelGeometry` as an SVG debug view.
+ * Renders one immutable `LevelGeometry` as an interactive SVG debug view.
  *
- * The component consumes runtime entities directly for this first playground
- * slice, but all world XZ to SVG XY projection is delegated to
- * `ViewportTransform2D`. This keeps the renderer honest without introducing a
- * complete 2D editor view-model hierarchy before editing exists.
+ * Event priority is defined by layer order and propagation: polygon hit areas
+ * are below boundary edges, boundary edges are below vertices, and handled
+ * entity clicks stop before reaching the background pan/clear layer.
  */
-export function GeometrySvgViewer({ level, options }: GeometrySvgViewerProps) {
+export function GeometrySvgViewer({
+  level,
+  options,
+  viewport,
+  selection,
+  hover,
+  onSelectionChange,
+  onHoverChange,
+  onViewportChange
+}: GeometrySvgViewerProps) {
   const bounds = collectLevelBounds(level);
+  const lastPanPointRef = useRef<ScreenPoint | undefined>(undefined);
+  const currentViewportRef = useRef<ViewportState | undefined>(undefined);
+  const suppressNextBackgroundClickRef = useRef(false);
+
+  const resolvedViewport =
+    viewport ??
+    (bounds
+      ? createFitViewportState({
+          bounds,
+          viewportWidth: geometrySvgViewport.width,
+          viewportHeight: geometrySvgViewport.height,
+          padding: geometrySvgViewport.padding
+        })
+      : defaultViewportState);
+  currentViewportRef.current = resolvedViewport;
+  const transform = useMemo(() => createViewportTransform2D(resolvedViewport), [resolvedViewport]);
+  const presentationModel = useMemo(
+    () =>
+      createGeometryPresentationModel2D({
+        level,
+        transform,
+        selection,
+        hover
+      }),
+    [hover, level, selection, transform]
+  );
+  const vertexRadius = Math.max(3, Math.min(6, transform.scaleLength(5)));
+  const centroidRadius = Math.max(4, Math.min(7, transform.scaleLength(6)));
 
   if (!bounds) {
     return (
@@ -68,45 +131,127 @@ export function GeometrySvgViewer({ level, options }: GeometrySvgViewerProps) {
     );
   }
 
-  const transform = createFitToViewTransform({
-    bounds,
-    viewportWidth: VIEWPORT_WIDTH,
-    viewportHeight: VIEWPORT_HEIGHT,
-    padding: VIEWPORT_PADDING
-  });
-  const edgeUseCounts = countBoundaryEdgeUses(level);
-  const vertexRadius = Math.max(3, Math.min(6, transform.scaleLength(5)));
-  const centroidRadius = Math.max(4, Math.min(7, transform.scaleLength(6)));
+  const getEventPoint = (event: {
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly currentTarget: SVGSVGElement;
+  }): ScreenPoint => getSvgEventPoint(event, geometrySvgViewport.width, geometrySvgViewport.height);
+
+  const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
+    if (!onViewportChange) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextViewport = zoomViewportState({
+      viewport: currentViewportRef.current ?? resolvedViewport,
+      zoomFactor: Math.exp(-event.deltaY * 0.0015),
+      center: getEventPoint(event)
+    });
+
+    currentViewportRef.current = nextViewport;
+    onViewportChange(nextViewport);
+  };
+
+  const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    if (!onViewportChange || !isBackgroundPanEvent(event)) {
+      return;
+    }
+
+    lastPanPointRef.current = getEventPoint(event);
+    suppressNextBackgroundClickRef.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    if (!onViewportChange || !lastPanPointRef.current) {
+      return;
+    }
+
+    const nextPoint = getEventPoint(event);
+    const delta = {
+      x: nextPoint.x - lastPanPointRef.current.x,
+      y: nextPoint.y - lastPanPointRef.current.y
+    };
+
+    if (Math.abs(delta.x) + Math.abs(delta.y) > 0) {
+      suppressNextBackgroundClickRef.current = true;
+      const nextViewport = panViewportState(currentViewportRef.current ?? resolvedViewport, delta);
+      currentViewportRef.current = nextViewport;
+      onViewportChange(nextViewport);
+      lastPanPointRef.current = nextPoint;
+    }
+  };
+
+  const handlePointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    if (lastPanPointRef.current) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      lastPanPointRef.current = undefined;
+    }
+  };
+
+  const handleBackgroundClick = (event: MouseEvent<SVGRectElement>) => {
+    if (suppressNextBackgroundClickRef.current) {
+      suppressNextBackgroundClickRef.current = false;
+      return;
+    }
+
+    event.stopPropagation();
+    onSelectionChange?.(clearGeometrySelection());
+  };
 
   return (
     <svg
       className="geometry-svg"
-      viewBox={`0 0 ${VIEWPORT_WIDTH} ${VIEWPORT_HEIGHT}`}
+      viewBox={`0 0 ${geometrySvgViewport.width} ${geometrySvgViewport.height}`}
       role="img"
       aria-labelledby="geometry-svg-title geometry-svg-description"
+      onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <title id="geometry-svg-title">Geometry playground runtime SVG viewer</title>
       <desc id="geometry-svg-description">
-        Read-only SVG projection of GeometryEngine runtime level geometry.
+        Interactive SVG projection of GeometryEngine runtime level geometry.
       </desc>
+
+      <rect
+        className="geometry-pan-background"
+        data-pan-target="true"
+        x="0"
+        y="0"
+        width={geometrySvgViewport.width}
+        height={geometrySvgViewport.height}
+        onClick={handleBackgroundClick}
+      />
 
       {options.polygons ? (
         <g data-layer="polygons">
-          {level.polygons.map((polygon) => {
-            const centroid = transform.worldToScreen(polygon.centroid);
+          {presentationModel.polygons.map((polygon) => {
+            const className = getEntityClassName("geometry-polygon", polygon);
 
             return (
-              <g key={polygon.id}>
+              <g key={polygon.geometryId}>
                 <polygon
                   data-testid="geometry-polygon"
-                  points={getPolygonPointString(polygon, transform)}
-                  className="geometry-polygon"
+                  data-geometry-kind={polygon.kind}
+                  data-geometry-id={polygon.geometryId}
+                  points={polygon.svgPoints}
+                  className={className}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectionChange?.(selectPolygon(polygon.geometryId));
+                  }}
+                  onMouseEnter={() => onHoverChange?.(selectPolygon(polygon.geometryId))}
+                  onMouseLeave={() => onHoverChange?.(undefined)}
                 />
                 {options.runtimeLabels ? (
                   <text
                     className="geometry-label geometry-label-room"
-                    x={formatSvgNumber(centroid.x)}
-                    y={formatSvgNumber(centroid.y - 14)}
+                    x={formatSvgNumber(polygon.centroid.screen.x)}
+                    y={formatSvgNumber(polygon.centroid.screen.y - 14)}
                     textAnchor="middle"
                   >
                     {polygon.sourceRoomId}
@@ -140,33 +285,46 @@ export function GeometrySvgViewer({ level, options }: GeometrySvgViewerProps) {
 
       {options.boundaryEdges ? (
         <g data-layer="boundary-edges">
-          {level.boundaryEdges.map((edge) => {
-            const start = transform.worldToScreen(edge.startVertex);
-            const end = transform.worldToScreen(edge.endVertex);
-            const isShared = (edgeUseCounts.get(edge.id) ?? 0) === 2;
-            const midpoint = {
-              x: (start.x + end.x) / 2,
-              y: (start.y + end.y) / 2
-            };
+          {presentationModel.boundaryEdges.map((edge) => {
+            const isShared = edge.sharedUsageCount === 2;
+            const className = getEntityClassName(
+              isShared ? "geometry-edge geometry-edge-shared" : "geometry-edge",
+              edge
+            );
 
             return (
-              <g key={edge.id}>
+              <g key={edge.geometryId}>
+                <line
+                  className="geometry-edge-hit-target"
+                  data-geometry-kind={edge.kind}
+                  data-geometry-id={edge.geometryId}
+                  x1={formatSvgNumber(edge.start.screen.x)}
+                  y1={formatSvgNumber(edge.start.screen.y)}
+                  x2={formatSvgNumber(edge.end.screen.x)}
+                  y2={formatSvgNumber(edge.end.screen.y)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectionChange?.(selectBoundaryEdge(edge.geometryId));
+                  }}
+                  onMouseEnter={() => onHoverChange?.(selectBoundaryEdge(edge.geometryId))}
+                  onMouseLeave={() => onHoverChange?.(undefined)}
+                />
                 <line
                   data-testid="boundary-edge"
                   data-shared={isShared ? "true" : "false"}
-                  className={isShared ? "geometry-edge geometry-edge-shared" : "geometry-edge"}
-                  x1={formatSvgNumber(start.x)}
-                  y1={formatSvgNumber(start.y)}
-                  x2={formatSvgNumber(end.x)}
-                  y2={formatSvgNumber(end.y)}
+                  className={className}
+                  x1={formatSvgNumber(edge.start.screen.x)}
+                  y1={formatSvgNumber(edge.start.screen.y)}
+                  x2={formatSvgNumber(edge.end.screen.x)}
+                  y2={formatSvgNumber(edge.end.screen.y)}
                 />
                 {options.runtimeLabels ? (
                   <text
                     className="geometry-label geometry-label-edge"
-                    x={formatSvgNumber(midpoint.x + 8)}
-                    y={formatSvgNumber(midpoint.y - 8)}
+                    x={formatSvgNumber(edge.midpoint.x + 8)}
+                    y={formatSvgNumber(edge.midpoint.y - 8)}
                   >
-                    {edge.id}
+                    {edge.geometryId}
                   </text>
                 ) : null}
               </g>
@@ -177,25 +335,33 @@ export function GeometrySvgViewer({ level, options }: GeometrySvgViewerProps) {
 
       {options.vertices ? (
         <g data-layer="vertices">
-          {level.vertices.map((vertex) => {
-            const point = transform.worldToScreen(vertex);
+          {presentationModel.vertices.map((vertex) => {
+            const className = getEntityClassName("geometry-vertex", vertex);
 
             return (
-              <g key={vertex.id}>
+              <g key={vertex.geometryId}>
                 <circle
                   data-testid="geometry-vertex"
-                  className="geometry-vertex"
-                  cx={formatSvgNumber(point.x)}
-                  cy={formatSvgNumber(point.y)}
+                  data-geometry-kind={vertex.kind}
+                  data-geometry-id={vertex.geometryId}
+                  className={className}
+                  cx={formatSvgNumber(vertex.point.x)}
+                  cy={formatSvgNumber(vertex.point.y)}
                   r={formatSvgNumber(vertexRadius)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectionChange?.(selectVertex(vertex.geometryId));
+                  }}
+                  onMouseEnter={() => onHoverChange?.(selectVertex(vertex.geometryId))}
+                  onMouseLeave={() => onHoverChange?.(undefined)}
                 />
                 {options.runtimeLabels ? (
                   <text
                     className="geometry-label geometry-label-vertex"
-                    x={formatSvgNumber(point.x + 8)}
-                    y={formatSvgNumber(point.y + 18)}
+                    x={formatSvgNumber(vertex.point.x + 8)}
+                    y={formatSvgNumber(vertex.point.y + 18)}
                   >
-                    {vertex.id}
+                    {vertex.geometryId}
                   </text>
                 ) : null}
               </g>
@@ -206,36 +372,64 @@ export function GeometrySvgViewer({ level, options }: GeometrySvgViewerProps) {
 
       {options.centroids ? (
         <g data-layer="centroids">
-          {level.polygons.map((polygon) => {
-            const point = transform.worldToScreen(polygon.centroid);
-
-            return (
-              <g key={polygon.id} data-testid="polygon-centroid">
-                <circle
-                  className="geometry-centroid"
-                  cx={formatSvgNumber(point.x)}
-                  cy={formatSvgNumber(point.y)}
-                  r={formatSvgNumber(centroidRadius)}
-                />
-                <line
-                  className="geometry-centroid-cross"
-                  x1={formatSvgNumber(point.x - centroidRadius)}
-                  y1={formatSvgNumber(point.y)}
-                  x2={formatSvgNumber(point.x + centroidRadius)}
-                  y2={formatSvgNumber(point.y)}
-                />
-                <line
-                  className="geometry-centroid-cross"
-                  x1={formatSvgNumber(point.x)}
-                  y1={formatSvgNumber(point.y - centroidRadius)}
-                  x2={formatSvgNumber(point.x)}
-                  y2={formatSvgNumber(point.y + centroidRadius)}
-                />
-              </g>
-            );
-          })}
+          {presentationModel.polygons.map((polygon) => (
+            <g key={polygon.geometryId} data-testid="polygon-centroid">
+              <circle
+                className="geometry-centroid"
+                cx={formatSvgNumber(polygon.centroid.screen.x)}
+                cy={formatSvgNumber(polygon.centroid.screen.y)}
+                r={formatSvgNumber(centroidRadius)}
+              />
+              <line
+                className="geometry-centroid-cross"
+                x1={formatSvgNumber(polygon.centroid.screen.x - centroidRadius)}
+                y1={formatSvgNumber(polygon.centroid.screen.y)}
+                x2={formatSvgNumber(polygon.centroid.screen.x + centroidRadius)}
+                y2={formatSvgNumber(polygon.centroid.screen.y)}
+              />
+              <line
+                className="geometry-centroid-cross"
+                x1={formatSvgNumber(polygon.centroid.screen.x)}
+                y1={formatSvgNumber(polygon.centroid.screen.y - centroidRadius)}
+                x2={formatSvgNumber(polygon.centroid.screen.x)}
+                y2={formatSvgNumber(polygon.centroid.screen.y + centroidRadius)}
+              />
+            </g>
+          ))}
         </g>
       ) : null}
     </svg>
   );
 }
+
+const getSvgEventPoint = (
+  event: {
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly currentTarget: SVGSVGElement;
+  },
+  viewportWidth: number,
+  viewportHeight: number
+): ScreenPoint => {
+  const bounds = event.currentTarget.getBoundingClientRect();
+
+  return {
+    x: ((event.clientX - bounds.left) / bounds.width) * viewportWidth,
+    y: ((event.clientY - bounds.top) / bounds.height) * viewportHeight
+  };
+};
+
+const isBackgroundPanEvent = (event: PointerEvent<SVGSVGElement>): boolean =>
+  event.target instanceof SVGElement && event.target.dataset.panTarget === "true";
+
+const getEntityClassName = (
+  baseClassName: string,
+  state: { readonly selected: boolean; readonly hovered: boolean }
+): string =>
+  [
+    baseClassName,
+    state.hovered ? "geometry-entity-hovered" : undefined,
+    state.selected ? "geometry-entity-selected" : undefined
+  ]
+    .filter(Boolean)
+    .join(" ");

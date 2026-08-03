@@ -40,18 +40,34 @@ a {
     linear-gradient(90deg, #edf2f0 1px, transparent 1px),
     #fbfcfc;
   background-size: 32px 32px;
+  touch-action: none;
+}
+
+.geometry-pan-background {
+  cursor: grab;
+  fill: transparent;
 }
 
 .geometry-polygon {
+  cursor: pointer;
   fill: rgba(31, 124, 111, 0.18);
   stroke: rgba(31, 124, 111, 0.35);
   stroke-width: 1;
 }
 
 .geometry-edge {
+  pointer-events: none;
   stroke: #20313a;
   stroke-linecap: round;
   stroke-width: 4;
+}
+
+.geometry-edge-hit-target {
+  cursor: pointer;
+  opacity: 0;
+  stroke: #000000;
+  stroke-linecap: round;
+  stroke-width: 18;
 }
 
 .geometry-edge-shared {
@@ -61,6 +77,7 @@ a {
 }
 
 .geometry-vertex {
+  cursor: pointer;
   fill: #f8fbfb;
   stroke: #0f6b68;
   stroke-width: 2;
@@ -68,26 +85,49 @@ a {
 
 .geometry-centroid {
   fill: #fed766;
+  pointer-events: none;
   stroke: #3b3320;
   stroke-width: 1.5;
 }
 
 .geometry-centroid-cross {
+  pointer-events: none;
   stroke: #3b3320;
   stroke-width: 1.5;
 }
 
 .geometry-polygon-bounds {
   fill: none;
+  pointer-events: none;
   stroke: #596a74;
   stroke-dasharray: 8 6;
   stroke-width: 2;
+}
+
+.geometry-entity-hovered {
+  filter: drop-shadow(0 0 3px rgba(15, 107, 104, 0.4));
+}
+
+.geometry-entity-selected {
+  stroke: #0b63ce;
+  stroke-width: 7;
+}
+
+.geometry-polygon.geometry-entity-selected {
+  fill: rgba(11, 99, 206, 0.2);
+  stroke-width: 3;
+}
+
+.geometry-vertex.geometry-entity-selected {
+  fill: #ffffff;
+  stroke-width: 4;
 }
 
 .geometry-label {
   fill: #26343c;
   font-size: 12px;
   paint-order: stroke;
+  pointer-events: none;
   stroke: #ffffff;
   stroke-linejoin: round;
   stroke-width: 3px;

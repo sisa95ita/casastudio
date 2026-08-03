@@ -1,7 +1,8 @@
 import { GeometryEngine } from "@casastudio/geometry";
 import { ProjectSchema } from "@casastudio/schema";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
 import {
@@ -129,5 +130,42 @@ describe("GeometrySvgViewer", () => {
     );
 
     expect(markup).toContain("No runtime geometry to display for this level.");
+  });
+
+  it("selects polygons, boundary edges, and vertices from SVG clicks", () => {
+    const level = getPlaygroundLevel();
+    const handleSelectionChange = vi.fn();
+    const { container } = render(
+      <GeometrySvgViewer
+        level={level}
+        options={defaultGeometryDisplayOptions}
+        onSelectionChange={handleSelectionChange}
+      />
+    );
+
+    const polygon = screen.getAllByTestId("geometry-polygon")[0];
+    const edgeHitTarget = container.querySelector(".geometry-edge-hit-target");
+    const vertex = screen.getAllByTestId("geometry-vertex")[0];
+
+    if (!polygon || !edgeHitTarget || !vertex) {
+      throw new Error("Expected interactive geometry elements.");
+    }
+
+    fireEvent.click(polygon);
+    fireEvent.click(edgeHitTarget);
+    fireEvent.click(vertex);
+
+    expect(handleSelectionChange).toHaveBeenNthCalledWith(1, {
+      kind: "POLYGON",
+      geometryId: level.polygons[0]?.id
+    });
+    expect(handleSelectionChange).toHaveBeenNthCalledWith(2, {
+      kind: "BOUNDARY_EDGE",
+      geometryId: level.boundaryEdges[0]?.id
+    });
+    expect(handleSelectionChange).toHaveBeenNthCalledWith(3, {
+      kind: "VERTEX",
+      geometryId: level.vertices[0]?.id
+    });
   });
 });

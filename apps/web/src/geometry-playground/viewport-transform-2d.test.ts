@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { createFitToViewTransform, ViewportTransform2D } from "./viewport-transform-2d";
+import {
+  createFitToViewTransform,
+  createFitViewportState,
+  createViewportTransform2D,
+  defaultViewportState,
+  panViewportState,
+  resetViewportState,
+  ViewportTransform2D,
+  zoomViewportState
+} from "./viewport-transform-2d";
 
 describe("ViewportTransform2D", () => {
   it("maps world X to screen X", () => {
@@ -63,5 +72,46 @@ describe("ViewportTransform2D", () => {
     };
 
     expect(createFitToViewTransform(input)).toEqual(createFitToViewTransform(input));
+  });
+});
+
+describe("ViewportState", () => {
+  it("creates a fit viewport state compatible with viewport transforms", () => {
+    const viewport = createFitViewportState({
+      bounds: { minX: 0, minZ: 0, maxX: 600, maxZ: 300 },
+      viewportWidth: 800,
+      viewportHeight: 500,
+      padding: 50
+    });
+    const transform = createViewportTransform2D(viewport);
+
+    expect(viewport.zoom).toBeCloseTo(700 / 600);
+    expect(transform.worldToScreen({ x: 0, z: 0 }).x).toBeCloseTo(50);
+  });
+
+  it("zooms around a screen point while keeping that anchor stable", () => {
+    const viewport = { zoom: 2, offsetX: 10, offsetY: 20 };
+    const center = { x: 100, y: 120 };
+    const nextViewport = zoomViewportState({
+      viewport,
+      zoomFactor: 2,
+      center
+    });
+
+    expect(nextViewport.zoom).toBe(4);
+    expect(nextViewport.offsetX).toBe(-80);
+    expect(nextViewport.offsetY).toBe(-80);
+  });
+
+  it("applies screen-space pan deltas", () => {
+    expect(panViewportState({ zoom: 3, offsetX: 10, offsetY: 20 }, { x: -5, y: 8 })).toEqual({
+      zoom: 3,
+      offsetX: 5,
+      offsetY: 28
+    });
+  });
+
+  it("resets to the neutral viewport state", () => {
+    expect(resetViewportState()).toBe(defaultViewportState);
   });
 });

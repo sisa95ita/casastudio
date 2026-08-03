@@ -1,4 +1,6 @@
 import { GeometryEngine, type LevelGeometry } from "@casastudio/geometry";
+import FitScreenIcon from "@mui/icons-material/FitScreen";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import {
   Alert,
   Box,
@@ -6,47 +8,68 @@ import {
   Divider,
   FormControl,
   InputLabel,
+  IconButton,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Tooltip,
   Typography
 } from "@mui/material";
 import type { Project } from "@casastudio/schema";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAppShellContent } from "../app-shell/AppShellContext";
 import { GeometryBuildErrorPanel } from "./GeometryBuildErrorPanel";
+import {
+  createGeometryPresentationModel2D,
+  type GeometryPresentationModel2D
+} from "./geometry-presentation-model-2d";
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
+import {
+  clearGeometrySelection,
+  type GeometryHoverState,
+  type GeometrySelection
+} from "./geometry-selection-state";
+import { collectLevelBounds } from "./geometry-svg-helpers";
 import { GeometryLayerControls } from "./GeometryLayerControls";
 import { GeometryRuntimeSummary } from "./GeometryRuntimeSummary";
+import { GeometrySelectionDetails } from "./GeometrySelectionDetails";
 import {
   defaultGeometryDisplayOptions,
+  geometrySvgViewport,
   type GeometryDisplayOptions,
   GeometrySvgViewer
 } from "./GeometrySvgViewer";
+import {
+  createFitViewportState,
+  createViewportTransform2D,
+  resetViewportState,
+  type ViewportState
+} from "./viewport-transform-2d";
 
 /**
- * Props for the read-only geometry playground page.
+ * Props for the interactive geometry playground page.
  */
 export type GeometryPlaygroundPageProps = {
   readonly project?: Project;
 };
 
 /**
- * Hosts the Phase 1 read-only geometry runtime playground.
+ * Hosts the Phase 2 interactive geometry runtime playground.
  *
  * The page intentionally executes the real pipeline from canonical `Project`
- * through `GeometryEngine.build(project)` into `GeometryModel`, then passes one
- * selected `LevelGeometry` directly to SVG components. No complete editor
- * view-model is introduced in this phase because the page has no editing,
- * selection, commands, or mutable domain operations.
+ * through `GeometryEngine.build(project)` into `GeometryModel`, then adapts one
+ * selected `LevelGeometry` into frontend-only 2D presentation state. Selection,
+ * hover, pan, and zoom remain UI state and never mutate the runtime model.
  */
 export function GeometryPlaygroundPage({
   project = geometryPlaygroundProject
 }: GeometryPlaygroundPageProps) {
   const buildResult = useMemo(() => GeometryEngine.build(project), [project]);
   const [displayOptions, setDisplayOptions] = useState(defaultGeometryDisplayOptions);
+  const [selection, setSelection] = useState<GeometrySelection | undefined>(undefined);
+  const [hover, setHover] = useState<GeometryHoverState>(undefined);
   const [selectedLevelId, setSelectedLevelId] = useState(() =>
     buildResult.ok ? (buildResult.model.levels[0]?.id ?? "") : ""
   );
@@ -60,6 +83,35 @@ export function GeometryPlaygroundPage({
     ? (buildResult.model.levels.find((level) => level.id === selectedLevelId) ??
       buildResult.model.levels[0])
     : undefined;
+  const [viewport, setViewport] = useState<ViewportState>(() =>
+    createInitialViewportState(selectedLevel)
+  );
+  const presentationModel = useMemo(
+    () =>
+      selectedLevel
+        ? createGeometryPresentationModel2D({
+            level: selectedLevel,
+            transform: createViewportTransform2D(viewport),
+            selection,
+            hover
+          })
+        : undefined,
+    [hover, selectedLevel, selection, viewport]
+  );
+
+  useEffect(() => {
+    setViewport(createInitialViewportState(selectedLevel));
+    setSelection(clearGeometrySelection());
+    setHover(undefined);
+  }, [selectedLevel]);
+
+  const handleFitViewport = () => {
+    setViewport(createInitialViewportState(selectedLevel));
+  };
+
+  const handleResetViewport = () => {
+    setViewport(resetViewportState());
+  };
 
   const shellContent = useMemo(
     () => ({
@@ -73,6 +125,8 @@ export function GeometryPlaygroundPage({
       ) : selectedLevel ? (
         <GeometryPlaygroundInspector
           level={selectedLevel}
+          presentationModel={presentationModel}
+          selection={selection}
           options={displayOptions}
           onOptionsChange={setDisplayOptions}
         />
@@ -84,12 +138,12 @@ export function GeometryPlaygroundPage({
       status: !buildResult.ok ? (
         "Engine: build failed"
       ) : selectedLevel ? (
-        <GeometryPlaygroundStatus level={selectedLevel} buildStatus="OK" />
+        <GeometryPlaygroundStatus level={selectedLevel} selection={selection} buildStatus="OK" />
       ) : (
         "Engine: OK | No levels"
       )
     }),
-    [buildResult.ok, displayOptions, headerAccessory, selectedLevel]
+    [buildResult.ok, displayOptions, headerAccessory, presentationModel, selectedLevel, selection]
   );
 
   useAppShellContent(shellContent);
@@ -141,11 +195,37 @@ export function GeometryPlaygroundPage({
           }}
         >
           <Box sx={{ borderBottom: 1, borderColor: "divider", px: 1.5, py: 1 }}>
-            <Typography variant="subtitle2" component="h2" id="geometry-viewer-heading">
-              SVG Debug Viewer
-            </Typography>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <Typography
+                variant="subtitle2"
+                component="h2"
+                id="geometry-viewer-heading"
+                sx={{ flex: "1 1 auto" }}
+              >
+                SVG Technical Viewer
+              </Typography>
+              <Tooltip title="Fit to view">
+                <IconButton aria-label="Fit to view" onClick={handleFitViewport}>
+                  <FitScreenIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Reset viewport">
+                <IconButton aria-label="Reset viewport" onClick={handleResetViewport}>
+                  <RestartAltIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
           </Box>
-          <GeometrySvgViewer level={selectedLevel} options={displayOptions} />
+          <GeometrySvgViewer
+            level={selectedLevel}
+            options={displayOptions}
+            viewport={viewport}
+            selection={selection}
+            hover={hover}
+            onSelectionChange={setSelection}
+            onHoverChange={setHover}
+            onViewportChange={setViewport}
+          />
         </Paper>
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
@@ -156,6 +236,9 @@ export function GeometryPlaygroundPage({
   );
 }
 
+/**
+ * Renders the route-local title block for the playground workspace.
+ */
 function PageIntro() {
   return (
     <Box className="geometry-page-header">
@@ -173,13 +256,15 @@ function PageIntro() {
 }
 
 /**
- * Inspector content for the read-only geometry playground route.
+ * Inspector content for the interactive geometry playground route.
  *
  * Controls stay route-owned even though the shell renders the inspector, which
  * prevents geometry diagnostics from becoming permanent global shell controls.
  */
 export type GeometryPlaygroundInspectorProps = {
   readonly level: LevelGeometry;
+  readonly presentationModel?: GeometryPresentationModel2D;
+  readonly selection?: GeometrySelection;
   readonly options: GeometryDisplayOptions;
   readonly onOptionsChange: (options: GeometryDisplayOptions) => void;
 };
@@ -189,6 +274,8 @@ export type GeometryPlaygroundInspectorProps = {
  */
 export function GeometryPlaygroundInspector({
   level,
+  presentationModel,
+  selection,
   options,
   onOptionsChange
 }: GeometryPlaygroundInspectorProps) {
@@ -196,6 +283,12 @@ export function GeometryPlaygroundInspector({
     <Stack spacing={1.5}>
       <GeometryLayerControls options={options} onOptionsChange={onOptionsChange} />
       <Divider />
+      {presentationModel ? (
+        <>
+          <GeometrySelectionDetails model={presentationModel} selection={selection} />
+          <Divider />
+        </>
+      ) : null}
       <GeometryRuntimeSummary level={level} />
     </Stack>
   );
@@ -206,6 +299,7 @@ export function GeometryPlaygroundInspector({
  */
 export type GeometryPlaygroundStatusProps = {
   readonly level: GeometryPlaygroundInspectorProps["level"];
+  readonly selection?: GeometrySelection;
   readonly buildStatus: "OK" | "Error";
 };
 
@@ -214,12 +308,29 @@ export type GeometryPlaygroundStatusProps = {
  */
 export function GeometryPlaygroundStatus({
   level,
+  selection,
   buildStatus
 }: GeometryPlaygroundStatusProps) {
   return (
     <Typography variant="caption" color="text.secondary" noWrap>
       Level: {level.sourceLevelId} | Vertices: {level.vertices.length} | Edges:{" "}
-      {level.boundaryEdges.length} | Polygons: {level.polygons.length} | Engine: {buildStatus}
+      {level.boundaryEdges.length} | Polygons: {level.polygons.length} | Selection:{" "}
+      {selection ? `${selection.kind} ${selection.geometryId}` : "None"} | Engine: {buildStatus}
     </Typography>
   );
 }
+
+const createInitialViewportState = (level: LevelGeometry | undefined): ViewportState => {
+  const bounds = level ? collectLevelBounds(level) : undefined;
+
+  if (!bounds) {
+    return resetViewportState();
+  }
+
+  return createFitViewportState({
+    bounds,
+    viewportWidth: geometrySvgViewport.width,
+    viewportHeight: geometrySvgViewport.height,
+    padding: geometrySvgViewport.padding
+  });
+};

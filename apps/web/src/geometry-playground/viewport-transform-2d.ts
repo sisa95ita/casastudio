@@ -1,5 +1,3 @@
-import type { BoundingBox } from "@casastudio/geometry";
-
 /**
  * Screen-space point in the SVG viewport coordinate system.
  *
@@ -21,6 +19,31 @@ export type WorldPointXZ = {
 };
 
 /**
+ * Two-dimensional world-space bounds that can be fit into an SVG viewport.
+ *
+ * This shape is intentionally local to the frontend viewport layer so viewport
+ * state is not coupled to a specific geometry package class or domain model.
+ */
+export type ViewportBounds2D = {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+};
+
+/**
+ * Minimal mutable UI state for the technical 2D viewport.
+ *
+ * `zoom` is the uniform world-to-screen scale. Offsets are screen-space
+ * translations applied after scaling X and inverting Z for SVG.
+ */
+export type ViewportState = {
+  readonly zoom: number;
+  readonly offsetX: number;
+  readonly offsetY: number;
+};
+
+/**
  * Immutable numeric parameters for projecting XZ geometry into SVG space.
  */
 export type ViewportTransform2DParameters = {
@@ -33,10 +56,21 @@ export type ViewportTransform2DParameters = {
  * Inputs used to fit a world-space XZ bounding box into a fixed SVG viewport.
  */
 export type FitToViewTransformOptions = {
-  readonly bounds: BoundingBox;
+  readonly bounds: ViewportBounds2D;
   readonly viewportWidth: number;
   readonly viewportHeight: number;
   readonly padding: number;
+};
+
+/**
+ * Options for applying screen-centered wheel or button zoom.
+ */
+export type ZoomViewportOptions = {
+  readonly viewport: ViewportState;
+  readonly zoomFactor: number;
+  readonly center: ScreenPoint;
+  readonly minZoom?: number;
+  readonly maxZoom?: number;
 };
 
 /**
@@ -91,6 +125,26 @@ export class ViewportTransform2D {
 }
 
 /**
+ * Neutral viewport state before fit-to-view or user navigation is applied.
+ */
+export const defaultViewportState: ViewportState = Object.freeze({
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0
+});
+
+/**
+ * Converts a `ViewportState` into the immutable projection object consumed by
+ * presentation adapters and SVG helpers.
+ */
+export const createViewportTransform2D = (viewport: ViewportState): ViewportTransform2D =>
+  new ViewportTransform2D({
+    scale: viewport.zoom,
+    offsetX: viewport.offsetX,
+    offsetY: viewport.offsetY
+  });
+
+/**
  * Builds a uniform fit-to-view transform for one level's diagnostic SVG.
  *
  * The algorithm preserves aspect ratio, applies padding on every side when the
@@ -103,6 +157,26 @@ export const createFitToViewTransform = ({
   viewportHeight,
   padding
 }: FitToViewTransformOptions): ViewportTransform2D => {
+  const viewport = createFitViewportState({
+    bounds,
+    viewportWidth,
+    viewportHeight,
+    padding
+  });
+
+  return createViewportTransform2D(viewport);
+};
+
+/**
+ * Builds a minimal viewport state that fits world-space bounds into a fixed
+ * SVG viewport.
+ */
+export const createFitViewportState = ({
+  bounds,
+  viewportWidth,
+  viewportHeight,
+  padding
+}: FitToViewTransformOptions): ViewportState => {
   const safeViewportWidth = Math.max(1, viewportWidth);
   const safeViewportHeight = Math.max(1, viewportHeight);
   const safePadding = Math.max(
@@ -121,9 +195,48 @@ export const createFitToViewTransform = ({
   const left = (safeViewportWidth - contentWidth) / 2;
   const top = (safeViewportHeight - contentHeight) / 2;
 
-  return new ViewportTransform2D({
-    scale,
+  return Object.freeze({
+    zoom: scale,
     offsetX: left - bounds.minX * scale,
     offsetY: top + bounds.maxZ * scale
+  });
+};
+
+/**
+ * Returns the neutral viewport state.
+ */
+export const resetViewportState = (): ViewportState => defaultViewportState;
+
+/**
+ * Applies a screen-space pan delta to the current viewport state.
+ */
+export const panViewportState = (
+  viewport: ViewportState,
+  delta: ScreenPoint
+): ViewportState =>
+  Object.freeze({
+    ...viewport,
+    offsetX: viewport.offsetX + delta.x,
+    offsetY: viewport.offsetY + delta.y
+  });
+
+/**
+ * Zooms around a fixed screen-space point while preserving the world point
+ * under the cursor.
+ */
+export const zoomViewportState = ({
+  viewport,
+  zoomFactor,
+  center,
+  minZoom = 0.05,
+  maxZoom = 20
+}: ZoomViewportOptions): ViewportState => {
+  const nextZoom = Math.min(maxZoom, Math.max(minZoom, viewport.zoom * zoomFactor));
+  const appliedFactor = nextZoom / viewport.zoom;
+
+  return Object.freeze({
+    zoom: nextZoom,
+    offsetX: center.x - (center.x - viewport.offsetX) * appliedFactor,
+    offsetY: center.y - (center.y - viewport.offsetY) * appliedFactor
   });
 };
