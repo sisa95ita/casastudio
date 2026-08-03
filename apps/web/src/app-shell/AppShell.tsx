@@ -2,6 +2,7 @@ import { Box } from "@mui/material";
 import { useCallback, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 
+import { useCasaTranslation } from "../i18n";
 import { AppHeader } from "./AppHeader";
 import {
   AppShellContentContext,
@@ -22,8 +23,17 @@ import { StatusBar } from "./StatusBar";
  * editor concepts such as selection, docking, persistence, or commands.
  */
 export function AppShell() {
+  const { t } = useCasaTranslation("common");
+  const localizedDefaultContent = useMemo(
+    () => ({
+      title: t("shell.defaultTitle"),
+      breadcrumb: t("shell.defaultBreadcrumb"),
+      status: t("shell.defaultStatus")
+    }),
+    [t]
+  );
   const [content, setContent] = useState<AppShellContent>(defaultAppShellContent);
-  const resetContent = useCallback(() => setContent(defaultAppShellContent), []);
+  const resetContent = useCallback(() => setContent(localizedDefaultContent), [localizedDefaultContent]);
   const contextValue = useMemo(
     () => ({
       setContent,
@@ -46,8 +56,8 @@ export function AppShell() {
         }}
       >
         <AppHeader
-          title={content.title}
-          breadcrumb={content.breadcrumb}
+          title={content.title || localizedDefaultContent.title}
+          breadcrumb={content.breadcrumb ?? localizedDefaultContent.breadcrumb}
           accessory={content.headerAccessory}
         />
 
@@ -71,7 +81,7 @@ export function AppShell() {
           <InspectorPanel>{content.inspector}</InspectorPanel>
         </Box>
 
-        <StatusBar>{content.status}</StatusBar>
+        <StatusBar>{content.status ?? localizedDefaultContent.status}</StatusBar>
       </Box>
     </AppShellContentContext.Provider>
   );

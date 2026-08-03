@@ -13,21 +13,21 @@ export const casaStudioTheme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#0f766e",
-      dark: "#115e59",
-      light: "#5eead4"
+      main: "#146b63",
+      dark: "#0b4f49",
+      light: "#7ed9ce"
     },
     warning: {
-      main: "#c2410c"
+      main: "#b45309"
     },
     background: {
-      default: "#f4f7f6",
-      paper: "#ffffff"
+      default: "#eef2f1",
+      paper: "#fbfcfb"
     },
-    divider: "#d7dfdc",
+    divider: "#cbd7d4",
     text: {
-      primary: "#172026",
-      secondary: "#56676f"
+      primary: "#162329",
+      secondary: "#53636a"
     }
   },
   shape: {
@@ -75,7 +75,7 @@ export const casaStudioTheme = createTheme({
     MuiDivider: {
       styleOverrides: {
         root: {
-          borderColor: "#d7dfdc"
+          borderColor: "#cbd7d4"
         }
       }
     },
@@ -92,7 +92,8 @@ export const casaStudioTheme = createTheme({
       },
       styleOverrides: {
         root: {
-          backgroundImage: "none"
+          backgroundImage: "none",
+          boxShadow: "0 1px 2px rgba(20, 39, 46, 0.06)"
         }
       }
     },

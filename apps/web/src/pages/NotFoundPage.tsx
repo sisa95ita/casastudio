@@ -4,18 +4,20 @@ import { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 
 import { useAppShellContent } from "../app-shell/AppShellContext";
+import { useCasaTranslation } from "../i18n";
 
 /**
  * Stable not-found route rendered inside the shared application shell.
  */
 export function NotFoundPage() {
+  const { t } = useCasaTranslation("common");
   const shellContent = useMemo(
     () => ({
-      title: "Not found",
-      breadcrumb: "Routing",
-      status: "Route not found"
+      title: t("routes.notFound.title"),
+      breadcrumb: t("routes.notFound.breadcrumb"),
+      status: t("routes.notFound.status")
     }),
-    []
+    [t]
   );
 
   useAppShellContent(shellContent);
@@ -24,13 +26,13 @@ export function NotFoundPage() {
     <Box sx={{ maxWidth: 560 }}>
       <Paper sx={{ border: 1, borderColor: "divider", p: 2 }}>
         <Stack spacing={1.5}>
-          <Typography variant="h1">Route not found</Typography>
+          <Typography variant="h1">{t("routes.notFound.heading")}</Typography>
           <Typography variant="body2" color="text.secondary">
-            CasaStudio does not have a workspace at this path.
+            {t("routes.notFound.description")}
           </Typography>
           <Box>
             <Button component={RouterLink} to="/" startIcon={<ArrowBackRoundedIcon />}>
-              Back to Home
+              {t("actions.backToHome")}
             </Button>
           </Box>
         </Stack>

@@ -20,7 +20,7 @@ export function MainWorkspace({ children }: MainWorkspaceProps) {
     <Box
       component="main"
       sx={{
-        bgcolor: "#eef3f1",
+        bgcolor: "#e9efed",
         minHeight: 0,
         minWidth: 0,
         overflow: "auto",

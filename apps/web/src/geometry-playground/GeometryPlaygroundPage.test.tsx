@@ -1,3 +1,4 @@
+import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Project } from "@casastudio/schema";
@@ -65,5 +66,39 @@ describe("GeometryPlaygroundPage", () => {
     expect(markup).toContain("INVALID_PROJECT_GEOMETRY");
     expect(markup).toContain("boundary must contain at least three edges");
     expect(markup).toContain("building.levels[0].rooms[0].boundary");
+  });
+
+  it("clears selection with Escape", () => {
+    render(<GeometryPlaygroundPage />);
+
+    const polygon = screen.getAllByTestId("geometry-polygon")[0];
+
+    if (!polygon) {
+      throw new Error("Expected a polygon hit target.");
+    }
+
+    fireEvent.click(polygon);
+    expect(polygon.getAttribute("class")).toContain("geometry-entity-selected");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(polygon.getAttribute("class")).not.toContain("geometry-entity-selected");
+  });
+
+  it("resets and fits the viewport from keyboard shortcuts", () => {
+    render(<GeometryPlaygroundPage />);
+
+    const polygon = screen.getAllByTestId("geometry-polygon")[0];
+
+    if (!polygon) {
+      throw new Error("Expected a polygon hit target.");
+    }
+
+    const fittedPoints = polygon.getAttribute("points");
+
+    fireEvent.keyDown(window, { key: "r" });
+    expect(polygon.getAttribute("points")).not.toBe(fittedPoints);
+
+    fireEvent.keyDown(window, { key: "f" });
+    expect(polygon.getAttribute("points")).toBe(fittedPoints);
   });
 });

@@ -3,14 +3,16 @@ import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import { Box, List, ListItem, ListItemButton, Tooltip } from "@mui/material";
 import { NavLink } from "react-router-dom";
 
+import { useCasaTranslation } from "../i18n";
+
 const navigationItems = [
   {
-    label: "Home",
+    labelKey: "items.home",
     path: "/",
     icon: <HomeRoundedIcon fontSize="small" />
   },
   {
-    label: "Geometry Playground",
+    labelKey: "items.geometryPlayground",
     path: "/geometry-playground",
     icon: <ArchitectureRoundedIcon fontSize="small" />
   }
@@ -24,10 +26,12 @@ const navigationItems = [
  * accessible through link names and tooltips.
  */
 export function NavigationRail() {
+  const { t } = useCasaTranslation("navigation");
+
   return (
     <Box
       component="nav"
-      aria-label="Primary"
+      aria-label={t("landmarks.primary")}
       sx={{
         borderRight: 1,
         borderColor: "divider",
@@ -38,33 +42,37 @@ export function NavigationRail() {
       }}
     >
       <List sx={{ display: "grid", gap: 0.5, p: 1 }}>
-        {navigationItems.map((item) => (
-          <ListItem key={item.path} disablePadding sx={{ display: "block" }}>
-            <Tooltip title={item.label} placement="right">
-              <ListItemButton
-                component={NavLink}
-                to={item.path}
-                end={item.path === "/"}
-                aria-label={item.label}
-                sx={{
-                  alignItems: "center",
-                  borderRadius: 1,
-                  color: "text.secondary",
-                  height: 42,
-                  justifyContent: "center",
-                  minWidth: 0,
-                  px: 0,
-                  "&.active": {
-                    bgcolor: "rgba(15, 118, 110, 0.1)",
-                    color: "primary.dark"
-                  }
-                }}
-              >
-                {item.icon}
-              </ListItemButton>
-            </Tooltip>
-          </ListItem>
-        ))}
+        {navigationItems.map((item) => {
+          const label = t(item.labelKey);
+
+          return (
+            <ListItem key={item.path} disablePadding sx={{ display: "block" }}>
+              <Tooltip title={label} placement="right">
+                <ListItemButton
+                  component={NavLink}
+                  to={item.path}
+                  end={item.path === "/"}
+                  aria-label={label}
+                  sx={{
+                    alignItems: "center",
+                    borderRadius: 1,
+                    color: "text.secondary",
+                    height: 42,
+                    justifyContent: "center",
+                    minWidth: 0,
+                    px: 0,
+                    "&.active": {
+                      bgcolor: "rgba(20, 107, 99, 0.12)",
+                      color: "primary.dark"
+                    }
+                  }}
+                >
+                  {item.icon}
+                </ListItemButton>
+              </Tooltip>
+            </ListItem>
+          );
+        })}
       </List>
     </Box>
   );

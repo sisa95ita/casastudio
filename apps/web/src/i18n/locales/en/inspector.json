@@ -1,0 +1,49 @@
+{
+  "layers": {
+    "title": "Layers",
+    "label": "Geometry debug layers",
+    "showPolygons": "Show polygons",
+    "showBoundaryEdges": "Show boundary edges",
+    "showVertices": "Show vertices",
+    "showCentroids": "Show centroids",
+    "showBounds": "Show bounds",
+    "showRuntimeLabels": "Show runtime labels"
+  },
+  "selection": {
+    "title": "Selection",
+    "empty": "No geometry selected.",
+    "multiple": "{{count}} geometry elements selected.",
+    "labels": {
+      "type": "Type",
+      "runtimeId": "Runtime id",
+      "sourceRoomId": "Source room id",
+      "sourceWallId": "Source wall id",
+      "area": "Area",
+      "winding": "Winding",
+      "centroid": "Centroid",
+      "startVertex": "Start vertex",
+      "endVertex": "End vertex",
+      "sharedUsageCount": "Shared usage count",
+      "coordinates": "Coordinates"
+    },
+    "types": {
+      "polygon": "Polygon",
+      "boundaryEdge": "Boundary edge",
+      "vertex": "Vertex"
+    }
+  },
+  "runtimeSummary": {
+    "title": "Runtime Summary",
+    "sourceLevel": "Source level",
+    "vertices": "Vertices",
+    "verticesValue": "{{count}} vertices",
+    "boundaryEdges": "Boundary edges",
+    "boundaryEdgesValue": "{{count}} boundary edges",
+    "boundaryEdgeUses": "Boundary edge uses",
+    "boundaryEdgeUsesValue": "{{count}} boundary edge uses",
+    "loops": "Loops",
+    "loopsValue": "{{count}} loops",
+    "polygons": "Polygons",
+    "polygonsValue": "{{count}} polygons"
+  }
+}

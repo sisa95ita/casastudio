@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import { createGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
-import { selectBoundaryEdge, selectPolygon, selectVertex } from "./geometry-selection-state";
+import {
+  createGeometrySelectionState,
+  selectBoundaryEdge,
+  selectPolygon,
+  selectVertex
+} from "./geometry-selection-state";
 import { collectLevelBounds } from "./geometry-svg-helpers";
 import { createFitToViewTransform } from "./viewport-transform-2d";
 
@@ -75,8 +80,10 @@ describe("createGeometryPresentationModel2D", () => {
         viewportHeight: 520,
         padding: 40
       }),
-      selection: selectPolygon(selectedPolygon.geometryId),
-      hover: selectVertex(hoveredVertex.geometryId)
+      selectionState: createGeometrySelectionState(
+        [selectPolygon(selectedPolygon.geometryId)],
+        selectVertex(hoveredVertex.geometryId)
+      )
     });
 
     expect(
@@ -130,7 +137,7 @@ describe("createGeometryPresentationModel2D", () => {
         viewportHeight: 520,
         padding: 40
       }),
-      selection: selectBoundaryEdge(sharedEdge.geometryId)
+      selectionState: createGeometrySelectionState([selectBoundaryEdge(sharedEdge.geometryId)])
     });
 
     expect(

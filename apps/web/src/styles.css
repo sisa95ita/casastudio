@@ -1,6 +1,6 @@
 :root {
-  color: #172026;
-  background: #f6f8f7;
+  color: #162329;
+  background: #eef2f1;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -18,7 +18,7 @@ body {
 }
 
 a {
-  color: #0f6b68;
+  color: #146b63;
 }
 
 .geometry-page {
@@ -27,6 +27,7 @@ a {
 
 .geometry-viewer-panel {
   height: min(100%, calc(100vh - 160px));
+  background: #fbfcfb;
 }
 
 .geometry-svg {
@@ -36,9 +37,16 @@ a {
   height: 100%;
   min-height: 360px;
   background:
-    linear-gradient(#edf2f0 1px, transparent 1px),
-    linear-gradient(90deg, #edf2f0 1px, transparent 1px),
-    #fbfcfc;
+    linear-gradient(rgba(87, 105, 111, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(87, 105, 111, 0.18) 1px, transparent 1px),
+    linear-gradient(rgba(87, 105, 111, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(87, 105, 111, 0.08) 1px, transparent 1px),
+    #f8faf9;
+  background-position:
+    -1px -1px,
+    -1px -1px,
+    -1px -1px,
+    -1px -1px;
   background-size: 32px 32px;
   touch-action: none;
 }
@@ -50,16 +58,16 @@ a {
 
 .geometry-polygon {
   cursor: pointer;
-  fill: rgba(31, 124, 111, 0.18);
-  stroke: rgba(31, 124, 111, 0.35);
+  fill: rgba(20, 107, 99, 0.13);
+  stroke: rgba(20, 107, 99, 0.34);
   stroke-width: 1;
 }
 
 .geometry-edge {
   pointer-events: none;
-  stroke: #20313a;
+  stroke: #1b2d35;
   stroke-linecap: round;
-  stroke-width: 4;
+  stroke-width: 4.5;
 }
 
 .geometry-edge-hit-target {
@@ -71,22 +79,22 @@ a {
 }
 
 .geometry-edge-shared {
-  stroke: #c04d2f;
+  stroke: #b45309;
   stroke-dasharray: 10 6;
   stroke-width: 6;
 }
 
 .geometry-vertex {
   cursor: pointer;
-  fill: #f8fbfb;
-  stroke: #0f6b68;
+  fill: #fbfcfb;
+  stroke: #146b63;
   stroke-width: 2;
 }
 
 .geometry-centroid {
-  fill: #fed766;
+  fill: #f2c94c;
   pointer-events: none;
-  stroke: #3b3320;
+  stroke: #3f3420;
   stroke-width: 1.5;
 }
 
@@ -99,22 +107,22 @@ a {
 .geometry-polygon-bounds {
   fill: none;
   pointer-events: none;
-  stroke: #596a74;
+  stroke: #5870a3;
   stroke-dasharray: 8 6;
   stroke-width: 2;
 }
 
 .geometry-entity-hovered {
-  filter: drop-shadow(0 0 3px rgba(15, 107, 104, 0.4));
+  filter: drop-shadow(0 0 4px rgba(180, 83, 9, 0.45));
 }
 
 .geometry-entity-selected {
-  stroke: #0b63ce;
+  stroke: #2563eb;
   stroke-width: 7;
 }
 
 .geometry-polygon.geometry-entity-selected {
-  fill: rgba(11, 99, 206, 0.2);
+  fill: rgba(37, 99, 235, 0.18);
   stroke-width: 3;
 }
 
@@ -124,11 +132,11 @@ a {
 }
 
 .geometry-label {
-  fill: #26343c;
+  fill: #25343b;
   font-size: 12px;
   paint-order: stroke;
   pointer-events: none;
-  stroke: #ffffff;
+  stroke: #fbfcfb;
   stroke-linejoin: round;
   stroke-width: 3px;
 }
@@ -143,11 +151,11 @@ a {
 }
 
 .geometry-summary-item {
-  padding: 8px 0;
+  padding: 7px 0;
 }
 
 .geometry-empty-state {
-  color: #596a74;
+  color: #5c6a70;
 }
 
 @media (max-width: 840px) {

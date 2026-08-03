@@ -1,14 +1,19 @@
 import type { LevelGeometry } from "@casastudio/geometry";
 import { useMemo, useRef, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 
+import { useCasaTranslation } from "../i18n";
 import { createGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import {
+  applyGeometrySelectionClick,
   clearGeometrySelection,
+  createGeometrySelectionState,
   selectBoundaryEdge,
   selectPolygon,
   selectVertex,
   type GeometryHoverState,
-  type GeometrySelection
+  type GeometrySelection,
+  type GeometrySelectionState,
+  setGeometryHover
 } from "./geometry-selection-state";
 import {
   collectLevelBounds,
@@ -69,10 +74,8 @@ export type GeometrySvgViewerProps = {
   readonly level: LevelGeometry;
   readonly options: GeometryDisplayOptions;
   readonly viewport?: ViewportState;
-  readonly selection?: GeometrySelection;
-  readonly hover?: GeometryHoverState;
-  readonly onSelectionChange?: (selection: GeometrySelection | undefined) => void;
-  readonly onHoverChange?: (hover: GeometryHoverState) => void;
+  readonly selectionState?: GeometrySelectionState;
+  readonly onSelectionStateChange?: (selectionState: GeometrySelectionState) => void;
   readonly onViewportChange?: (viewport: ViewportState) => void;
 };
 
@@ -87,12 +90,11 @@ export function GeometrySvgViewer({
   level,
   options,
   viewport,
-  selection,
-  hover,
-  onSelectionChange,
-  onHoverChange,
+  selectionState,
+  onSelectionStateChange,
   onViewportChange
 }: GeometrySvgViewerProps) {
+  const { t } = useCasaTranslation("geometry-playground");
   const bounds = collectLevelBounds(level);
   const lastPanPointRef = useRef<ScreenPoint | undefined>(undefined);
   const currentViewportRef = useRef<ViewportState | undefined>(undefined);
@@ -107,18 +109,18 @@ export function GeometrySvgViewer({
           viewportHeight: geometrySvgViewport.height,
           padding: geometrySvgViewport.padding
         })
-      : defaultViewportState);
+        : defaultViewportState);
   currentViewportRef.current = resolvedViewport;
+  const resolvedSelectionState = selectionState ?? createGeometrySelectionState();
   const transform = useMemo(() => createViewportTransform2D(resolvedViewport), [resolvedViewport]);
   const presentationModel = useMemo(
     () =>
       createGeometryPresentationModel2D({
         level,
         transform,
-        selection,
-        hover
+        selectionState: resolvedSelectionState
       }),
-    [hover, level, selection, transform]
+    [level, resolvedSelectionState, transform]
   );
   const vertexRadius = Math.max(3, Math.min(6, transform.scaleLength(5)));
   const centroidRadius = Math.max(4, Math.min(7, transform.scaleLength(6)));
@@ -126,7 +128,7 @@ export function GeometrySvgViewer({
   if (!bounds) {
     return (
       <div className="geometry-empty-state" role="status">
-        No runtime geometry to display for this level.
+        {t("viewer.empty")}
       </div>
     );
   }
@@ -197,7 +199,21 @@ export function GeometrySvgViewer({
     }
 
     event.stopPropagation();
-    onSelectionChange?.(clearGeometrySelection());
+    onSelectionStateChange?.(clearGeometrySelection(resolvedSelectionState));
+  };
+
+  const handleEntityClick = (
+    event: MouseEvent<SVGElement>,
+    nextSelection: GeometrySelection
+  ) => {
+    event.stopPropagation();
+    onSelectionStateChange?.(
+      applyGeometrySelectionClick(resolvedSelectionState, nextSelection, event.shiftKey)
+    );
+  };
+
+  const handleHoverChange = (nextHover: GeometryHoverState) => {
+    onSelectionStateChange?.(setGeometryHover(resolvedSelectionState, nextHover));
   };
 
   return (
@@ -212,9 +228,9 @@ export function GeometrySvgViewer({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      <title id="geometry-svg-title">Geometry playground runtime SVG viewer</title>
+      <title id="geometry-svg-title">{t("viewer.svgTitle")}</title>
       <desc id="geometry-svg-description">
-        Interactive SVG projection of GeometryEngine runtime level geometry.
+        {t("viewer.svgDescription")}
       </desc>
 
       <rect
@@ -240,12 +256,9 @@ export function GeometrySvgViewer({
                   data-geometry-id={polygon.geometryId}
                   points={polygon.svgPoints}
                   className={className}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectionChange?.(selectPolygon(polygon.geometryId));
-                  }}
-                  onMouseEnter={() => onHoverChange?.(selectPolygon(polygon.geometryId))}
-                  onMouseLeave={() => onHoverChange?.(undefined)}
+                  onClick={(event) => handleEntityClick(event, selectPolygon(polygon.geometryId))}
+                  onMouseEnter={() => handleHoverChange(selectPolygon(polygon.geometryId))}
+                  onMouseLeave={() => handleHoverChange(undefined)}
                 />
                 {options.runtimeLabels ? (
                   <text
@@ -303,11 +316,10 @@ export function GeometrySvgViewer({
                   x2={formatSvgNumber(edge.end.screen.x)}
                   y2={formatSvgNumber(edge.end.screen.y)}
                   onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectionChange?.(selectBoundaryEdge(edge.geometryId));
+                    handleEntityClick(event, selectBoundaryEdge(edge.geometryId));
                   }}
-                  onMouseEnter={() => onHoverChange?.(selectBoundaryEdge(edge.geometryId))}
-                  onMouseLeave={() => onHoverChange?.(undefined)}
+                  onMouseEnter={() => handleHoverChange(selectBoundaryEdge(edge.geometryId))}
+                  onMouseLeave={() => handleHoverChange(undefined)}
                 />
                 <line
                   data-testid="boundary-edge"
@@ -348,12 +360,9 @@ export function GeometrySvgViewer({
                   cx={formatSvgNumber(vertex.point.x)}
                   cy={formatSvgNumber(vertex.point.y)}
                   r={formatSvgNumber(vertexRadius)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectionChange?.(selectVertex(vertex.geometryId));
-                  }}
-                  onMouseEnter={() => onHoverChange?.(selectVertex(vertex.geometryId))}
-                  onMouseLeave={() => onHoverChange?.(undefined)}
+                  onClick={(event) => handleEntityClick(event, selectVertex(vertex.geometryId))}
+                  onMouseEnter={() => handleHoverChange(selectVertex(vertex.geometryId))}
+                  onMouseLeave={() => handleHoverChange(undefined)}
                 />
                 {options.runtimeLabels ? (
                   <text

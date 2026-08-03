@@ -1,6 +1,8 @@
 import { Box, Divider, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 
+import { useCasaTranslation } from "../i18n";
+
 /**
  * Props for the right-side route inspector.
  */
@@ -16,10 +18,12 @@ export type InspectorPanelProps = {
  * for the current foundation, not a full mobile editor strategy.
  */
 export function InspectorPanel({ children }: InspectorPanelProps) {
+  const { t } = useCasaTranslation("common");
+
   return (
     <Box
       component="aside"
-      aria-label="Inspector"
+      aria-label={t("shell.inspector.label")}
       sx={{
         bgcolor: "background.paper",
         borderLeft: 1,
@@ -32,12 +36,12 @@ export function InspectorPanel({ children }: InspectorPanelProps) {
     >
       <Stack spacing={1.5} sx={{ p: 1.5 }}>
         <Typography variant="overline" color="text.secondary">
-          Inspector
+          {t("shell.inspector.label")}
         </Typography>
         <Divider />
         {children ?? (
           <Typography variant="body2" color="text.secondary">
-            No route inspector available.
+            {t("shell.inspector.empty")}
           </Typography>
         )}
       </Stack>

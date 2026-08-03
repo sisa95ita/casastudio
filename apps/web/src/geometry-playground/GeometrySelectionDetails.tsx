@@ -1,19 +1,20 @@
 import { Divider, Stack, Typography } from "@mui/material";
 
+import { useCasaTranslation } from "../i18n";
 import type {
   GeometryPresentationBoundaryEdge2D,
   GeometryPresentationModel2D,
   GeometryPresentationPolygon2D,
   GeometryPresentationVertex2D
 } from "./geometry-presentation-model-2d";
-import type { GeometrySelection } from "./geometry-selection-state";
+import type { GeometrySelection, GeometrySelectionState } from "./geometry-selection-state";
 
 /**
  * Props for the contextual geometry selection inspector.
  */
 export type GeometrySelectionDetailsProps = {
   readonly model: GeometryPresentationModel2D;
-  readonly selection?: GeometrySelection;
+  readonly selectionState: GeometrySelectionState;
 };
 
 /**
@@ -21,19 +22,46 @@ export type GeometrySelectionDetailsProps = {
  */
 export function GeometrySelectionDetails({
   model,
-  selection
+  selectionState
 }: GeometrySelectionDetailsProps) {
-  const selectedEntity = findSelectedEntity(model, selection);
+  const { t } = useCasaTranslation("inspector");
+  const selectedSelections = selectionState.selected;
+  const selectedEntity =
+    selectedSelections.length === 1 ? findSelectedEntity(model, selectedSelections[0]) : undefined;
 
-  if (!selection || !selectedEntity) {
+  if (selectedSelections.length === 0 || (selectedSelections.length === 1 && !selectedEntity)) {
     return (
       <Stack component="section" spacing={1} aria-labelledby="geometry-selection-heading">
         <Typography variant="subtitle2" component="h2" id="geometry-selection-heading">
-          Selection
+          {t("selection.title")}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          No geometry selected.
+          {t("selection.empty")}
         </Typography>
+      </Stack>
+    );
+  }
+
+  if (!selectedEntity) {
+    return (
+      <Stack component="section" spacing={1} aria-labelledby="geometry-selection-heading">
+        <Typography variant="subtitle2" component="h2" id="geometry-selection-heading">
+          {t("selection.title")}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {t("selection.multiple", { count: selectedSelections.length })}
+        </Typography>
+        <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
+          {selectedSelections.map((selection) => (
+            <Typography
+              component="li"
+              key={`${selection.kind}-${selection.geometryId}`}
+              variant="caption"
+            >
+              {formatSelectionReference(selection)}
+            </Typography>
+          ))}
+        </Stack>
       </Stack>
     );
   }
@@ -41,10 +69,10 @@ export function GeometrySelectionDetails({
   return (
     <Stack component="section" spacing={1} aria-labelledby="geometry-selection-heading">
       <Typography variant="subtitle2" component="h2" id="geometry-selection-heading">
-        Selection
+        {t("selection.title")}
       </Typography>
       <Stack component="dl" spacing={0} sx={{ m: 0 }}>
-        {getSelectionItems(selectedEntity).map((item) => (
+        {getSelectionItems(selectedEntity, t).map((item) => (
           <Stack key={item.label} spacing={0.75}>
             <Divider />
             <Stack
@@ -96,17 +124,18 @@ const findSelectedEntity = (
 };
 
 const getSelectionItems = (
-  entity: SelectedPresentationEntity
+  entity: SelectedPresentationEntity,
+  t: (key: string) => string
 ): ReadonlyArray<{ readonly label: string; readonly value: string }> => {
   if (entity.kind === "POLYGON") {
     return [
-      { label: "Type", value: "Polygon" },
-      { label: "Runtime id", value: entity.geometryId },
-      { label: "Source room id", value: entity.sourceRoomId },
-      { label: "Area", value: formatMeasurement(entity.area) },
-      { label: "Winding", value: entity.winding },
+      { label: t("selection.labels.type"), value: t("selection.types.polygon") },
+      { label: t("selection.labels.runtimeId"), value: entity.geometryId },
+      { label: t("selection.labels.sourceRoomId"), value: entity.sourceRoomId },
+      { label: t("selection.labels.area"), value: formatMeasurement(entity.area) },
+      { label: t("selection.labels.winding"), value: entity.winding },
       {
-        label: "Centroid",
+        label: t("selection.labels.centroid"),
         value: `${formatMeasurement(entity.centroid.world.x)}, ${formatMeasurement(entity.centroid.world.z)}`
       }
     ];
@@ -114,23 +143,26 @@ const getSelectionItems = (
 
   if (entity.kind === "BOUNDARY_EDGE") {
     return [
-      { label: "Type", value: "Boundary edge" },
-      { label: "Runtime id", value: entity.geometryId },
-      { label: "Source wall id", value: entity.sourceWallId },
-      { label: "Start vertex", value: entity.startVertexId },
-      { label: "End vertex", value: entity.endVertexId },
-      { label: "Shared usage count", value: `${entity.sharedUsageCount}` }
+      { label: t("selection.labels.type"), value: t("selection.types.boundaryEdge") },
+      { label: t("selection.labels.runtimeId"), value: entity.geometryId },
+      { label: t("selection.labels.sourceWallId"), value: entity.sourceWallId },
+      { label: t("selection.labels.startVertex"), value: entity.startVertexId },
+      { label: t("selection.labels.endVertex"), value: entity.endVertexId },
+      { label: t("selection.labels.sharedUsageCount"), value: `${entity.sharedUsageCount}` }
     ];
   }
 
   return [
-    { label: "Type", value: "Vertex" },
-    { label: "Runtime id", value: entity.geometryId },
+    { label: t("selection.labels.type"), value: t("selection.types.vertex") },
+    { label: t("selection.labels.runtimeId"), value: entity.geometryId },
     {
-      label: "Coordinates",
+      label: t("selection.labels.coordinates"),
       value: `${formatMeasurement(entity.coordinates.x)}, ${formatMeasurement(entity.coordinates.z)}`
     }
   ];
 };
+
+const formatSelectionReference = (selection: GeometrySelection): string =>
+  `${selection.kind} ${selection.geometryId}`;
 
 const formatMeasurement = (value: number): string => Number(value.toFixed(2)).toString();

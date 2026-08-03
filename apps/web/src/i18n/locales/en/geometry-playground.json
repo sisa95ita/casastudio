@@ -1,0 +1,53 @@
+{
+  "shell": {
+    "title": "Geometry Playground",
+    "technicalPreview": "Technical preview"
+  },
+  "intro": {
+    "eyebrow": "Technical Runtime Viewer",
+    "heading": "Geometry Playground",
+    "description": "This route renders a canonical Project through GeometryEngine.build into an immutable GeometryModel, fitted through a small XZ-to-SVG viewport transform."
+  },
+  "viewer": {
+    "title": "SVG Technical Viewer",
+    "svgTitle": "Geometry playground runtime SVG viewer",
+    "svgDescription": "Interactive SVG projection of GeometryEngine runtime level geometry.",
+    "empty": "No runtime geometry to display for this level.",
+    "noLevels": "GeometryEngine produced a model with no levels."
+  },
+  "levelSelector": {
+    "label": "Level"
+  },
+  "toolbar": {
+    "fit": "Fit to view",
+    "reset": "Reset viewport",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out"
+  },
+  "shortcuts": {
+    "title": "Shortcuts",
+    "clearSelection": "Clear selection",
+    "fitViewport": "Fit viewport",
+    "resetViewport": "Reset viewport"
+  },
+  "status": {
+    "engineBuildFailed": "Engine: build failed",
+    "engineNoLevels": "Engine: OK | No levels",
+    "engine": "Engine",
+    "level": "Level",
+    "vertices": "Vertices",
+    "edges": "Edges",
+    "polygons": "Polygons",
+    "selection": "Selection",
+    "none": "None",
+    "ok": "OK",
+    "error": "Error"
+  },
+  "errors": {
+    "rootElementMissing": "Root element not found.",
+    "buildFailedTitle": "Geometry build failed",
+    "buildFailedInspector": "Geometry Engine build failed before a runtime level could be inspected.",
+    "path": "Path",
+    "sourceId": "Source ID"
+  }
+}

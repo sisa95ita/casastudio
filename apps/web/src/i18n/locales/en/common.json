@@ -1,0 +1,40 @@
+{
+  "brand": {
+    "name": "CasaStudio"
+  },
+  "shell": {
+    "defaultTitle": "CasaStudio",
+    "defaultBreadcrumb": "Foundation",
+    "defaultStatus": "Ready",
+    "technicalFoundation": "Technical foundation",
+    "inspector": {
+      "label": "Inspector",
+      "empty": "No route inspector available."
+    },
+    "statusBar": {
+      "label": "Status bar"
+    }
+  },
+  "actions": {
+    "backToHome": "Back to Home"
+  },
+  "routes": {
+    "home": {
+      "title": "Home",
+      "eyebrow": "Technical application foundation",
+      "heading": "CasaStudio",
+      "description": "A focused foundation for browser-based interior geometry, spatial previews, and future design tooling.",
+      "inspectorTitle": "Current foundation",
+      "inspectorDescription": "React Router, MUI shell, and the read-only geometry runtime viewer are the active frontend milestones.",
+      "status": "CasaStudio foundation ready",
+      "openGeometryPlayground": "Open Geometry Playground"
+    },
+    "notFound": {
+      "title": "Not found",
+      "breadcrumb": "Routing",
+      "heading": "Route not found",
+      "description": "CasaStudio does not have a workspace at this path.",
+      "status": "Route not found"
+    }
+  }
+}

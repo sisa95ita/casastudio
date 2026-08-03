@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 
 import { useAppShellContent } from "../app-shell/AppShellContext";
+import { useCasaTranslation } from "../i18n";
 
 /**
  * Minimal CasaStudio foundation home route.
@@ -13,23 +14,24 @@ import { useAppShellContent } from "../app-shell/AppShellContext";
  * technical workspace.
  */
 export function HomePage() {
+  const { t } = useCasaTranslation("common");
+  const { t: navigationT } = useCasaTranslation("navigation");
   const shellContent = useMemo(
     () => ({
-      title: "Home",
-      breadcrumb: "Foundation",
+      title: t("routes.home.title"),
+      breadcrumb: navigationT("breadcrumbs.foundation"),
       inspector: (
         <Stack spacing={1.5}>
-          <Typography variant="subtitle2">Current foundation</Typography>
+          <Typography variant="subtitle2">{t("routes.home.inspectorTitle")}</Typography>
           <Divider />
           <Typography variant="body2" color="text.secondary">
-            React Router, MUI shell, and the read-only geometry runtime viewer are the active
-            frontend milestones.
+            {t("routes.home.inspectorDescription")}
           </Typography>
         </Stack>
       ),
-      status: "CasaStudio foundation ready"
+      status: t("routes.home.status")
     }),
-    []
+    [navigationT, t]
   );
 
   useAppShellContent(shellContent);
@@ -46,12 +48,11 @@ export function HomePage() {
         <Stack spacing={2}>
           <Box>
             <Typography variant="overline" color="text.secondary">
-              Technical application foundation
+              {t("routes.home.eyebrow")}
             </Typography>
-            <Typography variant="h1">CasaStudio</Typography>
+            <Typography variant="h1">{t("routes.home.heading")}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              A focused foundation for browser-based interior geometry, spatial previews, and
-              future design tooling.
+              {t("routes.home.description")}
             </Typography>
           </Box>
 
@@ -64,7 +65,7 @@ export function HomePage() {
               variant="contained"
               endIcon={<ArrowForwardRoundedIcon />}
             >
-              Open Geometry Playground
+              {t("routes.home.openGeometryPlayground")}
             </Button>
           </Stack>
         </Stack>

@@ -1,6 +1,8 @@
 import { GeometryEngine, type LevelGeometry } from "@casastudio/geometry";
 import FitScreenIcon from "@mui/icons-material/FitScreen";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import ZoomInIcon from "@mui/icons-material/ZoomIn";
+import ZoomOutIcon from "@mui/icons-material/ZoomOut";
 import {
   Alert,
   Box,
@@ -17,9 +19,10 @@ import {
   Typography
 } from "@mui/material";
 import type { Project } from "@casastudio/schema";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAppShellContent } from "../app-shell/AppShellContext";
+import { useCasaTranslation } from "../i18n";
 import { GeometryBuildErrorPanel } from "./GeometryBuildErrorPanel";
 import {
   createGeometryPresentationModel2D,
@@ -28,13 +31,15 @@ import {
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
 import {
   clearGeometrySelection,
-  type GeometryHoverState,
-  type GeometrySelection
+  createGeometrySelectionState,
+  type GeometrySelectionState
 } from "./geometry-selection-state";
 import { collectLevelBounds } from "./geometry-svg-helpers";
 import { GeometryLayerControls } from "./GeometryLayerControls";
 import { GeometryRuntimeSummary } from "./GeometryRuntimeSummary";
+import { GeometryShortcutGuide } from "./GeometryShortcutGuide";
 import { GeometrySelectionDetails } from "./GeometrySelectionDetails";
+import { getGeometryViewerShortcutAction } from "./geometry-viewer-shortcuts";
 import {
   defaultGeometryDisplayOptions,
   geometrySvgViewport,
@@ -45,7 +50,8 @@ import {
   createFitViewportState,
   createViewportTransform2D,
   resetViewportState,
-  type ViewportState
+  type ViewportState,
+  zoomViewportState
 } from "./viewport-transform-2d";
 
 /**
@@ -56,7 +62,7 @@ export type GeometryPlaygroundPageProps = {
 };
 
 /**
- * Hosts the Phase 2 interactive geometry runtime playground.
+ * Hosts the Phase 3 interactive geometry runtime playground.
  *
  * The page intentionally executes the real pipeline from canonical `Project`
  * through `GeometryEngine.build(project)` into `GeometryModel`, then adapts one
@@ -66,17 +72,20 @@ export type GeometryPlaygroundPageProps = {
 export function GeometryPlaygroundPage({
   project = geometryPlaygroundProject
 }: GeometryPlaygroundPageProps) {
+  const { t } = useCasaTranslation("geometry-playground");
+  const { t: navigationT } = useCasaTranslation("navigation");
   const buildResult = useMemo(() => GeometryEngine.build(project), [project]);
   const [displayOptions, setDisplayOptions] = useState(defaultGeometryDisplayOptions);
-  const [selection, setSelection] = useState<GeometrySelection | undefined>(undefined);
-  const [hover, setHover] = useState<GeometryHoverState>(undefined);
+  const [selectionState, setSelectionState] = useState<GeometrySelectionState>(() =>
+    createGeometrySelectionState()
+  );
   const [selectedLevelId, setSelectedLevelId] = useState(() =>
     buildResult.ok ? (buildResult.model.levels[0]?.id ?? "") : ""
   );
 
   const headerAccessory = useMemo(
-    () => <Chip label="Technical preview" color="warning" variant="outlined" />,
-    []
+    () => <Chip label={t("shell.technicalPreview")} color="warning" variant="outlined" />,
+    [t]
   );
 
   const selectedLevel = buildResult.ok
@@ -92,58 +101,112 @@ export function GeometryPlaygroundPage({
         ? createGeometryPresentationModel2D({
             level: selectedLevel,
             transform: createViewportTransform2D(viewport),
-            selection,
-            hover
+            selectionState
           })
         : undefined,
-    [hover, selectedLevel, selection, viewport]
+    [selectedLevel, selectionState, viewport]
   );
 
   useEffect(() => {
     setViewport(createInitialViewportState(selectedLevel));
-    setSelection(clearGeometrySelection());
-    setHover(undefined);
+    setSelectionState(createGeometrySelectionState());
   }, [selectedLevel]);
 
-  const handleFitViewport = () => {
+  const handleFitViewport = useCallback(() => {
     setViewport(createInitialViewportState(selectedLevel));
-  };
+  }, [selectedLevel]);
 
-  const handleResetViewport = () => {
+  const handleResetViewport = useCallback(() => {
     setViewport(resetViewportState());
-  };
+  }, []);
+
+  const handleZoomViewport = useCallback((zoomFactor: number) => {
+    setViewport((currentViewport) =>
+      zoomViewportState({
+        viewport: currentViewport,
+        zoomFactor,
+        center: {
+          x: geometrySvgViewport.width / 2,
+          y: geometrySvgViewport.height / 2
+        }
+      })
+    );
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const action = getGeometryViewerShortcutAction(event);
+
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (action === "CLEAR_SELECTION") {
+        setSelectionState((currentState) => clearGeometrySelection(currentState));
+        return;
+      }
+
+      if (action === "FIT_VIEWPORT") {
+        handleFitViewport();
+        return;
+      }
+
+      handleResetViewport();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleFitViewport, handleResetViewport]);
 
   const shellContent = useMemo(
     () => ({
-      title: "Geometry Playground",
-      breadcrumb: "Runtime",
+      title: t("shell.title"),
+      breadcrumb: navigationT("breadcrumbs.runtime"),
       headerAccessory,
       inspector: !buildResult.ok ? (
         <Alert severity="error" variant="outlined">
-          Geometry Engine build failed before a runtime level could be inspected.
+          {t("errors.buildFailedInspector")}
         </Alert>
       ) : selectedLevel ? (
         <GeometryPlaygroundInspector
           level={selectedLevel}
           presentationModel={presentationModel}
-          selection={selection}
+          selectionState={selectionState}
           options={displayOptions}
           onOptionsChange={setDisplayOptions}
         />
       ) : (
         <Alert severity="info" variant="outlined">
-          GeometryEngine produced a model with no levels.
+          {t("viewer.noLevels")}
         </Alert>
       ),
       status: !buildResult.ok ? (
-        "Engine: build failed"
+        t("status.engineBuildFailed")
       ) : selectedLevel ? (
-        <GeometryPlaygroundStatus level={selectedLevel} selection={selection} buildStatus="OK" />
+        <GeometryPlaygroundStatus
+          level={selectedLevel}
+          selectionState={selectionState}
+          buildStatus="ok"
+        />
       ) : (
-        "Engine: OK | No levels"
+        t("status.engineNoLevels")
       )
     }),
-    [buildResult.ok, displayOptions, headerAccessory, presentationModel, selectedLevel, selection]
+    [
+      buildResult.ok,
+      displayOptions,
+      headerAccessory,
+      navigationT,
+      presentationModel,
+      selectedLevel,
+      selectionState,
+      t
+    ]
   );
 
   useAppShellContent(shellContent);
@@ -163,10 +226,10 @@ export function GeometryPlaygroundPage({
 
       {selectedLevel && buildResult.model.levels.length > 1 ? (
         <FormControl size="small" sx={{ maxWidth: 280 }}>
-          <InputLabel id="geometry-level-selector-label">Level</InputLabel>
+          <InputLabel id="geometry-level-selector-label">{t("levelSelector.label")}</InputLabel>
           <Select
             labelId="geometry-level-selector-label"
-            label="Level"
+            label={t("levelSelector.label")}
             value={selectedLevel.id}
             onChange={(event) => setSelectedLevelId(event.target.value)}
           >
@@ -202,15 +265,31 @@ export function GeometryPlaygroundPage({
                 id="geometry-viewer-heading"
                 sx={{ flex: "1 1 auto" }}
               >
-                SVG Technical Viewer
+                {t("viewer.title")}
               </Typography>
-              <Tooltip title="Fit to view">
-                <IconButton aria-label="Fit to view" onClick={handleFitViewport}>
+              <Tooltip title={t("toolbar.zoomOut")}>
+                <IconButton
+                  aria-label={t("toolbar.zoomOut")}
+                  onClick={() => handleZoomViewport(0.85)}
+                >
+                  <ZoomOutIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={t("toolbar.zoomIn")}>
+                <IconButton
+                  aria-label={t("toolbar.zoomIn")}
+                  onClick={() => handleZoomViewport(1.18)}
+                >
+                  <ZoomInIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={t("toolbar.fit")}>
+                <IconButton aria-label={t("toolbar.fit")} onClick={handleFitViewport}>
                   <FitScreenIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Reset viewport">
-                <IconButton aria-label="Reset viewport" onClick={handleResetViewport}>
+              <Tooltip title={t("toolbar.reset")}>
+                <IconButton aria-label={t("toolbar.reset")} onClick={handleResetViewport}>
                   <RestartAltIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
@@ -220,16 +299,14 @@ export function GeometryPlaygroundPage({
             level={selectedLevel}
             options={displayOptions}
             viewport={viewport}
-            selection={selection}
-            hover={hover}
-            onSelectionChange={setSelection}
-            onHoverChange={setHover}
+            selectionState={selectionState}
+            onSelectionStateChange={setSelectionState}
             onViewportChange={setViewport}
           />
         </Paper>
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
-          GeometryEngine produced a model with no levels.
+          {t("viewer.noLevels")}
         </Paper>
       )}
     </Stack>
@@ -240,16 +317,16 @@ export function GeometryPlaygroundPage({
  * Renders the route-local title block for the playground workspace.
  */
 function PageIntro() {
+  const { t } = useCasaTranslation("geometry-playground");
+
   return (
     <Box className="geometry-page-header">
       <Typography variant="overline" color="warning.dark">
-        Technical Runtime Viewer
+        {t("intro.eyebrow")}
       </Typography>
-      <Typography variant="h1">Geometry Playground</Typography>
+      <Typography variant="h1">{t("intro.heading")}</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 820 }}>
-        This route renders a canonical Project through GeometryEngine.build into
-        an immutable GeometryModel, fitted through a small XZ-to-SVG viewport
-        transform.
+        {t("intro.description")}
       </Typography>
     </Box>
   );
@@ -264,7 +341,7 @@ function PageIntro() {
 export type GeometryPlaygroundInspectorProps = {
   readonly level: LevelGeometry;
   readonly presentationModel?: GeometryPresentationModel2D;
-  readonly selection?: GeometrySelection;
+  readonly selectionState: GeometrySelectionState;
   readonly options: GeometryDisplayOptions;
   readonly onOptionsChange: (options: GeometryDisplayOptions) => void;
 };
@@ -275,7 +352,7 @@ export type GeometryPlaygroundInspectorProps = {
 export function GeometryPlaygroundInspector({
   level,
   presentationModel,
-  selection,
+  selectionState,
   options,
   onOptionsChange
 }: GeometryPlaygroundInspectorProps) {
@@ -285,10 +362,12 @@ export function GeometryPlaygroundInspector({
       <Divider />
       {presentationModel ? (
         <>
-          <GeometrySelectionDetails model={presentationModel} selection={selection} />
+          <GeometrySelectionDetails model={presentationModel} selectionState={selectionState} />
           <Divider />
         </>
       ) : null}
+      <GeometryShortcutGuide />
+      <Divider />
       <GeometryRuntimeSummary level={level} />
     </Stack>
   );
@@ -299,8 +378,8 @@ export function GeometryPlaygroundInspector({
  */
 export type GeometryPlaygroundStatusProps = {
   readonly level: GeometryPlaygroundInspectorProps["level"];
-  readonly selection?: GeometrySelection;
-  readonly buildStatus: "OK" | "Error";
+  readonly selectionState: GeometrySelectionState;
+  readonly buildStatus: "ok" | "error";
 };
 
 /**
@@ -308,14 +387,23 @@ export type GeometryPlaygroundStatusProps = {
  */
 export function GeometryPlaygroundStatus({
   level,
-  selection,
+  selectionState,
   buildStatus
 }: GeometryPlaygroundStatusProps) {
+  const { t } = useCasaTranslation("geometry-playground");
+  const selectionLabel =
+    selectionState.selected.length === 0
+      ? t("status.none")
+      : selectionState.selected
+          .map((selection) => `${selection.kind} ${selection.geometryId}`)
+          .join(", ");
+
   return (
     <Typography variant="caption" color="text.secondary" noWrap>
-      Level: {level.sourceLevelId} | Vertices: {level.vertices.length} | Edges:{" "}
-      {level.boundaryEdges.length} | Polygons: {level.polygons.length} | Selection:{" "}
-      {selection ? `${selection.kind} ${selection.geometryId}` : "None"} | Engine: {buildStatus}
+      {t("status.level")}: {level.sourceLevelId} | {t("status.vertices")}:{" "}
+      {level.vertices.length} | {t("status.edges")}: {level.boundaryEdges.length} |{" "}
+      {t("status.polygons")}: {level.polygons.length} | {t("status.selection")}:{" "}
+      {selectionLabel} | {t("status.engine")}: {t(`status.${buildStatus}`)}
     </Typography>
   );
 }

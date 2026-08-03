@@ -8,7 +8,8 @@ import {
 import {
   isGeometrySelectionMatch,
   type GeometryHoverState,
-  type GeometrySelection
+  type GeometrySelection,
+  type GeometrySelectionState
 } from "./geometry-selection-state";
 import type {
   ScreenPoint,
@@ -95,7 +96,7 @@ export type GeometryPresentationModel2D = {
 export type CreateGeometryPresentationModel2DOptions = {
   readonly level: LevelGeometry;
   readonly transform: ViewportTransform2D;
-  readonly selection?: GeometrySelection;
+  readonly selectionState?: GeometrySelectionState;
   readonly hover?: GeometryHoverState;
 };
 
@@ -106,25 +107,27 @@ export type CreateGeometryPresentationModel2DOptions = {
 export const createGeometryPresentationModel2D = ({
   level,
   transform,
-  selection,
+  selectionState,
   hover
 }: CreateGeometryPresentationModel2DOptions): GeometryPresentationModel2D => {
   const sharedUsageCounts = countBoundaryEdgeUses(level);
+  const selected = selectionState?.selected ?? [];
+  const hovered = selectionState?.hovered ?? hover;
 
   return Object.freeze({
     levelId: level.id,
     sourceLevelId: level.sourceLevelId,
     bounds: collectLevelBounds(level),
     polygons: Object.freeze(
-      level.polygons.map((polygon) => createPresentationPolygon(polygon, transform, selection, hover))
+      level.polygons.map((polygon) => createPresentationPolygon(polygon, transform, selected, hovered))
     ),
     boundaryEdges: Object.freeze(
       level.boundaryEdges.map((edge) =>
-        createPresentationBoundaryEdge(edge, transform, sharedUsageCounts, selection, hover)
+        createPresentationBoundaryEdge(edge, transform, sharedUsageCounts, selected, hovered)
       )
     ),
     vertices: Object.freeze(
-      level.vertices.map((vertex) => createPresentationVertex(vertex, transform, selection, hover))
+      level.vertices.map((vertex) => createPresentationVertex(vertex, transform, selected, hovered))
     )
   });
 };
@@ -132,7 +135,7 @@ export const createGeometryPresentationModel2D = ({
 const createPresentationPolygon = (
   polygon: Polygon,
   transform: ViewportTransform2D,
-  selection: GeometrySelection | undefined,
+  selected: readonly GeometrySelection[],
   hover: GeometryHoverState
 ): GeometryPresentationPolygon2D => {
   const points = polygon.outerLoop.edgeUses.map((edgeUse) =>
@@ -148,7 +151,7 @@ const createPresentationPolygon = (
     area: polygon.area,
     winding: polygon.winding,
     centroid: createPresentationPoint(polygon.centroid, transform),
-    selected: isGeometrySelectionMatch(selection, "POLYGON", polygon.id),
+    selected: isGeometrySelectionMatch(selected, "POLYGON", polygon.id),
     hovered: isGeometrySelectionMatch(hover, "POLYGON", polygon.id)
   });
 };
@@ -157,7 +160,7 @@ const createPresentationBoundaryEdge = (
   edge: BoundaryEdge,
   transform: ViewportTransform2D,
   sharedUsageCounts: ReadonlyMap<BoundaryEdge["id"], number>,
-  selection: GeometrySelection | undefined,
+  selected: readonly GeometrySelection[],
   hover: GeometryHoverState
 ): GeometryPresentationBoundaryEdge2D => {
   const start = createPresentationPoint(edge.startVertex, transform);
@@ -176,7 +179,7 @@ const createPresentationBoundaryEdge = (
       y: (start.screen.y + end.screen.y) / 2
     }),
     sharedUsageCount: sharedUsageCounts.get(edge.id) ?? 0,
-    selected: isGeometrySelectionMatch(selection, "BOUNDARY_EDGE", edge.id),
+    selected: isGeometrySelectionMatch(selected, "BOUNDARY_EDGE", edge.id),
     hovered: isGeometrySelectionMatch(hover, "BOUNDARY_EDGE", edge.id)
   });
 };
@@ -184,7 +187,7 @@ const createPresentationBoundaryEdge = (
 const createPresentationVertex = (
   vertex: Vertex,
   transform: ViewportTransform2D,
-  selection: GeometrySelection | undefined,
+  selected: readonly GeometrySelection[],
   hover: GeometryHoverState
 ): GeometryPresentationVertex2D =>
   Object.freeze({
@@ -192,7 +195,7 @@ const createPresentationVertex = (
     geometryId: vertex.id,
     coordinates: Object.freeze({ x: vertex.x, z: vertex.z }),
     point: transform.worldToScreen(vertex),
-    selected: isGeometrySelectionMatch(selection, "VERTEX", vertex.id),
+    selected: isGeometrySelectionMatch(selected, "VERTEX", vertex.id),
     hovered: isGeometrySelectionMatch(hover, "VERTEX", vertex.id)
   });
 

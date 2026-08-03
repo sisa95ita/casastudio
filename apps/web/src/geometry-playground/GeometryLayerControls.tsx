@@ -1,18 +1,19 @@
 import { Checkbox, FormControlLabel, FormGroup, Stack, Typography } from "@mui/material";
 import type { ChangeEvent } from "react";
 
+import { useCasaTranslation } from "../i18n";
 import type { GeometryDisplayOptions } from "./GeometrySvgViewer";
 
 const controlLabels: ReadonlyArray<{
   readonly option: keyof GeometryDisplayOptions;
-  readonly label: string;
+  readonly labelKey: string;
 }> = [
-  { option: "polygons", label: "Show polygons" },
-  { option: "boundaryEdges", label: "Show boundary edges" },
-  { option: "vertices", label: "Show vertices" },
-  { option: "centroids", label: "Show centroids" },
-  { option: "bounds", label: "Show bounds" },
-  { option: "runtimeLabels", label: "Show runtime labels" }
+  { option: "polygons", labelKey: "layers.showPolygons" },
+  { option: "boundaryEdges", labelKey: "layers.showBoundaryEdges" },
+  { option: "vertices", labelKey: "layers.showVertices" },
+  { option: "centroids", labelKey: "layers.showCentroids" },
+  { option: "bounds", labelKey: "layers.showBounds" },
+  { option: "runtimeLabels", labelKey: "layers.showRuntimeLabels" }
 ];
 
 /**
@@ -34,6 +35,7 @@ export function GeometryLayerControls({
   options,
   onOptionsChange
 }: GeometryLayerControlsProps) {
+  const { t } = useCasaTranslation("inspector");
   const handleChange =
     (option: keyof GeometryDisplayOptions) => (event: ChangeEvent<HTMLInputElement>) => {
       onOptionsChange({
@@ -43,24 +45,28 @@ export function GeometryLayerControls({
     };
 
   return (
-    <Stack spacing={1} aria-label="Geometry debug layers">
+    <Stack spacing={1} aria-label={t("layers.label")}>
       <Typography variant="subtitle2" component="h2">
-        Layers
+        {t("layers.title")}
       </Typography>
-      {controlLabels.map((control) => (
-        <FormGroup key={control.option}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={options[control.option]}
-                onChange={handleChange(control.option)}
-                slotProps={{ input: { "aria-label": control.label } }}
-              />
-            }
-            label={control.label}
-          />
-        </FormGroup>
-      ))}
+      {controlLabels.map((control) => {
+        const label = t(control.labelKey);
+
+        return (
+          <FormGroup key={control.option}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={options[control.option]}
+                  onChange={handleChange(control.option)}
+                  slotProps={{ input: { "aria-label": label } }}
+                />
+              }
+              label={label}
+            />
+          </FormGroup>
+        );
+      })}
     </Stack>
   );
 }

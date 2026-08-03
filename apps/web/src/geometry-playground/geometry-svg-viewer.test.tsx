@@ -1,8 +1,8 @@
 import { GeometryEngine } from "@casastudio/geometry";
 import { ProjectSchema } from "@casastudio/schema";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
 import {
@@ -14,6 +14,10 @@ import {
   defaultGeometryDisplayOptions,
   GeometrySvgViewer
 } from "./GeometrySvgViewer";
+import {
+  createGeometrySelectionState,
+  selectPolygon
+} from "./geometry-selection-state";
 import { createFitToViewTransform } from "./viewport-transform-2d";
 
 const getPlaygroundLevel = () => {
@@ -32,6 +36,10 @@ const getPlaygroundLevel = () => {
 
   return level;
 };
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("GeometrySvgViewer", () => {
   it("renders two polygons from traversal-relative loop order", () => {
@@ -134,12 +142,12 @@ describe("GeometrySvgViewer", () => {
 
   it("selects polygons, boundary edges, and vertices from SVG clicks", () => {
     const level = getPlaygroundLevel();
-    const handleSelectionChange = vi.fn();
+    const handleSelectionStateChange = vi.fn();
     const { container } = render(
       <GeometrySvgViewer
         level={level}
         options={defaultGeometryDisplayOptions}
-        onSelectionChange={handleSelectionChange}
+        onSelectionStateChange={handleSelectionStateChange}
       />
     );
 
@@ -155,17 +163,218 @@ describe("GeometrySvgViewer", () => {
     fireEvent.click(edgeHitTarget);
     fireEvent.click(vertex);
 
-    expect(handleSelectionChange).toHaveBeenNthCalledWith(1, {
-      kind: "POLYGON",
-      geometryId: level.polygons[0]?.id
+    expect(handleSelectionStateChange).toHaveBeenNthCalledWith(1, {
+      selected: [
+        {
+          kind: "POLYGON",
+          geometryId: level.polygons[0]?.id
+        }
+      ],
+      hovered: undefined
     });
-    expect(handleSelectionChange).toHaveBeenNthCalledWith(2, {
-      kind: "BOUNDARY_EDGE",
-      geometryId: level.boundaryEdges[0]?.id
+    expect(handleSelectionStateChange).toHaveBeenNthCalledWith(2, {
+      selected: [
+        {
+          kind: "BOUNDARY_EDGE",
+          geometryId: level.boundaryEdges[0]?.id
+        }
+      ],
+      hovered: undefined
     });
-    expect(handleSelectionChange).toHaveBeenNthCalledWith(3, {
-      kind: "VERTEX",
-      geometryId: level.vertices[0]?.id
+    expect(handleSelectionStateChange).toHaveBeenNthCalledWith(3, {
+      selected: [
+        {
+          kind: "VERTEX",
+          geometryId: level.vertices[0]?.id
+        }
+      ],
+      hovered: undefined
+    });
+  });
+
+  it("emits hover state separately from the selected set", () => {
+    const level = getPlaygroundLevel();
+    const selectedPolygon = level.polygons[0];
+    const hoveredVertex = level.vertices[0];
+    const handleSelectionStateChange = vi.fn();
+
+    if (!selectedPolygon || !hoveredVertex) {
+      throw new Error("Expected interactive geometry elements.");
+    }
+
+    const { container } = render(
+      <GeometrySvgViewer
+        level={level}
+        options={defaultGeometryDisplayOptions}
+        selectionState={createGeometrySelectionState([selectPolygon(selectedPolygon.id)])}
+        onSelectionStateChange={handleSelectionStateChange}
+      />
+    );
+
+    const vertex = container.querySelector('[data-testid="geometry-vertex"]');
+
+    if (!vertex) {
+      throw new Error("Expected a vertex hit target.");
+    }
+
+    fireEvent.mouseEnter(vertex);
+
+    expect(handleSelectionStateChange).toHaveBeenCalledWith({
+      selected: [selectPolygon(selectedPolygon.id)],
+      hovered: {
+        kind: "VERTEX",
+        geometryId: hoveredVertex.id
+      }
+    });
+  });
+
+  it("supports shift-click additive selection and toggling", () => {
+    const level = getPlaygroundLevel();
+    const selectedPolygon = level.polygons[0];
+    const handleAdditiveSelection = vi.fn();
+    const handleToggleSelection = vi.fn();
+
+    if (!selectedPolygon) {
+      throw new Error("Expected a polygon.");
+    }
+
+    const initialSelectionState = createGeometrySelectionState([selectPolygon(selectedPolygon.id)]);
+
+    const { container, unmount } = render(
+      <GeometrySvgViewer
+        level={level}
+        options={defaultGeometryDisplayOptions}
+        selectionState={initialSelectionState}
+        onSelectionStateChange={handleAdditiveSelection}
+      />
+    );
+
+    const edgeHitTarget = container.querySelector(".geometry-edge-hit-target");
+
+    if (!edgeHitTarget) {
+      throw new Error("Expected a boundary edge hit target.");
+    }
+
+    fireEvent.click(edgeHitTarget, { shiftKey: true });
+
+    expect(handleAdditiveSelection).toHaveBeenCalledWith({
+      selected: [
+        selectPolygon(selectedPolygon.id),
+        {
+          kind: "BOUNDARY_EDGE",
+          geometryId: level.boundaryEdges[0]?.id
+        }
+      ],
+      hovered: undefined
+    });
+
+    unmount();
+
+    const toggleRender = render(
+      <GeometrySvgViewer
+        level={level}
+        options={defaultGeometryDisplayOptions}
+        selectionState={initialSelectionState}
+        onSelectionStateChange={handleToggleSelection}
+      />
+    );
+
+    const polygon = toggleRender.container.querySelector('[data-testid="geometry-polygon"]');
+
+    if (!polygon) {
+      throw new Error("Expected a polygon hit target.");
+    }
+
+    fireEvent.click(polygon, { shiftKey: true });
+
+    expect(handleToggleSelection).toHaveBeenCalledWith({
+      selected: [],
+      hovered: undefined
+    });
+  });
+
+  it("emits zoom viewport updates from wheel input", () => {
+    const level = getPlaygroundLevel();
+    const viewport = { zoom: 1, offsetX: 0, offsetY: 0 };
+    const handleViewportChange = vi.fn();
+    const { container } = render(
+      <GeometrySvgViewer
+        level={level}
+        options={defaultGeometryDisplayOptions}
+        viewport={viewport}
+        onViewportChange={handleViewportChange}
+      />
+    );
+    const svg = container.querySelector("svg");
+
+    if (!svg) {
+      throw new Error("Expected an SVG viewport.");
+    }
+
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      bottom: 520,
+      height: 520,
+      left: 0,
+      right: 800,
+      top: 0,
+      width: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined
+    });
+
+    fireEvent.wheel(svg, { clientX: 400, clientY: 260, deltaY: -120 });
+
+    expect(handleViewportChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        zoom: expect.any(Number),
+        offsetX: expect.any(Number),
+        offsetY: expect.any(Number)
+      })
+    );
+    expect(handleViewportChange.mock.calls[0]?.[0].zoom).toBeGreaterThan(viewport.zoom);
+  });
+
+  it("emits pan viewport updates from background dragging", () => {
+    const level = getPlaygroundLevel();
+    const viewport = { zoom: 1, offsetX: 0, offsetY: 0 };
+    const handleViewportChange = vi.fn();
+    const { container } = render(
+      <GeometrySvgViewer
+        level={level}
+        options={defaultGeometryDisplayOptions}
+        viewport={viewport}
+        onViewportChange={handleViewportChange}
+      />
+    );
+    const svg = container.querySelector("svg");
+    const background = container.querySelector(".geometry-pan-background");
+
+    if (!svg || !background) {
+      throw new Error("Expected an SVG viewport and pan background.");
+    }
+
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      bottom: 520,
+      height: 520,
+      left: 0,
+      right: 800,
+      top: 0,
+      width: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined
+    });
+    svg.setPointerCapture = vi.fn();
+    svg.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(background, { clientX: 40, clientY: 60, pointerId: 1 });
+    fireEvent.pointerMove(svg, { clientX: 70, clientY: 80, pointerId: 1 });
+
+    expect(handleViewportChange).toHaveBeenCalledWith({
+      zoom: 1,
+      offsetX: 30,
+      offsetY: 20
     });
   });
 });

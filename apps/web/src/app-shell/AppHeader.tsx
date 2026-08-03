@@ -1,6 +1,8 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 
+import { useCasaTranslation } from "../i18n";
+
 /**
  * Props for the compact CasaStudio application header.
  */
@@ -17,11 +19,14 @@ export type AppHeaderProps = {
  * route without stealing vertical space from the design workspace.
  */
 export function AppHeader({ title, breadcrumb, accessory }: AppHeaderProps) {
+  const { t } = useCasaTranslation("common");
+
   return (
     <Box
       component="header"
       sx={{
         alignItems: "center",
+        bgcolor: "#fbfcfb",
         borderBottom: 1,
         borderColor: "divider",
         display: "flex",
@@ -32,7 +37,7 @@ export function AppHeader({ title, breadcrumb, accessory }: AppHeaderProps) {
     >
       <Stack direction="row" spacing={1.25} sx={{ alignItems: "baseline", minWidth: 0 }}>
         <Typography variant="subtitle1" component="div" sx={{ fontWeight: 800 }}>
-          CasaStudio
+          {t("brand.name")}
         </Typography>
         <Typography variant="body2" color="text.secondary" noWrap>
           {breadcrumb ? `${breadcrumb} / ${title}` : title}
@@ -41,7 +46,7 @@ export function AppHeader({ title, breadcrumb, accessory }: AppHeaderProps) {
 
       <Box sx={{ flex: 1 }} />
 
-      {accessory ? accessory : <Chip label="Technical foundation" variant="outlined" />}
+      {accessory ? accessory : <Chip label={t("shell.technicalFoundation")} variant="outlined" />}
     </Box>
   );
 }

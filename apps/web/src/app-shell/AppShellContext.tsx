@@ -25,12 +25,12 @@ export type AppShellContentController = {
 };
 
 /**
- * Conservative shell content used before a route registers its own slots.
+ * Minimal shell content used before a route registers its own localized slots.
  */
 export const defaultAppShellContent: AppShellContent = {
-  title: "CasaStudio",
-  breadcrumb: "Foundation",
-  status: "Ready"
+  title: "",
+  breadcrumb: undefined,
+  status: undefined
 };
 
 /**

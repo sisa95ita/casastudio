@@ -1,6 +1,8 @@
 import { Box, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 
+import { useCasaTranslation } from "../i18n";
+
 /**
  * Props for the compact application status bar.
  */
@@ -12,10 +14,12 @@ export type StatusBarProps = {
  * Renders glanceable route status while preserving the fixed shell frame.
  */
 export function StatusBar({ children }: StatusBarProps) {
+  const { t } = useCasaTranslation("common");
+
   return (
     <Box
       role="status"
-      aria-label="Status bar"
+      aria-label={t("shell.statusBar.label")}
       sx={{
         alignItems: "center",
         borderTop: 1,

@@ -1,0 +1,13 @@
+{
+  "landmarks": {
+    "primary": "Primary"
+  },
+  "items": {
+    "home": "Home",
+    "geometryPlayground": "Geometry Playground"
+  },
+  "breadcrumbs": {
+    "foundation": "Foundation",
+    "runtime": "Runtime"
+  }
+}
