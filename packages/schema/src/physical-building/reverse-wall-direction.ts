@@ -1,15 +1,15 @@
-import type { Identifier } from "../primitives";
-import { ProjectSchema, type Project } from "../project";
+import type { Identifier } from "../primitives/index.js";
+import { ProjectSchema, type Project } from "../project/index.js";
 import {
   validateProjectCrossReferences,
   validateProjectGeometry,
   validateProjectReferenceConsistency,
   ValidationErrorCode,
   type ValidationError
-} from "../validation";
-import type { Opening } from "./opening";
-import type { RoomBoundaryDirection } from "./room";
-import type { Wall } from "./wall";
+} from "../validation/index.js";
+import type { Opening } from "./opening.js";
+import type { RoomBoundaryDirection } from "./room.js";
+import type { Wall } from "./wall.js";
 
 /**
  * Result returned by the pure reverse-wall-direction domain operation.

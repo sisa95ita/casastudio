@@ -7,7 +7,7 @@ import {
   type DesignBrief,
   type RenderRequest,
   type RenderResult
-} from "./index";
+} from "./index.js";
 
 describe("design-rendering barrel exports", () => {
   it("exports design rendering schemas and inferred types", () => {

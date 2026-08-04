@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { StairLandingSchema } from "./stair-landing";
+import { StairLandingSchema } from "./stair-landing.js";
 
 const validLanding = {
   id: "stair-landing-1",

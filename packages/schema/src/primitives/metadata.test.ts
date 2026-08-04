@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CommonMetadataSchema } from "./metadata";
+import { CommonMetadataSchema } from "./metadata.js";
 
 describe("CommonMetadataSchema", () => {
   it("accepts an identifier with optional name and description", () => {

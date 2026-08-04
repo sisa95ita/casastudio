@@ -1,2 +1,2 @@
-export * from "./base-image";
-export * from "./viewpoint";
+export * from "./base-image.js";
+export * from "./viewpoint.js";

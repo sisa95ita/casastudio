@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import { CommonMetadataSchema, IdentifierSchema } from "../primitives";
-import { StairFlightSchema } from "./stair-flight";
-import { StairLandingSchema } from "./stair-landing";
+import { CommonMetadataSchema, IdentifierSchema } from "../primitives/index.js";
+import { StairFlightSchema } from "./stair-flight.js";
+import { StairLandingSchema } from "./stair-landing.js";
 
 const PositiveMeasurementSchema = z.number().finite().positive();
 

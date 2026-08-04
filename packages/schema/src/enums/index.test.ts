@@ -6,7 +6,7 @@ import {
   ProjectionTypeSchema,
   RenderStatusSchema,
   RoomTypeSchema
-} from "./index";
+} from "./index.js";
 
 describe("shared enum schemas", () => {
   it("validates documented building types", () => {

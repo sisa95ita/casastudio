@@ -2,14 +2,14 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { migrateProject } from "../migrations";
+import { migrateProject } from "../migrations/index.js";
 import {
   validateProjectCrossReferences,
   validateProjectGeometry,
   validateProjectReferenceConsistency,
   validateProjectRenderability
-} from "../validation";
-import { ProjectSchema } from "./project";
+} from "../validation/index.js";
+import { ProjectSchema } from "./project.js";
 
 const canonicalProjectUrl = new URL("../../examples/project.json", import.meta.url);
 const legacyProjectUrl = new URL("../../examples/project-v1-legacy-wallIds.json", import.meta.url);

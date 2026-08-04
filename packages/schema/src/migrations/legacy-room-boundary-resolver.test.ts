@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { LegacyRoomBoundaryMigrationFailureReason } from "./migration-error";
-import { resolveLegacyRoomBoundary } from "./legacy-room-boundary-resolver";
+import { LegacyRoomBoundaryMigrationFailureReason } from "./migration-error.js";
+import { resolveLegacyRoomBoundary } from "./legacy-room-boundary-resolver.js";
 
 type TestWall = {
   id: string;

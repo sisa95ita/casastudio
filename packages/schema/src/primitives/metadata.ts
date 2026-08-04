@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { IdentifierSchema } from "./identifier";
+import { IdentifierSchema } from "./identifier.js";
 
 /**
  * Shared identity and descriptive metadata used by named domain entities.

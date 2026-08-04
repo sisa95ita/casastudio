@@ -1,15 +1,15 @@
 import { z } from "zod";
 
-import { RoomBoundaryEdgeSchema } from "../physical-building";
-import { ProjectSchema } from "../project";
-import { CURRENT_PROJECT_SCHEMA_VERSION } from "../project/schema-version";
+import { RoomBoundaryEdgeSchema } from "../physical-building/index.js";
+import { ProjectSchema } from "../project/index.js";
+import { CURRENT_PROJECT_SCHEMA_VERSION } from "../project/schema-version.js";
 import {
   LegacyRoomBoundaryMigrationFailureReason,
   MigrationErrorCode,
   type ProjectMigrationError
-} from "./migration-error";
-import { resolveLegacyRoomBoundary } from "./legacy-room-boundary-resolver";
-import type { ProjectMigrationResult } from "./migrate-project";
+} from "./migration-error.js";
+import { resolveLegacyRoomBoundary } from "./legacy-room-boundary-resolver.js";
+import type { ProjectMigrationResult } from "./migrate-project.js";
 
 type MutableRecord = Record<string, unknown>;
 

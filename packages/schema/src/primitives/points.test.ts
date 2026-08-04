@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Point2DSchema, Point3DSchema } from "./points";
+import { Point2DSchema, Point3DSchema } from "./points.js";
 
 describe("Point2DSchema", () => {
   it("accepts XZ coordinates", () => {

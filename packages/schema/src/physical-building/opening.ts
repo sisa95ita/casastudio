@@ -1,12 +1,12 @@
 import { z } from "zod";
 
-import { IdentifierSchema } from "../primitives";
+import { IdentifierSchema } from "../primitives/index.js";
 import {
   IdentifierArraySchema,
   MeasurementSchema,
   OptionalDescriptionSchema,
   OptionalNameSchema
-} from "./shared";
+} from "./shared.js";
 
 const OpeningBaseSchema = z.strictObject({
   id: IdentifierSchema,

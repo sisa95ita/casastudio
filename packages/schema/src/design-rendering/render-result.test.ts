@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { RenderResultSchema } from "./render-result";
+import { RenderResultSchema } from "./render-result.js";
 
 const validSucceededResult = {
   id: "render-result-001",

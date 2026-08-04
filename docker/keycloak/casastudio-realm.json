@@ -72,6 +72,7 @@
   },
   "users": [
     {
+      "id": "8d62f7e2-0c2a-4f2a-a9cf-7f62c2f4e8f7",
       "username": "demo",
       "enabled": true,
       "emailVerified": true,

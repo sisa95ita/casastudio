@@ -1,10 +1,10 @@
-import type { Point2D } from "../primitives";
-import type { RoomBoundaryEdge } from "../physical-building";
+import type { Point2D } from "../primitives/index.js";
+import type { RoomBoundaryEdge } from "../physical-building/index.js";
 import {
   LegacyRoomBoundaryMigrationFailureReason,
   MigrationErrorCode,
   type ProjectMigrationError
-} from "./migration-error";
+} from "./migration-error.js";
 
 type LegacyWall = {
   id: string;

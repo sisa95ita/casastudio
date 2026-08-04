@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CommonMetadataSchema, IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema } from "../primitives";
+import { CommonMetadataSchema, IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema } from "../primitives/index.js";
 
 const AssetRefSchema = z.string().min(1);
 

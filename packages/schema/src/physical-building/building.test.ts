@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BuildingSchema } from "./building";
+import { BuildingSchema } from "./building.js";
 
 const validBuilding = {
   id: "main-building",

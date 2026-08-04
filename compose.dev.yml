@@ -4,6 +4,7 @@ services:
       target: development
     environment:
       NODE_ENV: development
+      CI: "true"
       SWAGGER_ENABLED: "true"
 
   api:
@@ -11,16 +12,23 @@ services:
       target: development
     environment:
       NODE_ENV: development
+      CI: "true"
       SWAGGER_ENABLED: "true"
+      PNPM_CONFIG_CONFIRM_MODULES_PURGE: "false"
+      npm_config_confirm_modules_purge: "false"
       LOG_LEVEL: debug
     volumes:
       - .:/workspace
       - api_node_modules:/workspace/node_modules
-    command: ["pnpm", "--filter", "@casastudio/api", "dev"]
+    command: ["sh", "-c", "pnpm --filter @casastudio/api db:generate && pnpm --filter @casastudio/api dev"]
 
   web:
     build:
       target: development
+    environment:
+      CI: "true"
+      PNPM_CONFIG_CONFIRM_MODULES_PURGE: "false"
+      npm_config_confirm_modules_purge: "false"
     ports: !override
       - "5173:5173"
     volumes:

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { Project } from "../project";
-import { validateProjectGeometry } from "./geometry";
-import { ValidationErrorCode } from "./validation-error-code";
+import type { Project } from "../project/index.js";
+import { validateProjectGeometry } from "./geometry.js";
+import { ValidationErrorCode } from "./validation-error-code.js";
 
 const createGeometricallyValidProject = (): Project => ({
   id: "geometry-fixture",

@@ -1,2 +1,2 @@
-export * from "./migration-error";
-export * from "./migrate-project";
+export * from "./migration-error.js";
+export * from "./migrate-project.js";

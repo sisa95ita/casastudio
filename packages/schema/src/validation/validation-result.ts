@@ -1,4 +1,4 @@
-import type { ValidationErrorCode } from "./validation-error-code";
+import type { ValidationErrorCode } from "./validation-error-code.js";
 
 /**
  * Describes one domain validation failure.

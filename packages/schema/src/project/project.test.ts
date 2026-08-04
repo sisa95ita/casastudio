@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ProjectSchema } from "./project";
-import { ProjectSchemaVersionSchema } from "./schema-version";
+import { ProjectSchema } from "./project.js";
+import { ProjectSchemaVersionSchema } from "./schema-version.js";
 
 const validBuilding = {
   id: "main-building",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { RoomSchema } from "./room";
+import { RoomSchema } from "./room.js";
 
 const northBoundaryEdge = { wallId: "living-wall-north", direction: "FORWARD" };
 const eastBoundaryEdge = { wallId: "living-wall-east", direction: "FORWARD" };

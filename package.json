@@ -16,6 +16,8 @@
     "db:migrate:dev": "pnpm --filter @casastudio/api db:migrate:dev",
     "db:migrate:deploy": "pnpm --filter @casastudio/api db:migrate:deploy",
     "db:migrate:status": "pnpm --filter @casastudio/api db:migrate:status",
+    "db:seed": "pnpm --filter @casastudio/api db:seed",
+    "db:reset:dev": "pnpm --filter @casastudio/api db:reset",
     "docker:dev:up": "docker compose -f compose.yml -f compose.dev.yml up --build",
     "docker:dev:down": "docker compose -f compose.yml -f compose.dev.yml down",
     "docker:test:up": "docker compose -f compose.yml -f compose.test.yml up --build --abort-on-container-exit --exit-code-from api-test api-test",

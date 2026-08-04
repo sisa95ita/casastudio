@@ -1,12 +1,12 @@
 import { z } from "zod";
 
-import { RoomTypeSchema } from "../enums";
-import { IdentifierSchema } from "../primitives";
+import { RoomTypeSchema } from "../enums/index.js";
+import { IdentifierSchema } from "../primitives/index.js";
 import {
   MeasurementSchema,
   OptionalDescriptionSchema,
   RequiredNameSchema
-} from "./shared";
+} from "./shared.js";
 
 /**
  * Validates how a Room boundary traverses a referenced Wall.

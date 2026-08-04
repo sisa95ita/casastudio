@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { IdentifierSchema, PositiveNumberSchema } from "../primitives";
+import { IdentifierSchema, PositiveNumberSchema } from "../primitives/index.js";
 
 /**
  * Required display name used by primary physical-building entities.

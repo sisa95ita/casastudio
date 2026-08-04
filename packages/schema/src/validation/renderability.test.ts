@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { Project } from "../project";
-import { validateProjectRenderability } from "./renderability";
-import { ValidationErrorCode } from "./validation-error-code";
+import type { Project } from "../project/index.js";
+import { validateProjectRenderability } from "./renderability.js";
+import { ValidationErrorCode } from "./validation-error-code.js";
 
 const createRenderableProject = (): Project => ({
   id: "casa-simone",

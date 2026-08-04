@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { LevelSchema } from "./level";
+import { LevelSchema } from "./level.js";
 
 const validLevel = {
   id: "ground-level",

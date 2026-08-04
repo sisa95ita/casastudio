@@ -45,7 +45,7 @@ import {
   type Staircase,
   type SupportedProjectSchemaVersion,
   type Viewpoint
-} from "./index";
+} from "./index.js";
 
 describe("package barrel exports", () => {
   it("exports shared schemas from the package entry point", () => {

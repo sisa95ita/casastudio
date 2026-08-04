@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { Project } from "../project";
+import type { Project } from "../project/index.js";
 import {
   validateProjectCrossReferences,
   validateProjectGeometry,
   validateProjectReferenceConsistency,
   ValidationErrorCode
-} from "../validation";
-import { reverseWallDirection } from "./reverse-wall-direction";
+} from "../validation/index.js";
+import { reverseWallDirection } from "./reverse-wall-direction.js";
 
 const createProject = (): Project => ({
   id: "reverse-wall-fixture",

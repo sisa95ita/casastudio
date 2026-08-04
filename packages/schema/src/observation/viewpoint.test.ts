@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ViewpointSchema } from "./viewpoint";
+import { ViewpointSchema } from "./viewpoint.js";
 
 const validViewpoint = {
   id: "living-tv-view",

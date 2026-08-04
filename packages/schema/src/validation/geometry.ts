@@ -1,8 +1,8 @@
-import type { Point2D } from "../primitives";
-import type { Level, RoomBoundaryEdge, Wall } from "../physical-building";
-import type { Project } from "../project";
-import { ValidationErrorCode } from "./validation-error-code";
-import type { ValidationError, ValidationResult } from "./validation-result";
+import type { Point2D } from "../primitives/index.js";
+import type { Level, RoomBoundaryEdge, Wall } from "../physical-building/index.js";
+import type { Project } from "../project/index.js";
+import { ValidationErrorCode } from "./validation-error-code.js";
+import type { ValidationError, ValidationResult } from "./validation-result.js";
 
 const pushError = (
   errors: ValidationError[],

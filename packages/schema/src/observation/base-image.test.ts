@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BaseImageSchema } from "./base-image";
+import { BaseImageSchema } from "./base-image.js";
 
 const validBaseImage = {
   id: "base-image-living-tv-001",

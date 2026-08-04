@@ -5,3 +5,505 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum BuildingType {
+  HOUSE
+  APARTMENT
+  VILLA
+  OFFICE
+  OTHER
+}
+
+enum RoomType {
+  LIVING_ROOM
+  KITCHEN
+  BEDROOM
+  BATHROOM
+  STUDIO
+  CORRIDOR
+  STORAGE
+  OTHER
+}
+
+enum OpeningType {
+  DOOR
+  WINDOW
+}
+
+enum RoomBoundaryDirection {
+  FORWARD
+  REVERSE
+}
+
+enum ProjectionType {
+  PERSPECTIVE
+  ORTHOGRAPHIC
+}
+
+enum RenderStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model Project {
+  id               String   @id @default(uuid()) @db.Uuid
+  domainId         String   @unique
+  name             String
+  schemaVersion    String
+  revision         Int
+  domainCreatedAt  String
+  domainUpdatedAt  String
+  unitLength       String
+  unitAngle        String
+  ownerSubject     String
+  createdBySubject String
+  updatedBySubject String
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+
+  building       Building?
+  viewpoints     Viewpoint[]
+  baseImages     BaseImage[]
+  designBriefs   DesignBrief[]
+  renderRequests RenderRequest[]
+  renderResults  RenderResult[]
+
+  levels                    Level[]
+  rooms                     Room[]
+  walls                     Wall[]
+  openings                  Opening[]
+  staircases                Staircase[]
+  stairFlights              StairFlight[]
+  stairLandings             StairLanding[]
+  wallRoomReferences        WallRoomReference[]
+  roomBoundaryEdges         RoomBoundaryEdge[]
+  openingConnectedRoomRefs  OpeningConnectedRoomReference[]
+  designBriefConstraints    DesignBriefConstraint[]
+  designBriefPaletteEntries DesignBriefPaletteEntry[]
+  designBriefAssetRefs      DesignBriefReferenceAsset[]
+
+  @@index([ownerSubject])
+}
+
+model Building {
+  id        String       @id @default(uuid()) @db.Uuid
+  projectId String       @unique @db.Uuid
+  domainId  String
+  name      String
+  type      BuildingType
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  levels  Level[]
+
+  @@unique([projectId, domainId])
+}
+
+model Level {
+  id         String @id @default(uuid()) @db.Uuid
+  projectId  String @db.Uuid
+  buildingId String @db.Uuid
+  domainId   String
+  position   Int
+  name       String
+  elevation  Float
+
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  building        Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  rooms           Room[]
+  walls           Wall[]
+  ownedStaircases Staircase[] @relation("OwningLevelStaircases")
+  fromStaircases  Staircase[] @relation("StaircaseFromLevel")
+  toStaircases    Staircase[] @relation("StaircaseToLevel")
+  viewpoints      Viewpoint[]
+
+  @@unique([projectId, domainId])
+  @@unique([buildingId, position])
+  @@index([projectId])
+  @@index([buildingId, position])
+}
+
+model Room {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @db.Uuid
+  levelId     String   @db.Uuid
+  domainId    String
+  position    Int
+  name        String
+  type        RoomType
+  description String?
+  elevation   Float?
+
+  project                    Project                         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  level                      Level                           @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  boundaryEdges              RoomBoundaryEdge[]
+  wallReferences             WallRoomReference[]
+  connectedOpeningReferences OpeningConnectedRoomReference[]
+  viewpoints                 Viewpoint[]
+  fromStaircases             Staircase[]                     @relation("StaircaseFromRoom")
+  toStaircases               Staircase[]                     @relation("StaircaseToRoom")
+
+  @@unique([projectId, domainId])
+  @@unique([levelId, position])
+  @@index([projectId])
+  @@index([levelId, position])
+}
+
+model Wall {
+  id          String  @id @default(uuid()) @db.Uuid
+  projectId   String  @db.Uuid
+  levelId     String  @db.Uuid
+  domainId    String
+  position    Int
+  name        String?
+  description String?
+  startX      Float
+  startZ      Float
+  endX        Float
+  endZ        Float
+  height      Float
+  thickness   Float
+
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  level          Level               @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  roomReferences WallRoomReference[]
+  boundaryEdges  RoomBoundaryEdge[]
+  openings       Opening[]
+
+  @@unique([projectId, domainId])
+  @@unique([levelId, position])
+  @@index([projectId])
+  @@index([levelId, position])
+}
+
+model WallRoomReference {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  wallId    String @db.Uuid
+  roomId    String @db.Uuid
+  position  Int
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wall    Wall    @relation(fields: [wallId], references: [id], onDelete: Cascade)
+  room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([wallId, position])
+  @@unique([wallId, roomId])
+  @@index([projectId])
+  @@index([roomId])
+}
+
+model RoomBoundaryEdge {
+  id        String                @id @default(uuid()) @db.Uuid
+  projectId String                @db.Uuid
+  roomId    String                @db.Uuid
+  wallId    String                @db.Uuid
+  position  Int
+  direction RoomBoundaryDirection
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  wall    Wall    @relation(fields: [wallId], references: [id], onDelete: Restrict)
+
+  @@unique([roomId, position])
+  @@unique([roomId, wallId])
+  @@index([projectId])
+  @@index([wallId])
+}
+
+model Opening {
+  id              String      @id @default(uuid()) @db.Uuid
+  projectId       String      @db.Uuid
+  wallId          String      @db.Uuid
+  domainId        String
+  position        Int
+  name            String?
+  description     String?
+  type            OpeningType
+  offsetFromStart Float
+  width           Float
+  height          Float
+  elevation       Float
+
+  project                 Project                         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wall                    Wall                            @relation(fields: [wallId], references: [id], onDelete: Cascade)
+  connectedRoomReferences OpeningConnectedRoomReference[]
+
+  @@unique([projectId, domainId])
+  @@unique([wallId, position])
+  @@index([projectId])
+  @@index([wallId, position])
+}
+
+model OpeningConnectedRoomReference {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  openingId String @db.Uuid
+  roomId    String @db.Uuid
+  position  Int
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  opening Opening @relation(fields: [openingId], references: [id], onDelete: Cascade)
+  room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([openingId, position])
+  @@unique([openingId, roomId])
+  @@index([projectId])
+  @@index([roomId])
+}
+
+model Staircase {
+  id            String  @id @default(uuid()) @db.Uuid
+  projectId     String  @db.Uuid
+  owningLevelId String  @db.Uuid
+  domainId      String
+  position      Int
+  name          String?
+  description   String?
+  fromLevelId   String  @db.Uuid
+  toLevelId     String  @db.Uuid
+  fromRoomId    String? @db.Uuid
+  toRoomId      String? @db.Uuid
+  width         Float
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owningLevel Level          @relation("OwningLevelStaircases", fields: [owningLevelId], references: [id], onDelete: Cascade)
+  fromLevel   Level          @relation("StaircaseFromLevel", fields: [fromLevelId], references: [id], onDelete: Restrict)
+  toLevel     Level          @relation("StaircaseToLevel", fields: [toLevelId], references: [id], onDelete: Restrict)
+  fromRoom    Room?          @relation("StaircaseFromRoom", fields: [fromRoomId], references: [id], onDelete: Restrict)
+  toRoom      Room?          @relation("StaircaseToRoom", fields: [toRoomId], references: [id], onDelete: Restrict)
+  flights     StairFlight[]
+  landings    StairLanding[]
+
+  @@unique([projectId, domainId])
+  @@unique([owningLevelId, position])
+  @@index([projectId])
+  @@index([fromLevelId])
+  @@index([toLevelId])
+  @@index([fromRoomId])
+  @@index([toRoomId])
+}
+
+model StairFlight {
+  id             String  @id @default(uuid()) @db.Uuid
+  projectId      String  @db.Uuid
+  staircaseId    String  @db.Uuid
+  domainId       String
+  position       Int
+  name           String?
+  description    String?
+  startX         Float
+  startZ         Float
+  endX           Float
+  endZ           Float
+  width          Float
+  stepCount      Int
+  startElevation Float
+  endElevation   Float
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  staircase Staircase @relation(fields: [staircaseId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, domainId])
+  @@unique([staircaseId, position])
+  @@index([projectId])
+}
+
+model StairLanding {
+  id          String  @id @default(uuid()) @db.Uuid
+  projectId   String  @db.Uuid
+  staircaseId String  @db.Uuid
+  domainId    String
+  position    Int
+  name        String?
+  description String?
+  pointX      Float
+  pointZ      Float
+  width       Float
+  depth       Float
+  elevation   Float
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  staircase Staircase @relation(fields: [staircaseId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, domainId])
+  @@unique([staircaseId, position])
+  @@index([projectId])
+}
+
+model Viewpoint {
+  id              String         @id @default(uuid()) @db.Uuid
+  projectId       String         @db.Uuid
+  domainId        String
+  position        Int
+  name            String?
+  description     String?
+  levelId         String         @db.Uuid
+  roomId          String?        @db.Uuid
+  cameraPositionX Float
+  cameraPositionY Float
+  cameraPositionZ Float
+  cameraTargetX   Float
+  cameraTargetY   Float
+  cameraTargetZ   Float
+  fieldOfView     Float
+  projection      ProjectionType
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  level          Level           @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  room           Room?           @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  baseImages     BaseImage[]
+  renderRequests RenderRequest[]
+
+  @@unique([projectId, domainId])
+  @@unique([projectId, position])
+  @@index([levelId])
+  @@index([roomId])
+}
+
+model BaseImage {
+  id              String  @id @default(uuid()) @db.Uuid
+  projectId       String  @db.Uuid
+  viewpointId     String  @db.Uuid
+  domainId        String
+  position        Int
+  name            String?
+  description     String?
+  assetRef        String
+  projectRevision Int
+  domainCreatedAt String
+  width           Int?
+  height          Int?
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  viewpoint      Viewpoint       @relation(fields: [viewpointId], references: [id], onDelete: Restrict)
+  renderRequests RenderRequest[]
+
+  @@unique([projectId, domainId])
+  @@unique([projectId, position])
+  @@index([viewpointId])
+}
+
+model DesignBrief {
+  id          String  @id @default(uuid()) @db.Uuid
+  projectId   String  @db.Uuid
+  domainId    String
+  position    Int
+  name        String?
+  description String?
+  promptText  String
+  style       String?
+  notes       String?
+
+  project         Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  constraints     DesignBriefConstraint[]
+  paletteEntries  DesignBriefPaletteEntry[]
+  referenceAssets DesignBriefReferenceAsset[]
+  renderRequests  RenderRequest[]
+
+  @@unique([projectId, domainId])
+  @@unique([projectId, position])
+}
+
+model DesignBriefConstraint {
+  id            String @id @default(uuid()) @db.Uuid
+  projectId     String @db.Uuid
+  designBriefId String @db.Uuid
+  position      Int
+  value         String
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designBrief DesignBrief @relation(fields: [designBriefId], references: [id], onDelete: Cascade)
+
+  @@unique([designBriefId, position])
+  @@index([projectId])
+}
+
+model DesignBriefPaletteEntry {
+  id            String @id @default(uuid()) @db.Uuid
+  projectId     String @db.Uuid
+  designBriefId String @db.Uuid
+  position      Int
+  value         String
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designBrief DesignBrief @relation(fields: [designBriefId], references: [id], onDelete: Cascade)
+
+  @@unique([designBriefId, position])
+  @@index([projectId])
+}
+
+model DesignBriefReferenceAsset {
+  id            String @id @default(uuid()) @db.Uuid
+  projectId     String @db.Uuid
+  designBriefId String @db.Uuid
+  position      Int
+  assetRef      String
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designBrief DesignBrief @relation(fields: [designBriefId], references: [id], onDelete: Cascade)
+
+  @@unique([designBriefId, position])
+  @@index([projectId])
+}
+
+model RenderRequest {
+  id                   String       @id @default(uuid()) @db.Uuid
+  projectId            String       @db.Uuid
+  viewpointId          String       @db.Uuid
+  baseImageId          String       @db.Uuid
+  designBriefId        String       @db.Uuid
+  domainId             String
+  position             Int
+  name                 String?
+  description          String?
+  status               RenderStatus
+  requestedProviderId  String?
+  requestedModelId     String?
+  requestedResultCount Int?
+  domainCreatedAt      String
+  startedAt            String?
+  completedAt          String?
+  error                String?
+
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  viewpoint     Viewpoint      @relation(fields: [viewpointId], references: [id], onDelete: Restrict)
+  baseImage     BaseImage      @relation(fields: [baseImageId], references: [id], onDelete: Restrict)
+  designBrief   DesignBrief    @relation(fields: [designBriefId], references: [id], onDelete: Restrict)
+  renderResults RenderResult[]
+
+  @@unique([projectId, domainId])
+  @@unique([projectId, position])
+  @@index([viewpointId])
+  @@index([baseImageId])
+  @@index([designBriefId])
+}
+
+model RenderResult {
+  id              String       @id @default(uuid()) @db.Uuid
+  projectId       String       @db.Uuid
+  renderRequestId String       @db.Uuid
+  domainId        String
+  position        Int
+  name            String?
+  description     String?
+  status          RenderStatus
+  domainCreatedAt String
+  assetRef        String?
+  providerId      String?
+  modelId         String?
+  notes           String?
+  favorite        Boolean?
+  error           String?
+  width           Int?
+  height          Int?
+
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  renderRequest RenderRequest @relation(fields: [renderRequestId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, domainId])
+  @@unique([projectId, position])
+  @@index([renderRequestId])
+}

@@ -1,13 +1,13 @@
 import { z } from "zod";
 
-import { IdentifierSchema, Point2DSchema } from "../primitives";
-import { OpeningSchema } from "./opening";
+import { IdentifierSchema, Point2DSchema } from "../primitives/index.js";
+import { OpeningSchema } from "./opening.js";
 import {
   IdentifierArraySchema,
   OptionalDescriptionSchema,
   OptionalNameSchema,
   PositiveMeasurementSchema
-} from "./shared";
+} from "./shared.js";
 
 const WallRoomIdsSchema = IdentifierArraySchema.max(2, "A wall may reference at most two rooms.").refine(
   (roomIds) => new Set(roomIds).size === roomIds.length,

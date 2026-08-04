@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { StaircaseSchema } from "./staircase";
+import { StaircaseSchema } from "./staircase.js";
 
 const validFlight = {
   id: "lower-flight",

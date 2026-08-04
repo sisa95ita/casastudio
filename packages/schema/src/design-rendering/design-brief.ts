@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CommonMetadataSchema } from "../primitives";
+import { CommonMetadataSchema } from "../primitives/index.js";
 
 const NonEmptyStringSchema = z.string().min(1);
 

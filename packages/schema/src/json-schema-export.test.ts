@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { ProjectSchema } from "./project";
+import { ProjectSchema } from "./project/index.js";
 
 const generatedSchemaUrl = new URL("../json-schema/project.schema.json", import.meta.url);
 const generatedSchemaPath = fileURLToPath(generatedSchemaUrl);

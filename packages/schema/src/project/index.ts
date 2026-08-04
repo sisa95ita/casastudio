@@ -1,2 +1,2 @@
-export * from "./project";
-export * from "./schema-version";
+export * from "./project.js";
+export * from "./schema-version.js";

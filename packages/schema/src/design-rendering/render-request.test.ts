@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { RenderRequestSchema } from "./render-request";
+import { RenderRequestSchema } from "./render-request.js";
 
 const validPendingRequest = {
   id: "render-request-001",

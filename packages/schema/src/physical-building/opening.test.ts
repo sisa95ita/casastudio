@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DoorSchema, OpeningSchema, WindowSchema } from "./opening";
+import { DoorSchema, OpeningSchema, WindowSchema } from "./opening.js";
 
 const validDoor = {
   id: "living-door",

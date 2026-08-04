@@ -1,3 +1,3 @@
-export * from "./stair-flight";
-export * from "./stair-landing";
-export * from "./staircase";
+export * from "./stair-flight.js";
+export * from "./stair-landing.js";
+export * from "./staircase.js";

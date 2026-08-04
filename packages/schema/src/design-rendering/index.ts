@@ -1,3 +1,3 @@
-export * from "./design-brief";
-export * from "./render-request";
-export * from "./render-result";
+export * from "./design-brief.js";
+export * from "./render-request.js";
+export * from "./render-result.js";

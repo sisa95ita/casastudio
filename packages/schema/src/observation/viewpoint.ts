@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { ProjectionTypeSchema } from "../enums";
-import { CommonMetadataSchema, IdentifierSchema, Point3DSchema, PositiveNumberSchema } from "../primitives";
+import { ProjectionTypeSchema } from "../enums/index.js";
+import { CommonMetadataSchema, IdentifierSchema, Point3DSchema, PositiveNumberSchema } from "../primitives/index.js";
 
 const FieldOfViewSchema = PositiveNumberSchema.lt(180);
 

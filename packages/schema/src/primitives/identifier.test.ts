@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { IdentifierSchema } from "./identifier";
+import { IdentifierSchema } from "./identifier.js";
 
 describe("IdentifierSchema", () => {
   it("accepts lowercase kebab-case identifiers", () => {

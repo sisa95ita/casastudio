@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { StairFlightSchema } from "./stair-flight";
+import { StairFlightSchema } from "./stair-flight.js";
 
 const validFlight = {
   id: "short-flight",

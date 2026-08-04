@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { UnitsSchema } from "./units";
+import { UnitsSchema } from "./units.js";
 
 describe("UnitsSchema", () => {
   it("accepts the documented MVP units", () => {

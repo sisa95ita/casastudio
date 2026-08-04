@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-import { DesignBriefSchema, RenderRequestSchema, RenderResultSchema } from "../design-rendering";
-import { BaseImageSchema, ViewpointSchema } from "../observation";
-import { BuildingSchema } from "../physical-building";
-import { IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema, UnitsSchema } from "../primitives";
-import { ProjectSchemaVersionSchema } from "./schema-version";
+import { DesignBriefSchema, RenderRequestSchema, RenderResultSchema } from "../design-rendering/index.js";
+import { BaseImageSchema, ViewpointSchema } from "../observation/index.js";
+import { BuildingSchema } from "../physical-building/index.js";
+import { IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema, UnitsSchema } from "../primitives/index.js";
+import { ProjectSchemaVersionSchema } from "./schema-version.js";
 
 /**
  * Represents the root aggregate of a CasaStudio project file.

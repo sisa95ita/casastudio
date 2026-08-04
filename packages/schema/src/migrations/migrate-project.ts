@@ -1,8 +1,8 @@
-import type { Project } from "../project";
-import { ProjectSchema } from "../project";
-import { CURRENT_PROJECT_SCHEMA_VERSION } from "../project/schema-version";
-import { MigrationErrorCode, type ProjectMigrationError } from "./migration-error";
-import { migrateV1ToV2 } from "./v1-to-v2";
+import type { Project } from "../project/index.js";
+import { ProjectSchema } from "../project/index.js";
+import { CURRENT_PROJECT_SCHEMA_VERSION } from "../project/schema-version.js";
+import { MigrationErrorCode, type ProjectMigrationError } from "./migration-error.js";
+import { migrateV1ToV2 } from "./v1-to-v2.js";
 
 /**
  * Result returned by schema-owned Project migration.

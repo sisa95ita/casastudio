@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { RenderStatusSchema } from "../enums";
-import { CommonMetadataSchema, IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema } from "../primitives";
+import { RenderStatusSchema } from "../enums/index.js";
+import { CommonMetadataSchema, IdentifierSchema, IsoDateTimeSchema, PositiveIntegerSchema } from "../primitives/index.js";
 
 const NonEmptyStringSchema = z.string().min(1);
 

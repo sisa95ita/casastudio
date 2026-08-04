@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { Project } from "../project";
-import { validateProjectCrossReferences } from "./cross-reference";
-import { ValidationErrorCode } from "./validation-error-code";
+import type { Project } from "../project/index.js";
+import { validateProjectCrossReferences } from "./cross-reference.js";
+import { ValidationErrorCode } from "./validation-error-code.js";
 
 const createValidProject = (): Project => ({
   id: "casa-simone",

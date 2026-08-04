@@ -6,16 +6,17 @@ import { StructuredLoggingModule } from "./bootstrap/logging.module";
 import { ProblemDetailsFilter } from "./common/problem-details/problem-details.filter";
 import { CasaStudioConfigModule } from "./config/casastudio-config.module";
 import { HealthModule } from "./health/health.module";
+import { ProjectsModule } from "./projects/projects.module";
 
 /**
  * Root Nest module for CasaStudio API infrastructure.
  *
- * Phase 1A registers only cross-cutting infrastructure modules: configuration,
- * structured logging, health/readiness, persistence lifecycle, Problem Details,
- * and authentication diagnostics. Business modules arrive in later phases.
+ * It registers cross-cutting infrastructure plus internal feature modules that
+ * expose application services without adding HTTP project endpoints at the root
+ * boundary.
  */
 @Module({
-  imports: [CasaStudioConfigModule, StructuredLoggingModule, HealthModule, AuthModule],
+  imports: [CasaStudioConfigModule, StructuredLoggingModule, HealthModule, AuthModule, ProjectsModule],
   providers: [
     {
       provide: APP_FILTER,

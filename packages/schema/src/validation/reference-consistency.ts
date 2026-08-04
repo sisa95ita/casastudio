@@ -1,8 +1,8 @@
-import type { BaseImage, Viewpoint } from "../observation";
-import type { Level } from "../physical-building";
-import type { Project } from "../project";
-import { ValidationErrorCode } from "./validation-error-code";
-import type { ValidationError, ValidationResult } from "./validation-result";
+import type { BaseImage, Viewpoint } from "../observation/index.js";
+import type { Level } from "../physical-building/index.js";
+import type { Project } from "../project/index.js";
+import { ValidationErrorCode } from "./validation-error-code.js";
+import type { ValidationError, ValidationResult } from "./validation-result.js";
 
 const pushError = (
   errors: ValidationError[],

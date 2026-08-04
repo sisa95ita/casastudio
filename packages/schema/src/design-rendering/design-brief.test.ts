@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DesignBriefSchema } from "./design-brief";
+import { DesignBriefSchema } from "./design-brief.js";
 
 const validDesignBrief = {
   id: "warm-industrial-living",

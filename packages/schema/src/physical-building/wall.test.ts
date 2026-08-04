@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WallSchema } from "./wall";
+import { WallSchema } from "./wall.js";
 
 const validWall = {
   id: "living-wall-tv",

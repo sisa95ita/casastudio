@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CommonMetadataSchema, Point2DSchema, PositiveIntegerSchema, PositiveNumberSchema } from "../primitives";
+import { CommonMetadataSchema, Point2DSchema, PositiveIntegerSchema, PositiveNumberSchema } from "../primitives/index.js";
 
 const PositiveMeasurementSchema = PositiveNumberSchema;
 const ElevationSchema = z.number();

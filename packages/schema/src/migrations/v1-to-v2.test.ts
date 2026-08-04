@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { ProjectSchema } from "../project";
-import { MigrationErrorCode } from "./migration-error";
-import { migrateV1ToV2 } from "./v1-to-v2";
+import { ProjectSchema } from "../project/index.js";
+import { MigrationErrorCode } from "./migration-error.js";
+import { migrateV1ToV2 } from "./v1-to-v2.js";
 
 const legacyProjectUrl = new URL("../../examples/project-v1-legacy-wallIds.json", import.meta.url);
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { IsoDateTimeSchema } from "./date-time";
+import { IsoDateTimeSchema } from "./date-time.js";
 
 describe("IsoDateTimeSchema", () => {
   it("accepts ISO 8601 date-times with an offset", () => {

@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { MigrationErrorCode } from "./migration-error";
-import { migrateProject } from "./migrate-project";
+import { MigrationErrorCode } from "./migration-error.js";
+import { migrateProject } from "./migrate-project.js";
 
 const legacyProjectUrl = new URL("../../examples/project-v1-legacy-wallIds.json", import.meta.url);
 const canonicalProjectUrl = new URL("../../examples/project.json", import.meta.url);

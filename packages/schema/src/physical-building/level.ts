@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-import { IdentifierSchema } from "../primitives";
-import { StaircaseSchema } from "../staircase";
-import { RoomSchema } from "./room";
-import { MeasurementSchema, RequiredNameSchema } from "./shared";
-import { WallSchema } from "./wall";
+import { IdentifierSchema } from "../primitives/index.js";
+import { StaircaseSchema } from "../staircase/index.js";
+import { RoomSchema } from "./room.js";
+import { MeasurementSchema, RequiredNameSchema } from "./shared.js";
+import { WallSchema } from "./wall.js";
 
 /**
  * Represents a vertical organizational layer of a Building.

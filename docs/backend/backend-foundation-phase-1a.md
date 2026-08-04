@@ -82,6 +82,11 @@ Development credentials are read from ignored `.env` variables:
 These credentials are deterministic for local development and must not be reused
 outside local or disposable test environments.
 
+The imported demo user also has stable Keycloak user ID
+`8d62f7e2-0c2a-4f2a-a9cf-7f62c2f4e8f7`. Keycloak emits this value as the token
+`sub`, and backend seed data uses it as the development owner and creator
+subject. Usernames and email addresses are display/login attributes only.
+
 ## Prisma Migrations
 
 Runtime Prisma integration lives under `apps/api/src/persistence`. Prisma CLI

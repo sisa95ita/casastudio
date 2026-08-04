@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-import { BuildingTypeSchema } from "../enums";
-import { IdentifierSchema } from "../primitives";
-import { LevelSchema } from "./level";
-import { RequiredNameSchema } from "./shared";
+import { BuildingTypeSchema } from "../enums/index.js";
+import { IdentifierSchema } from "../primitives/index.js";
+import { LevelSchema } from "./level.js";
+import { RequiredNameSchema } from "./shared.js";
 
 /**
  * Represents the physical property modeled by a CasaStudio Project.

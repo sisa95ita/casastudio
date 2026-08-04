@@ -1,6 +1,6 @@
-import type { Project } from "../project";
-import { ValidationErrorCode } from "./validation-error-code";
-import type { ValidationError, ValidationResult } from "./validation-result";
+import type { Project } from "../project/index.js";
+import { ValidationErrorCode } from "./validation-error-code.js";
+import type { ValidationError, ValidationResult } from "./validation-result.js";
 
 const toIdSet = (items: { id: string }[]) => new Set(items.map((item) => item.id));
 
