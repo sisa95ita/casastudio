@@ -1,0 +1,33 @@
+services:
+  migrate:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+      SWAGGER_ENABLED: "true"
+
+  api:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+      SWAGGER_ENABLED: "true"
+      LOG_LEVEL: debug
+    volumes:
+      - .:/workspace
+      - api_node_modules:/workspace/node_modules
+    command: ["pnpm", "--filter", "@casastudio/api", "dev"]
+
+  web:
+    build:
+      target: development
+    ports: !override
+      - "5173:5173"
+    volumes:
+      - .:/workspace
+      - web_node_modules:/workspace/node_modules
+    command: ["pnpm", "--filter", "@casastudio/web", "dev"]
+
+volumes:
+  api_node_modules:
+  web_node_modules:

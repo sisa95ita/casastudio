@@ -1,0 +1,2 @@
+-- CasaStudio Phase 1A initial migration.
+-- Intentionally empty: domain persistence tables are introduced in Phase 1B.

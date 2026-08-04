@@ -3,6 +3,12 @@ packages:
   - "packages/*"
 
 onlyBuiltDependencies:
+  - "@prisma/engines"
+  - "@scarf/scarf"
   - esbuild
+  - prisma
 allowBuilds:
+  "@prisma/engines": true
+  "@scarf/scarf": true
   esbuild: true
+  prisma: true

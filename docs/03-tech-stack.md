@@ -28,6 +28,10 @@ Prisma is selected as ORM. PostgreSQL is selected from the start to avoid a late
 
 Zod is used for shared schema validation.
 
+The backend foundation uses Nest ConfigModule with Zod environment validation,
+Pino structured logging, URI versioning under `/api/v1`, Passport JWT bearer
+authentication, and Keycloak as the local OIDC identity provider.
+
 ## AI
 
 OpenAI Image API is the initial image-to-image provider. Provider logic must be isolated behind an adapter interface.
@@ -41,6 +45,10 @@ export interface AiImageProvider {
 ## Infrastructure
 
 Initial infrastructure: GitHub, pnpm workspaces, Turborepo, Docker / Docker Compose, Jenkins, and Azure.
+
+Local Docker Compose runs web, api, PostgreSQL, Keycloak, and a dedicated Prisma
+migration service. Development containers use watch-mode targets, while
+production-like local images use compiled API and static web runtime targets.
 
 Cloud target: Azure Container Apps, Azure Database for PostgreSQL, Azure Blob Storage.
 

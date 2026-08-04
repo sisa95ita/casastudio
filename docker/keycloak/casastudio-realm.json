@@ -1,0 +1,95 @@
+{
+  "realm": "casastudio",
+  "enabled": true,
+  "displayName": "CasaStudio Development",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "clients": [
+    {
+      "clientId": "casastudio-web",
+      "name": "CasaStudio Web",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:8081/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:8081"
+      ],
+      "protocolMappers": [
+        {
+          "name": "casastudio-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "casastudio-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "casastudio-api",
+      "name": "CasaStudio API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${CASASTUDIO_KEYCLOAK_API_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "authorizationServicesEnabled": false
+    }
+  ],
+  "roles": {
+    "client": {
+      "casastudio-api": [
+        {
+          "name": "casastudio-user",
+          "description": "Development role for normal CasaStudio API access"
+        },
+        {
+          "name": "casastudio-admin",
+          "description": "Development role for administrative CasaStudio API diagnostics"
+        }
+      ]
+    }
+  },
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "CasaStudio",
+      "lastName": "Demo",
+      "email": "demo@casastudio.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${CASASTUDIO_KEYCLOAK_DEMO_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "casastudio-api": [
+          "casastudio-user"
+        ]
+      }
+    }
+  ]
+}

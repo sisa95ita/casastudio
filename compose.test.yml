@@ -1,0 +1,51 @@
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ${CASASTUDIO_TEST_POSTGRES_DB:-casastudio_test}
+      POSTGRES_PASSWORD: ${CASASTUDIO_TEST_POSTGRES_PASSWORD:?Set CASASTUDIO_TEST_POSTGRES_PASSWORD in .env}
+    ports: !override
+      - "55432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+
+  keycloak:
+    environment:
+      KC_HOSTNAME: http://localhost:58080
+    ports: !override
+      - "58080:8080"
+      - "59000:9000"
+
+  migrate:
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://${CASASTUDIO_POSTGRES_USER:-casastudio}:${CASASTUDIO_TEST_POSTGRES_PASSWORD:?Set CASASTUDIO_TEST_POSTGRES_PASSWORD in .env}@postgres:5432/${CASASTUDIO_TEST_POSTGRES_DB:-casastudio_test}?schema=public
+      SWAGGER_ENABLED: "false"
+
+  api-test:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    environment:
+      NODE_ENV: test
+      API_PORT: 3000
+      DATABASE_URL: postgresql://${CASASTUDIO_POSTGRES_USER:-casastudio}:${CASASTUDIO_TEST_POSTGRES_PASSWORD:?Set CASASTUDIO_TEST_POSTGRES_PASSWORD in .env}@postgres:5432/${CASASTUDIO_TEST_POSTGRES_DB:-casastudio_test}?schema=public
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: casastudio
+      KEYCLOAK_ISSUER: http://localhost:58080/realms/casastudio
+      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/casastudio/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE: casastudio-api
+      KEYCLOAK_CLIENT_ID: casastudio-api
+      SWAGGER_ENABLED: "false"
+      LOG_LEVEL: warn
+    command: ["pnpm", "--filter", "@casastudio/api", "test"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+
+volumes:
+  postgres_test_data:

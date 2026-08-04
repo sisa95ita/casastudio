@@ -1,0 +1,92 @@
+name: casastudio
+
+x-api-environment: &api-environment
+  NODE_ENV: production
+  API_PORT: 3000
+  DATABASE_URL: postgresql://${CASASTUDIO_POSTGRES_USER:-casastudio}:${CASASTUDIO_POSTGRES_PASSWORD:?Set CASASTUDIO_POSTGRES_PASSWORD in .env}@postgres:5432/${CASASTUDIO_POSTGRES_DB:-casastudio}?schema=public
+  KEYCLOAK_BASE_URL: http://keycloak:8080
+  KEYCLOAK_REALM: casastudio
+  KEYCLOAK_ISSUER: http://localhost:8080/realms/casastudio
+  KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/casastudio/protocol/openid-connect/certs
+  KEYCLOAK_AUDIENCE: casastudio-api
+  KEYCLOAK_CLIENT_ID: casastudio-api
+  SWAGGER_ENABLED: "false"
+  LOG_LEVEL: info
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${CASASTUDIO_POSTGRES_DB:-casastudio}
+      POSTGRES_USER: ${CASASTUDIO_POSTGRES_USER:-casastudio}
+      POSTGRES_PASSWORD: ${CASASTUDIO_POSTGRES_PASSWORD:?Set CASASTUDIO_POSTGRES_PASSWORD in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${CASASTUDIO_KEYCLOAK_ADMIN_PASSWORD:?Set CASASTUDIO_KEYCLOAK_ADMIN_PASSWORD in .env}
+      CASASTUDIO_KEYCLOAK_API_CLIENT_SECRET: ${CASASTUDIO_KEYCLOAK_API_CLIENT_SECRET:?Set CASASTUDIO_KEYCLOAK_API_CLIENT_SECRET in .env}
+      CASASTUDIO_KEYCLOAK_DEMO_PASSWORD: ${CASASTUDIO_KEYCLOAK_DEMO_PASSWORD:?Set CASASTUDIO_KEYCLOAK_DEMO_PASSWORD in .env}
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_MANAGEMENT_PORT: 9000
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+    volumes:
+      - ./docker/keycloak/casastudio-realm.json:/opt/keycloak/data/import/casastudio-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec ': > /dev/tcp/127.0.0.1/9000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment: *api-environment
+    command: ["pnpm", "--filter", "@casastudio/api", "db:migrate:deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment: *api-environment
+    ports:
+      - "3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runtime
+    ports:
+      - "8081:80"
+
+volumes:
+  postgres_data:
