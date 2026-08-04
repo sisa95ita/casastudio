@@ -1,14 +1,18 @@
 /**
  * Stable top-level API error codes exposed in Problem Details responses.
  *
- * These codes intentionally stay infrastructure-level in Phase 1A so future
- * project and geometry APIs can add domain-specific codes without changing the
- * base error envelope.
+ * Infrastructure and domain-specific codes share one vocabulary so clients can
+ * branch on stable failure identifiers without parsing human-readable text.
  */
 export enum ApiErrorCode {
   InvalidRequest = "INVALID_REQUEST",
   Unauthorized = "UNAUTHORIZED",
   Forbidden = "FORBIDDEN",
   InternalServerError = "INTERNAL_SERVER_ERROR",
-  DependencyUnavailable = "DEPENDENCY_UNAVAILABLE"
+  DependencyUnavailable = "DEPENDENCY_UNAVAILABLE",
+  ProjectIdInvalid = "PROJECT_ID_INVALID",
+  ProjectNotFound = "PROJECT_NOT_FOUND",
+  ProjectAccessForbidden = "PROJECT_ACCESS_FORBIDDEN",
+  ProjectPersistedStateInvalid = "PROJECT_PERSISTED_STATE_INVALID",
+  ProjectReadFailed = "PROJECT_READ_FAILED"
 }

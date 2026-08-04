@@ -12,6 +12,7 @@ import type { Request, Response } from "express";
 
 import { getRequestId, type RequestWithId } from "../request/request-id";
 import { ApiErrorCode } from "./api-error-code";
+import { ApiProblemError } from "./problem-details-exception";
 import type { ProblemDetailsDto, ProblemDetailItemDto } from "./problem-details.dto";
 
 type HttpExceptionBody = {
@@ -38,7 +39,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const requestId = getRequestId(request);
     const problemDetails = this.toProblemDetails(exception, request, requestId);
 
-    if (!this.isExpectedHttpException(exception)) {
+    if (exception instanceof ApiProblemError && exception.status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error({ err: exception, requestId, path: request.url }, "API problem error");
+    } else if (!this.isExpectedHttpException(exception) && !(exception instanceof ApiProblemError)) {
       this.logger.error({ err: exception, requestId, path: request.url }, "Unhandled API exception");
     }
 
@@ -57,6 +60,19 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         ...responseBody,
         instance: responseBody.instance ?? request.originalUrl,
         requestId: responseBody.requestId ?? requestId
+      };
+    }
+
+    if (exception instanceof ApiProblemError) {
+      return {
+        type: exception.type,
+        title: exception.title,
+        status: exception.status,
+        detail: exception.detail,
+        instance: request.originalUrl,
+        code: exception.code,
+        requestId,
+        errors: exception.errors
       };
     }
 

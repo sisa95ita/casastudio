@@ -107,6 +107,24 @@ describeWithDatabase("relational Project persistence", () => {
     });
   });
 
+  it("loads validated Projects with internal authorization metadata", async () => {
+    const project = createTestProject();
+
+    await writeProject(project);
+
+    const loadedProject = await repository.findLoadedByDomainId(project.id);
+
+    expect(loadedProject?.project).toEqual(project);
+    expect(loadedProject?.metadata).toMatchObject({
+      ownerSubject: testOwnerSubject,
+      createdBySubject: testOwnerSubject,
+      updatedBySubject: testOwnerSubject
+    });
+    expect(loadedProject?.metadata.createdAt).toBeInstanceOf(Date);
+    expect(loadedProject?.metadata.updatedAt).toBeInstanceOf(Date);
+    expect(JSON.stringify(loadedProject?.project)).not.toContain("ownerSubject");
+  });
+
   it("rejects duplicate room-boundary positions at the database constraint", async () => {
     const project = createTestProject();
 

@@ -259,11 +259,11 @@ realm.
   schema/semantic layer rather than a shared database registry.
 - Geometry Engine execution remains outside persistence.
 
-## Deferred To Phase 1C
+## Deferred After Phase 1B
 
 - Project controllers and route contracts.
 - Authorization checks against `ownerSubject`.
 - HTTP Problem Details mapping for project persistence errors.
 - Project response DTOs and API documentation.
-- Frontend project loading integration.
 - Mutation, save, and optimistic-concurrency behavior.
+- Frontend project loading integration.

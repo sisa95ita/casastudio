@@ -4,7 +4,7 @@ import { PrismaService } from "../../persistence/prisma.service";
 import { ProjectAggregateMapper } from "./project-aggregate.mapper";
 import { projectPersistenceInclude } from "./project-persistence-aggregate";
 import { ProjectPersistenceError, ProjectReconstructionError } from "./project-persistence-error";
-import type { ProjectsRepository } from "./project.repository";
+import type { LoadedProject, ProjectsRepository } from "./project.repository";
 import type { Project } from "@casastudio/schema";
 
 /**
@@ -24,6 +24,15 @@ export class PrismaProjectRepository implements ProjectsRepository {
    * Loads a validated canonical Project by its CasaStudio domain identifier.
    */
   async findByDomainId(projectId: string): Promise<Project | null> {
+    const loadedProject = await this.findLoadedByDomainId(projectId);
+
+    return loadedProject?.project ?? null;
+  }
+
+  /**
+   * Loads a validated Project together with internal authorization metadata.
+   */
+  async findLoadedByDomainId(projectId: string): Promise<LoadedProject | null> {
     try {
       const aggregate = await this.prismaService.project.findUnique({
         where: {
@@ -32,7 +41,18 @@ export class PrismaProjectRepository implements ProjectsRepository {
         include: projectPersistenceInclude
       });
 
-      return aggregate ? this.mapper.toProject(aggregate) : null;
+      return aggregate
+        ? {
+            project: this.mapper.toProject(aggregate),
+            metadata: {
+              ownerSubject: aggregate.ownerSubject,
+              createdBySubject: aggregate.createdBySubject,
+              updatedBySubject: aggregate.updatedBySubject,
+              createdAt: aggregate.createdAt,
+              updatedAt: aggregate.updatedAt
+            }
+          }
+        : null;
     } catch (error) {
       if (error instanceof ProjectPersistenceError || error instanceof ProjectReconstructionError) {
         throw error;
