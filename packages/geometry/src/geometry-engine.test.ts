@@ -14,7 +14,7 @@ import {
   type Loop,
   type Polygon,
   type Vertex
-} from "./index";
+} from "./index.js";
 
 type RectangleFixtureOptions = {
   readonly clockwise?: boolean;

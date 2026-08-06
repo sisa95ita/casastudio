@@ -17,11 +17,12 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
         "http://localhost:5173/*",
-        "http://localhost:8081/*"
+        "http://localhost:8081/*",
+        "https://oauth.pstmn.io/v1/browser-callback"
       ],
       "webOrigins": [
         "http://localhost:5173",
@@ -53,7 +54,20 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "authorizationServicesEnabled": false
+      "authorizationServicesEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "casastudio-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "casastudio-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "roles": {

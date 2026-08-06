@@ -1,11 +1,11 @@
 import type { Level } from "@casastudio/schema";
 
-import type { BoundaryEdge } from "./boundary-edge";
-import type { BoundaryEdgeUse } from "./boundary-edge-use";
-import type { GeometryId } from "./index";
-import type { Loop } from "./loop";
-import type { Polygon } from "./polygon";
-import type { Vertex } from "./vertex";
+import type { BoundaryEdge } from "./boundary-edge.js";
+import type { BoundaryEdgeUse } from "./boundary-edge-use.js";
+import type { GeometryId } from "./index.js";
+import type { Loop } from "./loop.js";
+import type { Polygon } from "./polygon.js";
+import type { Vertex } from "./vertex.js";
 
 /**
  * Groups all planar runtime topology derived for one source Level.

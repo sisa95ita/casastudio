@@ -1,11 +1,11 @@
 import type { Point2D, Room } from "@casastudio/schema";
 
-import type { BoundaryEdge } from "./boundary-edge";
-import type { BoundaryEdgeUse } from "./boundary-edge-use";
-import type { GeometryId } from "./index";
-import type { Loop } from "./loop";
-import type { BoundingBox, PolygonMetrics, PolygonWinding } from "./polygon-metrics";
-import type { Vertex } from "./vertex";
+import type { BoundaryEdge } from "./boundary-edge.js";
+import type { BoundaryEdgeUse } from "./boundary-edge-use.js";
+import type { GeometryId } from "./index.js";
+import type { Loop } from "./loop.js";
+import type { BoundingBox, PolygonMetrics, PolygonWinding } from "./polygon-metrics.js";
+import type { Vertex } from "./vertex.js";
 
 /**
  * Represents one room-derived geometric region.

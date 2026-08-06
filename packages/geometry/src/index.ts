@@ -1,6 +1,6 @@
-export { GeometryBuildErrorCode, type GeometryBuildError } from "./geometry-build-error";
-export type { GeometryBuildResult } from "./geometry-build-result";
-export { GeometryEngine } from "./geometry-engine";
+export { GeometryBuildErrorCode, type GeometryBuildError } from "./geometry-build-error.js";
+export type { GeometryBuildResult } from "./geometry-build-result.js";
+export { GeometryEngine } from "./geometry-engine.js";
 export {
   BoundaryEdge,
   BoundaryEdgeUse,
@@ -14,4 +14,4 @@ export {
   type GeometryId,
   type LoopKind,
   type PolygonWinding
-} from "./model";
+} from "./model/index.js";

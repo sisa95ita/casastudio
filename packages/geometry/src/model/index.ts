@@ -1,11 +1,11 @@
-export { BoundaryEdge } from "./boundary-edge";
-export { BoundaryEdgeUse, type BoundaryEdgeUseDirection } from "./boundary-edge-use";
-export { GeometryModel } from "./geometry-model";
-export { LevelGeometry } from "./level-geometry";
-export { Loop, type LoopKind } from "./loop";
-export { Polygon } from "./polygon";
-export type { BoundingBox, PolygonMetrics, PolygonWinding } from "./polygon-metrics";
-export { Vertex } from "./vertex";
+export { BoundaryEdge } from "./boundary-edge.js";
+export { BoundaryEdgeUse, type BoundaryEdgeUseDirection } from "./boundary-edge-use.js";
+export { GeometryModel } from "./geometry-model.js";
+export { LevelGeometry } from "./level-geometry.js";
+export { Loop, type LoopKind } from "./loop.js";
+export { Polygon } from "./polygon.js";
+export type { BoundingBox, PolygonMetrics, PolygonWinding } from "./polygon-metrics.js";
+export { Vertex } from "./vertex.js";
 
 /**
  * Deterministic identifier assigned to one runtime geometry object.

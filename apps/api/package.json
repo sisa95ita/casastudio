@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@casastudio/ai": "workspace:*",
+    "@casastudio/geometry": "workspace:*",
     "@casastudio/schema": "workspace:*",
     "@casastudio/shared": "workspace:*",
     "@nestjs/common": "^11.1.0",

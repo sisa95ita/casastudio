@@ -1,7 +1,7 @@
 import type { Project } from "@casastudio/schema";
 
-import type { GeometryId } from "./index";
-import type { LevelGeometry } from "./level-geometry";
+import type { GeometryId } from "./index.js";
+import type { LevelGeometry } from "./level-geometry.js";
 
 /**
  * Root aggregate of derived runtime geometry for one Project revision.

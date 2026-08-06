@@ -11,9 +11,9 @@ The only Project business endpoint in this phase is:
 GET /api/v1/projects/:id
 ```
 
-No Project creation, update, deletion, listing, workspace endpoint, geometry
-endpoint, frontend integration, generated client, revision history, or
-Geometry Engine execution is included.
+No Project creation, update, deletion, listing, workspace endpoint, frontend
+integration, generated client, revision history, or Geometry Engine execution is
+included in the Project read endpoint itself.
 
 ## Endpoint Contract
 
@@ -183,7 +183,7 @@ The OpenAPI document includes:
 - `400`, `401`, `403`, `404`, and `500` Problem Details responses.
 
 The OpenAPI contract does not include Project ownership metadata, Prisma
-technical IDs as transport fields, `/geometry`, or `/workspace`.
+technical IDs as transport fields, or `/workspace`.
 
 ## Logging
 
@@ -295,10 +295,15 @@ Do not include bearer token values in logs, documentation, reports, or commits.
 - Persistence corruption is reported as a sanitized server error.
 - PostgreSQL-backed HTTP tests require a configured test database.
 
-## Deferred To Phase 1D
+## Implemented By Phase 1D
 
 - Geometry endpoint design and implementation.
 - Geometry Engine execution from persisted Projects.
 - Geometry response DTOs.
 - Geometry-specific Problem Details codes.
-- Geometry snapshot or derived artifact behavior.
+
+## Still Deferred
+
+- Geometry mutation endpoints.
+- Persisted geometry snapshots or derived artifact caches.
+- Frontend geometry integration and generated clients.

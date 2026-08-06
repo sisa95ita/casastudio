@@ -167,34 +167,62 @@ non-success response with the unavailable dependency marked `error`.
 The development realm is imported from
 `docker/keycloak/casastudio-realm.json`.
 
-Get a demo access token:
+The API validates the JWT `aud` claim against `KEYCLOAK_AUDIENCE`, currently
+`casastudio-api`. The token's `azp` authorized-party claim identifies the client
+that requested the token, but it is not a substitute for the expected audience:
+without `aud = casastudio-api`, the API rejects the token as `401 Unauthorized`.
 
-```bash
-set -a
-. ./.env
-set +a
+The realm JSON includes Audience protocol mappers on both development clients
+that issue access tokens for the API:
 
-TOKEN="$(
-  curl -s \
-    -d grant_type=password \
-    -d client_id=casastudio-web \
-    -d username=demo \
-    --data-urlencode "password=$CASASTUDIO_KEYCLOAK_DEMO_PASSWORD" \
-    http://localhost:8080/realms/casastudio/protocol/openid-connect/token \
-    | node -e "let body=''; process.stdin.on('data', c => body += c); process.stdin.on('end', () => console.log(JSON.parse(body).access_token));"
-)"
-```
+- `casastudio-web`, the public browser client used by the normal authorization
+  code flow;
+- `casastudio-api`, the confidential API client representing the API audience.
+
+Newly imported realms must include these mappers before issuing tokens intended
+for the API. If a mapper changes in the Keycloak Admin Console, request a new
+token; previously issued access tokens keep their old claims. Manual Admin
+Console changes are also ephemeral relative to a later realm reimport unless the
+same change is represented in `docker/keycloak/casastudio-realm.json`.
+
+For local manual API checks, use the Postman collection in `tools/postman`.
+Postman is configured for OAuth 2.0 Authorization Code Flow with PKCE:
+
+- Authorization URL:
+  `http://localhost:8080/realms/casastudio/protocol/openid-connect/auth`
+- Token URL:
+  `http://localhost:8080/realms/casastudio/protocol/openid-connect/token`
+- Client ID: `casastudio-web`
+- Client authentication: none
+- PKCE challenge method: S256
+- Scope: `openid`
+- Callback URL: `https://oauth.pstmn.io/v1/browser-callback`
+
+The token endpoint still exists and is used by Postman to exchange an
+authorization code for tokens. Direct Access Grants are disabled for the
+existing development clients, which disables the password grant only. Users
+authenticate on Keycloak's page instead of giving credentials to scripts.
 
 Verify protected diagnostics:
 
 ```bash
 curl -i http://localhost:3000/api/v1/auth/me
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/v1/auth/me
-curl -i -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/v1/auth/admin
 ```
 
-The demo user has the `casastudio-user` client role for `casastudio-api`, so
-`/auth/me` succeeds with a valid token and `/auth/admin` returns Forbidden.
+Use the Postman collection to run authenticated requests after completing the
+browser login. The demo user has the `casastudio-user` client role for
+`casastudio-api`, so authenticated user endpoints succeed and admin-only routes
+return Forbidden unless the token also carries `casastudio-admin`.
+
+Postman OAuth tokens are local user state and must never be committed. Swagger
+remains the authoritative API contract; the Postman collection is an executable
+development aid, not a replacement for OpenAPI.
+
+A future hardening pass can add a separate development-only public client such
+as `casastudio-dev-cli` using the OAuth 2.0 Device Authorization Grant. Device
+flow would permit terminal authentication through a browser without storing or
+submitting the demo password in scripts, while Direct Access Grants remain
+disabled.
 
 ## Production-Like Local Build
 

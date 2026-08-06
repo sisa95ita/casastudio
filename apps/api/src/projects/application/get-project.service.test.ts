@@ -6,6 +6,7 @@ import { ApiErrorCode } from "../../common/problem-details/api-error-code";
 import { ProjectApiMapper } from "../api/project-api.mapper";
 import { PersistedProjectInvalidError, ProjectPersistenceError } from "../persistence/project-persistence-error";
 import type { LoadedProject, ProjectsRepository } from "../persistence/project.repository";
+import { AuthorizedProjectLoader } from "./authorized-project-loader.service";
 import { GetProjectService } from "./get-project.service";
 import { ProjectReadAuthorizationPolicy } from "./project-read-authorization.policy";
 
@@ -139,7 +140,10 @@ describe("GetProjectService", () => {
 });
 
 function createService(repository: ProjectsRepository): GetProjectService {
-  return new GetProjectService(repository, new ProjectReadAuthorizationPolicy(), new ProjectApiMapper());
+  return new GetProjectService(
+    new AuthorizedProjectLoader(repository, new ProjectReadAuthorizationPolicy()),
+    new ProjectApiMapper()
+  );
 }
 
 function createRepository(input: {

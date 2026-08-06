@@ -304,6 +304,24 @@ describe("authentication and authorization", () => {
     await context.app.close();
   });
 
+  it("rejects a token with authorized party but no configured audience", async () => {
+    const context = await createTestApp();
+
+    await request(context.app.getHttpServer())
+      .get("/api/v1/auth/me")
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          authorizedParty: "casastudio-api",
+          includeAudience: false,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(401);
+
+    await context.app.close();
+  });
+
   it("rejects expired tokens", async () => {
     const context = await createTestApp();
 
@@ -499,12 +517,15 @@ function createSigningKeys() {
     publicPem,
     signToken: (options?: {
       readonly audience?: string;
+      readonly authorizedParty?: string;
       readonly expiresIn?: number;
+      readonly includeAudience?: boolean;
       readonly issuer?: string;
       readonly roles?: readonly string[];
     }) =>
       sign(
         {
+          azp: options?.authorizedParty,
           preferred_username: "demo",
           resource_access: {
             "casastudio-api": {
@@ -516,10 +537,12 @@ function createSigningKeys() {
         privatePem,
         {
           algorithm: "RS256",
-          audience: options?.audience ?? defaultTestEnvironment.KEYCLOAK_AUDIENCE,
           expiresIn: options?.expiresIn ?? 300,
           issuer: options?.issuer ?? defaultTestEnvironment.KEYCLOAK_ISSUER,
-          keyid: keyId
+          keyid: keyId,
+          ...(options?.includeAudience === false
+            ? {}
+            : { audience: options?.audience ?? defaultTestEnvironment.KEYCLOAK_AUDIENCE })
         }
       )
   };

@@ -38,6 +38,9 @@ importers:
       '@casastudio/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@casastudio/geometry':
+        specifier: workspace:*
+        version: link:../../packages/geometry
       '@casastudio/schema':
         specifier: workspace:*
         version: link:../../packages/schema

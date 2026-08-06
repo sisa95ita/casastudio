@@ -1,5 +1,5 @@
-import type { BoundaryEdge } from "./boundary-edge";
-import type { GeometryId } from "./index";
+import type { BoundaryEdge } from "./boundary-edge.js";
+import type { GeometryId } from "./index.js";
 
 /**
  * Represents one deduplicated position in a level-local XZ plane.

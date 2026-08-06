@@ -14,5 +14,8 @@ export enum ApiErrorCode {
   ProjectNotFound = "PROJECT_NOT_FOUND",
   ProjectAccessForbidden = "PROJECT_ACCESS_FORBIDDEN",
   ProjectPersistedStateInvalid = "PROJECT_PERSISTED_STATE_INVALID",
-  ProjectReadFailed = "PROJECT_READ_FAILED"
+  ProjectReadFailed = "PROJECT_READ_FAILED",
+  ProjectGeometryBuildFailed = "PROJECT_GEOMETRY_BUILD_FAILED",
+  ProjectGeometryInvalid = "PROJECT_GEOMETRY_INVALID",
+  ProjectGeometrySerializationFailed = "PROJECT_GEOMETRY_SERIALIZATION_FAILED"
 }

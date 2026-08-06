@@ -1,7 +1,7 @@
 import type { Project } from "@casastudio/schema";
 
-import type { GeometryBuildResult } from "./geometry-build-result";
-import { GeometryModelBuilder } from "./internal";
+import type { GeometryBuildResult } from "./geometry-build-result.js";
+import { GeometryModelBuilder } from "./internal/index.js";
 
 /**
  * Stateless facade for deriving renderer-neutral runtime geometry.

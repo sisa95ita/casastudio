@@ -1,5 +1,5 @@
-import type { GeometryBuildError } from "./geometry-build-error";
-import type { GeometryModel } from "./model";
+import type { GeometryBuildError } from "./geometry-build-error.js";
+import type { GeometryModel } from "./model/index.js";
 
 /**
  * Result returned by `GeometryEngine.build`.

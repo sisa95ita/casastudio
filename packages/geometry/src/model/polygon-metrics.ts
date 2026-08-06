@@ -1,6 +1,6 @@
 import type { Point2D } from "@casastudio/schema";
 
-import type { Vertex } from "./vertex";
+import type { Vertex } from "./vertex.js";
 
 /**
  * Runtime winding classification for a polygon's traversal order.

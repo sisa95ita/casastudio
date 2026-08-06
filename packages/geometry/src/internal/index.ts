@@ -1,1 +1,1 @@
-export { GeometryModelBuilder } from "./geometry-model-builder";
+export { GeometryModelBuilder } from "./geometry-model-builder.js";

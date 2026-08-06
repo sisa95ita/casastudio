@@ -58,6 +58,18 @@ AI provider interfaces and DTOs. Defines contracts, not provider implementation 
 {
   "scripts": {
     "dev": "turbo dev",
+    "api:dev": "pnpm --filter @casastudio/api dev",
+    "api:build": "pnpm --filter @casastudio/api build",
+    "api:test": "pnpm --filter @casastudio/api test",
+    "api:lint": "pnpm --filter @casastudio/api lint",
+    "web:dev": "pnpm --filter @casastudio/web dev",
+    "web:build": "pnpm --filter @casastudio/web build",
+    "web:test": "pnpm --filter @casastudio/web test",
+    "web:lint": "pnpm --filter @casastudio/web lint",
+    "app:dev": "pnpm --parallel --filter @casastudio/api --filter @casastudio/web dev",
+    "app:build": "pnpm --filter @casastudio/api build && pnpm --filter @casastudio/web build",
+    "app:test": "pnpm --filter @casastudio/api test && pnpm --filter @casastudio/web test",
+    "app:lint": "pnpm --filter @casastudio/api lint && pnpm --filter @casastudio/web lint",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test"

@@ -3,12 +3,20 @@ import { readFileSync } from "node:fs";
 
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import {
+  GeometryBuildErrorCode,
+  GeometryModel,
+  LevelGeometry,
+  Vertex,
+  type GeometryBuildResult
+} from "@casastudio/geometry";
 import { ProjectSchema, type Project } from "@casastudio/schema";
 import { sign } from "jsonwebtoken";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ApiErrorCode } from "../../common/problem-details/api-error-code";
+import type { ProjectGeometryBuilder } from "../geometry-api/project-geometry-builder";
 import type { LoadedProject, ProjectsRepository } from "../persistence/project.repository";
 
 const canonicalProjectUrl = new URL("../../../../../packages/schema/examples/project.json", import.meta.url);
@@ -34,6 +42,7 @@ type DependencyMock = {
 type TestAppContext = {
   readonly app: INestApplication;
   readonly repository: ProjectsRepository;
+  readonly geometryBuilder: ProjectGeometryBuilder;
 };
 
 describe("ProjectsController", () => {
@@ -156,6 +165,102 @@ describe("ProjectsController", () => {
     await context.app.close();
   });
 
+  it("returns the authoritative Project geometry for its owner", async () => {
+    const context = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject)
+    });
+
+    const response = await request(context.app.getHttpServer())
+      .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: ownerSubject,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(200);
+
+    expect(response.body.sourceProjectId).toBe(canonicalProject.id);
+    expect(response.body.sourceRevision).toBe(canonicalProject.revision);
+    expect(response.body.geometry).toMatchObject({
+      id: `geometry-model:${canonicalProject.id}:${canonicalProject.revision}`,
+      units: {
+        length: "cm",
+        angle: "deg"
+      }
+    });
+    expect(response.body.geometry.levels[0].sourceLevelId).toBe("ground-floor");
+    expect(response.body.geometry.levels[0].polygons[0]).toMatchObject({
+      sourceRoomId: "living-room",
+      metrics: {
+        area: expect.any(Number),
+        winding: expect.any(String)
+      }
+    });
+    expect(JSON.stringify(response.body)).not.toContain("ownerSubject");
+    expect(JSON.stringify(response.body)).not.toContain("createdBySubject");
+    expect(JSON.stringify(response.body)).not.toContain("updatedBySubject");
+    expect(JSON.stringify(response.body)).not.toContain('"projectId"');
+    expect(JSON.stringify(response.body)).not.toContain("findLoadedByDomainId");
+    expect(context.repository.findLoadedByDomainId).toHaveBeenCalledTimes(1);
+    expect(context.geometryBuilder.build).toHaveBeenCalledTimes(1);
+
+    await context.app.close();
+  });
+
+  it("requires authentication for Project geometry", async () => {
+    const context = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject)
+    });
+
+    await request(context.app.getHttpServer()).get(`/api/v1/projects/${canonicalProject.id}/geometry`).expect(401);
+    await request(context.app.getHttpServer())
+      .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
+      .set("authorization", "Bearer not-a-token")
+      .expect(401);
+
+    await context.app.close();
+  });
+
+  it("reuses owner and administrator authorization for Project geometry", async () => {
+    const context = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject)
+    });
+
+    const forbiddenResponse = await request(context.app.getHttpServer())
+      .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: "other-subject",
+          username: ownerSubject,
+          email: `${ownerSubject}@example.test`,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(403);
+
+    expect(forbiddenResponse.body).toMatchObject({
+      code: ApiErrorCode.ProjectAccessForbidden,
+      status: 403
+    });
+    expect(JSON.stringify(forbiddenResponse.body)).not.toContain(ownerSubject);
+
+    await request(context.app.getHttpServer())
+      .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: "admin-subject",
+          roles: ["casastudio-admin"]
+        })}`
+      )
+      .expect(200);
+
+    await context.app.close();
+  });
+
   it("rejects malformed Project IDs before repository access", async () => {
     const context = await createTestApp({
       loadedProject: createLoadedProject(canonicalProject)
@@ -187,6 +292,32 @@ describe("ProjectsController", () => {
     await context.app.close();
   });
 
+  it("rejects malformed Project geometry IDs before repository or engine access", async () => {
+    const context = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject)
+    });
+
+    const response = await request(context.app.getHttpServer())
+      .get("/api/v1/projects/Casa Studio/geometry")
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: ownerSubject,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: ApiErrorCode.ProjectIdInvalid,
+      status: 400
+    });
+    expect(context.repository.findLoadedByDomainId).not.toHaveBeenCalled();
+    expect(context.geometryBuilder.build).not.toHaveBeenCalled();
+
+    await context.app.close();
+  });
+
   it("returns not found for unknown valid Project IDs", async () => {
     const context = await createTestApp({
       loadedProject: null
@@ -194,6 +325,30 @@ describe("ProjectsController", () => {
 
     const response = await request(context.app.getHttpServer())
       .get("/api/v1/projects/unknown-project")
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: ownerSubject,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      code: ApiErrorCode.ProjectNotFound,
+      status: 404
+    });
+
+    await context.app.close();
+  });
+
+  it("returns not found for unknown valid Project geometry IDs", async () => {
+    const context = await createTestApp({
+      loadedProject: null
+    });
+
+    const response = await request(context.app.getHttpServer())
+      .get("/api/v1/projects/unknown-project/geometry")
       .set(
         "authorization",
         `Bearer ${signingKeys.signToken({
@@ -260,6 +415,91 @@ describe("ProjectsController", () => {
 
     await context.app.close();
   });
+
+  it("returns sanitized geometry-specific failures", async () => {
+    const invalidContext = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject),
+      geometryBuildResult: {
+        ok: false,
+        errors: [
+          {
+            code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+            message: "engine diagnostic internals",
+            path: "building.levels[0].rooms[0].boundary",
+            sourceId: "living-room"
+          }
+        ]
+      }
+    });
+
+    const invalidResponse = await request(invalidContext.app.getHttpServer())
+      .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: ownerSubject,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(500);
+
+    expect(invalidResponse.body).toMatchObject({
+      code: ApiErrorCode.ProjectGeometryInvalid,
+      status: 500
+    });
+    expect(JSON.stringify(invalidResponse.body)).not.toContain("engine diagnostic internals");
+    await invalidContext.app.close();
+
+    const buildFailureContext = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject),
+      geometryBuilder: {
+        build: vi.fn<ProjectGeometryBuilder["build"]>(() => {
+          throw new Error("engine stack internals");
+        })
+      }
+    });
+
+    const buildFailureResponse = await request(buildFailureContext.app.getHttpServer())
+      .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: ownerSubject,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(500);
+
+    expect(buildFailureResponse.body).toMatchObject({
+      code: ApiErrorCode.ProjectGeometryBuildFailed,
+      status: 500
+    });
+    expect(JSON.stringify(buildFailureResponse.body)).not.toContain("engine stack internals");
+    await buildFailureContext.app.close();
+
+    const serializationFailureContext = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject),
+      geometryBuildResult: createNonFiniteGeometryBuildResult(canonicalProject)
+    });
+
+    const serializationFailureResponse = await request(serializationFailureContext.app.getHttpServer())
+      .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({
+          subject: ownerSubject,
+          roles: ["casastudio-user"]
+        })}`
+      )
+      .expect(500);
+
+    expect(serializationFailureResponse.body).toMatchObject({
+      code: ApiErrorCode.ProjectGeometrySerializationFailed,
+      status: 500
+    });
+    expect(JSON.stringify(serializationFailureResponse.body)).not.toContain("must be finite");
+    await serializationFailureContext.app.close();
+  });
 });
 
 describe("Projects OpenAPI contract", () => {
@@ -267,7 +507,7 @@ describe("Projects OpenAPI contract", () => {
     vi.unstubAllEnvs();
   });
 
-  it("documents the read-only Project endpoint without internal metadata or geometry APIs", async () => {
+  it("documents the read-only Project and geometry endpoints without internal metadata or write APIs", async () => {
     const context = await createTestApp({
       environment: {
         NODE_ENV: "development"
@@ -278,6 +518,7 @@ describe("Projects OpenAPI contract", () => {
     const response = await request(context.app.getHttpServer()).get("/api/docs-json").expect(200);
     const documentJson = JSON.stringify(response.body);
     const operation = response.body.paths["/api/v1/projects/{id}"].get;
+    const geometryOperation = response.body.paths["/api/v1/projects/{id}/geometry"].get;
     const schemas = response.body.components.schemas;
 
     expect(operation).toBeDefined();
@@ -293,6 +534,29 @@ describe("Projects OpenAPI contract", () => {
     );
     expect(Object.keys(operation.responses)).toEqual(expect.arrayContaining(["200", "400", "401", "403", "404", "500"]));
     expect(schemas.ProjectResponseDto).toBeDefined();
+    expect(geometryOperation).toBeDefined();
+    expect(geometryOperation.security).toEqual([{ bearer: [] }]);
+    expect(geometryOperation.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "id",
+          required: true,
+          in: "path"
+        })
+      ])
+    );
+    expect(Object.keys(geometryOperation.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "403", "404", "500"])
+    );
+    expect(geometryOperation.responses["200"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/ProjectGeometryResponseDto"
+    });
+    expect(schemas.ProjectGeometryResponseDto.required).toEqual(
+      expect.arrayContaining(["sourceProjectId", "sourceRevision", "geometry"])
+    );
+    expect(schemas.GeometrySnapshotDto).toBeDefined();
+    expect(documentJson).toContain("#/components/schemas/GeometryLevelDto");
+    expect(documentJson).toContain("#/components/schemas/GeometryPolygonMetricsDto");
     expect(documentJson).toContain("#/components/schemas/ProjectDto");
     expect(documentJson).toContain("#/components/schemas/BuildingDto");
     expect(documentJson).toContain("#/components/schemas/RoomBoundaryEdgeDto");
@@ -301,7 +565,14 @@ describe("Projects OpenAPI contract", () => {
     expect(documentJson).not.toContain("createdBySubject");
     expect(documentJson).not.toContain("updatedBySubject");
     expect(documentJson).not.toContain('"projectId"');
-    expect(Object.keys(response.body.paths).some((path) => path.includes("geometry"))).toBe(false);
+    expect(Object.keys(response.body.paths).some((path) => path.includes("/workspace"))).toBe(false);
+    expect(Object.keys(response.body.paths).some((path) => path.includes("/geometry/rebuild"))).toBe(false);
+    expect(Object.keys(response.body.paths).some((path) => path.includes("/geometry/validate"))).toBe(false);
+    expect(Object.keys(response.body.paths).some((path) => path.includes("/geometry/{geometryId}"))).toBe(false);
+    expect(Object.values(response.body.paths).some((pathItem) => "post" in (pathItem as Record<string, unknown>))).toBe(false);
+    expect(Object.values(response.body.paths).some((pathItem) => "put" in (pathItem as Record<string, unknown>))).toBe(false);
+    expect(Object.values(response.body.paths).some((pathItem) => "patch" in (pathItem as Record<string, unknown>))).toBe(false);
+    expect(Object.values(response.body.paths).some((pathItem) => "delete" in (pathItem as Record<string, unknown>))).toBe(false);
 
     await context.app.close();
   });
@@ -311,6 +582,8 @@ async function createTestApp(options: {
   readonly loadedProject?: LoadedProject | null;
   readonly errorKind?: "persisted-invalid" | "persistence";
   readonly environment?: Record<string, string>;
+  readonly geometryBuildResult?: GeometryBuildResult;
+  readonly geometryBuilder?: ProjectGeometryBuilder;
 }): Promise<TestAppContext> {
   const prisma: DependencyMock = {
     verifyReady: vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
@@ -332,6 +605,8 @@ async function createTestApp(options: {
   const { PrismaService: RuntimePrismaService } = await import("../../persistence/prisma.service");
   const { OidcHealthService: RuntimeOidcHealthService } = await import("../../health/oidc-health.service");
   const { PROJECTS_REPOSITORY } = await import("../persistence/projects-repository.token");
+  const { PROJECT_GEOMETRY_BUILDER } = await import("../geometry-api/project-geometry-builder");
+  const { GeometryEngine } = await import("@casastudio/geometry");
   const { PersistedProjectInvalidError, ProjectPersistenceError } = await import(
     "../persistence/project-persistence-error"
   );
@@ -345,6 +620,11 @@ async function createTestApp(options: {
           ? new ProjectPersistenceError("SQL connection refused")
           : undefined
   });
+  const geometryBuilder =
+    options.geometryBuilder ??
+    ({
+      build: vi.fn<ProjectGeometryBuilder["build"]>((project) => options.geometryBuildResult ?? GeometryEngine.build(project))
+    } satisfies ProjectGeometryBuilder);
   const moduleReference = await Test.createTestingModule({
     imports: [AppModule]
   })
@@ -354,6 +634,8 @@ async function createTestApp(options: {
     .useValue(oidc)
     .overrideProvider(PROJECTS_REPOSITORY)
     .useValue(repository)
+    .overrideProvider(PROJECT_GEOMETRY_BUILDER)
+    .useValue(geometryBuilder)
     .compile();
   const app = moduleReference.createNestApplication();
 
@@ -364,7 +646,8 @@ async function createTestApp(options: {
 
   return {
     app,
-    repository
+    repository,
+    geometryBuilder
   };
 }
 
@@ -393,6 +676,16 @@ function createLoadedProject(project: Project): LoadedProject {
       createdAt: metadataDate,
       updatedAt: metadataDate
     }
+  };
+}
+
+function createNonFiniteGeometryBuildResult(project: Project): GeometryBuildResult {
+  const vertex = new Vertex("vertex:bad", Number.NaN, 0, () => []);
+  const level = new LevelGeometry("level:bad", "ground-floor", 0, [vertex], [], [], [], []);
+
+  return {
+    ok: true,
+    model: new GeometryModel(`geometry-model:${project.id}:${project.revision}`, project.id, project.revision, [level])
   };
 }
 

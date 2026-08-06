@@ -1,0 +1,315 @@
+{
+  "info": {
+    "_postman_id": "1208fc00-ae2a-4dc1-b782-0de2c4f93a1d",
+    "name": "CasaStudio API",
+    "description": "Executable local-development requests for the CasaStudio API. OAuth tokens are local Postman user state and are not stored in this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "authUrl",
+        "value": "{{keycloakBaseUrl}}/realms/{{realm}}/protocol/openid-connect/auth",
+        "type": "string"
+      },
+      {
+        "key": "accessTokenUrl",
+        "value": "{{keycloakBaseUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+        "type": "string"
+      },
+      {
+        "key": "clientId",
+        "value": "{{clientId}}",
+        "type": "string"
+      },
+      {
+        "key": "client_authentication",
+        "value": "none",
+        "type": "string"
+      },
+      {
+        "key": "grant_type",
+        "value": "authorization_code_with_pkce",
+        "type": "string"
+      },
+      {
+        "key": "challengeAlgorithm",
+        "value": "S256",
+        "type": "string"
+      },
+      {
+        "key": "scope",
+        "value": "openid",
+        "type": "string"
+      },
+      {
+        "key": "callbackUrl",
+        "value": "https://oauth.pstmn.io/v1/browser-callback",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Live",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/health/live",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health",
+                "live"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"body status is ok\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.eql(\"ok\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ready",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/health/ready",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health",
+                "ready"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Get Canonical Project",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects/{{projectId}}",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"project identity and revision are authoritative\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.project.id).to.eql(pm.environment.get(\"projectId\"));",
+                  "  pm.expect(body.sourceRevision).to.eql(body.project.revision);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Unknown Project",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects/unknown-project",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "unknown-project"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"problem code is PROJECT_NOT_FOUND\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.code).to.eql(\"PROJECT_NOT_FOUND\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Geometry",
+      "item": [
+        {
+          "name": "Get Canonical Project Geometry",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects/{{projectId}}/geometry",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}",
+                "geometry"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"geometry envelope has source identity\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.sourceProjectId).to.eql(pm.environment.get(\"projectId\"));",
+                  "  pm.expect(body.sourceRevision).to.be.a(\"number\");",
+                  "  pm.expect(body.geometry).to.be.an(\"object\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Unknown Project Geometry",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects/unknown-project/geometry",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "unknown-project",
+                "geometry"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"problem code is PROJECT_NOT_FOUND\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.code).to.eql(\"PROJECT_NOT_FOUND\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

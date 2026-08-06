@@ -1,7 +1,7 @@
 import type { Level, Project, Wall } from "@casastudio/schema";
 
-import { GeometryBuildErrorCode, type GeometryBuildError } from "../geometry-build-error";
-import type { GeometryBuildResult } from "../geometry-build-result";
+import { GeometryBuildErrorCode, type GeometryBuildError } from "../geometry-build-error.js";
+import type { GeometryBuildResult } from "../geometry-build-result.js";
 import {
   BoundaryEdge,
   BoundaryEdgeUse,
@@ -10,9 +10,9 @@ import {
   Loop,
   Polygon,
   Vertex
-} from "../model";
-import { calculatePolygonMetrics } from "../model/polygon-metrics";
-import { coordinateKey, runtimeId } from "./runtime-id";
+} from "../model/index.js";
+import { calculatePolygonMetrics } from "../model/polygon-metrics.js";
+import { coordinateKey, runtimeId } from "./runtime-id.js";
 
 type MutableVertexEntry = {
   readonly vertex: Vertex;

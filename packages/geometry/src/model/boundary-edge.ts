@@ -1,7 +1,7 @@
 import type { Wall } from "@casastudio/schema";
 
-import type { GeometryId } from "./index";
-import type { Vertex } from "./vertex";
+import type { GeometryId } from "./index.js";
+import type { Vertex } from "./vertex.js";
 
 /**
  * Represents one shared physical wall boundary in runtime topology.
