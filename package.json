@@ -31,6 +31,10 @@
     "docker:test:up": "docker compose -f compose.yml -f compose.test.yml up --build --abort-on-container-exit --exit-code-from api-test api-test",
     "docker:test:down": "docker compose -f compose.yml -f compose.test.yml down --volumes",
     "docker:build": "docker compose build web api",
+    "jenkins:up": "docker compose -f compose.jenkins.yml up -d --build",
+    "jenkins:down": "docker compose -f compose.jenkins.yml down",
+    "jenkins:logs": "docker compose -f compose.jenkins.yml logs -f",
+    "jenkins:config": "docker compose -f compose.jenkins.yml config",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test"

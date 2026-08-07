@@ -4,7 +4,7 @@ services:
       POSTGRES_DB: ${CASASTUDIO_TEST_POSTGRES_DB:-casastudio_test}
       POSTGRES_PASSWORD: ${CASASTUDIO_TEST_POSTGRES_PASSWORD:?Set CASASTUDIO_TEST_POSTGRES_PASSWORD in .env}
     ports: !override
-      - "55432:5432"
+      - "${CASASTUDIO_TEST_POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres_test_data:/var/lib/postgresql/data
     healthcheck:

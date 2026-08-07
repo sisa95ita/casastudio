@@ -62,6 +62,7 @@ Infrastructure: Docker / Docker Compose, Azure Container Apps, Azure Blob Storag
 - `docs/07-codex-kickoff.md`
 - `docs/08-development-environment.md`
 - `docs/09-development-conventions.md`
+- `docs/backend/backend-foundation-phase-1e.md`
 - `docs/adr/ADR-001-architecture-style.md`
 - `docs/adr/ADR-002-backend-framework.md`
 - `docs/adr/ADR-003-cloud-provider.md`

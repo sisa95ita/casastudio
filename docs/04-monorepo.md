@@ -70,6 +70,13 @@ AI provider interfaces and DTOs. Defines contracts, not provider implementation 
     "app:build": "pnpm --filter @casastudio/api build && pnpm --filter @casastudio/web build",
     "app:test": "pnpm --filter @casastudio/api test && pnpm --filter @casastudio/web test",
     "app:lint": "pnpm --filter @casastudio/api lint && pnpm --filter @casastudio/web lint",
+    "db:generate": "pnpm --filter @casastudio/api db:generate",
+    "db:validate": "pnpm --filter @casastudio/api db:validate",
+    "docker:build": "docker compose build web api",
+    "jenkins:up": "docker compose -f compose.jenkins.yml up -d --build",
+    "jenkins:down": "docker compose -f compose.jenkins.yml down",
+    "jenkins:logs": "docker compose -f compose.jenkins.yml logs -f",
+    "jenkins:config": "docker compose -f compose.jenkins.yml config",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test"
