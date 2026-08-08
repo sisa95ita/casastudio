@@ -45,6 +45,8 @@ type TestAppContext = {
   readonly geometryBuilder: ProjectGeometryBuilder;
 };
 
+const coldControllerBootstrapTimeoutMs = 15_000;
+
 describe("ProjectsController", () => {
   const signingKeys = createSigningKeys();
 
@@ -103,7 +105,7 @@ describe("ProjectsController", () => {
     expect(JSON.stringify(response.body)).not.toContain('"projectId"');
 
     await context.app.close();
-  });
+  }, coldControllerBootstrapTimeoutMs);
 
   it("requires authentication", async () => {
     const context = await createTestApp({
