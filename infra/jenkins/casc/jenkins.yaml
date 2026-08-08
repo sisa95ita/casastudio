@@ -1,0 +1,35 @@
+jenkins:
+  systemMessage: "CasaStudio local Jenkins controller. Managed by Jenkins Configuration as Code from the repository."
+  numExecutors: 0
+  mode: NORMAL
+  slaveAgentPort: 50000
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${CASC_JENKINS_ADMIN_ID}"
+          password: "${CASC_JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  nodes:
+    - permanent:
+        name: "casastudio-agent-node"
+        remoteFS: "/home/jenkins/agent"
+        labelString: "casastudio-linux docker node24"
+        numExecutors: 1
+        mode: EXCLUSIVE
+        retentionStrategy: "always"
+        launcher:
+          inbound:
+            webSocket: true
+            workDirSettings:
+              disabled: false
+              failIfWorkDirIsMissing: false
+              internalDir: "remoting"
+              workDirPath: "/home/jenkins/agent/remoting"
+
+unclassified:
+  location:
+    adminAddress: "${CASC_JENKINS_ADMIN_EMAIL}"
+    url: "http://localhost:8082/"

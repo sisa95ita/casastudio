@@ -1,0 +1,21 @@
+# Pipeline as Code.
+workflow-aggregator:608.v67378e9d3db_1
+
+# Git checkout and GitHub Multibranch Pipeline discovery.
+git:5.10.1
+github:1.47.0
+github-branch-source:1983.vfa_27ed961853
+
+# Secret storage and binding for GitHub, webhook, and future registry credentials.
+credentials:1506.v948b_b_b_7dec44
+credentials-binding:728.v902a_273b_8947
+
+# Jenkins Configuration as Code.
+configuration-as-code:2115.vf6de120eef70
+
+# Machine-readable test publication from Vitest JUnit reports.
+junit:1418.v67a_81935603c
+
+# Build log timestamps and workspace cleanup used by the Jenkinsfile.
+timestamper:1.30
+ws-cleanup:0.49
