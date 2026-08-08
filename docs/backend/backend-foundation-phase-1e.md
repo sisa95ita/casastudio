@@ -63,9 +63,9 @@ JCasC sets:
 CSRF protection is preserved by leaving Jenkins' default crumb issuer enabled.
 
 The agent image is built from `infra/jenkins/agent.Dockerfile`. It provides
-Git, Node.js 24, Corepack, Docker CLI, Docker Compose support, and native system
-libraries required by the repository. The pipeline activates the exact
-repository package-manager version: `pnpm@11.10.0`.
+Git, Node.js 24, Corepack, Docker CLI, Docker Buildx, Docker Compose support,
+and native system libraries required by the repository. The pipeline activates
+the exact repository package-manager version: `pnpm@11.10.0`.
 
 The Jenkinsfile also uses:
 

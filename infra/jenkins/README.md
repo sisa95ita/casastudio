@@ -9,7 +9,7 @@ changes; it is not part of the CasaStudio web/API/PostgreSQL/Keycloak runtime.
 | File | Responsibility |
 | --- | --- |
 | `Dockerfile` | Builds the Jenkins LTS controller image and installs the declared plugins. |
-| `agent.Dockerfile` | Builds the single inbound build agent with Node.js 24, Corepack, Git, Docker CLI, and Docker Compose support. |
+| `agent.Dockerfile` | Builds the single inbound build agent with Node.js 24, Corepack, Git, Docker CLI, Docker Buildx, and Docker Compose support. |
 | `plugins.txt` | Direct Jenkins plugin set for Pipeline, GitHub multibranch discovery, credentials, JCasC, JUnit, timestamps, and workspace cleanup. |
 | `casc/jenkins.yaml` | Non-secret Jenkins Configuration as Code defaults. |
 
