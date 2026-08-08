@@ -9,11 +9,22 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@casastudio/api#build": {
+      "dependsOn": ["^build", "db:generate"],
+      "outputs": ["dist/**"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },
+    "db:generate": {
+      "cache": false
+    },
     "test": {
-      "dependsOn": ["^test"],
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@casastudio/api#test": {
+      "dependsOn": ["^build", "db:generate"],
       "outputs": []
     }
   }

@@ -195,9 +195,16 @@ pipeline {
       post {
         always {
           sh '''
-            set +e
+            set +u
             project_name="casastudio-ci-${BUILD_NUMBER:-0}"
-            docker compose -p "${project_name}" -f compose.yml -f compose.test.yml down --volumes --remove-orphans
+            cleanup_status=0
+
+            docker compose -p "${project_name}" -f compose.yml -f compose.test.yml down --volumes --remove-orphans || cleanup_status=$?
+
+            if [ "${cleanup_status}" -ne 0 ]; then
+              echo "API database integration cleanup reported failures. Review Docker access and any partial CI resources above."
+            fi
+            exit 0
           '''
         }
       }
@@ -230,11 +237,22 @@ pipeline {
   post {
     always {
       sh '''
-        set +e
+        set +u
         project_name="casastudio-ci-${BUILD_NUMBER:-0}"
         image_tag="ci-${BUILD_NUMBER:-local}"
-        docker compose -p "${project_name}" -f compose.yml -f compose.test.yml down --volumes --remove-orphans
-        docker image rm -f "casastudio-web:${image_tag}" "casastudio-api:${image_tag}"
+        cleanup_status=0
+
+        docker compose -p "${project_name}" -f compose.yml -f compose.test.yml down --volumes --remove-orphans || cleanup_status=$?
+        for image in "casastudio-web:${image_tag}" "casastudio-api:${image_tag}"; do
+          if docker image inspect "${image}" >/dev/null 2>&1; then
+            docker image rm -f "${image}" || cleanup_status=$?
+          fi
+        done
+
+        if [ "${cleanup_status}" -ne 0 ]; then
+          echo "Post-build cleanup reported failures. Review Docker access and any partial CI resources above."
+        fi
+        exit 0
       '''
       junit allowEmptyResults: true, testResults: 'test-results/**/*.xml'
       archiveArtifacts allowEmptyArchive: true, artifacts: 'test-results/**, coverage/**'

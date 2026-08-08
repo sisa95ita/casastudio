@@ -14,7 +14,7 @@ jenkins:
       allowAnonymousRead: false
   nodes:
     - permanent:
-        name: "casastudio-agent"
+        name: "casastudio-agent-node"
         remoteFS: "/home/jenkins/agent"
         labelString: "casastudio-linux docker node24"
         numExecutors: 1

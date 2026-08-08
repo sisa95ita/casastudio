@@ -27,14 +27,12 @@ services:
       - controller
     environment:
       JENKINS_URL: http://controller:8080
-      JENKINS_AGENT_NAME: casastudio-agent
+      JENKINS_AGENT_NAME: casastudio-agent-node
       JENKINS_SECRET: ${CASC_JENKINS_AGENT_SECRET:-replace-with-generated-agent-secret}
       JENKINS_WEB_SOCKET: "true"
       JENKINS_AGENT_WORKDIR: /home/jenkins/agent
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    group_add:
-      - "${DOCKER_GID:-0}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - jenkins_agent_home:/home/jenkins

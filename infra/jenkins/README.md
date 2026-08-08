@@ -50,12 +50,12 @@ docker compose -f compose.jenkins.yml down --volumes
 
 ## Agent Bootstrap
 
-JCasC creates a permanent inbound node named `casastudio-agent` with one
+JCasC creates a permanent inbound node named `casastudio-agent-node` with one
 executor. The controller has zero executors, so it does not run CasaStudio
 builds.
 
 The inbound agent secret is Jenkins state and must not be committed. On first
-startup, open the `casastudio-agent` node page in Jenkins, copy the generated
+startup, open the `casastudio-agent-node` node page in Jenkins, copy the generated
 agent secret, set it as `CASC_JENKINS_AGENT_SECRET` in the ignored `.env`, and
 restart the agent:
 
@@ -69,6 +69,11 @@ The placeholder value in `.env.example` is intentionally not a working secret.
 
 Only the dedicated Jenkins agent mounts `/var/run/docker.sock`. The controller
 does not mount it.
+
+The agent container starts as root only long enough to read the mounted socket's
+numeric group ID, create a matching in-container group when needed, add
+`jenkins` to it, and then exec the inbound agent as the non-root `jenkins` user.
+No host-specific Docker socket GID is committed.
 
 The agent can control the local Docker daemon. That means any pipeline running
 on the agent can build images, start containers, read container metadata, and
@@ -99,4 +104,3 @@ Jenkinsfile from the checked-out revision
         ↓
 Jenkins status check on the pull request
 ```
-

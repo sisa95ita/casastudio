@@ -56,7 +56,7 @@ JCasC sets:
 - anonymous access disabled;
 - local security realm with the administrator supplied from environment
   variables;
-- a permanent `casastudio-agent` node;
+- a permanent `casastudio-agent-node` node;
 - agent executors to `1`;
 - a local CasaStudio system message.
 
@@ -80,6 +80,12 @@ image builds for the same job.
 
 Only the build agent mounts `/var/run/docker.sock`. The controller never mounts
 the Docker socket.
+
+At container startup, the agent entrypoint reads the mounted socket's numeric
+group ID, creates a matching group inside the container when necessary, adds the
+`jenkins` user to that group, and then starts the inbound agent process as the
+non-root `jenkins` user. This avoids hard-coding a host-specific Docker socket
+GID while keeping normal build execution non-root.
 
 This gives the agent control of the local Docker daemon. It can build images,
 start containers, and remove CI-tagged images or CI Compose services. This is a
@@ -166,6 +172,12 @@ pnpm test
 pnpm build
 ```
 
+Turbo is configured so `test` tasks depend on dependency package `build` tasks.
+Workspace packages export their built `dist` entry points, so a clean checkout
+must build dependency packages such as `@casastudio/schema` before tests in
+dependents such as `@casastudio/geometry`, `@casastudio/api`, and
+`@casastudio/web` resolve those package exports.
+
 Schema validation also runs schema lint, tests, build, JSON Schema generation,
 and a Git diff check for `packages/schema/json-schema/project.schema.json`.
 
@@ -244,6 +256,12 @@ casastudio-api:ci-<build-number>
 
 Images are not pushed. Deployments are not performed. CI-tagged images are
 removed in post actions.
+
+Post-build cleanup is best-effort and scoped to the CI Compose project plus
+CI-tagged application images. Cleanup reports Docker failures in the build log
+but exits successfully from the post action so it does not hide an earlier
+pipeline failure or fail a successful build only because a CI object was never
+created.
 
 ## GitHub Flow
 
@@ -331,8 +349,9 @@ unchanged.
 - Missing Jenkins admin variables: `pnpm jenkins:config` fails before startup.
 - Agent does not connect: replace the placeholder
   `CASC_JENKINS_AGENT_SECRET` with the generated node secret from Jenkins.
-- Docker permission denied on the agent: set `DOCKER_GID` to the group ID that
-  owns `/var/run/docker.sock` and restart the agent.
+- Docker permission denied on the agent: rebuild and restart the agent so the
+  entrypoint can remap the `jenkins` user's supplementary group to the mounted
+  socket's numeric group ID.
 - Local image builds are killed: reduce Docker/Colima pressure and rerun; the
   pipeline is intentionally single-agent and sequential.
 - Database tests skip locally: ensure `DATABASE_URL` is present when running API
