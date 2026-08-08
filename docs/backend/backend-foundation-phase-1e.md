@@ -152,6 +152,10 @@ requests, and `main`. No image push or deployment occurs on any branch.
 
 ## Dependency And Cache Policy
 
+CasaStudio's current Jenkins installation is local development CI running on a
+Docker/Colima-backed Mac, so repository validation favors predictable resource
+usage over maximum throughput.
+
 CI runs:
 
 ```bash
@@ -159,8 +163,12 @@ pnpm install --frozen-lockfile
 ```
 
 The pipeline activates `pnpm@11.10.0` through Corepack and checks that
-`pnpm-lock.yaml` was not modified. It does not cache `node_modules`. pnpm and
-Turbo cache tuning can be added later after Jenkins has a stable baseline.
+`pnpm-lock.yaml` was not modified. It does not cache `node_modules`. Jenkins sets
+`TURBO_CONCURRENCY=1` to serialize Turbo task execution on the local Docker
+host. This is a CI execution policy, not a monorepo limitation; normal
+developer `pnpm lint`, `pnpm test`, and `pnpm build` commands keep their default
+Turbo behavior. The value can be revisited when Jenkins moves to more capable
+infrastructure.
 
 ## Validation Details
 

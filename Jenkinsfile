@@ -19,6 +19,7 @@ pipeline {
     PNPM_HOME = "${WORKSPACE}/.pnpm-home"
     PATH = "${WORKSPACE}/.pnpm-home:${PATH}"
     TURBO_TELEMETRY_DISABLED = '1'
+    TURBO_CONCURRENCY = '1'
     CASASTUDIO_POSTGRES_PASSWORD = 'ci-compose-placeholder-not-secret'
     CASASTUDIO_TEST_POSTGRES_PASSWORD = 'ci-test-postgres-password'
     CASASTUDIO_KEYCLOAK_ADMIN_PASSWORD = 'ci-compose-placeholder-not-secret'

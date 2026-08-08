@@ -84,6 +84,14 @@ sandbox and is not suitable for untrusted multi-tenant builds.
 A future hosted Jenkins setup should use isolated ephemeral agents or a remote
 container builder instead of sharing the local Docker socket.
 
+## Local Resource Policy
+
+This Jenkins setup is local development CI for a resource-constrained
+Docker/Colima host. Jenkins sets `TURBO_CONCURRENCY=1` so repository-wide Turbo
+tasks validate the same packages with serialized task execution. This does not
+limit normal developer monorepo commands outside Jenkins and can be revisited on
+larger CI infrastructure.
+
 ## Multibranch Pipeline
 
 Create a Jenkins Multibranch Pipeline that points at the GitHub repository and
