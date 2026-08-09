@@ -1,7 +1,7 @@
 import type { Level, Project, Room, Wall } from "@casastudio/schema";
 
 /**
- * Creates deterministic runtime identifiers for the first geometry slice.
+ * Creates deterministic runtime identifiers for derived geometry objects.
  *
  * The strategy is prefix-based and source-derived: entities with a direct
  * persisted source use that source identifier, while derived topology uses
@@ -20,8 +20,8 @@ export const runtimeId = {
 } as const;
 
 /**
- * Exact level-local coordinate key used for MVP vertex deduplication.
+ * Exact level-local coordinate key used for vertex deduplication.
  *
- * No tolerance, snapping, or coordinate normalization is applied in this phase.
+ * No tolerance, snapping, or coordinate normalization is applied.
  */
 export const coordinateKey = (x: number, z: number): string => `${x}:${z}`;

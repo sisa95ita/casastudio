@@ -10,7 +10,7 @@ import { HealthService } from "./health.service";
  *
  * Health endpoints are deliberately unauthenticated: liveness is safe process
  * metadata, and readiness exposes only coarse dependency status for local
- * Compose, CI, and future platform health checks.
+ * Compose, CI, and platform health checks.
  */
 @ApiTags("health")
 @Controller({

@@ -10,7 +10,7 @@ const PositiveMeasurementSchema = z.number().finite().positive();
  * Represents vertical circulation between Levels and optional Rooms.
  *
  * Staircases preserve architectural connection intent while detailed renderable
- * geometry is derived later from flights, landings, and spatial references.
+ * geometry is derived from flights, landings, and spatial references.
  */
 export const StaircaseSchema = z.strictObject({
   ...CommonMetadataSchema.shape,

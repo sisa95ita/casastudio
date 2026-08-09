@@ -4,8 +4,8 @@ import type { ValidationError } from "@casastudio/schema";
  * Internal failure raised when project persistence cannot complete a database operation.
  *
  * The error keeps the original cause available for logs and diagnostics while
- * allowing future HTTP boundaries to translate persistence failures without
- * exposing SQL or provider details to callers.
+ * allowing HTTP boundaries to translate persistence failures without exposing
+ * SQL or provider details to callers.
  */
 export class ProjectPersistenceError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -31,9 +31,9 @@ export class ProjectReconstructionError extends Error {
 /**
  * Internal failure raised when reconstructed project data fails schema validation.
  *
- * The collected schema or semantic validation errors are retained for later
- * server-side diagnostics and future Problem Details mapping, while the error
- * itself stays below HTTP controller boundaries.
+ * The collected schema or semantic validation errors are retained for
+ * server-side diagnostics and Problem Details mapping, while the error itself
+ * stays below HTTP controller boundaries.
  */
 export class PersistedProjectInvalidError extends ProjectReconstructionError {
   constructor(

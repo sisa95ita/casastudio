@@ -14,8 +14,8 @@ export type InspectorPanelProps = {
  * Renders the bounded route-specific inspector panel.
  *
  * The panel is hidden below the medium breakpoint to preserve the usable SVG
- * workspace on narrow screens; this is a deliberate desktop-first assumption
- * for the current foundation, not a full mobile editor strategy.
+ * workspace on narrow screens. It is a desktop inspector surface, not a mobile
+ * editing surface.
  */
 export function InspectorPanel({ children }: InspectorPanelProps) {
   const { t } = useCasaTranslation("common");

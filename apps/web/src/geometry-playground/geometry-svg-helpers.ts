@@ -17,8 +17,8 @@ export const formatSvgNumber = (value: number): string => {
  * Collects traversal-relative polygon points for an SVG `polygon` element.
  *
  * The helper consumes `polygon.outerLoop.edgeUses` in the exact runtime order
- * produced from ADR-005 `Room.boundary`. It deliberately avoids reconstructing
- * a polygon from unordered physical edges or normalizing winding.
+ * produced from ordered `Room.boundary` data. It deliberately avoids
+ * reconstructing a polygon from unordered physical edges or normalizing winding.
  */
 export const getPolygonPointString = (
   polygon: Polygon,

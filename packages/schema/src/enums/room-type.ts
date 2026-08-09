@@ -15,7 +15,7 @@ export const RoomTypeValues = [
 ] as const;
 
 /**
- * Validates the supported functional Room classifications for the MVP.
+ * Validates the supported functional Room classifications.
  */
 export const RoomTypeSchema = z.enum(RoomTypeValues);
 

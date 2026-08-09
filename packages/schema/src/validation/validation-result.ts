@@ -13,7 +13,7 @@ export type ValidationError = {
 };
 
 /**
- * Standard result shape returned by CasaStudio validation phases.
+ * Standard result shape returned by CasaStudio validators.
  *
  * Validators collect all applicable failures and report validity without
  * throwing for domain validation errors.

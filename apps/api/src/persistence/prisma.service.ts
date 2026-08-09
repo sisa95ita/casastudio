@@ -12,10 +12,8 @@ type MigrationCountResult = {
 /**
  * Prisma client lifecycle boundary for CasaStudio persistence.
  *
- * Runtime integration lives under `persistence` because later relational
- * repositories will depend on a database abstraction here, while the generated
- * Prisma schema and SQL migration history remain in the standard `prisma/`
- * tooling directory.
+ * Runtime modules depend on this service for database access, while generated
+ * Prisma artifacts and SQL migration history remain owned by Prisma tooling.
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {

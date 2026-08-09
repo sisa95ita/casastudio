@@ -280,7 +280,7 @@ export class ProjectAggregateMapper {
  * Structural parsing runs first, followed by reference existence,
  * bidirectional-reference consistency, and persisted geometry validation. The
  * renderability validator is deliberately excluded so draft but valid projects
- * can be persisted in later phases.
+ * can be persisted before they contain every rendering prerequisite.
  */
 export function validateProjectForPersistence(project: unknown): Project {
   const parsed = parseProject(project);

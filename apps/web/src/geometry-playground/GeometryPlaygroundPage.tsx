@@ -62,7 +62,7 @@ export type GeometryPlaygroundPageProps = {
 };
 
 /**
- * Hosts the Phase 3 interactive geometry runtime playground.
+ * Hosts the interactive geometry runtime playground.
  *
  * The page intentionally executes the real pipeline from canonical `Project`
  * through `GeometryEngine.build(project)` into `GeometryModel`, then adapts one

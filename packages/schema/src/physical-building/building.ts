@@ -9,7 +9,7 @@ import { RequiredNameSchema } from "./shared.js";
  * Represents the physical property modeled by a CasaStudio Project.
  *
  * The Building owns the Level hierarchy and remains the central source for
- * physical data consumed by future geometry and rendering layers.
+ * physical data consumed by geometry and rendering layers.
  */
 export const BuildingSchema = z.strictObject({
   id: IdentifierSchema,

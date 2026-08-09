@@ -17,9 +17,9 @@ export type GeometrySelection = {
 /**
  * UI-only interaction state for immutable runtime geometry.
  *
- * Selected and hovered entities are deliberately separate so future editor
- * workflows can layer hover previews, selection sets, and commands without
- * duplicating runtime geometry data or moving UI state into `GeometryModel`.
+ * Selected and hovered entities are deliberately separate so click selection,
+ * hover previews, and command handling can compose without duplicating runtime
+ * geometry data or moving UI state into `GeometryModel`.
  */
 export type GeometrySelectionState = {
   readonly selected: readonly GeometrySelection[];

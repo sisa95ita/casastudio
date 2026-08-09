@@ -1,13 +1,11 @@
 import { createTheme } from "@mui/material/styles";
 
 /**
- * Central MUI theme for the CasaStudio frontend foundation.
+ * Central MUI theme for the CasaStudio frontend.
  *
- * The first theme is intentionally light, compact, and neutral so technical
- * workspaces stay dominant while panels and controls recede into a CAD-like
- * application frame. It does not introduce font downloads or a theme switcher
- * because this phase is focused on shell architecture rather than a complete
- * design system.
+ * The theme is light, compact, and neutral so technical workspaces stay
+ * dominant while panels and controls recede into a CAD-like application frame.
+ * It avoids runtime font downloads and exposes a single stable theme instance.
  */
 export const casaStudioTheme = createTheme({
   palette: {

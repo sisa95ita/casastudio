@@ -6,7 +6,7 @@ import { z } from "zod";
 export const BuildingTypeValues = ["HOUSE", "APARTMENT", "VILLA", "OFFICE", "OTHER"] as const;
 
 /**
- * Validates the supported Building type vocabulary for the MVP domain model.
+ * Validates the supported Building type vocabulary for the domain model.
  */
 export const BuildingTypeSchema = z.enum(BuildingTypeValues);
 

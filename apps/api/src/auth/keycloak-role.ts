@@ -1,8 +1,9 @@
 /**
- * Keycloak client roles understood by the Phase 1A authorization foundation.
+ * Keycloak client roles accepted by the API authorization boundary.
  *
- * Project ownership and domain-specific permissions are intentionally deferred;
- * these roles only prove that client-role extraction and role guarding work.
+ * These roles are coarse client-level grants. Resource ownership and
+ * domain-specific permissions are evaluated by the modules that own those
+ * resources.
  */
 export enum KeycloakRole {
   User = "casastudio-user",

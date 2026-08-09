@@ -6,7 +6,7 @@ import type { Vertex } from "./vertex.js";
  * Runtime winding classification for a polygon's traversal order.
  *
  * Winding is derived from ordered level-local XZ vertices. The Geometry Engine
- * reports the order it built from ADR-005 `Room.boundary`; it does not
+ * reports the source boundary traversal order exactly as built; it does not
  * normalize clockwise input into counter-clockwise output.
  */
 export type PolygonWinding = "CLOCKWISE" | "COUNTER_CLOCKWISE" | "DEGENERATE";
@@ -25,7 +25,7 @@ export type BoundingBox = {
 };
 
 /**
- * Complete set of derived polygon measurements for the current runtime slice.
+ * Complete set of derived polygon measurements for runtime geometry.
  *
  * `signedArea` preserves traversal orientation, while `area` is the absolute
  * planar area. Degenerate polygons intentionally have no centroid because the
@@ -130,7 +130,7 @@ export const calculateCentroid = (
 };
 
 /**
- * Calculates all current polygon metrics from traversal-relative vertices.
+ * Calculates all polygon metrics from traversal-relative vertices.
  */
 export const calculatePolygonMetrics = (vertices: readonly Vertex[]): PolygonMetrics => {
   const signedArea = calculateSignedArea(vertices);

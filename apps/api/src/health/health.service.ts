@@ -8,7 +8,7 @@ import { OidcHealthService } from "./oidc-health.service";
  * Computes public liveness and readiness probe responses.
  *
  * Liveness is process-only; readiness verifies infrastructure dependencies so
- * container orchestration and future CI do not send traffic before PostgreSQL,
+ * container orchestration and CI do not send traffic before PostgreSQL,
  * migrations, and OIDC key discovery are available.
  */
 @Injectable()

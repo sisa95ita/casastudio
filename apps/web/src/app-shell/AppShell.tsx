@@ -19,8 +19,8 @@ import { StatusBar } from "./StatusBar";
  *
  * The shell owns viewport filling, fixed chrome, navigation, inspector, and
  * status regions. Nested routes only register small route-specific slots so
- * this foundation remains compact and avoids prematurely modelling future CAD
- * editor concepts such as selection, docking, persistence, or commands.
+ * global chrome stays separate from route-owned selection, persistence, command,
+ * and view-model state.
  */
 export function AppShell() {
   const { t } = useCasaTranslation("common");
