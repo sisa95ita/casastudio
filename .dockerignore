@@ -1,9 +1,13 @@
 **/node_modules
 **/dist
 **/coverage
+test-results
 .git
 .pnpm-store
 .turbo
+.jenkins
+jenkins_home
+infra/jenkins
 .DS_Store
 *.log
 .env
