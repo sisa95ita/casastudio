@@ -10,9 +10,9 @@ import type { Vertex } from "./vertex.js";
 /**
  * Represents one room-derived geometric region.
  *
- * The current MVP creates exactly one outer loop per buildable room and keeps
- * `innerLoops` as a stable empty collection. No triangulation, mesh faces, or
- * renderer-specific data belongs to this object.
+ * Each buildable room produces one outer loop and a stable immutable inner-loop
+ * collection. No triangulation, mesh faces, or renderer-specific data belongs
+ * to this object.
  */
 export class Polygon {
   readonly innerLoops: readonly Loop[];
@@ -27,8 +27,8 @@ export class Polygon {
   /**
    * Absolute planar area in square project length units.
    *
-   * The current schema uses centimeters, so this value is square centimeters
-   * for canonical MVP projects.
+   * Canonical projects use centimeters, so this value is square centimeters
+   * unless the schema's persisted unit contract changes.
    */
   readonly area: number;
   /**
@@ -77,21 +77,21 @@ export class Polygon {
   }
 
   /**
-   * Ordered traversal uses from all current polygon loops.
+   * Ordered traversal uses from all polygon loops.
    */
   get edgeUses(): readonly BoundaryEdgeUse[] {
     return Object.freeze(this.loops.flatMap((loop) => loop.edgeUses));
   }
 
   /**
-   * Physical boundary edges from all current polygon loops.
+   * Physical boundary edges from all polygon loops.
    */
   get boundaryEdges(): readonly BoundaryEdge[] {
     return Object.freeze(this.edgeUses.map((edgeUse) => edgeUse.boundaryEdge));
   }
 
   /**
-   * Traversal-relative vertices from all current polygon loops.
+   * Traversal-relative vertices from all polygon loops.
    */
   get vertices(): readonly Vertex[] {
     return Object.freeze(this.edgeUses.map((edgeUse) => edgeUse.startVertex));

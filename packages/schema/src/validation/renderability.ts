@@ -15,12 +15,12 @@ const pushError = (
 
 /**
  * Validates whether an already parsed Project contains the minimum workflow
- * data required by the future Geometry Engine rendering pipeline.
+ * data required by the Geometry Engine rendering pipeline.
  *
- * This phase is separate from ProjectSchema composition and cross-reference
- * validation. It checks only first-layer renderability prerequisites and does
- * not perform geometry, asset, provider, prompt, status-lifecycle, or
- * bidirectional-consistency validation.
+ * This validation pass is separate from ProjectSchema composition and
+ * cross-reference validation. It checks only first-layer renderability
+ * prerequisites and does not perform geometry, asset, provider, prompt,
+ * status-lifecycle, or bidirectional-consistency validation.
  */
 export const validateProjectRenderability = (project: Project): ValidationResult => {
   const errors: ValidationError[] = [];

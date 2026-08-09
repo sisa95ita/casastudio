@@ -7,9 +7,10 @@ import { GeometryModelBuilder } from "./internal/index.js";
  * Stateless facade for deriving renderer-neutral runtime geometry.
  *
  * `build` expects an already canonical typed `Project` using the latest schema
- * representation, including ADR-005 `Room.boundary` entries. It does not parse,
- * migrate legacy data, call schema validators, mutate the source Project, or
- * produce renderer-specific meshes, triangulation, extrusion, or Three.js data.
+ * representation, including ordered and oriented `Room.boundary` entries. It
+ * does not parse, migrate legacy data, call schema validators, mutate the
+ * source Project, or produce renderer-specific meshes, triangulation,
+ * extrusion, or Three.js data.
  *
  * Valid canonical input returns a deterministic immutable `GeometryModel`.
  * Expected build-time problems return an `ok: false` result with geometry-build

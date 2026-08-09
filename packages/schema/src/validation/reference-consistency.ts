@@ -39,11 +39,11 @@ const toIndexedLookup = <Item extends { id: string }>(items: Item[]) =>
 /**
  * Validates semantic coherence between references that already resolve.
  *
- * This phase assumes structural validation and cross-reference validation are
- * handled elsewhere. Missing referenced entities are skipped so this validator
- * only reports consistency mismatches between existing Project entities,
- * including reciprocal agreement between Room boundary edges and Wall `roomIds`.
- * It does not validate room-boundary geometry.
+ * This validation pass assumes structural validation and cross-reference
+ * validation are handled elsewhere. Missing referenced entities are skipped so
+ * this validator only reports consistency mismatches between existing Project
+ * entities, including reciprocal agreement between Room boundary edges and Wall
+ * `roomIds`. It does not validate room-boundary geometry.
  */
 export const validateProjectReferenceConsistency = (project: Project): ValidationResult => {
   const errors: ValidationError[] = [];

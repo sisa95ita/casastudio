@@ -7,11 +7,11 @@ import { useAppShellContent } from "../app-shell/AppShellContext";
 import { useCasaTranslation } from "../i18n";
 
 /**
- * Minimal CasaStudio foundation home route.
+ * Minimal CasaStudio home route.
  *
- * The page avoids fake project data and keeps the first screen purposeful:
- * identify the product foundation and link directly to the only current
- * technical workspace.
+ * The page avoids fake project data and keeps the first screen purposeful by
+ * identifying the product and linking directly to the primary technical
+ * workspace.
  */
 export function HomePage() {
   const { t } = useCasaTranslation("common");

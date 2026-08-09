@@ -5,9 +5,9 @@ import { PrismaService } from "./prisma.service";
 /**
  * Provides database runtime infrastructure for the Nest API.
  *
- * Phase 1A exposes only Prisma lifecycle and readiness services; normalized
- * project repositories and relational domain tables are intentionally deferred
- * to Phase 1B.
+ * The module exposes the shared Prisma lifecycle and readiness boundary used
+ * by persistence providers without exporting repository implementations
+ * directly.
  */
 @Module({
   exports: [PrismaService],

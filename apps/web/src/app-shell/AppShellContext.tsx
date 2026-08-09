@@ -5,8 +5,8 @@ import { createContext, useContext, useEffect } from "react";
  * Route-owned content that is projected into the shared application shell.
  *
  * The shell accepts only title, inspector, status, and a small header accessory
- * so this foundation can support nested routes without inventing docking,
- * plugin, or editor view-model systems before CasaStudio has editing commands.
+ * so nested routes can update chrome without moving route-specific view models
+ * into the global shell.
  */
 export type AppShellContent = {
   readonly title: string;

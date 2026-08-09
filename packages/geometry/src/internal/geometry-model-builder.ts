@@ -246,8 +246,7 @@ export class GeometryModelBuilder {
    *
    * A physical boundary edge may be used by one exterior room or by two rooms
    * sharing that wall. More than two `BoundaryEdgeUse` instances for the same
-   * source wall would require an adjacency/topology design that this phase
-   * intentionally does not introduce.
+   * source wall is rejected as non-manifold input.
    */
   private validateBoundaryEdgeUseCounts(
     boundaryEdgeUses: readonly BoundaryEdgeUse[],

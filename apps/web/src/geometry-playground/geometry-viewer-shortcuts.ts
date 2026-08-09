@@ -2,8 +2,7 @@
  * Keyboard actions supported by the read-only geometry viewer.
  *
  * The action identifiers are UI-only and intentionally separate from editor
- * commands so ADR-006 Phase 3 can add navigation shortcuts without introducing
- * undoable domain mutations.
+ * commands, so navigation shortcuts never introduce undoable domain mutations.
  */
 export type GeometryViewerShortcutAction = "CLEAR_SELECTION" | "FIT_VIEWPORT" | "RESET_VIEWPORT";
 
@@ -17,7 +16,7 @@ export type GeometryViewerShortcutDefinition = {
 };
 
 /**
- * Stable shortcut registry for the current technical viewer.
+ * Stable shortcut registry for the read-only geometry viewer.
  */
 export const geometryViewerShortcuts: readonly GeometryViewerShortcutDefinition[] = Object.freeze([
   Object.freeze({

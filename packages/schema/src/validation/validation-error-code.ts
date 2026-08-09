@@ -1,5 +1,5 @@
 /**
- * Shared error-code contract for CasaStudio validation phases.
+ * Shared error-code contract for CasaStudio validators.
  *
  * Codes are stable identifiers intended for callers that need to group,
  * translate, or act on validation failures without parsing human messages.

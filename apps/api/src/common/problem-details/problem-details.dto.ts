@@ -5,8 +5,9 @@ import { ApiErrorCode } from "./api-error-code";
 /**
  * Nested validation or dependency error item in a Problem Details response.
  *
- * The structure is intentionally generic so future schema and geometry errors
- * can report field paths without changing the top-level envelope.
+ * The structure is intentionally generic so schema, geometry, and dependency
+ * failures can report field or dependency paths without changing the top-level
+ * envelope.
  */
 export class ProblemDetailItemDto {
   @ApiProperty({ type: String })

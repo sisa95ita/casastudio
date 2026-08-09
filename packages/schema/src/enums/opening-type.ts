@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Stable vocabulary for concrete architectural openings supported by the MVP.
+ * Stable vocabulary for concrete architectural openings.
  */
 export const OpeningTypeValues = ["DOOR", "WINDOW"] as const;
 

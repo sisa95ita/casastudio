@@ -16,7 +16,7 @@ const pushError = (
 /**
  * Validates that references inside an already parsed Project resolve.
  *
- * This phase is separate from ProjectSchema composition and only checks
+ * This validation pass is separate from ProjectSchema composition and only checks
  * cross-reference existence and owning-level scope, including Room boundary
  * wall references. It does not perform bidirectional reference consistency,
  * renderability, geometry, asset, or provider validation.

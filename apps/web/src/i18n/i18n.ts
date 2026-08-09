@@ -8,11 +8,10 @@ import inspectorEn from "./locales/en/inspector.json";
 import navigationEn from "./locales/en/navigation.json";
 
 /**
- * Default and fallback locale for the current CasaStudio frontend.
+ * Default and fallback locale for the CasaStudio frontend.
  *
- * English is the only shipped locale in ADR-006 Phase 3, but components consume
- * namespace keys through i18next so future locale bundles can be added without
- * changing route or shell component code.
+ * Components consume namespace keys through i18next so locale resources remain
+ * isolated from route and shell component code.
  */
 export const DEFAULT_LOCALE = "en";
 

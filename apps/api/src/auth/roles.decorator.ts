@@ -10,8 +10,8 @@ export const requiredRolesMetadataKey = "casastudio:required-roles";
 /**
  * Declares Keycloak client roles required by a protected route.
  *
- * The decorator is intentionally client-role focused; project ownership and
- * resource-specific authorization are deferred to later backend phases.
+ * The decorator stores only coarse client-role requirements. Project ownership
+ * and resource-specific authorization remain separate business-layer checks.
  */
 export const Roles = (...roles: readonly KeycloakRole[]) =>
   SetMetadata(requiredRolesMetadataKey, roles);

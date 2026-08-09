@@ -6,10 +6,11 @@ import { JwtStrategy } from "./jwt.strategy";
 import { RolesGuard } from "./roles.guard";
 
 /**
- * Authentication and authorization foundation for the API.
+ * Authentication and authorization boundary for the API.
  *
- * Phase 1A validates Keycloak OIDC bearer tokens and client roles only; domain
- * authorization such as project ownership belongs to later business modules.
+ * The module validates Keycloak OIDC bearer tokens and client roles. Domain
+ * authorization, such as project ownership, belongs to the business modules
+ * that own those resources.
  */
 @Module({
   controllers: [AuthController],

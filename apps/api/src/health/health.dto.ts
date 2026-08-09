@@ -29,7 +29,7 @@ export class DependencyHealthDto {
  * Stable response body for public health probes.
  *
  * Liveness never includes dependencies; readiness includes each dependency so
- * Compose and future CI hooks can distinguish database and identity failures.
+ * orchestration and CI hooks can distinguish database and identity failures.
  */
 export class HealthResponseDto {
   @ApiProperty({ enum: HealthStatus, enumName: "HealthStatus" })
