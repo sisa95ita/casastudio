@@ -4,6 +4,7 @@ import { initReactI18next } from "react-i18next";
 
 import authEn from "./locales/en/auth.json";
 import commonEn from "./locales/en/common.json";
+import connectedProjectEn from "./locales/en/connected-project.json";
 import geometryPlaygroundEn from "./locales/en/geometry-playground.json";
 import inspectorEn from "./locales/en/inspector.json";
 import navigationEn from "./locales/en/navigation.json";
@@ -22,6 +23,7 @@ export const DEFAULT_LOCALE = "en";
 export const I18N_NAMESPACES = [
   "auth",
   "common",
+  "connected-project",
   "navigation",
   "geometry-playground",
   "inspector"
@@ -39,6 +41,7 @@ export const casaI18nResources = {
   en: {
     auth: authEn,
     common: commonEn,
+    "connected-project": connectedProjectEn,
     navigation: navigationEn,
     "geometry-playground": geometryPlaygroundEn,
     inspector: inspectorEn

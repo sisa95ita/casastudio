@@ -109,6 +109,7 @@ Only public Keycloak coordinates are exposed to the browser:
 | `VITE_KEYCLOAK_REALM` | `casastudio` | Development realm |
 | `VITE_KEYCLOAK_CLIENT_ID` | `casastudio-web` | Public Authorization Code client |
 | `VITE_KEYCLOAK_ROLE_CLIENT_ID` | `casastudio-api` | Token resource whose roles are shown in UI state |
+| `VITE_API_BASE_URL` | `http://localhost:3000` | Browser-reachable CasaStudio API base URL |
 
 The web client uses `keycloak-js` with standard Authorization Code Flow and
 SHA-256 PKCE. Initialization does not force authentication and does not use a
@@ -122,3 +123,25 @@ memory. Future API code may call `getAccessToken()`, which asks Keycloak to
 refresh an expiring token before returning the bearer token. The frontend maps
 identity claims and `resource_access["casastudio-api"].roles` for presentation
 only; the API remains authoritative for authorization.
+
+## Frontend Project and Geometry data flow
+
+Authenticated browser requests use a small frontend API client that obtains a
+current in-memory access token through `AuthProvider.getAccessToken()`, attaches
+it as a bearer token, and parses CasaStudio Problem Details failures without
+exposing credentials. The API accepts the explicitly configured local web
+origins from `CORS_ALLOWED_ORIGINS`; the default development list covers the
+pnpm Vite server on port 5173 and the Compose web runtime on port 8081.
+
+TanStack Query owns authoritative Project and Geometry server state, including
+request cancellation, loading and error state, cache lifecycle, and route-ID
+query identity. Redux Toolkit owns shared local application state only. The
+first Redux-backed state is the Geometry Playground entity selection and hover
+references; Project responses, Geometry responses, authentication, and backend
+errors are not copied into Redux.
+
+After signing in with the seeded demo user, the connected technical route is:
+
+```text
+http://localhost:5173/app/projects/casa-studio-canonical-project
+```

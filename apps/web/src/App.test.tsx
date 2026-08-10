@@ -1,19 +1,25 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import type { AuthClient, AuthSession } from "./auth/auth-client";
+import { geometryPlaygroundProject } from "./geometry-playground/geometry-playground-fixture";
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3000");
+});
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
 });
 
-function createAuthClient(session: AuthSession): AuthClient {
+function createAuthClient(session: AuthSession, accessToken: string | null = null): AuthClient {
   return {
     initialize: vi.fn().mockResolvedValue(session),
     login: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
-    getAccessToken: vi.fn().mockResolvedValue(null)
+    getAccessToken: vi.fn().mockResolvedValue(accessToken)
   };
 }
 
@@ -96,6 +102,50 @@ describe("App authentication and routing", () => {
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
     expect(screen.getByRole("main").textContent).toContain("Technical application foundation");
     expect(screen.getByText("demo")).toBeTruthy();
+  });
+
+  it("creates the default API client for authenticated project routes", async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) =>
+      Response.json(
+        String(input).endsWith("/geometry")
+          ? {
+              sourceProjectId: geometryPlaygroundProject.id,
+              sourceRevision: geometryPlaygroundProject.revision,
+              geometry: {
+                id: "geometry-demo",
+                units: { length: "cm", angle: "deg" },
+                levels: []
+              }
+            }
+          : {
+              project: geometryPlaygroundProject,
+              sourceRevision: geometryPlaygroundProject.revision
+            }
+      )
+    ) as typeof fetch;
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(
+      <App
+        initialEntries={[`/app/projects/${geometryPlaygroundProject.id}`]}
+        authClient={createAuthClient(authenticatedSession, "access-token")}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: geometryPlaygroundProject.name })).toBeTruthy();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `http://localhost:3000/api/v1/projects/${geometryPlaygroundProject.id}`,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer access-token"
+        })
+      })
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `http://localhost:3000/api/v1/projects/${geometryPlaygroundProject.id}/geometry`,
+      expect.any(Object)
+    );
   });
 
   it("delegates logout from the authenticated shell to the auth client", async () => {

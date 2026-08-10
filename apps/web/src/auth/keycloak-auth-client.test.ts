@@ -58,6 +58,18 @@ describe("KeycloakAuthClient", () => {
     expect(keycloak.updateToken).toHaveBeenCalledWith(30);
   });
 
+  it("returns the current token when refresh succeeds", async () => {
+    const keycloak = createKeycloakStub({
+      token: "refreshed-access-token",
+      updateToken: vi.fn().mockResolvedValue(true)
+    });
+    const client = new KeycloakAuthClient(keycloak, "casastudio-api");
+
+    await expect(client.getAccessToken()).resolves.toBe("refreshed-access-token");
+    expect(keycloak.updateToken).toHaveBeenCalledWith(30);
+    expect(keycloak.clearToken).not.toHaveBeenCalled();
+  });
+
   it("clears adapter token state when refresh fails", async () => {
     const keycloak = createKeycloakStub({
       updateToken: vi.fn().mockRejectedValue(new Error("session expired"))
@@ -66,6 +78,23 @@ describe("KeycloakAuthClient", () => {
 
     await expect(client.getAccessToken()).resolves.toBeNull();
     expect(keycloak.clearToken).toHaveBeenCalledOnce();
+  });
+
+  it("reports token unavailable when an authenticated adapter has no access token", async () => {
+    const keycloak = createKeycloakStub({ token: undefined });
+    const client = new KeycloakAuthClient(keycloak, "casastudio-api");
+
+    await expect(client.getAccessToken()).resolves.toBeNull();
+    expect(keycloak.updateToken).toHaveBeenCalledWith(30);
+    expect(keycloak.clearToken).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh when the adapter is no longer authenticated", async () => {
+    const keycloak = createKeycloakStub({ authenticated: false });
+    const client = new KeycloakAuthClient(keycloak, "casastudio-api");
+
+    await expect(client.getAccessToken()).resolves.toBeNull();
+    expect(keycloak.updateToken).not.toHaveBeenCalled();
   });
 
   it("delegates login and logout with application redirect URLs", async () => {

@@ -29,11 +29,7 @@ import {
   type GeometryPresentationModel2D
 } from "./geometry-presentation-model-2d";
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
-import {
-  clearGeometrySelection,
-  createGeometrySelectionState,
-  type GeometrySelectionState
-} from "./geometry-selection-state";
+import type { GeometrySelectionState } from "./geometry-selection-state";
 import { collectLevelBounds } from "./geometry-svg-helpers";
 import { GeometryLayerControls } from "./GeometryLayerControls";
 import { GeometryRuntimeSummary } from "./GeometryRuntimeSummary";
@@ -53,6 +49,13 @@ import {
   type ViewportState,
   zoomViewportState
 } from "./viewport-transform-2d";
+import { useAppDispatch, useAppSelector } from "../state/hooks";
+import {
+  geometrySelectionChanged,
+  geometrySelectionCleared,
+  geometrySelectionReset,
+  selectGeometrySelection
+} from "../state/viewer-slice";
 
 /**
  * Props for the interactive geometry playground page.
@@ -74,11 +77,10 @@ export function GeometryPlaygroundPage({
 }: GeometryPlaygroundPageProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const { t: navigationT } = useCasaTranslation("navigation");
+  const dispatch = useAppDispatch();
   const buildResult = useMemo(() => GeometryEngine.build(project), [project]);
   const [displayOptions, setDisplayOptions] = useState(defaultGeometryDisplayOptions);
-  const [selectionState, setSelectionState] = useState<GeometrySelectionState>(() =>
-    createGeometrySelectionState()
-  );
+  const selectionState = useAppSelector(selectGeometrySelection);
   const [selectedLevelId, setSelectedLevelId] = useState(() =>
     buildResult.ok ? (buildResult.model.levels[0]?.id ?? "") : ""
   );
@@ -109,8 +111,15 @@ export function GeometryPlaygroundPage({
 
   useEffect(() => {
     setViewport(createInitialViewportState(selectedLevel));
-    setSelectionState(createGeometrySelectionState());
-  }, [selectedLevel]);
+    dispatch(geometrySelectionReset());
+  }, [dispatch, selectedLevel]);
+
+  const handleSelectionStateChange = useCallback(
+    (nextSelectionState: GeometrySelectionState) => {
+      dispatch(geometrySelectionChanged(nextSelectionState));
+    },
+    [dispatch]
+  );
 
   const handleFitViewport = useCallback(() => {
     setViewport(createInitialViewportState(selectedLevel));
@@ -144,7 +153,7 @@ export function GeometryPlaygroundPage({
       event.preventDefault();
 
       if (action === "CLEAR_SELECTION") {
-        setSelectionState((currentState) => clearGeometrySelection(currentState));
+        dispatch(geometrySelectionCleared());
         return;
       }
 
@@ -161,7 +170,7 @@ export function GeometryPlaygroundPage({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [handleFitViewport, handleResetViewport]);
+  }, [dispatch, handleFitViewport, handleResetViewport]);
 
   const shellContent = useMemo(
     () => ({
@@ -300,7 +309,7 @@ export function GeometryPlaygroundPage({
             options={displayOptions}
             viewport={viewport}
             selectionState={selectionState}
-            onSelectionStateChange={setSelectionState}
+            onSelectionStateChange={handleSelectionStateChange}
             onViewportChange={setViewport}
           />
         </Paper>

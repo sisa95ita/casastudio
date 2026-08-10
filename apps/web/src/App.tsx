@@ -1,7 +1,11 @@
 import { CssBaseline, ThemeProvider } from "@mui/material";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { Provider as ReduxProvider } from "react-redux";
 import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./app-shell/AppShell";
+import { ApiProvider } from "./api/ApiProvider";
+import type { CasaStudioApiClient } from "./api/CasaStudioApiClient";
 import type { AuthClient } from "./auth/auth-client";
 import { AuthProvider } from "./auth/AuthProvider";
 import {
@@ -13,6 +17,9 @@ import { GeometryPlaygroundPage } from "./geometry-playground/GeometryPlayground
 import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PublicLandingPage } from "./pages/PublicLandingPage";
+import { ConnectedProjectPage } from "./pages/ConnectedProjectPage";
+import { appQueryClient, createAppQueryClient } from "./queries/query-client";
+import { appStore, createAppStore, type AppStore } from "./state/store";
 import "./styles.css";
 import { casaStudioTheme } from "./theme/casaStudioTheme";
 
@@ -22,6 +29,9 @@ import { casaStudioTheme } from "./theme/casaStudioTheme";
 export type AppProps = {
   readonly initialEntries?: readonly string[];
   readonly authClient?: AuthClient;
+  readonly apiClient?: CasaStudioApiClient;
+  readonly queryClient?: QueryClient;
+  readonly store?: AppStore;
 };
 
 /** Lazily created browser authentication client shared across React renders. */
@@ -33,20 +43,28 @@ let defaultAuthClient: AuthClient | undefined;
  * BrowserRouter is used in production, while tests can pass `initialEntries`
  * to exercise the same nested route tree with MemoryRouter.
  */
-export function App({ initialEntries, authClient }: AppProps) {
+export function App({ initialEntries, authClient, apiClient, queryClient, store }: AppProps) {
   const routes = <AppRoutes />;
   const activeAuthClient = authClient ?? getDefaultAuthClient();
+  const activeQueryClient = queryClient ?? (initialEntries ? createAppQueryClient() : appQueryClient);
+  const activeStore = store ?? (initialEntries ? createAppStore() : appStore);
 
   return (
     <ThemeProvider theme={casaStudioTheme}>
       <CssBaseline />
-      <AuthProvider client={activeAuthClient}>
-        {initialEntries ? (
-          <MemoryRouter initialEntries={[...initialEntries]}>{routes}</MemoryRouter>
-        ) : (
-          <BrowserRouter>{routes}</BrowserRouter>
-        )}
-      </AuthProvider>
+      <ReduxProvider store={activeStore}>
+        <QueryClientProvider client={activeQueryClient}>
+          <AuthProvider client={activeAuthClient}>
+            <ApiProvider client={apiClient}>
+              {initialEntries ? (
+                <MemoryRouter initialEntries={[...initialEntries]}>{routes}</MemoryRouter>
+              ) : (
+                <BrowserRouter>{routes}</BrowserRouter>
+              )}
+            </ApiProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </ReduxProvider>
     </ThemeProvider>
   );
 }
@@ -72,6 +90,7 @@ export function AppRoutes() {
         <Route path="/app" element={<AppShell />}>
           <Route index element={<HomePage />} />
           <Route path="geometry-playground" element={<GeometryPlaygroundPage />} />
+          <Route path="projects/:projectId" element={<ConnectedProjectPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
