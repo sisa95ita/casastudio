@@ -31,7 +31,7 @@ export function NotFoundPage() {
             {t("routes.notFound.description")}
           </Typography>
           <Box>
-            <Button component={RouterLink} to="/" startIcon={<ArrowBackRoundedIcon />}>
+            <Button component={RouterLink} to="/app" startIcon={<ArrowBackRoundedIcon />}>
               {t("actions.backToHome")}
             </Button>
           </Box>

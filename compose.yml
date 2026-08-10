@@ -85,6 +85,11 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       target: runtime
+      args:
+        VITE_KEYCLOAK_BASE_URL: ${VITE_KEYCLOAK_BASE_URL:-http://localhost:8080}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-casastudio}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-casastudio-web}
+        VITE_KEYCLOAK_ROLE_CLIENT_ID: ${VITE_KEYCLOAK_ROLE_CLIENT_ID:-casastudio-api}
     ports:
       - "8081:80"
 

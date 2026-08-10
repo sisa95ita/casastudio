@@ -61,7 +61,7 @@ export function HomePage() {
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: "flex-start" }}>
             <Button
               component={RouterLink}
-              to="/geometry-playground"
+              to="/app/geometry-playground"
               variant="contained"
               endIcon={<ArrowForwardRoundedIcon />}
             >

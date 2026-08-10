@@ -69,3 +69,56 @@ Optional later: Docker, Prisma, Tailwind CSS IntelliSense, GitLens.
 ## Containers
 
 CasaStudio should support containerized local development through Docker / Docker Compose. The documentation assumes a standard modern container environment. Platform-specific workarounds should be documented separately as troubleshooting notes, not as the main project standard.
+
+## Daily application workflow
+
+Copy `.env.example` to `.env` and replace the local placeholder passwords and
+API client secret. The preferred development topology runs PostgreSQL and
+Keycloak in Docker while the API and web application run through pnpm:
+
+```bash
+docker compose up -d postgres keycloak
+pnpm db:migrate:deploy
+pnpm db:seed
+pnpm api:dev
+pnpm web:dev
+```
+
+Run the API and web commands in separate terminals. The resulting local
+endpoints are:
+
+| Service | URL |
+|---|---|
+| Web | `http://localhost:5173` |
+| API | `http://localhost:3000` |
+| Keycloak | `http://localhost:8080` |
+
+The development realm import creates the public `casastudio-web` browser client
+and the `demo` user. Its password comes from
+`CASASTUDIO_KEYCLOAK_DEMO_PASSWORD`; it must not be copied into frontend source
+or browser configuration.
+
+## Frontend authentication configuration
+
+Vite loads frontend environment values from the repository-level `.env` file.
+Only public Keycloak coordinates are exposed to the browser:
+
+| Variable | Local value | Purpose |
+|---|---|---|
+| `VITE_KEYCLOAK_BASE_URL` | `http://localhost:8080` | Browser-reachable Keycloak base URL |
+| `VITE_KEYCLOAK_REALM` | `casastudio` | Development realm |
+| `VITE_KEYCLOAK_CLIENT_ID` | `casastudio-web` | Public Authorization Code client |
+| `VITE_KEYCLOAK_ROLE_CLIENT_ID` | `casastudio-api` | Token resource whose roles are shown in UI state |
+
+The web client uses `keycloak-js` with standard Authorization Code Flow and
+SHA-256 PKCE. Initialization does not force authentication and does not use a
+session-check iframe. `/` remains public; visiting `/app` while anonymous shows
+an explicit sign-in action. Keycloak returns a successful login to the original
+application URL, and logout returns to `/`.
+
+`AuthProvider` owns initialization and exposes `useAuth()` plus the protected
+route boundary. Keycloak access and refresh tokens remain inside the adapter in
+memory. Future API code may call `getAccessToken()`, which asks Keycloak to
+refresh an expiring token before returning the bearer token. The frontend maps
+identity claims and `resource_access["casastudio-api"].roles` for presentation
+only; the API remains authoritative for authorization.

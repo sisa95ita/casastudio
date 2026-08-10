@@ -1,7 +1,8 @@
-import { Box } from "@mui/material";
+import { Box, Stack } from "@mui/material";
 import { useCallback, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 
+import { AuthControls } from "../auth/AuthControls";
 import { useCasaTranslation } from "../i18n";
 import { AppHeader } from "./AppHeader";
 import {
@@ -58,7 +59,12 @@ export function AppShell() {
         <AppHeader
           title={content.title || localizedDefaultContent.title}
           breadcrumb={content.breadcrumb ?? localizedDefaultContent.breadcrumb}
-          accessory={content.headerAccessory}
+          accessory={
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              {content.headerAccessory}
+              <AuthControls />
+            </Stack>
+          }
         />
 
         <Box
