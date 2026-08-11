@@ -12,6 +12,8 @@ import {
   Stack,
   Typography
 } from "@mui/material";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import LockOutlineRoundedIcon from "@mui/icons-material/LockOutlineRounded";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -229,11 +231,14 @@ export function ProjectViewerPage() {
         projectQuery.isFetching || geometryQuery.isFetching
           ? t("status.loading")
           : geometryIdentity && selectedLevel
-            ? t("status.ready", {
-                level: selectedLevel.sourceLevelId,
-                polygons: selectedLevel.polygons.length,
-                selection: safeSelectionState.selected.length
-              })
+            ? (
+                <ProjectViewerStatus
+                  level={selectedLevel.sourceLevelId}
+                  polygons={selectedLevel.polygons.length}
+                  selection={safeSelectionState.selected.length}
+                  revision={geometryResponse?.sourceRevision}
+                />
+              )
             : t("status.unavailable")
     }),
     [
@@ -286,62 +291,114 @@ export function ProjectViewerPage() {
   }
 
   return (
-    <Stack className="geometry-page" spacing={1.5}>
-      <Box className="geometry-page-header">
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+    <Stack className="geometry-page" spacing={0}>
+      <Box className="project-viewer-context">
+        <Box className="project-viewer-context__title">
           <Typography variant="overline" color="primary.dark">
             {t("intro.eyebrow")}
           </Typography>
+          <Typography component="h1" variant="h3">
+            {projectResponse.project.name}
+          </Typography>
+        </Box>
+
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          {selectedLevel && levels.length > 1 ? (
+            <FormControl size="small" className="project-level-selector">
+              <InputLabel id="project-geometry-level-selector-label">{t("levelSelector.label")}</InputLabel>
+              <Select
+                labelId="project-geometry-level-selector-label"
+                label={t("levelSelector.label")}
+                value={selectedLevel.id}
+                onChange={(event) => setSelectedLevelId(event.target.value)}
+              >
+                {levels.map((level) => (
+                  <MenuItem key={level.id} value={level.id}>
+                    {level.sourceLevelId}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : selectedLevel ? (
+            <Chip label={selectedLevel.sourceLevelId} variant="outlined" />
+          ) : null}
           <Chip
-            size="small"
+            icon={<CheckCircleRoundedIcon />}
             color="success"
             variant="outlined"
             label={t("revision.agreement", { revision: projectResponse.sourceRevision })}
           />
         </Stack>
-        <Typography variant="h1">{projectResponse.project.name}</Typography>
-        <Typography variant="body2" color="text.secondary">
-          {projectResponse.project.id}
-        </Typography>
       </Box>
 
-      {selectedLevel && levels.length > 1 ? (
-        <FormControl size="small" sx={{ maxWidth: 280 }}>
-          <InputLabel id="project-geometry-level-selector-label">{t("levelSelector.label")}</InputLabel>
-          <Select
-            labelId="project-geometry-level-selector-label"
-            label={t("levelSelector.label")}
-            value={selectedLevel.id}
-            onChange={(event) => setSelectedLevelId(event.target.value)}
-          >
-            {levels.map((level) => (
-              <MenuItem key={level.id} value={level.id}>
-                {level.sourceLevelId}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      ) : null}
-
       {selectedLevel && presentationResult?.ok ? (
-        <GeometryViewerPanel
-          title={t("viewer.title")}
-          headingId="project-geometry-viewer-heading"
-          presentationModel={presentationResult.model}
-          options={displayOptions}
-          viewport={activeViewport}
-          selectionState={safeSelectionState}
-          onSelectionStateChange={handleSelectionStateChange}
-          onViewportChange={setViewport}
-          onFitViewport={handleFitViewport}
-          onResetViewport={handleResetViewport}
-          onZoomViewport={handleZoomViewport}
-        />
+        <>
+          <GeometryViewerPanel
+            title={t("viewer.title")}
+            headingId="project-geometry-viewer-heading"
+            presentationModel={presentationResult.model}
+            options={displayOptions}
+            viewport={activeViewport}
+            selectionState={safeSelectionState}
+            onSelectionStateChange={handleSelectionStateChange}
+            onViewportChange={setViewport}
+            onFitViewport={handleFitViewport}
+            onResetViewport={handleResetViewport}
+            onZoomViewport={handleZoomViewport}
+          />
+          <Paper className="mobile-project-overview" variant="outlined">
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <LockOutlineRoundedIcon color="primary" />
+              <Box>
+                <Typography variant="subtitle2">{t("mobile.title")}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {t("mobile.description")}
+                </Typography>
+              </Box>
+            </Stack>
+            <Box className="mobile-project-overview__facts">
+              <Box>
+                <Typography variant="caption" color="text.secondary">{t("mobile.level")}</Typography>
+                <Typography variant="subtitle2">{selectedLevel.sourceLevelId}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">{t("mobile.spaces")}</Typography>
+                <Typography variant="subtitle2">{selectedLevel.polygons.length}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">{t("mobile.revision")}</Typography>
+                <Typography variant="subtitle2">{geometryResponse.sourceRevision}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+        </>
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
           {t("viewer.noLevels")}
         </Paper>
       )}
+    </Stack>
+  );
+}
+
+/** Values displayed in the authoritative geometry status strip. */
+type ProjectViewerStatusProps = {
+  readonly level: string;
+  readonly polygons: number;
+  readonly selection: number;
+  readonly revision?: number;
+};
+
+/** Renders the compact authoritative geometry status values. */
+function ProjectViewerStatus({ level, polygons, selection, revision }: ProjectViewerStatusProps) {
+  const { t } = useCasaTranslation("project-viewer");
+
+  return (
+    <Stack direction="row" spacing={2.5} className="project-viewer-status">
+      <Typography variant="caption">{t("status.level", { level })}</Typography>
+      <Typography variant="caption">{t("status.polygons", { polygons })}</Typography>
+      <Typography variant="caption">{t("status.selection", { selection })}</Typography>
+      <Typography variant="caption">{t("status.revision", { revision })}</Typography>
     </Stack>
   );
 }

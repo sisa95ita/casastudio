@@ -3,10 +3,11 @@
     "primary": "Primary"
   },
   "items": {
-    "home": "Home"
+    "projects": "Projects",
+    "projectViewer": "Project viewer"
   },
   "breadcrumbs": {
-    "home": "Home",
+    "home": "Projects",
     "runtime": "Runtime"
   }
 }

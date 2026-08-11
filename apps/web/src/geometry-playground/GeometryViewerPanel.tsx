@@ -1,15 +1,14 @@
-import FitScreenIcon from "@mui/icons-material/FitScreen";
-import RestartAltIcon from "@mui/icons-material/RestartAlt";
-import ZoomInIcon from "@mui/icons-material/ZoomIn";
-import ZoomOutIcon from "@mui/icons-material/ZoomOut";
-import { Box, IconButton, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import FitScreenRoundedIcon from "@mui/icons-material/FitScreenRounded";
+import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
+import ZoomInRoundedIcon from "@mui/icons-material/ZoomInRounded";
+import ZoomOutRoundedIcon from "@mui/icons-material/ZoomOutRounded";
+import { Box, Chip, IconButton, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import type { ReactNode } from "react";
+
 import { useCasaTranslation } from "../i18n";
 import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import type { GeometrySelectionState } from "./geometry-selection-state";
-import {
-  type GeometryDisplayOptions,
-  GeometrySvgViewer
-} from "./GeometrySvgViewer";
+import { type GeometryDisplayOptions, GeometrySvgViewer } from "./GeometrySvgViewer";
 import type { ViewportState } from "./viewport-transform-2d";
 
 /** Props for the shared interactive 2D geometry viewer panel. */
@@ -27,10 +26,7 @@ export type GeometryViewerPanelProps = {
   readonly onZoomViewport: (zoomFactor: number) => void;
 };
 
-/**
- * Renders shared viewer chrome around a source-independent 2D presentation
- * model.
- */
+/** Renders professional canvas chrome around a source-independent 2D model. */
 export function GeometryViewerPanel({
   title,
   headingId,
@@ -47,52 +43,42 @@ export function GeometryViewerPanel({
   const { t } = useCasaTranslation("geometry-playground");
 
   return (
-    <Paper
-      component="section"
-      className="geometry-viewer-panel"
-      aria-labelledby={headingId}
-      sx={{
-        border: 1,
-        borderColor: "divider",
-        display: "flex",
-        flex: "1 1 auto",
-        flexDirection: "column",
-        minHeight: 0,
-        overflow: "hidden"
-      }}
-    >
-      <Box sx={{ borderBottom: 1, borderColor: "divider", px: 1.5, py: 1 }}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <Typography
-            variant="subtitle2"
-            component="h2"
-            id={headingId}
-            sx={{ flex: "1 1 auto" }}
-          >
+    <Paper component="section" className="geometry-viewer-panel" aria-labelledby={headingId} variant="outlined">
+      <Box className="geometry-viewer-panel__toolbar">
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
+          <Typography variant="subtitle2" component="h2" id={headingId} noWrap>
             {title}
           </Typography>
+          <Chip label={t("viewer.readOnly")} size="small" variant="outlined" />
+        </Stack>
+        <Stack direction="row" spacing={0.25} role="toolbar" aria-label={t("toolbar.label")}>
           <ViewportButton label={t("toolbar.zoomOut")} onClick={() => onZoomViewport(0.85)}>
-            <ZoomOutIcon fontSize="small" />
+            <ZoomOutRoundedIcon fontSize="small" />
           </ViewportButton>
           <ViewportButton label={t("toolbar.zoomIn")} onClick={() => onZoomViewport(1.18)}>
-            <ZoomInIcon fontSize="small" />
+            <ZoomInRoundedIcon fontSize="small" />
           </ViewportButton>
           <ViewportButton label={t("toolbar.fit")} onClick={onFitViewport}>
-            <FitScreenIcon fontSize="small" />
+            <FitScreenRoundedIcon fontSize="small" />
           </ViewportButton>
           <ViewportButton label={t("toolbar.reset")} onClick={onResetViewport}>
-            <RestartAltIcon fontSize="small" />
+            <RestartAltRoundedIcon fontSize="small" />
           </ViewportButton>
         </Stack>
       </Box>
-      <GeometrySvgViewer
-        presentationModel={presentationModel}
-        options={options}
-        viewport={viewport}
-        selectionState={selectionState}
-        onSelectionStateChange={onSelectionStateChange}
-        onViewportChange={onViewportChange}
-      />
+      <Box className="geometry-viewer-panel__canvas">
+        <GeometrySvgViewer
+          presentationModel={presentationModel}
+          options={options}
+          viewport={viewport}
+          selectionState={selectionState}
+          onSelectionStateChange={onSelectionStateChange}
+          onViewportChange={onViewportChange}
+        />
+        <Box className="geometry-canvas-hint">
+          <Typography variant="caption">{t("viewer.canvasHint")}</Typography>
+        </Box>
+      </Box>
     </Paper>
   );
 }
@@ -100,13 +86,14 @@ export function GeometryViewerPanel({
 type ViewportButtonProps = {
   readonly label: string;
   readonly onClick: () => void;
-  readonly children: React.ReactNode;
+  readonly children: ReactNode;
 };
 
+/** Renders one labelled viewport toolbar action. */
 function ViewportButton({ label, onClick, children }: ViewportButtonProps) {
   return (
     <Tooltip title={label}>
-      <IconButton aria-label={label} onClick={onClick}>
+      <IconButton aria-label={label} onClick={onClick} size="small">
         {children}
       </IconButton>
     </Tooltip>

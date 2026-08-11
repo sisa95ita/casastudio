@@ -2,6 +2,7 @@
   "layers": {
     "title": "Layers",
     "label": "Geometry debug layers",
+    "description": "Control the visible plan detail",
     "showPolygons": "Show polygons",
     "showBoundaryEdges": "Show boundary edges",
     "showVertices": "Show vertices",

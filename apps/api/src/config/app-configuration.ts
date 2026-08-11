@@ -56,6 +56,7 @@ const environmentSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   API_PORT: z.coerce.number().int().positive().max(65535).default(3000),
+  API_HOST: z.string().min(1).default("0.0.0.0"),
   CORS_ALLOWED_ORIGINS: corsAllowedOriginsSchema,
   DATABASE_URL: databaseUrlSchema,
   KEYCLOAK_BASE_URL: z.url(),
@@ -82,6 +83,7 @@ type EnvironmentVariables = z.infer<typeof environmentSchema>;
 export type AppConfiguration = {
   readonly nodeEnv: "development" | "test" | "production";
   readonly apiPort: number;
+  readonly apiHost: string;
   readonly databaseUrl: string;
   readonly corsAllowedOrigins: readonly string[];
   readonly keycloak: {
@@ -117,6 +119,7 @@ function mapEnvironmentToConfiguration(
   return {
     nodeEnv: environment.NODE_ENV,
     apiPort: environment.API_PORT,
+    apiHost: environment.API_HOST,
     databaseUrl: environment.DATABASE_URL,
     corsAllowedOrigins: environment.CORS_ALLOWED_ORIGINS,
     keycloak: {

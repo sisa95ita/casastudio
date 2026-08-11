@@ -1,27 +1,27 @@
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
-import { Button, Chip, Stack } from "@mui/material";
+import PersonOutlineRoundedIcon from "@mui/icons-material/PersonOutlineRounded";
+import { Box, Button, Typography } from "@mui/material";
 
 import { useCasaTranslation } from "../i18n";
 import { useAuth } from "./AuthProvider";
 
-/**
- * Displays the current user and the explicit logout action in the application shell.
- */
+/** Displays the current identity and accessible logout controls. */
 export function AuthControls() {
   const { t } = useCasaTranslation("auth");
   const { logout, user } = useAuth();
   const identity = user?.username ?? user?.email ?? t("user.fallback");
 
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-      <Chip label={identity} size="small" variant="outlined" />
-      <Button
-        size="small"
-        startIcon={<LogoutRoundedIcon />}
-        onClick={() => void logout()}
-      >
-        {t("actions.logout")}
+    <Box className="auth-controls">
+      <Box className="auth-controls__identity">
+        <PersonOutlineRoundedIcon fontSize="small" />
+        <Typography variant="caption" noWrap>
+          {identity}
+        </Typography>
+      </Box>
+      <Button className="auth-controls__button" size="small" startIcon={<LogoutRoundedIcon />} onClick={() => void logout()} aria-label={t("actions.logout")}>
+        <Box component="span" className="auth-controls__label">{t("actions.logout")}</Box>
       </Button>
-    </Stack>
+    </Box>
   );
 }

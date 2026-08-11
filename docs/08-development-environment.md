@@ -115,7 +115,7 @@ The web client uses `keycloak-js` with standard Authorization Code Flow and
 SHA-256 PKCE. Startup uses `check-sso` without a session-check iframe, allowing
 Keycloak to restore an existing SSO session before the application decides that
 the user is anonymous. `/` remains public; visiting `/app` while genuinely
-anonymous shows an explicit sign-in action. Keycloak returns a successful login
+anonymous starts Keycloak login directly. Keycloak returns a successful login
 to the original application URL, and logout returns to `/`.
 
 `AuthProvider` owns initialization and exposes `useAuth()` plus the protected
@@ -124,6 +124,55 @@ memory. Future API code may call `getAccessToken()`, which asks Keycloak to
 refresh an expiring token before returning the bearer token. The frontend maps
 identity claims and `resource_access["casastudio-api"].roles` for presentation
 only; the API remains authoritative for authorization.
+
+## Local-network device testing
+
+The committed configuration keeps the localhost URLs above as its defaults.
+Vite and the Nest API both listen on all local interfaces during development,
+so a phone or tablet on the same trusted network can reach the Mac once the
+browser-facing URLs and allowed origins use the Mac's LAN address.
+
+Create a repository-root `.env.local` for machine-specific values. The file is
+ignored by Git and is loaded ahead of `.env` by both Vite and the API. Replace
+`<LAN-IP>` locally; do not copy a real address into committed configuration.
+
+```dotenv
+VITE_API_BASE_URL=http://<LAN-IP>:3000
+VITE_KEYCLOAK_BASE_URL=http://<LAN-IP>:8080
+
+KEYCLOAK_BASE_URL=http://<LAN-IP>:8080
+KEYCLOAK_ISSUER=http://<LAN-IP>:8080/realms/casastudio
+KEYCLOAK_JWKS_URI=http://<LAN-IP>:8080/realms/casastudio/protocol/openid-connect/certs
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8081,http://<LAN-IP>:5173
+
+CASASTUDIO_KEYCLOAK_HOSTNAME=http://<LAN-IP>:8080
+CASASTUDIO_WEB_LAN_ORIGIN=http://<LAN-IP>:5173
+```
+
+The standard pnpm commands remain unchanged:
+
+```bash
+pnpm api:dev
+pnpm web:dev
+```
+
+Docker Compose reads `.env` by default, but intentionally does not consume the
+machine-specific override implicitly. When recreating Keycloak for LAN testing,
+pass both files explicitly so the imported development realm receives the LAN
+redirect URI and web origin:
+
+```bash
+docker compose --env-file .env --env-file .env.local up -d --force-recreate keycloak
+```
+
+Return to localhost mode by starting Keycloak normally and running the pnpm
+commands without `.env.local`. A realm is imported only when it does not already
+exist in that Keycloak container, so recreating the development-only container
+is required when switching its public hostname or imported client origins.
+
+LAN access is intended only for a trusted development network. The client keeps
+explicit origins, the API does not use wildcard CORS, and production hostname or
+redirect policy is not changed by this local workflow.
 
 ## Frontend Project and Geometry data flow
 

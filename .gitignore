@@ -12,5 +12,7 @@ jenkins_home/
 .env.*
 !.env.example
 !**/.env.example
+# Machine-specific browser and service endpoints for local-network testing.
+.env.local
 *.log
 *.tsbuildinfo

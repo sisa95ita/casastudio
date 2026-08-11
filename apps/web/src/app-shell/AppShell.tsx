@@ -1,6 +1,6 @@
-import { Box, Stack } from "@mui/material";
-import { useCallback, useMemo, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Box, Drawer, Stack } from "@mui/material";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 
 import { AuthControls } from "../auth/AuthControls";
 import { useCasaTranslation } from "../i18n";
@@ -15,16 +15,10 @@ import { MainWorkspace } from "./MainWorkspace";
 import { NavigationRail } from "./NavigationRail";
 import { StatusBar } from "./StatusBar";
 
-/**
- * Reusable CasaStudio desktop application shell.
- *
- * The shell owns viewport filling, fixed chrome, navigation, inspector, and
- * status regions. Nested routes only register small route-specific slots so
- * global chrome stays separate from route-owned selection, persistence, command,
- * and view-model state.
- */
+/** Renders the responsive authenticated CasaStudio product shell. */
 export function AppShell() {
   const { t } = useCasaTranslation("common");
+  const location = useLocation();
   const localizedDefaultContent = useMemo(
     () => ({
       title: t("shell.defaultTitle"),
@@ -34,31 +28,25 @@ export function AppShell() {
     [t]
   );
   const [content, setContent] = useState<AppShellContent>(defaultAppShellContent);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const resetContent = useCallback(() => setContent(localizedDefaultContent), [localizedDefaultContent]);
   const contextValue = useMemo(
-    () => ({
-      setContent,
-      resetContent
-    }),
+    () => ({ setContent, resetContent }),
     [resetContent]
   );
 
+  useEffect(() => {
+    setInspectorOpen(false);
+  }, [location.pathname]);
+
   return (
     <AppShellContentContext.Provider value={contextValue}>
-      <Box
-        sx={{
-          bgcolor: "background.default",
-          color: "text.primary",
-          display: "grid",
-          gridTemplateRows: "52px minmax(0, 1fr) 28px",
-          height: "100vh",
-          minWidth: 0,
-          overflow: "hidden"
-        }}
-      >
+      <Box className="app-shell">
         <AppHeader
           title={content.title || localizedDefaultContent.title}
           breadcrumb={content.breadcrumb ?? localizedDefaultContent.breadcrumb}
+          inspectorAvailable={Boolean(content.inspector)}
+          onOpenInspector={() => setInspectorOpen(true)}
           accessory={
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               {content.headerAccessory}
@@ -67,19 +55,7 @@ export function AppShell() {
           }
         />
 
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "58px minmax(0, 1fr)",
-              sm: "68px minmax(0, 1fr)",
-              md: "68px minmax(0, 1fr) 300px",
-              lg: "68px minmax(0, 1fr) 320px"
-            },
-            minHeight: 0,
-            minWidth: 0
-          }}
-        >
+        <Box className="app-shell__layout">
           <NavigationRail />
           <MainWorkspace>
             <Outlet />
@@ -89,6 +65,18 @@ export function AppShell() {
 
         <StatusBar>{content.status ?? localizedDefaultContent.status}</StatusBar>
       </Box>
+
+      <Drawer
+        anchor="right"
+        open={inspectorOpen}
+        onClose={() => setInspectorOpen(false)}
+        className="inspector-drawer"
+        ModalProps={{ keepMounted: true }}
+      >
+        <InspectorPanel compact onClose={() => setInspectorOpen(false)}>
+          {content.inspector}
+        </InspectorPanel>
+      </Drawer>
     </AppShellContentContext.Provider>
   );
 }

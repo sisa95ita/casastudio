@@ -137,6 +137,40 @@ describe("ProjectViewerPage", () => {
     expect(screen.getByText(`Revision ${demoProjectFixture.revision}`)).toBeTruthy();
     expect(screen.getByRole("img", { name: /interactive 2d geometry viewer/i })).toBeTruthy();
     expect(screen.getAllByTestId("geometry-polygon")).toHaveLength(1);
+    expect(screen.getByText("Reduced project view")).toBeTruthy();
+  });
+
+  it("switches authoritative geometry levels from the level selector", async () => {
+    const firstLevel = geometryResponse.geometry.levels[0]!;
+    const multiLevelGeometry = {
+      ...geometryResponse,
+      geometry: {
+        ...geometryResponse.geometry,
+        levels: [
+          firstLevel,
+          {
+            ...firstLevel,
+            id: "geometry-level-upper",
+            sourceLevelId: "level-upper",
+            elevation: 300
+          }
+        ]
+      }
+    };
+    const fetchImplementation = vi.fn(async (input: RequestInfo | URL) =>
+      Response.json(
+        String(input).endsWith("/geometry")
+          ? multiLevelGeometry
+          : { project: demoProjectFixture, sourceRevision: demoProjectFixture.revision }
+      )
+    ) as typeof fetch;
+
+    renderConnectedRoute(createApiClient(fetchImplementation));
+
+    fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Level" }));
+    fireEvent.click(screen.getByRole("option", { name: "level-upper" }));
+
+    expect(await screen.findByText("level-upper", { selector: ".MuiSelect-select" })).toBeTruthy();
   });
 
   it("does not invoke GeometryEngine.build for authoritative route data", async () => {
@@ -223,6 +257,18 @@ describe("ProjectViewerPage", () => {
     expect(polygon.getAttribute("points")).not.toBe(fittedPoints);
 
     fireEvent.keyDown(window, { key: "f" });
+    expect(polygon.getAttribute("points")).toBe(fittedPoints);
+  });
+
+  it("fits and resets the authoritative viewport from canvas controls", async () => {
+    renderConnectedRoute(createApiClient(successFetch()));
+    const polygon = await screen.findByTestId("geometry-polygon");
+    const fittedPoints = polygon.getAttribute("points");
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset viewport" }));
+    expect(polygon.getAttribute("points")).not.toBe(fittedPoints);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fit to view" }));
     expect(polygon.getAttribute("points")).toBe(fittedPoints);
   });
 

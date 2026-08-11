@@ -1,44 +1,38 @@
-import { Box, Divider, Stack, Typography } from "@mui/material";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import { Box, IconButton, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 
 import { useCasaTranslation } from "../i18n";
 
-/**
- * Props for the right-side route inspector.
- */
+/** Props for the route-specific inspector surface. */
 export type InspectorPanelProps = {
   readonly children?: ReactNode;
+  readonly compact?: boolean;
+  readonly onClose?: () => void;
 };
 
-/**
- * Renders the bounded route-specific inspector panel.
- *
- * The panel is hidden below the medium breakpoint to preserve the usable SVG
- * workspace on narrow screens. It is a desktop inspector surface, not a mobile
- * editing surface.
- */
-export function InspectorPanel({ children }: InspectorPanelProps) {
+/** Renders the grouped route inspector for persistent and drawer placements. */
+export function InspectorPanel({ children, compact = false, onClose }: InspectorPanelProps) {
   const { t } = useCasaTranslation("common");
 
   return (
-    <Box
-      component="aside"
-      aria-label={t("shell.inspector.label")}
-      sx={{
-        bgcolor: "background.paper",
-        borderLeft: 1,
-        borderColor: "divider",
-        display: { xs: "none", md: "block" },
-        minHeight: 0,
-        overflow: "auto",
-        width: { md: 300, lg: 320 }
-      }}
-    >
-      <Stack spacing={1.5} sx={{ p: 1.5 }}>
-        <Typography variant="overline" color="text.secondary">
-          {t("shell.inspector.label")}
-        </Typography>
-        <Divider />
+    <Box component="aside" aria-label={t("shell.inspector.label")} className={compact ? "inspector-panel inspector-panel--drawer" : "inspector-panel"}>
+      <Box className="inspector-panel__header">
+        <Box>
+          <Typography variant="overline" color="primary.dark">
+            {t("shell.inspector.eyebrow")}
+          </Typography>
+          <Typography component="h2" variant="h3">
+            {t("shell.inspector.label")}
+          </Typography>
+        </Box>
+        {onClose ? (
+          <IconButton aria-label={t("shell.inspector.close")} onClick={onClose}>
+            <CloseRoundedIcon />
+          </IconButton>
+        ) : null}
+      </Box>
+      <Stack className="inspector-panel__content" spacing={2.25}>
         {children ?? (
           <Typography variant="body2" color="text.secondary">
             {t("shell.inspector.empty")}
