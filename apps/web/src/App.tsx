@@ -17,7 +17,7 @@ import { GeometryPlaygroundPage } from "./geometry-playground/GeometryPlayground
 import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PublicLandingPage } from "./pages/PublicLandingPage";
-import { ConnectedProjectPage } from "./pages/ConnectedProjectPage";
+import { ProjectViewerPage } from "./pages/ProjectViewerPage";
 import { appQueryClient, createAppQueryClient } from "./queries/query-client";
 import { appStore, createAppStore, type AppStore } from "./state/store";
 import "./styles.css";
@@ -90,7 +90,7 @@ export function AppRoutes() {
         <Route path="/app" element={<AppShell />}>
           <Route index element={<HomePage />} />
           <Route path="geometry-playground" element={<GeometryPlaygroundPage />} />
-          <Route path="projects/:projectId" element={<ConnectedProjectPage />} />
+          <Route path="projects/:projectId" element={<ProjectViewerPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

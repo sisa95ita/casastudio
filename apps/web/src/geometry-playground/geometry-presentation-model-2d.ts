@@ -35,7 +35,7 @@ export type GeometryPresentationPoint2D = {
 };
 
 /**
- * Render-oriented polygon derived from one runtime `Polygon`.
+ * Render-oriented polygon independent of its geometry source.
  */
 export type GeometryPresentationPolygon2D = GeometryPresentationInteractionState & {
   readonly kind: "POLYGON";
@@ -46,11 +46,17 @@ export type GeometryPresentationPolygon2D = GeometryPresentationInteractionState
   readonly area: Polygon["area"];
   readonly winding: Polygon["winding"];
   readonly centroid: GeometryPresentationPoint2D;
+  readonly bounds: ViewportBounds2D;
+  readonly screenBounds: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
 };
 
 /**
- * Render-oriented physical boundary edge derived from one runtime
- * `BoundaryEdge`.
+ * Render-oriented physical boundary edge independent of its geometry source.
  */
 export type GeometryPresentationBoundaryEdge2D = GeometryPresentationInteractionState & {
   readonly kind: "BOUNDARY_EDGE";
@@ -65,7 +71,7 @@ export type GeometryPresentationBoundaryEdge2D = GeometryPresentationInteraction
 };
 
 /**
- * Render-oriented vertex derived from one runtime `Vertex`.
+ * Render-oriented vertex independent of its geometry source.
  */
 export type GeometryPresentationVertex2D = GeometryPresentationInteractionState & {
   readonly kind: "VERTEX";
@@ -77,9 +83,9 @@ export type GeometryPresentationVertex2D = GeometryPresentationInteractionState 
 /**
  * Frontend-only model consumed by the SVG renderer and inspector.
  *
- * This object adapts immutable runtime geometry into deterministic rendering
- * data. It owns no domain mutation, persistence, editor command, or project
- * editing behavior.
+ * Instances may be adapted from runtime geometry, an authoritative snapshot,
+ * or future editor state. The model owns no domain mutation, persistence,
+ * editor command, or project editing behavior.
  */
 export type GeometryPresentationModel2D = {
   readonly levelId: LevelGeometry["id"];
@@ -91,9 +97,9 @@ export type GeometryPresentationModel2D = {
 };
 
 /**
- * Inputs for deriving a `GeometryPresentationModel2D`.
+ * Inputs for adapting runtime geometry into a presentation model.
  */
-export type CreateGeometryPresentationModel2DOptions = {
+export type CreateRuntimeGeometryPresentationModel2DOptions = {
   readonly level: LevelGeometry;
   readonly transform: ViewportTransform2D;
   readonly selectionState?: GeometrySelectionState;
@@ -104,12 +110,12 @@ export type CreateGeometryPresentationModel2DOptions = {
  * Adapts immutable runtime level geometry into SVG-oriented 2D presentation
  * data.
  */
-export const createGeometryPresentationModel2D = ({
+export const createRuntimeGeometryPresentationModel2D = ({
   level,
   transform,
   selectionState,
   hover
-}: CreateGeometryPresentationModel2DOptions): GeometryPresentationModel2D => {
+}: CreateRuntimeGeometryPresentationModel2DOptions): GeometryPresentationModel2D => {
   const sharedUsageCounts = countBoundaryEdgeUses(level);
   const selected = selectionState?.selected ?? [];
   const hovered = selectionState?.hovered ?? hover;
@@ -151,6 +157,8 @@ const createPresentationPolygon = (
     area: polygon.area,
     winding: polygon.winding,
     centroid: createPresentationPoint(polygon.centroid, transform),
+    bounds: Object.freeze({ ...polygon.bounds }),
+    screenBounds: Object.freeze(createScreenBounds(polygon.bounds, transform)),
     selected: isGeometrySelectionMatch(selected, "POLYGON", polygon.id),
     hovered: isGeometrySelectionMatch(hover, "POLYGON", polygon.id)
   });
@@ -207,3 +215,18 @@ const createPresentationPoint = (
     world: Object.freeze({ x: point.x, z: point.z }),
     screen: transform.worldToScreen(point)
   });
+
+const createScreenBounds = (
+  bounds: ViewportBounds2D,
+  transform: ViewportTransform2D
+): GeometryPresentationPolygon2D["screenBounds"] => {
+  const minPoint = transform.worldToScreen({ x: bounds.minX, z: bounds.minZ });
+  const maxPoint = transform.worldToScreen({ x: bounds.maxX, z: bounds.maxZ });
+
+  return {
+    x: Math.min(minPoint.x, maxPoint.x),
+    y: Math.min(minPoint.y, maxPoint.y),
+    width: Math.abs(maxPoint.x - minPoint.x),
+    height: Math.abs(maxPoint.y - minPoint.y)
+  };
+};

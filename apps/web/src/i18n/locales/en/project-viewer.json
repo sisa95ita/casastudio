@@ -1,0 +1,69 @@
+{
+  "shell": {
+    "title": "Project viewer",
+    "breadcrumb": "Projects"
+  },
+  "status": {
+    "loading": "Loading authoritative Project geometry",
+    "ready": "Level {{level}} | {{polygons}} polygons | {{selection}} selected",
+    "unavailable": "Project geometry unavailable"
+  },
+  "loading": "Loading Project and Geometry data…",
+  "intro": {
+    "eyebrow": "Authoritative project geometry"
+  },
+  "viewer": {
+    "title": "Project plan",
+    "noLevels": "This Project has no geometry levels to display."
+  },
+  "levelSelector": {
+    "label": "Level"
+  },
+  "toolbar": {
+    "fit": "Fit to view",
+    "reset": "Reset viewport",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out"
+  },
+  "revision": {
+    "agreement": "Revision {{revision}}"
+  },
+  "inspector": {
+    "snapshot": "Geometry snapshot",
+    "level": "Source level: {{level}}",
+    "revision": "Source revision: {{revision}}"
+  },
+  "consistency": {
+    "title": "Project geometry is inconsistent",
+    "project-id": {
+      "detail": "The Geometry Snapshot belongs to a different Project. Geometry has not been rendered."
+    },
+    "revision": {
+      "detail": "The Project and Geometry Snapshot refer to different revisions. Geometry has not been rendered."
+    },
+    "diagnostic": "Project {{projectId}} revision {{projectRevision}}; Geometry source {{geometryProjectId}} revision {{geometryRevision}}."
+  },
+  "errors": {
+    "authentication": {
+      "title": "Authentication unavailable",
+      "detail": "Your authenticated session is no longer available. Sign in again to load this project."
+    },
+    "forbidden": {
+      "title": "Project access forbidden",
+      "detail": "Your account does not have permission to view this project."
+    },
+    "notFound": {
+      "title": "Project not found",
+      "detail": "No project is available for this project ID."
+    },
+    "network": {
+      "title": "API unavailable",
+      "detail": "CasaStudio could not reach the API. Check that the local API is running and try again."
+    },
+    "unexpected": {
+      "title": "Project data unavailable",
+      "detail": "CasaStudio received an unexpected response while loading this project."
+    },
+    "requestId": "Request ID: {{requestId}}"
+  }
+}

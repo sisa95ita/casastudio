@@ -7,7 +7,7 @@
     "showVertices": "Show vertices",
     "showCentroids": "Show centroids",
     "showBounds": "Show bounds",
-    "showRuntimeLabels": "Show runtime labels"
+    "showEntityLabels": "Show geometry labels"
   },
   "selection": {
     "title": "Selection",
@@ -15,7 +15,7 @@
     "multiple": "{{count}} geometry elements selected.",
     "labels": {
       "type": "Type",
-      "runtimeId": "Runtime id",
+      "geometryId": "Geometry id",
       "sourceRoomId": "Source room id",
       "sourceWallId": "Source wall id",
       "area": "Area",

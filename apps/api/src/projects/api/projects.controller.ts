@@ -89,7 +89,7 @@ export class ProjectsController {
     schema: {
       type: "string",
       pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-      example: "casa-studio-canonical-project"
+      example: "demo-project"
     }
   })
   @ApiOkResponse({ type: ProjectResponseDto })

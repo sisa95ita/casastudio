@@ -1,12 +1,12 @@
 /**
- * Runtime entity kinds that can be selected in the Geometry Playground.
+ * Geometry entity kinds supported by the interactive viewer.
  */
 export type GeometrySelectionKind = "POLYGON" | "BOUNDARY_EDGE" | "VERTEX";
 
 /**
- * UI-only selection reference for immutable runtime geometry.
+ * UI-only selection reference for immutable presented geometry.
  *
- * The selection stores runtime geometry identifiers only. It deliberately does
+ * The selection stores geometry identifiers only. It deliberately does
  * not contain source project objects, editor commands, or mutation payloads.
  */
 export type GeometrySelection = {
@@ -15,11 +15,11 @@ export type GeometrySelection = {
 };
 
 /**
- * UI-only interaction state for immutable runtime geometry.
+ * UI-only interaction state for immutable presented geometry.
  *
  * Selected and hovered entities are deliberately separate so click selection,
- * hover previews, and command handling can compose without duplicating runtime
- * geometry data or moving UI state into `GeometryModel`.
+ * hover previews, and command handling can compose without duplicating server
+ * or runtime geometry data.
  */
 export type GeometrySelectionState = {
   readonly selected: readonly GeometrySelection[];
@@ -27,7 +27,7 @@ export type GeometrySelectionState = {
 };
 
 /**
- * UI-only hover reference for immutable runtime geometry.
+ * UI-only hover reference for immutable presented geometry.
  */
 export type GeometryHoverState = GeometrySelectionState["hovered"];
 
@@ -56,7 +56,7 @@ export const selectVertex = (geometryId: string): GeometrySelection => ({
 });
 
 /**
- * Creates a frozen UI selection state from runtime ID references.
+ * Creates a frozen UI selection state from geometry ID references.
  */
 export const createGeometrySelectionState = (
   selected: readonly GeometrySelection[] = [],
@@ -82,7 +82,7 @@ export const clearGeometryHover = (
 ): GeometrySelectionState => createGeometrySelectionState(state.selected);
 
 /**
- * Replaces the selected set with a single runtime geometry reference.
+ * Replaces the selected set with a single geometry reference.
  */
 export const replaceGeometrySelection = (selection: GeometrySelection): GeometrySelectionState =>
   createGeometrySelectionState([selection]);
@@ -96,7 +96,7 @@ export const setGeometryHover = (
 ): GeometrySelectionState => createGeometrySelectionState(state.selected, hovered);
 
 /**
- * Adds or removes a runtime geometry reference from the selected set.
+ * Adds or removes a geometry reference from the selected set.
  */
 export const toggleGeometrySelection = (
   state: GeometrySelectionState,
@@ -115,7 +115,7 @@ export const toggleGeometrySelection = (
 };
 
 /**
- * Applies playground click selection semantics.
+ * Applies viewer click selection semantics.
  *
  * Plain clicks replace the current selected set. Additive clicks toggle one
  * entity, which currently maps to Shift-click in the SVG viewer.

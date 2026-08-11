@@ -112,10 +112,11 @@ Only public Keycloak coordinates are exposed to the browser:
 | `VITE_API_BASE_URL` | `http://localhost:3000` | Browser-reachable CasaStudio API base URL |
 
 The web client uses `keycloak-js` with standard Authorization Code Flow and
-SHA-256 PKCE. Initialization does not force authentication and does not use a
-session-check iframe. `/` remains public; visiting `/app` while anonymous shows
-an explicit sign-in action. Keycloak returns a successful login to the original
-application URL, and logout returns to `/`.
+SHA-256 PKCE. Startup uses `check-sso` without a session-check iframe, allowing
+Keycloak to restore an existing SSO session before the application decides that
+the user is anonymous. `/` remains public; visiting `/app` while genuinely
+anonymous shows an explicit sign-in action. Keycloak returns a successful login
+to the original application URL, and logout returns to `/`.
 
 `AuthProvider` owns initialization and exposes `useAuth()` plus the protected
 route boundary. Keycloak access and refresh tokens remain inside the adapter in
@@ -140,8 +141,13 @@ first Redux-backed state is the Geometry Playground entity selection and hover
 references; Project responses, Geometry responses, authentication, and backend
 errors are not copied into Redux.
 
-After signing in with the seeded demo user, the connected technical route is:
+After signing in with the seeded demo user, `/app` presents a temporary entry
+for the seeded `Demo Project`. Its authoritative viewer route is:
 
 ```text
-http://localhost:5173/app/projects/casa-studio-canonical-project
+http://localhost:5173/app/projects/demo-project
 ```
+
+The Geometry Playground remains available at `/app/geometry-playground` as a
+development and diagnostic harness. It is intentionally absent from the
+primary navigation and Home product actions.

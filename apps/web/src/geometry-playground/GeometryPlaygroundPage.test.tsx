@@ -28,7 +28,7 @@ describe("GeometryPlaygroundPage", () => {
     expect(markup).toContain("Show vertices");
     expect(markup).toContain("Show centroids");
     expect(markup).toContain("Show bounds");
-    expect(markup).toContain("Show runtime labels");
+    expect(markup).toContain("Show geometry labels");
   });
 
   it("renders technical geometry build errors without throwing", () => {

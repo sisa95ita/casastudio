@@ -46,7 +46,7 @@ export function AppHeader({ title, breadcrumb, accessory }: AppHeaderProps) {
 
       <Box sx={{ flex: 1 }} />
 
-      {accessory ? accessory : <Chip label={t("shell.technicalFoundation")} variant="outlined" />}
+      {accessory ? accessory : <Chip label={t("shell.workspace")} variant="outlined" />}
     </Box>
   );
 }

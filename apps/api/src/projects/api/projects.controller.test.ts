@@ -20,7 +20,14 @@ import type { ProjectGeometryBuilder } from "../geometry-api/project-geometry-bu
 import type { LoadedProject, ProjectsRepository } from "../persistence/project.repository";
 
 const canonicalProjectUrl = new URL("../../../../../packages/schema/examples/project.json", import.meta.url);
-const canonicalProject = ProjectSchema.parse(JSON.parse(readFileSync(canonicalProjectUrl, "utf8")));
+const canonicalProjectFixture = ProjectSchema.parse(
+  JSON.parse(readFileSync(canonicalProjectUrl, "utf8"))
+);
+const canonicalProject = ProjectSchema.parse({
+  ...canonicalProjectFixture,
+  id: "demo-project",
+  name: "Demo Project"
+});
 const ownerSubject = "8d62f7e2-0c2a-4f2a-a9cf-7f62c2f4e8f7";
 const defaultTestEnvironment = {
   NODE_ENV: "test",

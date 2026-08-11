@@ -66,7 +66,8 @@ export class KeycloakAuthClient implements AuthClient {
   ) {}
 
   /**
-   * Initializes Authorization Code Flow with SHA-256 PKCE without forcing login.
+   * Restores an existing SSO session through Authorization Code Flow and
+   * SHA-256 PKCE without forcing an anonymous user to log in.
    */
   initialize(): Promise<AuthSession> {
     this.initialization ??= this.initializeKeycloak();
@@ -109,6 +110,7 @@ export class KeycloakAuthClient implements AuthClient {
     const authenticated = await this.keycloak.init({
       checkLoginIframe: false,
       flow: "standard",
+      onLoad: "check-sso",
       pkceMethod: "S256",
       responseMode: "fragment"
     });

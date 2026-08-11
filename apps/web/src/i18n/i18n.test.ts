@@ -11,7 +11,7 @@ describe("CasaStudio i18n", () => {
 
   it("looks up translations across UI namespaces", () => {
     expect(casaI18n.t("common:brand.name")).toBe("CasaStudio");
-    expect(casaI18n.t("navigation:items.geometryPlayground")).toBe("Geometry Playground");
+    expect(casaI18n.t("navigation:items.home")).toBe("Home");
     expect(casaI18n.t("inspector:layers.showPolygons")).toBe("Show polygons");
   });
 

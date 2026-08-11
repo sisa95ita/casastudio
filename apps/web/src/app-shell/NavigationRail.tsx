@@ -1,4 +1,3 @@
-import ArchitectureRoundedIcon from "@mui/icons-material/ArchitectureRounded";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import { Box, List, ListItem, ListItemButton, Tooltip } from "@mui/material";
 import { NavLink } from "react-router-dom";
@@ -10,11 +9,6 @@ const navigationItems = [
     labelKey: "items.home",
     path: "/app",
     icon: <HomeRoundedIcon fontSize="small" />
-  },
-  {
-    labelKey: "items.geometryPlayground",
-    path: "/app/geometry-playground",
-    icon: <ArchitectureRoundedIcon fontSize="small" />
   }
 ] as const;
 

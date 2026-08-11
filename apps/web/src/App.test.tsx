@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import type { AuthClient, AuthSession } from "./auth/auth-client";
-import { geometryPlaygroundProject } from "./geometry-playground/geometry-playground-fixture";
+import { demoProjectEntry } from "./development/demo-project-entry";
+import { demoProjectFixture } from "./test/demo-project-fixture";
+import { createGeometrySnapshotFixture } from "./test/geometry-snapshot-fixture";
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3000");
@@ -81,6 +83,47 @@ describe("App authentication and routing", () => {
     expect(screen.queryByRole("main")).toBeNull();
   });
 
+  it("shows an explicit login action for an anonymous direct Project route", async () => {
+    render(
+      <App
+        initialEntries={[`/app/projects/${demoProjectEntry.id}`]}
+        authClient={createAuthClient({ authenticated: false })}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Sign in to CasaStudio" })).toBeTruthy();
+    expect(screen.queryByRole("main")).toBeNull();
+  });
+
+  it("does not expose Sign In while protected-route SSO restoration is pending", async () => {
+    let finishRestoration: ((session: AuthSession) => void) | undefined;
+    const authClient = createAuthClient({ authenticated: false });
+    vi.mocked(authClient.initialize).mockReturnValue(
+      new Promise((resolve) => {
+        finishRestoration = resolve;
+      })
+    );
+
+    render(<App initialEntries={["/app"]} authClient={authClient} />);
+
+    expect(screen.getByRole("status").textContent).toContain("Checking authentication");
+    expect(screen.queryByRole("heading", { name: "Sign in to CasaStudio" })).toBeNull();
+
+    finishRestoration?.(authenticatedSession);
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeTruthy();
+  });
+
+  it("falls back safely when protected-route SSO restoration finds no valid session", async () => {
+    render(
+      <App
+        initialEntries={[`/app/projects/${demoProjectEntry.id}`]}
+        authClient={createAuthClient({ authenticated: false })}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Sign in to CasaStudio" })).toBeTruthy();
+  });
+
   it("delegates the protected-route login action to the auth client", async () => {
     const authClient = createAuthClient({ authenticated: false });
     render(<App initialEntries={["/app"]} authClient={authClient} />);
@@ -90,36 +133,54 @@ describe("App authentication and routing", () => {
     expect(authClient.login).toHaveBeenCalledOnce();
   });
 
-  it("renders the authenticated application shell at /app", async () => {
+  it("restores a valid SSO session on protected-route startup", async () => {
+    const authClient = createAuthClient(authenticatedSession);
     render(
       <App
         initialEntries={["/app"]}
-        authClient={createAuthClient(authenticatedSession)}
+        authClient={authClient}
       />
     );
 
     expect((await screen.findByRole("banner")).textContent).toContain("CasaStudio");
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
-    expect(screen.getByRole("main").textContent).toContain("Technical application foundation");
+    expect(screen.getByRole("main").textContent).toContain("Projects");
+    expect(screen.getByRole("heading", { name: demoProjectEntry.name })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open project" }).getAttribute("href")).toBe(
+      `/app/projects/${demoProjectEntry.id}`
+    );
+    expect(screen.queryByRole("link", { name: "Geometry Playground" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Sign in to CasaStudio" })).toBeNull();
     expect(screen.getByText("demo")).toBeTruthy();
+    expect(authClient.initialize).toHaveBeenCalledOnce();
+  });
+
+  it("restores a valid SSO session after a fresh application mount", async () => {
+    const firstMount = render(
+      <App initialEntries={["/app"]} authClient={createAuthClient(authenticatedSession)} />
+    );
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeTruthy();
+    firstMount.unmount();
+
+    const restoredClient = createAuthClient(authenticatedSession);
+    render(<App initialEntries={["/app"]} authClient={restoredClient} />);
+
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Sign in to CasaStudio" })).toBeNull();
+    expect(restoredClient.initialize).toHaveBeenCalledOnce();
   });
 
   it("creates the default API client for authenticated project routes", async () => {
     const fetchSpy = vi.fn(async (input: RequestInfo | URL) =>
       Response.json(
         String(input).endsWith("/geometry")
-          ? {
-              sourceProjectId: geometryPlaygroundProject.id,
-              sourceRevision: geometryPlaygroundProject.revision,
-              geometry: {
-                id: "geometry-demo",
-                units: { length: "cm", angle: "deg" },
-                levels: []
-              }
-            }
+          ? createGeometrySnapshotFixture(
+              demoProjectFixture.id,
+              demoProjectFixture.revision
+            )
           : {
-              project: geometryPlaygroundProject,
-              sourceRevision: geometryPlaygroundProject.revision
+              project: demoProjectFixture,
+              sourceRevision: demoProjectFixture.revision
             }
       )
     ) as typeof fetch;
@@ -127,15 +188,15 @@ describe("App authentication and routing", () => {
 
     render(
       <App
-        initialEntries={[`/app/projects/${geometryPlaygroundProject.id}`]}
+        initialEntries={[`/app/projects/${demoProjectFixture.id}`]}
         authClient={createAuthClient(authenticatedSession, "access-token")}
       />
     );
 
-    expect(await screen.findByRole("heading", { name: geometryPlaygroundProject.name })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: demoProjectFixture.name })).toBeTruthy();
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
     expect(fetchSpy).toHaveBeenCalledWith(
-      `http://localhost:3000/api/v1/projects/${geometryPlaygroundProject.id}`,
+      `http://localhost:3000/api/v1/projects/${demoProjectFixture.id}`,
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer access-token"
@@ -143,7 +204,7 @@ describe("App authentication and routing", () => {
       })
     );
     expect(fetchSpy).toHaveBeenCalledWith(
-      `http://localhost:3000/api/v1/projects/${geometryPlaygroundProject.id}/geometry`,
+      `http://localhost:3000/api/v1/projects/${demoProjectFixture.id}/geometry`,
       expect.any(Object)
     );
   });
@@ -169,7 +230,7 @@ describe("App authentication and routing", () => {
     expect(screen.getByRole("main").textContent).toContain("SVG Technical Viewer");
   });
 
-  it("uses client-side navigation inside the protected shell", async () => {
+  it("keeps the Geometry Playground out of primary navigation", async () => {
     render(
       <App
         initialEntries={["/app"]}
@@ -178,13 +239,8 @@ describe("App authentication and routing", () => {
     );
 
     const homeLink = await screen.findByRole("link", { name: "Home" });
-    const geometryLink = screen.getByRole("link", { name: "Geometry Playground" });
-
     expect(homeLink.getAttribute("aria-current")).toBe("page");
-    fireEvent.click(geometryLink);
-
-    expect(await screen.findByRole("heading", { name: "Geometry Playground" })).toBeTruthy();
-    expect(geometryLink.getAttribute("aria-current")).toBe("page");
+    expect(screen.queryByRole("link", { name: "Geometry Playground" })).toBeNull();
   });
 
   it("renders the application not-found route behind authentication", async () => {

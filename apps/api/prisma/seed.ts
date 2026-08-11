@@ -6,9 +6,12 @@ import { ProjectSchema } from "@casastudio/schema";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-import { seedCanonicalDemoProject } from "../src/projects/persistence/demo-project-seed";
+import {
+  createDemoProject,
+  seedDemoProject
+} from "../src/projects/persistence/demo-project-seed";
 
-const canonicalProjectUrl = new URL("../../../packages/schema/examples/project.json", import.meta.url);
+const projectFixtureUrl = new URL("../../../packages/schema/examples/project.json", import.meta.url);
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
@@ -22,8 +25,8 @@ const prisma = new PrismaClient({
 });
 
 async function main(): Promise<void> {
-  const project = ProjectSchema.parse(JSON.parse(readFileSync(canonicalProjectUrl, "utf8")));
-  const result = await seedCanonicalDemoProject(prisma, project);
+  const projectFixture = ProjectSchema.parse(JSON.parse(readFileSync(projectFixtureUrl, "utf8")));
+  const result = await seedDemoProject(prisma, createDemoProject(projectFixture));
 
   console.log(
     `Seeded CasaStudio demo project ${result.projectId} at revision ${result.revision} for owner subject ${result.ownerSubject}.`

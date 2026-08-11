@@ -135,24 +135,35 @@ export function parseProjectResponse(value: unknown): ProjectResponse {
   return { project, sourceRevision };
 }
 
-/** Defensively validates the geometry response envelope used by the connected route. */
+/** Defensively validates the geometry response envelope used by the Project viewer. */
 export function parseProjectGeometryResponse(value: unknown): ProjectGeometryResponse {
   const response = requireRecord(value, "Geometry response");
   const geometry = requireRecord(response.geometry, "Geometry snapshot");
   const units = requireRecord(geometry.units, "Geometry units");
   const levels = requireArray(geometry.levels, "Geometry levels").map((level, index) => {
     const item = requireRecord(level, `Geometry level ${index}`);
+    const label = `Geometry level ${index}`;
 
     return {
-      ...item,
-      id: requireString(item.id, `Geometry level ${index} id`),
-      sourceLevelId: requireString(item.sourceLevelId, `Geometry level ${index} sourceLevelId`),
-      elevation: requireNumber(item.elevation, `Geometry level ${index} elevation`),
-      vertices: requireArray(item.vertices, `Geometry level ${index} vertices`) as readonly GeometryVertex[],
-      boundaryEdges: requireArray(item.boundaryEdges, `Geometry level ${index} boundaryEdges`) as readonly GeometryBoundaryEdge[],
-      boundaryEdgeUses: requireArray(item.boundaryEdgeUses, `Geometry level ${index} boundaryEdgeUses`) as readonly GeometryBoundaryEdgeUse[],
-      loops: requireArray(item.loops, `Geometry level ${index} loops`) as readonly GeometryLoop[],
-      polygons: requireArray(item.polygons, `Geometry level ${index} polygons`) as readonly GeometryPolygon[]
+      id: requireString(item.id, `${label} id`),
+      sourceLevelId: requireString(item.sourceLevelId, `${label} sourceLevelId`),
+      elevation: requireNumber(item.elevation, `${label} elevation`),
+      vertices: requireArray(item.vertices, `${label} vertices`).map((vertex, itemIndex) =>
+        parseGeometryVertex(vertex, `${label} vertex ${itemIndex}`)
+      ),
+      boundaryEdges: requireArray(item.boundaryEdges, `${label} boundaryEdges`).map(
+        (edge, itemIndex) => parseGeometryBoundaryEdge(edge, `${label} boundary edge ${itemIndex}`)
+      ),
+      boundaryEdgeUses: requireArray(item.boundaryEdgeUses, `${label} boundaryEdgeUses`).map(
+        (edgeUse, itemIndex) =>
+          parseGeometryBoundaryEdgeUse(edgeUse, `${label} boundary edge use ${itemIndex}`)
+      ),
+      loops: requireArray(item.loops, `${label} loops`).map((loop, itemIndex) =>
+        parseGeometryLoop(loop, `${label} loop ${itemIndex}`)
+      ),
+      polygons: requireArray(item.polygons, `${label} polygons`).map((polygon, itemIndex) =>
+        parseGeometryPolygon(polygon, `${label} polygon ${itemIndex}`)
+      )
     } satisfies GeometryLevel;
   });
 
@@ -170,6 +181,115 @@ export function parseProjectGeometryResponse(value: unknown): ProjectGeometryRes
       },
       levels
     }
+  };
+}
+
+function parseGeometryVertex(value: unknown, label: string): GeometryVertex {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    x: requireNumber(item.x, `${label} x`),
+    z: requireNumber(item.z, `${label} z`),
+    incidentBoundaryEdgeIds: requireStringArray(
+      item.incidentBoundaryEdgeIds,
+      `${label} incidentBoundaryEdgeIds`
+    )
+  };
+}
+
+function parseGeometryBoundaryEdge(value: unknown, label: string): GeometryBoundaryEdge {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceWallId: requireString(item.sourceWallId, `${label} sourceWallId`),
+    startVertexId: requireString(item.startVertexId, `${label} startVertexId`),
+    endVertexId: requireString(item.endVertexId, `${label} endVertexId`),
+    start: parseGeometryPoint(item.start, `${label} start`),
+    end: parseGeometryPoint(item.end, `${label} end`),
+    thickness: requireNumber(item.thickness, `${label} thickness`),
+    height: requireNumber(item.height, `${label} height`)
+  };
+}
+
+function parseGeometryBoundaryEdgeUse(
+  value: unknown,
+  label: string
+): GeometryBoundaryEdgeUse {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    boundaryEdgeId: requireString(item.boundaryEdgeId, `${label} boundaryEdgeId`),
+    sourceWallId: requireString(item.sourceWallId, `${label} sourceWallId`),
+    direction: requireOneOf(item.direction, ["FORWARD", "REVERSE"] as const, `${label} direction`),
+    index: requireNumber(item.index, `${label} index`),
+    loopId: requireString(item.loopId, `${label} loopId`),
+    startVertexId: requireString(item.startVertexId, `${label} startVertexId`),
+    endVertexId: requireString(item.endVertexId, `${label} endVertexId`),
+    start: parseGeometryPoint(item.start, `${label} start`),
+    end: parseGeometryPoint(item.end, `${label} end`)
+  };
+}
+
+function parseGeometryLoop(value: unknown, label: string): GeometryLoop {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    kind: requireOneOf(item.kind, ["OUTER", "INNER"] as const, `${label} kind`),
+    polygonId: requireString(item.polygonId, `${label} polygonId`),
+    boundaryEdgeUseIds: requireStringArray(item.boundaryEdgeUseIds, `${label} boundaryEdgeUseIds`),
+    boundaryEdgeIds: requireStringArray(item.boundaryEdgeIds, `${label} boundaryEdgeIds`),
+    vertexIds: requireStringArray(item.vertexIds, `${label} vertexIds`)
+  };
+}
+
+function parseGeometryPolygon(value: unknown, label: string): GeometryPolygon {
+  const item = requireRecord(value, label);
+  const metrics = requireRecord(item.metrics, `${label} metrics`);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceRoomId: requireString(item.sourceRoomId, `${label} sourceRoomId`),
+    outerLoopId: requireString(item.outerLoopId, `${label} outerLoopId`),
+    innerLoopIds: requireStringArray(item.innerLoopIds, `${label} innerLoopIds`),
+    loopIds: requireStringArray(item.loopIds, `${label} loopIds`),
+    boundaryEdgeUseIds: requireStringArray(item.boundaryEdgeUseIds, `${label} boundaryEdgeUseIds`),
+    boundaryEdgeIds: requireStringArray(item.boundaryEdgeIds, `${label} boundaryEdgeIds`),
+    vertexIds: requireStringArray(item.vertexIds, `${label} vertexIds`),
+    metrics: {
+      signedArea: requireNumber(metrics.signedArea, `${label} signedArea`),
+      area: requireNumber(metrics.area, `${label} area`),
+      winding: requireOneOf(
+        metrics.winding,
+        ["CLOCKWISE", "COUNTER_CLOCKWISE", "DEGENERATE"] as const,
+        `${label} winding`
+      ),
+      bounds: parseGeometryBounds(metrics.bounds, `${label} bounds`),
+      centroid: parseGeometryPoint(metrics.centroid, `${label} centroid`)
+    }
+  };
+}
+
+function parseGeometryPoint(value: unknown, label: string): GeometryPoint2D {
+  const item = requireRecord(value, label);
+
+  return {
+    x: requireNumber(item.x, `${label} x`),
+    z: requireNumber(item.z, `${label} z`)
+  };
+}
+
+function parseGeometryBounds(value: unknown, label: string): GeometryBounds {
+  const item = requireRecord(value, label);
+
+  return {
+    minX: requireNumber(item.minX, `${label} minX`),
+    minZ: requireNumber(item.minZ, `${label} minZ`),
+    maxX: requireNumber(item.maxX, `${label} maxX`),
+    maxZ: requireNumber(item.maxZ, `${label} maxZ`)
   };
 }
 
@@ -208,6 +328,10 @@ function requireArray(value: unknown, label: string): readonly unknown[] {
   return value;
 }
 
+function requireStringArray(value: unknown, label: string): readonly string[] {
+  return requireArray(value, label).map((item, index) => requireString(item, `${label} ${index}`));
+}
+
 function requireString(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${label} must be a non-empty string.`);
@@ -234,4 +358,16 @@ function requireLiteral<const Value extends string>(
   }
 
   return expected;
+}
+
+function requireOneOf<const Values extends readonly string[]>(
+  value: unknown,
+  expected: Values,
+  label: string
+): Values[number] {
+  if (typeof value !== "string" || !expected.includes(value)) {
+    throw new Error(`${label} must be one of ${expected.join(", ")}.`);
+  }
+
+  return value as Values[number];
 }

@@ -29,7 +29,7 @@ function createKeycloakStub(overrides: Partial<Keycloak> = {}): Keycloak {
 }
 
 describe("KeycloakAuthClient", () => {
-  it("initializes standard flow with explicit SHA-256 PKCE and maps the session", async () => {
+  it("restores an existing SSO session with standard flow and SHA-256 PKCE", async () => {
     const keycloak = createKeycloakStub();
     const client = new KeycloakAuthClient(keycloak, "casastudio-api");
 
@@ -45,9 +45,32 @@ describe("KeycloakAuthClient", () => {
     expect(keycloak.init).toHaveBeenCalledWith({
       checkLoginIframe: false,
       flow: "standard",
+      onLoad: "check-sso",
       pkceMethod: "S256",
       responseMode: "fragment"
     });
+  });
+
+  it("falls back to an anonymous session when check-sso finds no valid session", async () => {
+    const keycloak = createKeycloakStub({
+      authenticated: false,
+      init: vi.fn().mockResolvedValue(false),
+      token: undefined,
+      tokenParsed: undefined
+    });
+    const client = new KeycloakAuthClient(keycloak, "casastudio-api");
+
+    await expect(client.initialize()).resolves.toEqual({ authenticated: false });
+    expect(keycloak.login).not.toHaveBeenCalled();
+  });
+
+  it("shares one restoration attempt across concurrent initialization callers", async () => {
+    const keycloak = createKeycloakStub();
+    const client = new KeycloakAuthClient(keycloak, "casastudio-api");
+
+    await Promise.all([client.initialize(), client.initialize()]);
+
+    expect(keycloak.init).toHaveBeenCalledOnce();
   });
 
   it("refreshes an expiring token before returning the in-memory access token", async () => {

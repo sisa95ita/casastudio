@@ -166,7 +166,7 @@ The documented identifier format is lowercase kebab-case:
 The canonical seeded Project domain ID is:
 
 ```text
-casa-studio-canonical-project
+demo-project
 ```
 
 ## Swagger And OpenAPI
@@ -263,8 +263,8 @@ Obtain a local development token without printing it in reports, then verify:
 
 ```bash
 curl -i -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3000/api/v1/projects/casa-studio-canonical-project
-curl -i http://localhost:3000/api/v1/projects/casa-studio-canonical-project
+  http://localhost:3000/api/v1/projects/demo-project
+curl -i http://localhost:3000/api/v1/projects/demo-project
 curl -i -H "Authorization: Bearer $TOKEN" \
   http://localhost:3000/api/v1/projects/unknown-project
 curl -i -H "Authorization: Bearer $TOKEN" \
@@ -279,7 +279,7 @@ docker compose -f compose.yml -f compose.dev.yml up --build
 curl http://localhost:3000/api/v1/health/live
 curl http://localhost:3000/api/v1/health/ready
 curl -i -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3000/api/v1/projects/casa-studio-canonical-project
+  http://localhost:3000/api/v1/projects/demo-project
 ```
 
 Do not include bearer token values in logs, documentation, reports, or commits.

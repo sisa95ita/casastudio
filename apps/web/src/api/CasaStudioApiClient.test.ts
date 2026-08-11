@@ -134,6 +134,28 @@ describe("CasaStudioApiClient", () => {
     );
   });
 
+  it("rejects malformed nested Geometry snapshot entities", async () => {
+    const invalidGeometryResponse = {
+      ...geometryResponse,
+      geometry: {
+        ...geometryResponse.geometry,
+        levels: [
+          {
+            ...geometryResponse.geometry.levels[0],
+            vertices: [{ id: "vertex-without-coordinates" }]
+          }
+        ]
+      }
+    };
+    const client = createClient(
+      vi.fn().mockResolvedValue(Response.json(invalidGeometryResponse))
+    );
+
+    await expect(client.getProjectGeometry(geometryPlaygroundProject.id)).rejects.toMatchObject({
+      kind: "invalid-response"
+    });
+  });
+
   it("parses RFC 9457 Problem Details and preserves HTTP status", async () => {
     const problem = {
       type: "/problems/project-access-forbidden",
