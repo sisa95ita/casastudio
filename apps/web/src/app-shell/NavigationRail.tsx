@@ -1,4 +1,3 @@
-import ArchitectureRoundedIcon from "@mui/icons-material/ArchitectureRounded";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import { Box, List, ListItem, ListItemButton, Tooltip } from "@mui/material";
 import { NavLink } from "react-router-dom";
@@ -8,13 +7,8 @@ import { useCasaTranslation } from "../i18n";
 const navigationItems = [
   {
     labelKey: "items.home",
-    path: "/",
+    path: "/app",
     icon: <HomeRoundedIcon fontSize="small" />
-  },
-  {
-    labelKey: "items.geometryPlayground",
-    path: "/geometry-playground",
-    icon: <ArchitectureRoundedIcon fontSize="small" />
   }
 ] as const;
 
@@ -51,7 +45,7 @@ export function NavigationRail() {
                 <ListItemButton
                   component={NavLink}
                   to={item.path}
-                  end={item.path === "/"}
+                  end={item.path === "/app"}
                   aria-label={label}
                   sx={{
                     alignItems: "center",

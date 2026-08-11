@@ -24,7 +24,7 @@ The response envelope is:
 
 ```json
 {
-  "sourceProjectId": "casa-studio-canonical-project",
+  "sourceProjectId": "demo-project",
   "sourceRevision": 1,
   "geometry": {}
 }
@@ -279,8 +279,8 @@ token, then verify:
 
 ```bash
 curl -i -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3000/api/v1/projects/casa-studio-canonical-project/geometry
-curl -i http://localhost:3000/api/v1/projects/casa-studio-canonical-project/geometry
+  http://localhost:3000/api/v1/projects/demo-project/geometry
+curl -i http://localhost:3000/api/v1/projects/demo-project/geometry
 curl -i -H "Authorization: Bearer $TOKEN" \
   http://localhost:3000/api/v1/projects/unknown-project/geometry
 curl -i -H "Authorization: Bearer $TOKEN" \
@@ -297,7 +297,7 @@ docker compose -f compose.yml -f compose.dev.yml up --build
 curl http://localhost:3000/api/v1/health/live
 curl http://localhost:3000/api/v1/health/ready
 curl -i -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3000/api/v1/projects/casa-studio-canonical-project/geometry
+  http://localhost:3000/api/v1/projects/demo-project/geometry
 ```
 
 Do not include bearer token values in logs, documentation, reports, or commits.

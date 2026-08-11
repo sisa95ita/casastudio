@@ -1,8 +1,4 @@
 import { GeometryEngine, type LevelGeometry } from "@casastudio/geometry";
-import FitScreenIcon from "@mui/icons-material/FitScreen";
-import RestartAltIcon from "@mui/icons-material/RestartAlt";
-import ZoomInIcon from "@mui/icons-material/ZoomIn";
-import ZoomOutIcon from "@mui/icons-material/ZoomOut";
 import {
   Alert,
   Box,
@@ -10,12 +6,10 @@ import {
   Divider,
   FormControl,
   InputLabel,
-  IconButton,
   MenuItem,
   Paper,
   Select,
   Stack,
-  Tooltip,
   Typography
 } from "@mui/material";
 import type { Project } from "@casastudio/schema";
@@ -25,15 +19,11 @@ import { useAppShellContent } from "../app-shell/AppShellContext";
 import { useCasaTranslation } from "../i18n";
 import { GeometryBuildErrorPanel } from "./GeometryBuildErrorPanel";
 import {
-  createGeometryPresentationModel2D,
+  createRuntimeGeometryPresentationModel2D,
   type GeometryPresentationModel2D
 } from "./geometry-presentation-model-2d";
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
-import {
-  clearGeometrySelection,
-  createGeometrySelectionState,
-  type GeometrySelectionState
-} from "./geometry-selection-state";
+import type { GeometrySelectionState } from "./geometry-selection-state";
 import { collectLevelBounds } from "./geometry-svg-helpers";
 import { GeometryLayerControls } from "./GeometryLayerControls";
 import { GeometryRuntimeSummary } from "./GeometryRuntimeSummary";
@@ -43,9 +33,9 @@ import { getGeometryViewerShortcutAction } from "./geometry-viewer-shortcuts";
 import {
   defaultGeometryDisplayOptions,
   geometrySvgViewport,
-  type GeometryDisplayOptions,
-  GeometrySvgViewer
+  type GeometryDisplayOptions
 } from "./GeometrySvgViewer";
+import { GeometryViewerPanel } from "./GeometryViewerPanel";
 import {
   createFitViewportState,
   createViewportTransform2D,
@@ -53,6 +43,13 @@ import {
   type ViewportState,
   zoomViewportState
 } from "./viewport-transform-2d";
+import { useAppDispatch, useAppSelector } from "../state/hooks";
+import {
+  geometrySelectionChanged,
+  geometrySelectionCleared,
+  geometrySelectionReset,
+  selectGeometrySelection
+} from "../state/viewer-slice";
 
 /**
  * Props for the interactive geometry playground page.
@@ -74,11 +71,10 @@ export function GeometryPlaygroundPage({
 }: GeometryPlaygroundPageProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const { t: navigationT } = useCasaTranslation("navigation");
+  const dispatch = useAppDispatch();
   const buildResult = useMemo(() => GeometryEngine.build(project), [project]);
   const [displayOptions, setDisplayOptions] = useState(defaultGeometryDisplayOptions);
-  const [selectionState, setSelectionState] = useState<GeometrySelectionState>(() =>
-    createGeometrySelectionState()
-  );
+  const selectionState = useAppSelector(selectGeometrySelection);
   const [selectedLevelId, setSelectedLevelId] = useState(() =>
     buildResult.ok ? (buildResult.model.levels[0]?.id ?? "") : ""
   );
@@ -98,7 +94,7 @@ export function GeometryPlaygroundPage({
   const presentationModel = useMemo(
     () =>
       selectedLevel
-        ? createGeometryPresentationModel2D({
+        ? createRuntimeGeometryPresentationModel2D({
             level: selectedLevel,
             transform: createViewportTransform2D(viewport),
             selectionState
@@ -109,8 +105,15 @@ export function GeometryPlaygroundPage({
 
   useEffect(() => {
     setViewport(createInitialViewportState(selectedLevel));
-    setSelectionState(createGeometrySelectionState());
-  }, [selectedLevel]);
+    dispatch(geometrySelectionReset());
+  }, [dispatch, selectedLevel]);
+
+  const handleSelectionStateChange = useCallback(
+    (nextSelectionState: GeometrySelectionState) => {
+      dispatch(geometrySelectionChanged(nextSelectionState));
+    },
+    [dispatch]
+  );
 
   const handleFitViewport = useCallback(() => {
     setViewport(createInitialViewportState(selectedLevel));
@@ -144,7 +147,7 @@ export function GeometryPlaygroundPage({
       event.preventDefault();
 
       if (action === "CLEAR_SELECTION") {
-        setSelectionState((currentState) => clearGeometrySelection(currentState));
+        dispatch(geometrySelectionCleared());
         return;
       }
 
@@ -161,7 +164,7 @@ export function GeometryPlaygroundPage({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [handleFitViewport, handleResetViewport]);
+  }, [dispatch, handleFitViewport, handleResetViewport]);
 
   const shellContent = useMemo(
     () => ({
@@ -242,68 +245,20 @@ export function GeometryPlaygroundPage({
         </FormControl>
       ) : null}
 
-      {selectedLevel ? (
-        <Paper
-          component="section"
-          className="geometry-viewer-panel"
-          aria-labelledby="geometry-viewer-heading"
-          sx={{
-            border: 1,
-            borderColor: "divider",
-            display: "flex",
-            flex: "1 1 auto",
-            flexDirection: "column",
-            minHeight: 0,
-            overflow: "hidden"
-          }}
-        >
-          <Box sx={{ borderBottom: 1, borderColor: "divider", px: 1.5, py: 1 }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-              <Typography
-                variant="subtitle2"
-                component="h2"
-                id="geometry-viewer-heading"
-                sx={{ flex: "1 1 auto" }}
-              >
-                {t("viewer.title")}
-              </Typography>
-              <Tooltip title={t("toolbar.zoomOut")}>
-                <IconButton
-                  aria-label={t("toolbar.zoomOut")}
-                  onClick={() => handleZoomViewport(0.85)}
-                >
-                  <ZoomOutIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={t("toolbar.zoomIn")}>
-                <IconButton
-                  aria-label={t("toolbar.zoomIn")}
-                  onClick={() => handleZoomViewport(1.18)}
-                >
-                  <ZoomInIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={t("toolbar.fit")}>
-                <IconButton aria-label={t("toolbar.fit")} onClick={handleFitViewport}>
-                  <FitScreenIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={t("toolbar.reset")}>
-                <IconButton aria-label={t("toolbar.reset")} onClick={handleResetViewport}>
-                  <RestartAltIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-          </Box>
-          <GeometrySvgViewer
-            level={selectedLevel}
-            options={displayOptions}
-            viewport={viewport}
-            selectionState={selectionState}
-            onSelectionStateChange={setSelectionState}
-            onViewportChange={setViewport}
-          />
-        </Paper>
+      {selectedLevel && presentationModel ? (
+        <GeometryViewerPanel
+          title={t("viewer.title")}
+          headingId="geometry-viewer-heading"
+          presentationModel={presentationModel}
+          options={displayOptions}
+          viewport={viewport}
+          selectionState={selectionState}
+          onSelectionStateChange={handleSelectionStateChange}
+          onViewportChange={setViewport}
+          onFitViewport={handleFitViewport}
+          onResetViewport={handleResetViewport}
+          onZoomViewport={handleZoomViewport}
+        />
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
           {t("viewer.noLevels")}

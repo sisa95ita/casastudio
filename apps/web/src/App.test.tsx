@@ -1,73 +1,259 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import type { AuthClient, AuthSession } from "./auth/auth-client";
+import { demoProjectEntry } from "./development/demo-project-entry";
+import { demoProjectFixture } from "./test/demo-project-fixture";
+import { createGeometrySnapshotFixture } from "./test/geometry-snapshot-fixture";
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3000");
+});
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
 });
 
-describe("App routing and shell", () => {
-  it("renders the home route inside the shared shell", async () => {
-    render(<App initialEntries={["/"]} />);
+function createAuthClient(session: AuthSession, accessToken: string | null = null): AuthClient {
+  return {
+    initialize: vi.fn().mockResolvedValue(session),
+    login: vi.fn().mockResolvedValue(undefined),
+    logout: vi.fn().mockResolvedValue(undefined),
+    getAccessToken: vi.fn().mockResolvedValue(accessToken)
+  };
+}
 
-    expect(screen.getByRole("banner").textContent).toContain("CasaStudio");
+const authenticatedSession: AuthSession = {
+  authenticated: true,
+  user: {
+    subject: "user-1",
+    username: "demo",
+    email: "demo@casastudio.local",
+    roles: ["casastudio-user"]
+  }
+};
+
+describe("App authentication and routing", () => {
+  it("shows initialization state before mounting application routes", async () => {
+    let finishInitialization: ((session: AuthSession) => void) | undefined;
+    const authClient = createAuthClient({ authenticated: false });
+    vi.mocked(authClient.initialize).mockReturnValue(
+      new Promise((resolve) => {
+        finishInitialization = resolve;
+      })
+    );
+
+    render(<App initialEntries={["/"]} authClient={authClient} />);
+
+    expect(screen.getByRole("status").textContent).toContain("Checking authentication");
+    expect(screen.queryByRole("heading", { name: "Plan spaces with confidence" })).toBeNull();
+
+    finishInitialization?.({ authenticated: false });
+
+    expect(
+      await screen.findByRole("heading", { name: "Plan spaces with confidence" })
+    ).toBeTruthy();
+  });
+
+  it("keeps the public route accessible while unauthenticated", async () => {
+    render(
+      <App
+        initialEntries={["/"]}
+        authClient={createAuthClient({ authenticated: false })}
+      />
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Plan spaces with confidence" })
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+  });
+
+  it("shows an explicit login action for an unauthenticated protected route", async () => {
+    render(
+      <App
+        initialEntries={["/app"]}
+        authClient={createAuthClient({ authenticated: false })}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Sign in to CasaStudio" })).toBeTruthy();
+    expect(screen.queryByRole("main")).toBeNull();
+  });
+
+  it("shows an explicit login action for an anonymous direct Project route", async () => {
+    render(
+      <App
+        initialEntries={[`/app/projects/${demoProjectEntry.id}`]}
+        authClient={createAuthClient({ authenticated: false })}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Sign in to CasaStudio" })).toBeTruthy();
+    expect(screen.queryByRole("main")).toBeNull();
+  });
+
+  it("does not expose Sign In while protected-route SSO restoration is pending", async () => {
+    let finishRestoration: ((session: AuthSession) => void) | undefined;
+    const authClient = createAuthClient({ authenticated: false });
+    vi.mocked(authClient.initialize).mockReturnValue(
+      new Promise((resolve) => {
+        finishRestoration = resolve;
+      })
+    );
+
+    render(<App initialEntries={["/app"]} authClient={authClient} />);
+
+    expect(screen.getByRole("status").textContent).toContain("Checking authentication");
+    expect(screen.queryByRole("heading", { name: "Sign in to CasaStudio" })).toBeNull();
+
+    finishRestoration?.(authenticatedSession);
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeTruthy();
+  });
+
+  it("falls back safely when protected-route SSO restoration finds no valid session", async () => {
+    render(
+      <App
+        initialEntries={[`/app/projects/${demoProjectEntry.id}`]}
+        authClient={createAuthClient({ authenticated: false })}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Sign in to CasaStudio" })).toBeTruthy();
+  });
+
+  it("delegates the protected-route login action to the auth client", async () => {
+    const authClient = createAuthClient({ authenticated: false });
+    render(<App initialEntries={["/app"]} authClient={authClient} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+
+    expect(authClient.login).toHaveBeenCalledOnce();
+  });
+
+  it("restores a valid SSO session on protected-route startup", async () => {
+    const authClient = createAuthClient(authenticatedSession);
+    render(
+      <App
+        initialEntries={["/app"]}
+        authClient={authClient}
+      />
+    );
+
+    expect((await screen.findByRole("banner")).textContent).toContain("CasaStudio");
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
-    expect(screen.getByRole("main").textContent).toContain("Technical application foundation");
-    expect(screen.getByRole("complementary", { name: "Inspector" }).textContent).toContain(
-      "Current foundation"
+    expect(screen.getByRole("main").textContent).toContain("Projects");
+    expect(screen.getByRole("heading", { name: demoProjectEntry.name })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open project" }).getAttribute("href")).toBe(
+      `/app/projects/${demoProjectEntry.id}`
     );
-    expect((await screen.findByRole("status", { name: "Status bar" })).textContent).toContain(
-      "CasaStudio foundation ready"
+    expect(screen.queryByRole("link", { name: "Geometry Playground" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Sign in to CasaStudio" })).toBeNull();
+    expect(screen.getByText("demo")).toBeTruthy();
+    expect(authClient.initialize).toHaveBeenCalledOnce();
+  });
+
+  it("restores a valid SSO session after a fresh application mount", async () => {
+    const firstMount = render(
+      <App initialEntries={["/app"]} authClient={createAuthClient(authenticatedSession)} />
+    );
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeTruthy();
+    firstMount.unmount();
+
+    const restoredClient = createAuthClient(authenticatedSession);
+    render(<App initialEntries={["/app"]} authClient={restoredClient} />);
+
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Sign in to CasaStudio" })).toBeNull();
+    expect(restoredClient.initialize).toHaveBeenCalledOnce();
+  });
+
+  it("creates the default API client for authenticated project routes", async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) =>
+      Response.json(
+        String(input).endsWith("/geometry")
+          ? createGeometrySnapshotFixture(
+              demoProjectFixture.id,
+              demoProjectFixture.revision
+            )
+          : {
+              project: demoProjectFixture,
+              sourceRevision: demoProjectFixture.revision
+            }
+      )
+    ) as typeof fetch;
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(
+      <App
+        initialEntries={[`/app/projects/${demoProjectFixture.id}`]}
+        authClient={createAuthClient(authenticatedSession, "access-token")}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: demoProjectFixture.name })).toBeTruthy();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `http://localhost:3000/api/v1/projects/${demoProjectFixture.id}`,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer access-token"
+        })
+      })
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `http://localhost:3000/api/v1/projects/${demoProjectFixture.id}/geometry`,
+      expect.any(Object)
     );
   });
 
-  it("renders the geometry playground route with inspector and status content", async () => {
-    render(<App initialEntries={["/geometry-playground"]} />);
+  it("delegates logout from the authenticated shell to the auth client", async () => {
+    const authClient = createAuthClient(authenticatedSession);
+    render(<App initialEntries={["/app"]} authClient={authClient} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+
+    expect(authClient.logout).toHaveBeenCalledOnce();
+  });
+
+  it("renders the protected geometry playground route", async () => {
+    render(
+      <App
+        initialEntries={["/app/geometry-playground"]}
+        authClient={createAuthClient(authenticatedSession)}
+      />
+    );
 
     expect(await screen.findByRole("heading", { name: "Geometry Playground" })).toBeTruthy();
-    expect(screen.getByRole("banner").textContent).toContain("Technical preview");
     expect(screen.getByRole("main").textContent).toContain("SVG Technical Viewer");
-    expect(screen.getByRole("complementary", { name: "Inspector" }).textContent).toContain(
-      "Layers"
-    );
-    expect(screen.getByRole("complementary", { name: "Inspector" }).textContent).toContain(
-      "Runtime Summary"
-    );
-    expect(screen.getByRole("status", { name: "Status bar" }).textContent).toContain(
-      "Level: ground-floor"
-    );
-    expect(screen.getByRole("status", { name: "Status bar" }).textContent).toContain(
-      "Engine: OK"
-    );
   });
 
-  it("uses client-side navigation and updates selected navigation state", async () => {
-    render(<App initialEntries={["/"]} />);
+  it("keeps the Geometry Playground out of primary navigation", async () => {
+    render(
+      <App
+        initialEntries={["/app"]}
+        authClient={createAuthClient(authenticatedSession)}
+      />
+    );
 
-    const homeLink = screen.getByRole("link", { name: "Home" });
-    const geometryLink = screen.getByRole("link", { name: "Geometry Playground" });
-
+    const homeLink = await screen.findByRole("link", { name: "Home" });
     expect(homeLink.getAttribute("aria-current")).toBe("page");
-    expect(geometryLink.hasAttribute("aria-current")).toBe(false);
-
-    fireEvent.click(geometryLink);
-
-    expect(await screen.findByRole("heading", { name: "Geometry Playground" })).toBeTruthy();
-    expect(geometryLink.getAttribute("aria-current")).toBe("page");
-    expect(homeLink.hasAttribute("aria-current")).toBe(false);
+    expect(screen.queryByRole("link", { name: "Geometry Playground" })).toBeNull();
   });
 
-  it("renders a stable not-found route inside the shell", async () => {
+  it("renders the application not-found route behind authentication", async () => {
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-
-    render(<App initialEntries={["/missing-workspace"]} />);
+    render(
+      <App
+        initialEntries={["/app/missing-workspace"]}
+        authClient={createAuthClient(authenticatedSession)}
+      />
+    );
 
     expect(await screen.findByRole("heading", { name: "Route not found" })).toBeTruthy();
     expect(screen.getByRole("main").textContent).toContain("CasaStudio does not have a workspace");
-    expect(screen.getByRole("status", { name: "Status bar" }).textContent).toContain(
-      "Route not found"
-    );
 
     consoleWarnSpy.mockRestore();
   });

@@ -31,11 +31,32 @@ const databaseUrlSchema = z
     }
   );
 
+const corsAllowedOriginsSchema = z
+  .string()
+  .default("http://localhost:5173,http://localhost:8081")
+  .transform((value, context) => {
+    const origins = value
+      .split(",")
+      .map((origin) => origin.trim().replace(/\/$/, ""))
+      .filter(Boolean);
+
+    if (origins.length === 0 || origins.some((origin) => !URL.canParse(origin))) {
+      context.addIssue({
+        code: "custom",
+        message: "CORS_ALLOWED_ORIGINS must contain comma-separated absolute URLs"
+      });
+      return z.NEVER;
+    }
+
+    return origins;
+  });
+
 const environmentSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
   API_PORT: z.coerce.number().int().positive().max(65535).default(3000),
+  CORS_ALLOWED_ORIGINS: corsAllowedOriginsSchema,
   DATABASE_URL: databaseUrlSchema,
   KEYCLOAK_BASE_URL: z.url(),
   KEYCLOAK_REALM: z.string().min(1),
@@ -62,6 +83,7 @@ export type AppConfiguration = {
   readonly nodeEnv: "development" | "test" | "production";
   readonly apiPort: number;
   readonly databaseUrl: string;
+  readonly corsAllowedOrigins: readonly string[];
   readonly keycloak: {
     readonly baseUrl: string;
     readonly realm: string;
@@ -96,6 +118,7 @@ function mapEnvironmentToConfiguration(
     nodeEnv: environment.NODE_ENV,
     apiPort: environment.API_PORT,
     databaseUrl: environment.DATABASE_URL,
+    corsAllowedOrigins: environment.CORS_ALLOWED_ORIGINS,
     keycloak: {
       baseUrl: environment.KEYCLOAK_BASE_URL,
       realm: environment.KEYCLOAK_REALM,

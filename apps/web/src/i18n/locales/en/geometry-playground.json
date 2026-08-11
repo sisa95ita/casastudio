@@ -10,8 +10,8 @@
   },
   "viewer": {
     "title": "SVG Technical Viewer",
-    "svgTitle": "Geometry playground runtime SVG viewer",
-    "svgDescription": "Interactive SVG projection of GeometryEngine runtime level geometry.",
+    "svgTitle": "Interactive 2D geometry viewer",
+    "svgDescription": "Interactive SVG projection of read-only level geometry.",
     "empty": "No runtime geometry to display for this level.",
     "noLevels": "GeometryEngine produced a model with no levels."
   },

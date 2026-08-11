@@ -67,7 +67,7 @@ describe("Postman development artifacts", () => {
       keycloakBaseUrl: "http://localhost:8080",
       realm: "casastudio",
       clientId: "casastudio-web",
-      projectId: "casa-studio-canonical-project"
+      projectId: "demo-project"
     });
     expect((environment.values ?? []).map((entry) => entry.key)).not.toEqual(
       expect.arrayContaining(["accessToken", "refreshToken", "password", "clientSecret", "adminPassword"])

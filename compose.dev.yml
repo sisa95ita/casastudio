@@ -29,6 +29,11 @@ services:
       CI: "true"
       PNPM_CONFIG_CONFIRM_MODULES_PURGE: "false"
       npm_config_confirm_modules_purge: "false"
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+      VITE_KEYCLOAK_BASE_URL: ${VITE_KEYCLOAK_BASE_URL:-http://localhost:8080}
+      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-casastudio}
+      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-casastudio-web}
+      VITE_KEYCLOAK_ROLE_CLIENT_ID: ${VITE_KEYCLOAK_ROLE_CLIENT_ID:-casastudio-api}
     ports: !override
       - "5173:5173"
     volumes:

@@ -4,14 +4,14 @@ import { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 
 import { useAppShellContent } from "../app-shell/AppShellContext";
+import { demoProjectEntry } from "../development/demo-project-entry";
 import { useCasaTranslation } from "../i18n";
 
 /**
  * Minimal CasaStudio home route.
  *
- * The page avoids fake project data and keeps the first screen purposeful by
- * identifying the product and linking directly to the primary technical
- * workspace.
+ * The page keeps the first authenticated screen focused on opening an
+ * authoritative Project workspace.
  */
 export function HomePage() {
   const { t } = useCasaTranslation("common");
@@ -19,7 +19,7 @@ export function HomePage() {
   const shellContent = useMemo(
     () => ({
       title: t("routes.home.title"),
-      breadcrumb: navigationT("breadcrumbs.foundation"),
+      breadcrumb: navigationT("breadcrumbs.home"),
       inspector: (
         <Stack spacing={1.5}>
           <Typography variant="subtitle2">{t("routes.home.inspectorTitle")}</Typography>
@@ -58,14 +58,15 @@ export function HomePage() {
 
           <Divider />
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: "flex-start" }}>
+          <Stack spacing={1} sx={{ alignItems: "flex-start" }}>
+            <Typography variant="h2">{demoProjectEntry.name}</Typography>
             <Button
               component={RouterLink}
-              to="/geometry-playground"
+              to={`/app/projects/${demoProjectEntry.id}`}
               variant="contained"
               endIcon={<ArrowForwardRoundedIcon />}
             >
-              {t("routes.home.openGeometryPlayground")}
+              {t("routes.home.openProject")}
             </Button>
           </Stack>
         </Stack>

@@ -26,6 +26,12 @@ export function configureApiApplication(
   const configuration = readAppConfiguration(app.get(ConfigService<AppConfiguration, true>));
 
   app.useLogger(app.get(Logger));
+  app.enableCors({
+    allowedHeaders: ["Authorization", "Content-Type"],
+    credentials: false,
+    methods: ["GET", "OPTIONS"],
+    origin: configuration.corsAllowedOrigins
+  });
   app.setGlobalPrefix("api");
   app.enableVersioning({
     type: VersioningType.URI,
@@ -56,6 +62,7 @@ export function readAppConfiguration(
     nodeEnv: configService.get("nodeEnv", { infer: true }),
     apiPort: configService.get("apiPort", { infer: true }),
     databaseUrl: configService.get("databaseUrl", { infer: true }),
+    corsAllowedOrigins: configService.get("corsAllowedOrigins", { infer: true }),
     keycloak: configService.get("keycloak", { infer: true }),
     swaggerEnabled: configService.get("swaggerEnabled", { infer: true }),
     logLevel: configService.get("logLevel", { infer: true })

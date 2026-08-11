@@ -57,6 +57,7 @@ describe("API configuration", () => {
   it("accepts a valid environment", () => {
     expect(createValidatedConfiguration(defaultTestEnvironment)).toMatchObject({
       apiPort: 3000,
+      corsAllowedOrigins: ["http://localhost:5173", "http://localhost:8081"],
       databaseUrl: defaultTestEnvironment.DATABASE_URL,
       keycloak: {
         audience: "casastudio-api",
@@ -80,6 +81,24 @@ describe("API configuration", () => {
         NODE_ENV: "production"
       }).swaggerEnabled
     ).toBe(false);
+  });
+});
+
+describe("CORS", () => {
+  it("allows the explicit local Vite origin and bearer header", async () => {
+    const context = await createTestApp();
+
+    const response = await request(context.app.getHttpServer())
+      .options("/api/v1/health/live")
+      .set("origin", "http://localhost:5173")
+      .set("access-control-request-method", "GET")
+      .set("access-control-request-headers", "authorization")
+      .expect(204);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(response.headers["access-control-allow-headers"]).toContain("Authorization");
+
+    await context.app.close();
   });
 });
 

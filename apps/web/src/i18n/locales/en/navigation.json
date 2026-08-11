@@ -3,11 +3,10 @@
     "primary": "Primary"
   },
   "items": {
-    "home": "Home",
-    "geometryPlayground": "Geometry Playground"
+    "home": "Home"
   },
   "breadcrumbs": {
-    "foundation": "Foundation",
+    "home": "Home",
     "runtime": "Runtime"
   }
 }

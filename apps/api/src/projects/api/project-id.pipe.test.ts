@@ -5,7 +5,7 @@ import { ProjectIdPipe } from "./project-id.pipe";
 
 describe("ProjectIdPipe", () => {
   it("accepts canonical CasaStudio identifiers", () => {
-    expect(new ProjectIdPipe().transform("casa-studio-canonical-project")).toBe("casa-studio-canonical-project");
+    expect(new ProjectIdPipe().transform("demo-project")).toBe("demo-project");
   });
 
   it("rejects malformed identifiers with a stable project error code", () => {

@@ -140,7 +140,7 @@
       "name": "Projects",
       "item": [
         {
-          "name": "Get Canonical Project",
+          "name": "Get Demo Project",
           "request": {
             "auth": {
               "type": "inherit"
@@ -226,7 +226,7 @@
       "name": "Geometry",
       "item": [
         {
-          "name": "Get Canonical Project Geometry",
+          "name": "Get Demo Project Geometry",
           "request": {
             "auth": {
               "type": "inherit"

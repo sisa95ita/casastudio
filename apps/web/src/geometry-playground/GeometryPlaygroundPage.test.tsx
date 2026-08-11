@@ -2,11 +2,17 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Project } from "@casastudio/schema";
+import { Provider } from "react-redux";
 
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
 import { GeometryLayerControls } from "./GeometryLayerControls";
 import { GeometryPlaygroundPage } from "./GeometryPlaygroundPage";
 import { defaultGeometryDisplayOptions } from "./GeometrySvgViewer";
+import { createAppStore } from "../state/store";
+
+function withStore(component: React.ReactNode) {
+  return <Provider store={createAppStore()}>{component}</Provider>;
+}
 
 describe("GeometryPlaygroundPage", () => {
   it("renders accessible layer controls", () => {
@@ -22,7 +28,7 @@ describe("GeometryPlaygroundPage", () => {
     expect(markup).toContain("Show vertices");
     expect(markup).toContain("Show centroids");
     expect(markup).toContain("Show bounds");
-    expect(markup).toContain("Show runtime labels");
+    expect(markup).toContain("Show geometry labels");
   });
 
   it("renders technical geometry build errors without throwing", () => {
@@ -60,7 +66,7 @@ describe("GeometryPlaygroundPage", () => {
       }
     };
 
-    const markup = renderToStaticMarkup(<GeometryPlaygroundPage project={invalidProject} />);
+    const markup = renderToStaticMarkup(withStore(<GeometryPlaygroundPage project={invalidProject} />));
 
     expect(markup).toContain("Geometry build failed");
     expect(markup).toContain("INVALID_PROJECT_GEOMETRY");
@@ -69,7 +75,7 @@ describe("GeometryPlaygroundPage", () => {
   });
 
   it("clears selection with Escape", () => {
-    render(<GeometryPlaygroundPage />);
+    render(withStore(<GeometryPlaygroundPage />));
 
     const polygon = screen.getAllByTestId("geometry-polygon")[0];
 
@@ -85,7 +91,7 @@ describe("GeometryPlaygroundPage", () => {
   });
 
   it("resets and fits the viewport from keyboard shortcuts", () => {
-    render(<GeometryPlaygroundPage />);
+    render(withStore(<GeometryPlaygroundPage />));
 
     const polygon = screen.getAllByTestId("geometry-polygon")[0];
 

@@ -1,8 +1,7 @@
-import type { LevelGeometry } from "@casastudio/geometry";
-import { useMemo, useRef, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
+import { useRef, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 
 import { useCasaTranslation } from "../i18n";
-import { createGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
+import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import {
   applyGeometrySelectionClick,
   clearGeometrySelection,
@@ -15,15 +14,8 @@ import {
   type GeometrySelectionState,
   setGeometryHover
 } from "./geometry-selection-state";
+import { formatSvgNumber } from "./geometry-svg-helpers";
 import {
-  collectLevelBounds,
-  formatSvgNumber,
-  getScreenBoundsRect
-} from "./geometry-svg-helpers";
-import {
-  createFitViewportState,
-  createViewportTransform2D,
-  defaultViewportState,
   panViewportState,
   zoomViewportState,
   type ScreenPoint,
@@ -42,9 +34,8 @@ export const geometrySvgViewport = Object.freeze({
 /**
  * Read-only diagnostic SVG layer visibility flags.
  *
- * These options are local presentation state for the playground. They are kept
- * out of `GeometryModel` because diagnostic overlays such as bounds and labels
- * are not domain geometry.
+ * These options are local presentation state. Diagnostic overlays such as
+ * bounds and labels are not domain or server state.
  */
 export type GeometryDisplayOptions = {
   readonly polygons: boolean;
@@ -52,11 +43,11 @@ export type GeometryDisplayOptions = {
   readonly vertices: boolean;
   readonly centroids: boolean;
   readonly bounds: boolean;
-  readonly runtimeLabels: boolean;
+  readonly entityLabels: boolean;
 };
 
 /**
- * Default debug layers for the geometry playground.
+ * Default layers for an interactive geometry viewer.
  */
 export const defaultGeometryDisplayOptions: GeometryDisplayOptions = Object.freeze({
   polygons: true,
@@ -64,30 +55,31 @@ export const defaultGeometryDisplayOptions: GeometryDisplayOptions = Object.free
   vertices: true,
   centroids: true,
   bounds: false,
-  runtimeLabels: false
+  entityLabels: false
 });
 
 /**
- * Props for the interactive runtime geometry SVG viewer.
+ * Props for the interactive geometry SVG viewer.
  */
 export type GeometrySvgViewerProps = {
-  readonly level: LevelGeometry;
+  readonly presentationModel: GeometryPresentationModel2D;
   readonly options: GeometryDisplayOptions;
-  readonly viewport?: ViewportState;
+  readonly viewport: ViewportState;
   readonly selectionState?: GeometrySelectionState;
   readonly onSelectionStateChange?: (selectionState: GeometrySelectionState) => void;
   readonly onViewportChange?: (viewport: ViewportState) => void;
 };
 
 /**
- * Renders one immutable `LevelGeometry` as an interactive SVG debug view.
+ * Renders a source-independent 2D presentation model as an interactive SVG
+ * view.
  *
  * Event priority is defined by layer order and propagation: polygon hit areas
  * are below boundary edges, boundary edges are below vertices, and handled
  * entity clicks stop before reaching the background pan/clear layer.
  */
 export function GeometrySvgViewer({
-  level,
+  presentationModel,
   options,
   viewport,
   selectionState,
@@ -95,35 +87,15 @@ export function GeometrySvgViewer({
   onViewportChange
 }: GeometrySvgViewerProps) {
   const { t } = useCasaTranslation("geometry-playground");
-  const bounds = collectLevelBounds(level);
+  const bounds = presentationModel.bounds;
   const lastPanPointRef = useRef<ScreenPoint | undefined>(undefined);
   const currentViewportRef = useRef<ViewportState | undefined>(undefined);
   const suppressNextBackgroundClickRef = useRef(false);
 
-  const resolvedViewport =
-    viewport ??
-    (bounds
-      ? createFitViewportState({
-          bounds,
-          viewportWidth: geometrySvgViewport.width,
-          viewportHeight: geometrySvgViewport.height,
-          padding: geometrySvgViewport.padding
-        })
-        : defaultViewportState);
-  currentViewportRef.current = resolvedViewport;
+  currentViewportRef.current = viewport;
   const resolvedSelectionState = selectionState ?? createGeometrySelectionState();
-  const transform = useMemo(() => createViewportTransform2D(resolvedViewport), [resolvedViewport]);
-  const presentationModel = useMemo(
-    () =>
-      createGeometryPresentationModel2D({
-        level,
-        transform,
-        selectionState: resolvedSelectionState
-      }),
-    [level, resolvedSelectionState, transform]
-  );
-  const vertexRadius = Math.max(3, Math.min(6, transform.scaleLength(5)));
-  const centroidRadius = Math.max(4, Math.min(7, transform.scaleLength(6)));
+  const vertexRadius = Math.max(3, Math.min(6, viewport.zoom * 5));
+  const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
   if (!bounds) {
     return (
@@ -146,7 +118,7 @@ export function GeometrySvgViewer({
 
     event.preventDefault();
     const nextViewport = zoomViewportState({
-      viewport: currentViewportRef.current ?? resolvedViewport,
+      viewport: currentViewportRef.current ?? viewport,
       zoomFactor: Math.exp(-event.deltaY * 0.0015),
       center: getEventPoint(event)
     });
@@ -178,7 +150,7 @@ export function GeometrySvgViewer({
 
     if (Math.abs(delta.x) + Math.abs(delta.y) > 0) {
       suppressNextBackgroundClickRef.current = true;
-      const nextViewport = panViewportState(currentViewportRef.current ?? resolvedViewport, delta);
+      const nextViewport = panViewportState(currentViewportRef.current ?? viewport, delta);
       currentViewportRef.current = nextViewport;
       onViewportChange(nextViewport);
       lastPanPointRef.current = nextPoint;
@@ -260,7 +232,7 @@ export function GeometrySvgViewer({
                   onMouseEnter={() => handleHoverChange(selectPolygon(polygon.geometryId))}
                   onMouseLeave={() => handleHoverChange(undefined)}
                 />
-                {options.runtimeLabels ? (
+                {options.entityLabels ? (
                   <text
                     className="geometry-label geometry-label-room"
                     x={formatSvgNumber(polygon.centroid.screen.x)}
@@ -278,12 +250,12 @@ export function GeometrySvgViewer({
 
       {options.bounds ? (
         <g data-layer="polygon-bounds">
-          {level.polygons.map((polygon) => {
-            const rect = getScreenBoundsRect(polygon.bounds, transform);
+          {presentationModel.polygons.map((polygon) => {
+            const rect = polygon.screenBounds;
 
             return (
               <rect
-                key={polygon.id}
+                key={polygon.geometryId}
                 data-testid="polygon-bounds"
                 className="geometry-polygon-bounds"
                 x={formatSvgNumber(rect.x)}
@@ -330,7 +302,7 @@ export function GeometrySvgViewer({
                   x2={formatSvgNumber(edge.end.screen.x)}
                   y2={formatSvgNumber(edge.end.screen.y)}
                 />
-                {options.runtimeLabels ? (
+                {options.entityLabels ? (
                   <text
                     className="geometry-label geometry-label-edge"
                     x={formatSvgNumber(edge.midpoint.x + 8)}
@@ -364,7 +336,7 @@ export function GeometrySvgViewer({
                   onMouseEnter={() => handleHoverChange(selectVertex(vertex.geometryId))}
                   onMouseLeave={() => handleHoverChange(undefined)}
                 />
-                {options.runtimeLabels ? (
+                {options.entityLabels ? (
                   <text
                     className="geometry-label geometry-label-vertex"
                     x={formatSvgNumber(vertex.point.x + 8)}

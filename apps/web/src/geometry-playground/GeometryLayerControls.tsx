@@ -13,7 +13,7 @@ const controlLabels: ReadonlyArray<{
   { option: "vertices", labelKey: "layers.showVertices" },
   { option: "centroids", labelKey: "layers.showCentroids" },
   { option: "bounds", labelKey: "layers.showBounds" },
-  { option: "runtimeLabels", labelKey: "layers.showRuntimeLabels" }
+  { option: "entityLabels", labelKey: "layers.showEntityLabels" }
 ];
 
 /**
@@ -27,9 +27,8 @@ export type GeometryLayerControlsProps = {
 /**
  * Renders accessible checkboxes for SVG diagnostic layers.
  *
- * The controls own only view state. They do not write to `GeometryModel`, and
- * toggling diagnostic overlays never changes the immutable runtime topology
- * produced by the Geometry Engine.
+ * The controls own only view state. Toggling diagnostic overlays never changes
+ * authoritative geometry or runtime topology.
  */
 export function GeometryLayerControls({
   options,

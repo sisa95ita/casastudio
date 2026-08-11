@@ -1,4 +1,4 @@
-import { GeometryEngine } from "@casastudio/geometry";
+import { GeometryEngine, type LevelGeometry } from "@casastudio/geometry";
 import { ProjectSchema } from "@casastudio/schema";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
 import {
   collectLevelBounds,
-  countBoundaryEdgeUses,
-  getPolygonPointString
+  countBoundaryEdgeUses
 } from "./geometry-svg-helpers";
+import { createRuntimeGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import {
   defaultGeometryDisplayOptions,
   GeometrySvgViewer
@@ -18,7 +18,12 @@ import {
   createGeometrySelectionState,
   selectPolygon
 } from "./geometry-selection-state";
-import { createFitToViewTransform } from "./viewport-transform-2d";
+import {
+  createFitViewportState,
+  createViewportTransform2D,
+  defaultViewportState,
+  type ViewportState
+} from "./viewport-transform-2d";
 
 const getPlaygroundLevel = () => {
   const project = ProjectSchema.parse(geometryPlaygroundProject);
@@ -37,6 +42,34 @@ const getPlaygroundLevel = () => {
   return level;
 };
 
+const createViewerProps = (
+  level: LevelGeometry,
+  selectionState = createGeometrySelectionState(),
+  requestedViewport?: ViewportState
+) => {
+  const bounds = collectLevelBounds(level);
+  const viewport =
+    requestedViewport ??
+    (bounds
+      ? createFitViewportState({
+          bounds,
+          viewportWidth: 800,
+          viewportHeight: 520,
+          padding: 40
+        })
+      : defaultViewportState);
+
+  return {
+    presentationModel: createRuntimeGeometryPresentationModel2D({
+      level,
+      transform: createViewportTransform2D(viewport),
+      selectionState
+    }),
+    selectionState,
+    viewport
+  };
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -51,16 +84,11 @@ describe("GeometrySvgViewer", () => {
       throw new Error("Expected playground level to contain polygon bounds.");
     }
 
-    const transform = createFitToViewTransform({
-      bounds,
-      viewportWidth: 800,
-      viewportHeight: 520,
-      padding: 40
-    });
-    const expectedFirstPolygonPoints = getPolygonPointString(firstPolygon, transform);
+    const viewerProps = createViewerProps(level);
+    const expectedFirstPolygonPoints = viewerProps.presentationModel.polygons[0]?.svgPoints;
 
     const markup = renderToStaticMarkup(
-      <GeometrySvgViewer level={level} options={defaultGeometryDisplayOptions} />
+      <GeometrySvgViewer {...viewerProps} options={defaultGeometryDisplayOptions} />
     );
 
     expect(markup.match(/data-testid="geometry-polygon"/g)).toHaveLength(2);
@@ -72,7 +100,7 @@ describe("GeometrySvgViewer", () => {
     const useCounts = countBoundaryEdgeUses(level);
 
     const markup = renderToStaticMarkup(
-      <GeometrySvgViewer level={level} options={defaultGeometryDisplayOptions} />
+      <GeometrySvgViewer {...createViewerProps(level)} options={defaultGeometryDisplayOptions} />
     );
 
     expect(level.boundaryEdges).toHaveLength(7);
@@ -86,13 +114,13 @@ describe("GeometrySvgViewer", () => {
 
     const visibleMarkup = renderToStaticMarkup(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(level)}
         options={{ ...defaultGeometryDisplayOptions, bounds: true }}
       />
     );
     const hiddenMarkup = renderToStaticMarkup(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(level)}
         options={{ ...defaultGeometryDisplayOptions, vertices: false, bounds: false }}
       />
     );
@@ -134,7 +162,7 @@ describe("GeometrySvgViewer", () => {
     }
 
     const markup = renderToStaticMarkup(
-      <GeometrySvgViewer level={level} options={defaultGeometryDisplayOptions} />
+      <GeometrySvgViewer {...createViewerProps(level)} options={defaultGeometryDisplayOptions} />
     );
 
     expect(markup).toContain("No runtime geometry to display for this level.");
@@ -145,7 +173,7 @@ describe("GeometrySvgViewer", () => {
     const handleSelectionStateChange = vi.fn();
     const { container } = render(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(level)}
         options={defaultGeometryDisplayOptions}
         onSelectionStateChange={handleSelectionStateChange}
       />
@@ -204,9 +232,11 @@ describe("GeometrySvgViewer", () => {
 
     const { container } = render(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(
+          level,
+          createGeometrySelectionState([selectPolygon(selectedPolygon.id)])
+        )}
         options={defaultGeometryDisplayOptions}
-        selectionState={createGeometrySelectionState([selectPolygon(selectedPolygon.id)])}
         onSelectionStateChange={handleSelectionStateChange}
       />
     );
@@ -242,9 +272,8 @@ describe("GeometrySvgViewer", () => {
 
     const { container, unmount } = render(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(level, initialSelectionState)}
         options={defaultGeometryDisplayOptions}
-        selectionState={initialSelectionState}
         onSelectionStateChange={handleAdditiveSelection}
       />
     );
@@ -272,9 +301,8 @@ describe("GeometrySvgViewer", () => {
 
     const toggleRender = render(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(level, initialSelectionState)}
         options={defaultGeometryDisplayOptions}
-        selectionState={initialSelectionState}
         onSelectionStateChange={handleToggleSelection}
       />
     );
@@ -299,9 +327,8 @@ describe("GeometrySvgViewer", () => {
     const handleViewportChange = vi.fn();
     const { container } = render(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(level, createGeometrySelectionState(), viewport)}
         options={defaultGeometryDisplayOptions}
-        viewport={viewport}
         onViewportChange={handleViewportChange}
       />
     );
@@ -341,9 +368,8 @@ describe("GeometrySvgViewer", () => {
     const handleViewportChange = vi.fn();
     const { container } = render(
       <GeometrySvgViewer
-        level={level}
+        {...createViewerProps(level, createGeometrySelectionState(), viewport)}
         options={defaultGeometryDisplayOptions}
-        viewport={viewport}
         onViewportChange={handleViewportChange}
       />
     );

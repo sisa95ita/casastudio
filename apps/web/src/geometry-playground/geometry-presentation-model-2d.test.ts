@@ -2,7 +2,7 @@ import { GeometryEngine } from "@casastudio/geometry";
 import { ProjectSchema } from "@casastudio/schema";
 import { describe, expect, it } from "vitest";
 
-import { createGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
+import { createRuntimeGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import { geometryPlaygroundProject } from "./geometry-playground-fixture";
 import {
   createGeometrySelectionState,
@@ -33,7 +33,7 @@ const getPresentationModel = () => {
     throw new Error("Expected playground fixture to produce bounds.");
   }
 
-  return createGeometryPresentationModel2D({
+  return createRuntimeGeometryPresentationModel2D({
     level,
     transform: createFitToViewTransform({
       bounds,
@@ -44,7 +44,7 @@ const getPresentationModel = () => {
   });
 };
 
-describe("createGeometryPresentationModel2D", () => {
+describe("createRuntimeGeometryPresentationModel2D", () => {
   it("returns deterministic render-oriented geometry", () => {
     expect(getPresentationModel()).toEqual(getPresentationModel());
   });
@@ -72,7 +72,7 @@ describe("createGeometryPresentationModel2D", () => {
       throw new Error("Expected playground runtime level and bounds.");
     }
 
-    const model = createGeometryPresentationModel2D({
+    const model = createRuntimeGeometryPresentationModel2D({
       level,
       transform: createFitToViewTransform({
         bounds,
@@ -129,7 +129,7 @@ describe("createGeometryPresentationModel2D", () => {
       throw new Error("Expected playground runtime level and bounds.");
     }
 
-    const selectedModel = createGeometryPresentationModel2D({
+    const selectedModel = createRuntimeGeometryPresentationModel2D({
       level,
       transform: createFitToViewTransform({
         bounds,

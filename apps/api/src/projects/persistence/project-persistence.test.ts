@@ -7,7 +7,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaService } from "../../persistence/prisma.service";
 import { ProjectAggregateMapper, validateProjectForPersistence } from "./project-aggregate.mapper";
-import { DEMO_PROJECT_OWNER_SUBJECT, seedCanonicalDemoProject } from "./demo-project-seed";
+import {
+  createDemoProject,
+  DEMO_PROJECT_ID,
+  DEMO_PROJECT_NAME,
+  DEMO_PROJECT_OWNER_SUBJECT,
+  seedDemoProject
+} from "./demo-project-seed";
 import { projectPersistenceInclude } from "./project-persistence-aggregate";
 import { PersistedProjectInvalidError, ProjectReconstructionError } from "./project-persistence-error";
 import { ProjectPersistenceWriter } from "./project-persistence-writer";
@@ -15,6 +21,7 @@ import { PrismaProjectRepository } from "./prisma-project.repository";
 
 const canonicalProjectUrl = new URL("../../../../../packages/schema/examples/project.json", import.meta.url);
 const canonicalProject = ProjectSchema.parse(JSON.parse(readFileSync(canonicalProjectUrl, "utf8")));
+const demoProject = createDemoProject(canonicalProject);
 const testOwnerSubject = "8d62f7e2-0c2a-4f2a-a9cf-7f62c2f4e8f7";
 const testProjectId = "phase-1b-round-trip-project";
 
@@ -26,6 +33,15 @@ describe("ProjectAggregateMapper", () => {
         schemaVersion: "9.9.9"
       })
     ).toThrow(PersistedProjectInvalidError);
+  });
+
+  it("applies the neutral development identity to the persisted demo Project", () => {
+    expect(demoProject).toMatchObject({
+      id: DEMO_PROJECT_ID,
+      name: DEMO_PROJECT_NAME
+    });
+    expect(JSON.stringify(demoProject)).not.toContain("casa-studio-canonical-project");
+    expect(JSON.stringify(demoProject)).not.toContain("CasaStudio Canonical Project");
   });
 });
 
@@ -241,25 +257,26 @@ describeWithDatabase("relational Project persistence", () => {
     await expect(repository.findByDomainId(project.id)).rejects.toThrow(PersistedProjectInvalidError);
   });
 
-  it("seeds the canonical demo project repeatably without duplicates", async () => {
-    const firstResult = await seedCanonicalDemoProject(prisma, canonicalProject);
-    const secondResult = await seedCanonicalDemoProject(prisma, canonicalProject);
+  it("seeds the neutral demo Project repeatably without duplicates", async () => {
+    const firstResult = await seedDemoProject(prisma, demoProject);
+    const secondResult = await seedDemoProject(prisma, demoProject);
 
     const projectCount = await prisma.project.count({
       where: {
-        domainId: canonicalProject.id
+        domainId: DEMO_PROJECT_ID
       }
     });
-    const loadedProject = await repository.findByDomainId(canonicalProject.id);
+    const loadedProject = await repository.findByDomainId(DEMO_PROJECT_ID);
 
     expect(firstResult).toEqual({
-      projectId: canonicalProject.id,
-      revision: canonicalProject.revision,
+      projectId: DEMO_PROJECT_ID,
+      revision: demoProject.revision,
       ownerSubject: DEMO_PROJECT_OWNER_SUBJECT
     });
     expect(secondResult).toEqual(firstResult);
     expect(projectCount).toBe(1);
-    expect(loadedProject).toEqual(canonicalProject);
+    expect(loadedProject).toEqual(demoProject);
+    expect(loadedProject?.name).toBe(DEMO_PROJECT_NAME);
   });
 
   it("maps a loaded persistence aggregate to the exact canonical Project", async () => {

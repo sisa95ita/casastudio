@@ -18,7 +18,7 @@ export type GeometrySelectionDetailsProps = {
 };
 
 /**
- * Renders selected runtime geometry details without mutating the runtime model.
+ * Renders details from selected entities in the current presentation model.
  */
 export function GeometrySelectionDetails({
   model,
@@ -130,7 +130,7 @@ const getSelectionItems = (
   if (entity.kind === "POLYGON") {
     return [
       { label: t("selection.labels.type"), value: t("selection.types.polygon") },
-      { label: t("selection.labels.runtimeId"), value: entity.geometryId },
+      { label: t("selection.labels.geometryId"), value: entity.geometryId },
       { label: t("selection.labels.sourceRoomId"), value: entity.sourceRoomId },
       { label: t("selection.labels.area"), value: formatMeasurement(entity.area) },
       { label: t("selection.labels.winding"), value: entity.winding },
@@ -144,7 +144,7 @@ const getSelectionItems = (
   if (entity.kind === "BOUNDARY_EDGE") {
     return [
       { label: t("selection.labels.type"), value: t("selection.types.boundaryEdge") },
-      { label: t("selection.labels.runtimeId"), value: entity.geometryId },
+      { label: t("selection.labels.geometryId"), value: entity.geometryId },
       { label: t("selection.labels.sourceWallId"), value: entity.sourceWallId },
       { label: t("selection.labels.startVertex"), value: entity.startVertexId },
       { label: t("selection.labels.endVertex"), value: entity.endVertexId },
@@ -154,7 +154,7 @@ const getSelectionItems = (
 
   return [
     { label: t("selection.labels.type"), value: t("selection.types.vertex") },
-    { label: t("selection.labels.runtimeId"), value: entity.geometryId },
+    { label: t("selection.labels.geometryId"), value: entity.geometryId },
     {
       label: t("selection.labels.coordinates"),
       value: `${formatMeasurement(entity.coordinates.x)}, ${formatMeasurement(entity.coordinates.z)}`

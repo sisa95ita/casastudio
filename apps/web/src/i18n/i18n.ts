@@ -2,10 +2,12 @@ import i18next from "i18next";
 import type { i18n as I18nInstance } from "i18next";
 import { initReactI18next } from "react-i18next";
 
+import authEn from "./locales/en/auth.json";
 import commonEn from "./locales/en/common.json";
 import geometryPlaygroundEn from "./locales/en/geometry-playground.json";
 import inspectorEn from "./locales/en/inspector.json";
 import navigationEn from "./locales/en/navigation.json";
+import projectViewerEn from "./locales/en/project-viewer.json";
 
 /**
  * Default and fallback locale for the CasaStudio frontend.
@@ -19,7 +21,9 @@ export const DEFAULT_LOCALE = "en";
  * Translation namespaces grouped by UI and domain context.
  */
 export const I18N_NAMESPACES = [
+  "auth",
   "common",
+  "project-viewer",
   "navigation",
   "geometry-playground",
   "inspector"
@@ -35,7 +39,9 @@ export type CasaI18nNamespace = (typeof I18N_NAMESPACES)[number];
  */
 export const casaI18nResources = {
   en: {
+    auth: authEn,
     common: commonEn,
+    "project-viewer": projectViewerEn,
     navigation: navigationEn,
     "geometry-playground": geometryPlaygroundEn,
     inspector: inspectorEn
