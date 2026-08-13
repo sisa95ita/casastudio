@@ -1,21 +1,47 @@
+import { GeometryEngine, LevelGeometry } from "@casastudio/geometry";
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
-  Divider,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
-  Typography
+  Tab,
+  Tabs,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+  useMediaQuery,
+  useTheme
 } from "@mui/material";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import LinearScaleRoundedIcon from "@mui/icons-material/LinearScaleRounded";
 import LockOutlineRoundedIcon from "@mui/icons-material/LockOutlineRounded";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import KeyboardRoundedIcon from "@mui/icons-material/KeyboardRounded";
+import NearMeRoundedIcon from "@mui/icons-material/NearMeRounded";
+import PanToolAltRoundedIcon from "@mui/icons-material/PanToolAltRounded";
+import RedoRoundedIcon from "@mui/icons-material/RedoRounded";
+import UndoRoundedIcon from "@mui/icons-material/UndoRounded";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode
+} from "react";
+import { useBlocker, useParams } from "react-router-dom";
 
 import {
   ApiAuthenticationUnavailableError,
@@ -24,6 +50,8 @@ import {
 import type { GeometryLevel, GeometrySnapshot } from "../api/api-types";
 import { useAppShellContent } from "../app-shell/AppShellContext";
 import { GeometryLayerControls } from "../geometry-playground/GeometryLayerControls";
+import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
+import { createRuntimeGeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
 import { GeometryShortcutGuide } from "../geometry-playground/GeometryShortcutGuide";
 import { GeometryViewerPanel } from "../geometry-playground/GeometryViewerPanel";
@@ -35,6 +63,7 @@ import {
   createGeometrySelectionState,
   type GeometrySelectionState
 } from "../geometry-playground/geometry-selection-state";
+import { collectLevelBounds } from "../geometry-playground/geometry-svg-helpers";
 import { getGeometryViewerShortcutAction } from "../geometry-playground/geometry-viewer-shortcuts";
 import {
   defaultGeometryDisplayOptions,
@@ -53,6 +82,25 @@ import { useProjectGeometryQuery } from "../queries/geometry-queries";
 import { useProjectQuery } from "../queries/project-queries";
 import { useAppDispatch, useAppSelector } from "../state/hooks";
 import {
+  cleanEditingSessionLeft,
+  editingSessionEntered,
+  editorActiveLevelChanged,
+  editorActiveToolChanged,
+  editorSelectionChanged,
+  editorSelectionCleared,
+  projectRouteChanged,
+  projectRouteExited,
+  selectEditorGeometrySelection,
+  selectProjectEditor,
+  selectShouldProtectProjectNavigation,
+  type ProjectWorkspaceMode
+} from "../state/project-editor-slice";
+import {
+  getProjectEditorInteraction,
+  projectEditorTools,
+  type ProjectEditorTool
+} from "../state/project-editor-tools";
+import {
   geometrySelectionChanged,
   geometrySelectionCleared,
   geometrySelectionReset,
@@ -61,103 +109,187 @@ import {
 
 const emptySelectionState = createGeometrySelectionState();
 
-/** Renders the authoritative read-only Project geometry workspace. */
+/** Renders the authoritative View and local-draft Edit workspace for one Project. */
 export function ProjectViewerPage() {
   const { projectId = "" } = useParams<{ projectId: string }>();
   const { t } = useCasaTranslation("project-viewer");
+  const theme = useTheme();
+  const isPhone = useMediaQuery(theme.breakpoints.down("sm"));
+  const isTablet = useMediaQuery(theme.breakpoints.between("sm", "lg"));
   const dispatch = useAppDispatch();
-  const selectionState = useAppSelector(selectGeometrySelection);
+  const editor = useAppSelector(selectProjectEditor);
+  const viewSelection = useAppSelector(selectGeometrySelection);
+  const editSelection = useAppSelector(selectEditorGeometrySelection);
+  const shouldProtectNavigation = useAppSelector((state) =>
+    selectShouldProtectProjectNavigation(state, projectId)
+  );
+  const blocker = useBlocker(shouldProtectNavigation);
   const projectQuery = useProjectQuery(projectId);
   const geometryQuery = useProjectGeometryQuery(projectId);
-  const [displayOptions, setDisplayOptions] = useState(defaultGeometryDisplayOptions);
-  const [selectedLevelId, setSelectedLevelId] = useState("");
+  const [displayOptions, setDisplayOptions] = useState(
+    defaultGeometryDisplayOptions
+  );
+  const [selectedViewLevelId, setSelectedViewLevelId] = useState("");
   const [viewport, setViewport] = useState<ViewportState>(resetViewportState);
-  const [selectionOwnerSnapshot, setSelectionOwnerSnapshot] = useState<GeometrySnapshot>();
-  const [viewportOwnerSnapshot, setViewportOwnerSnapshot] = useState<GeometrySnapshot>();
+  const [selectionOwnerSnapshot, setSelectionOwnerSnapshot] =
+    useState<GeometrySnapshot>();
+  const [viewportOwnerKey, setViewportOwnerKey] = useState("");
+  const [dirtyExitBlocked, setDirtyExitBlocked] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
-  const consistencyFailure = getConsistencyFailure(projectResponse, geometryResponse);
+  const consistencyFailure = getConsistencyFailure(
+    projectResponse,
+    geometryResponse
+  );
   const geometryIdentity =
     projectResponse && geometryResponse && !consistencyFailure
       ? `${projectResponse.project.id}:${geometryResponse.sourceRevision}:${geometryResponse.geometry.id}`
       : undefined;
-  const levels = geometryResponse?.geometry.levels ?? [];
-  const selectedLevel =
-    levels.find((level) => level.id === selectedLevelId) ?? levels[0];
-  const safeSelectionState =
+  const ownsEditingSession =
+    editor.mode === "edit" && editor.projectId === projectId;
+  const workspaceMode: ProjectWorkspaceMode =
+    ownsEditingSession && !isPhone ? "edit" : "view";
+  const viewLevels = geometryResponse?.geometry.levels ?? [];
+  const selectedViewLevel =
+    viewLevels.find((level) => level.id === selectedViewLevelId) ??
+    viewLevels[0];
+  const safeViewSelection =
     geometryResponse && selectionOwnerSnapshot === geometryResponse.geometry
-      ? selectionState
+      ? viewSelection
       : emptySelectionState;
-  const activeViewport =
-    geometryResponse && viewportOwnerSnapshot === geometryResponse.geometry
-      ? viewport
-      : createInitialViewportState(selectedLevel);
 
-  const presentationResult = useMemo(() => {
-    if (!selectedLevel || consistencyFailure) {
+  const editBuildResult = useMemo(() => {
+    if (!ownsEditingSession || !editor.draft) {
       return undefined;
     }
 
     try {
-      return {
-        ok: true as const,
-        model: createGeometrySnapshotPresentationModel2D({
-          level: selectedLevel,
-          transform: createViewportTransform2D(activeViewport),
-          selectionState: safeSelectionState
-        })
-      };
+      return GeometryEngine.build(editor.draft);
+    } catch (error) {
+      return { ok: false as const, unexpectedError: error };
+    }
+  }, [editor.draft, ownsEditingSession]);
+  const selectedEditLevel = editBuildResult?.ok
+    ? (editBuildResult.model.levels.find(
+        (level) => level.sourceLevelId === editor.activeLevelId
+      ) ?? editBuildResult.model.levels[0])
+    : undefined;
+  const selectedLevel =
+    workspaceMode === "edit" ? selectedEditLevel : selectedViewLevel;
+  const selectionState =
+    workspaceMode === "edit" ? editSelection : safeViewSelection;
+  const viewportKey = `${workspaceMode}:${selectedLevel?.id ?? "none"}:${
+    workspaceMode === "edit"
+      ? editor.baseRevision
+      : (geometryIdentity ?? "none")
+  }`;
+  const activeViewport =
+    viewportOwnerKey === viewportKey
+      ? viewport
+      : createInitialViewportState(selectedLevel);
+
+  const presentationResult = useMemo(() => {
+    if (!selectedLevel || (workspaceMode === "view" && consistencyFailure)) {
+      return undefined;
+    }
+
+    try {
+      const transform = createViewportTransform2D(activeViewport);
+      const model =
+        workspaceMode === "edit"
+          ? createRuntimeGeometryPresentationModel2D({
+              level: selectedLevel as LevelGeometry,
+              transform,
+              selectionState
+            })
+          : createGeometrySnapshotPresentationModel2D({
+              level: selectedLevel as GeometryLevel,
+              transform,
+              selectionState
+            });
+
+      return { ok: true as const, model };
     } catch (error) {
       return { ok: false as const, error };
     }
-  }, [activeViewport, consistencyFailure, safeSelectionState, selectedLevel]);
+  }, [
+    activeViewport,
+    consistencyFailure,
+    selectedLevel,
+    selectionState,
+    workspaceMode
+  ]);
 
   useEffect(() => {
+    dispatch(projectRouteChanged(projectId));
     dispatch(geometrySelectionReset());
     setSelectionOwnerSnapshot(undefined);
-    setViewportOwnerSnapshot(undefined);
+    setViewportOwnerKey("");
+
+    return () => {
+      dispatch(projectRouteExited(projectId));
+    };
   }, [dispatch, projectId]);
+
+  useEffect(() => {
+    if (!shouldProtectNavigation) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [shouldProtectNavigation]);
 
   useEffect(() => {
     if (!geometryIdentity) {
       return;
     }
 
-    const firstLevel = levels[0];
-    setSelectedLevelId(firstLevel?.id ?? "");
-    setViewport(createInitialViewportState(firstLevel));
+    const firstLevel = viewLevels[0];
+    setSelectedViewLevelId(firstLevel?.id ?? "");
     dispatch(geometrySelectionReset());
     setSelectionOwnerSnapshot(geometryResponse?.geometry);
-    setViewportOwnerSnapshot(geometryResponse?.geometry);
-  }, [dispatch, geometryIdentity, geometryResponse, levels]);
+  }, [dispatch, geometryIdentity, geometryResponse, viewLevels]);
 
   useEffect(() => {
-    if (!selectedLevel || !geometryIdentity) {
+    if (!selectedLevel) {
       return;
     }
 
     setViewport(createInitialViewportState(selectedLevel));
-    dispatch(geometrySelectionReset());
-    setSelectionOwnerSnapshot(geometryResponse?.geometry);
-    setViewportOwnerSnapshot(geometryResponse?.geometry);
-  }, [dispatch, geometryIdentity, geometryResponse, selectedLevel]);
+    setViewportOwnerKey(viewportKey);
+    if (workspaceMode === "edit") {
+      dispatch(editorSelectionCleared());
+    } else {
+      dispatch(geometrySelectionReset());
+      setSelectionOwnerSnapshot(geometryResponse?.geometry);
+    }
+  }, [dispatch, geometryResponse, selectedLevel, viewportKey, workspaceMode]);
 
   const handleSelectionStateChange = useCallback(
     (nextSelectionState: GeometrySelectionState) => {
-      dispatch(geometrySelectionChanged(nextSelectionState));
+      dispatch(
+        workspaceMode === "edit"
+          ? editorSelectionChanged(nextSelectionState)
+          : geometrySelectionChanged(nextSelectionState)
+      );
     },
-    [dispatch]
+    [dispatch, workspaceMode]
   );
-
   const handleFitViewport = useCallback(() => {
     setViewport(createInitialViewportState(selectedLevel));
   }, [selectedLevel]);
-
-  const handleResetViewport = useCallback(() => {
-    setViewport(resetViewportState());
-  }, []);
-
+  const handleResetViewport = useCallback(
+    () => setViewport(resetViewportState()),
+    []
+  );
   const handleZoomViewport = useCallback((zoomFactor: number) => {
     setViewport((currentViewport) =>
       zoomViewportState({
@@ -172,21 +304,21 @@ export function ProjectViewerPage() {
   }, []);
 
   useEffect(() => {
-    if (!geometryIdentity) {
+    if (!selectedLevel) {
       return;
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (shortcutsOpen) return;
       const action = getGeometryViewerShortcutAction(event);
-
-      if (!action) {
-        return;
-      }
-
+      if (!action) return;
       event.preventDefault();
-
       if (action === "CLEAR_SELECTION") {
-        dispatch(geometrySelectionCleared());
+        dispatch(
+          workspaceMode === "edit"
+            ? editorSelectionCleared()
+            : geometrySelectionCleared()
+        );
       } else if (action === "FIT_VIEWPORT") {
         handleFitViewport();
       } else {
@@ -195,64 +327,121 @@ export function ProjectViewerPage() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [dispatch, geometryIdentity, handleFitViewport, handleResetViewport]);
+  }, [
+    dispatch,
+    handleFitViewport,
+    handleResetViewport,
+    selectedLevel,
+    shortcutsOpen,
+    workspaceMode
+  ]);
+
+  const handleModeChange = useCallback(
+    (nextMode: ProjectWorkspaceMode | null) => {
+      if (
+        !nextMode ||
+        nextMode === workspaceMode ||
+        !projectResponse ||
+        consistencyFailure
+      ) {
+        return;
+      }
+
+      if (nextMode === "edit") {
+        dispatch(
+          editingSessionEntered({
+            project: projectResponse.project,
+            baseRevision: projectResponse.sourceRevision,
+            preferredLevelId: selectedViewLevel?.sourceLevelId
+          })
+        );
+        dispatch(geometrySelectionReset());
+        setDirtyExitBlocked(false);
+        return;
+      }
+
+      if (editor.dirty) {
+        setDirtyExitBlocked(true);
+        return;
+      }
+
+      dispatch(cleanEditingSessionLeft());
+      dispatch(geometrySelectionReset());
+      setDirtyExitBlocked(false);
+    },
+    [
+      consistencyFailure,
+      dispatch,
+      editor.dirty,
+      projectResponse,
+      selectedViewLevel,
+      workspaceMode
+    ]
+  );
 
   const inspector = useMemo(() => {
-    if (!presentationResult?.ok || !selectedLevel || !geometryResponse) {
+    if (!presentationResult?.ok || !selectedLevel) {
       return undefined;
     }
 
     return (
-      <ProjectGeometryInspector
-        level={selectedLevel}
+      <ProjectWorkspaceInspector
         model={presentationResult.model}
-        selectionState={safeSelectionState}
+        selectionState={selectionState}
         options={displayOptions}
         onOptionsChange={setDisplayOptions}
-        revision={geometryResponse.sourceRevision}
+        level={selectedLevel.sourceLevelId}
+        revision={
+          workspaceMode === "edit"
+            ? editor.baseRevision
+            : geometryResponse?.sourceRevision
+        }
+        mode={workspaceMode}
       />
     );
   }, [
     displayOptions,
+    editor.baseRevision,
     geometryResponse,
     presentationResult,
-    safeSelectionState,
-    selectedLevel
+    selectedLevel,
+    selectionState,
+    workspaceMode
   ]);
 
   const shellContent = useMemo(
     () => ({
       title: projectResponse?.project.name ?? t("shell.title"),
       breadcrumb: t("shell.breadcrumb"),
-      inspector,
+      inspector: isTablet || isPhone ? undefined : inspector,
       status:
         projectQuery.isFetching || geometryQuery.isFetching
           ? t("status.loading")
-          : geometryIdentity && selectedLevel
-            ? (
-                <ProjectViewerStatus
-                  level={selectedLevel.sourceLevelId}
-                  polygons={selectedLevel.polygons.length}
-                  selection={safeSelectionState.selected.length}
-                  revision={geometryResponse?.sourceRevision}
-                />
-              )
+          : selectedLevel
+            ? t(workspaceMode === "edit" ? "status.editing" : "status.saved", {
+                level: selectedLevel.sourceLevelId,
+                revision:
+                  workspaceMode === "edit"
+                    ? editor.baseRevision
+                    : geometryResponse?.sourceRevision
+              })
             : t("status.unavailable")
     }),
     [
-      geometryIdentity,
+      editor.baseRevision,
       geometryQuery.isFetching,
+      geometryResponse,
       inspector,
+      isPhone,
+      isTablet,
       projectQuery.isFetching,
       projectResponse,
-      safeSelectionState.selected.length,
       selectedLevel,
-      t
+      t,
+      workspaceMode
     ]
   );
-
   useAppShellContent(shellContent);
 
   if (projectQuery.isPending || geometryQuery.isPending) {
@@ -265,15 +454,12 @@ export function ProjectViewerPage() {
   }
 
   const failure = projectQuery.error ?? geometryQuery.error;
-
-  if (failure) {
-    return <ProjectViewerError error={failure} />;
-  }
-
+  if (failure) return <ProjectViewerError error={failure} />;
   if (!projectResponse || !geometryResponse) {
-    return <ProjectViewerError error={new Error("Query completed without data.")} />;
+    return (
+      <ProjectViewerError error={new Error("Query completed without data.")} />
+    );
   }
-
   if (consistencyFailure) {
     return (
       <ProjectConsistencyError
@@ -286,160 +472,472 @@ export function ProjectViewerPage() {
     );
   }
 
-  if (presentationResult && !presentationResult.ok) {
-    return <ProjectViewerError error={presentationResult.error} />;
-  }
+  const editBuildFailed =
+    workspaceMode === "edit" && editBuildResult && !editBuildResult.ok;
+  const presentationFailed = presentationResult && !presentationResult.ok;
 
   return (
-    <Stack className="geometry-page" spacing={0}>
+    <Stack className="geometry-page project-workspace" spacing={0}>
+      {blocker.state === "blocked" ? (
+        <Alert
+          severity="warning"
+          action={
+            <Button onClick={() => blocker.reset()}>
+              {t("guard.keepEditing")}
+            </Button>
+          }
+        >
+          {t("guard.navigationBlocked")}
+        </Alert>
+      ) : null}
+      {dirtyExitBlocked ? (
+        <Alert severity="warning" onClose={() => setDirtyExitBlocked(false)}>
+          {t("guard.viewBlocked")}
+        </Alert>
+      ) : null}
+
       <Box className="project-viewer-context">
         <Box className="project-viewer-context__title">
           <Typography variant="overline" color="primary.dark">
-            {t("intro.eyebrow")}
+            {t(
+              workspaceMode === "edit" ? "intro.editEyebrow" : "intro.eyebrow"
+            )}
           </Typography>
           <Typography component="h1" variant="h3">
             {projectResponse.project.name}
           </Typography>
         </Box>
 
+        {!isPhone ? (
+          <WorkspaceModeControl
+            mode={workspaceMode}
+            onChange={handleModeChange}
+          />
+        ) : (
+          <Chip
+            icon={<LockOutlineRoundedIcon />}
+            label={t("workspace.readOnly")}
+          />
+        )}
+
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          {selectedLevel && levels.length > 1 ? (
-            <FormControl size="small" className="project-level-selector">
-              <InputLabel id="project-geometry-level-selector-label">{t("levelSelector.label")}</InputLabel>
-              <Select
-                labelId="project-geometry-level-selector-label"
-                label={t("levelSelector.label")}
-                value={selectedLevel.id}
-                onChange={(event) => setSelectedLevelId(event.target.value)}
-              >
-                {levels.map((level) => (
-                  <MenuItem key={level.id} value={level.id}>
-                    {level.sourceLevelId}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          ) : selectedLevel ? (
-            <Chip label={selectedLevel.sourceLevelId} variant="outlined" />
+          <ProjectLevelControl
+            mode={workspaceMode}
+            viewLevels={viewLevels}
+            selectedViewLevel={selectedViewLevel}
+            draftLevelIds={
+              editor.draft?.building.levels.map((level) => ({
+                id: level.id,
+                name: level.name
+              })) ?? []
+            }
+            activeEditLevelId={editor.activeLevelId}
+            onViewLevelChange={setSelectedViewLevelId}
+            onEditLevelChange={(levelId) =>
+              dispatch(editorActiveLevelChanged(levelId))
+            }
+          />
+          {!isPhone ? (
+            <ShortcutsHelpControl
+              open={shortcutsOpen}
+              onOpen={() => setShortcutsOpen(true)}
+              onClose={() => setShortcutsOpen(false)}
+            />
           ) : null}
           <Chip
-            icon={<CheckCircleRoundedIcon />}
-            color="success"
+            icon={
+              workspaceMode === "edit" ? (
+                <EditRoundedIcon />
+              ) : (
+                <CheckCircleRoundedIcon />
+              )
+            }
+            color={
+              editor.dirty && workspaceMode === "edit" ? "warning" : "success"
+            }
             variant="outlined"
-            label={t("revision.agreement", { revision: projectResponse.sourceRevision })}
+            label={
+              workspaceMode === "edit"
+                ? t(editor.dirty ? "workspace.unsaved" : "workspace.editing")
+                : t("workspace.saved")
+            }
           />
         </Stack>
       </Box>
 
-      {selectedLevel && presentationResult?.ok ? (
-        <>
-          <GeometryViewerPanel
-            title={t("viewer.title")}
-            headingId="project-geometry-viewer-heading"
-            presentationModel={presentationResult.model}
-            options={displayOptions}
-            viewport={activeViewport}
-            selectionState={safeSelectionState}
-            onSelectionStateChange={handleSelectionStateChange}
-            onViewportChange={setViewport}
-            onFitViewport={handleFitViewport}
-            onResetViewport={handleResetViewport}
-            onZoomViewport={handleZoomViewport}
-          />
-          <Paper className="mobile-project-overview" variant="outlined">
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-              <LockOutlineRoundedIcon color="primary" />
-              <Box>
-                <Typography variant="subtitle2">{t("mobile.title")}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {t("mobile.description")}
-                </Typography>
-              </Box>
-            </Stack>
-            <Box className="mobile-project-overview__facts">
-              <Box>
-                <Typography variant="caption" color="text.secondary">{t("mobile.level")}</Typography>
-                <Typography variant="subtitle2">{selectedLevel.sourceLevelId}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary">{t("mobile.spaces")}</Typography>
-                <Typography variant="subtitle2">{selectedLevel.polygons.length}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary">{t("mobile.revision")}</Typography>
-                <Typography variant="subtitle2">{geometryResponse.sourceRevision}</Typography>
-              </Box>
-            </Box>
-          </Paper>
-        </>
+      {workspaceMode === "edit" ? (
+        <ProjectEditorToolbar
+          activeTool={editor.activeTool}
+          onToolChange={(tool) => dispatch(editorActiveToolChanged(tool))}
+        />
+      ) : null}
+
+      {editBuildFailed ? (
+        <Alert className="project-workspace__geometry-error" severity="error">
+          <Typography component="h2" variant="h3">
+            {t("errors.editGeometry.title")}
+          </Typography>
+          <Typography variant="body2">
+            {t("errors.editGeometry.detail")}
+          </Typography>
+        </Alert>
+      ) : presentationFailed ? (
+        <ProjectViewerError error={presentationResult.error} />
+      ) : selectedLevel && presentationResult?.ok ? (
+        <GeometryViewerPanel
+          title={t("viewer.title")}
+          headingId="project-geometry-viewer-heading"
+          presentationModel={presentationResult.model}
+          options={displayOptions}
+          viewport={activeViewport}
+          selectionState={selectionState}
+          onSelectionStateChange={handleSelectionStateChange}
+          onViewportChange={setViewport}
+          onFitViewport={handleFitViewport}
+          onResetViewport={handleResetViewport}
+          onZoomViewport={handleZoomViewport}
+          statusLabel={t(
+            workspaceMode === "edit"
+              ? "workspace.editing"
+              : "workspace.readOnly"
+          )}
+          interaction={
+            workspaceMode === "edit"
+              ? getProjectEditorInteraction(editor.activeTool)
+              : undefined
+          }
+        />
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
           {t("viewer.noLevels")}
         </Paper>
       )}
+
+      {isTablet && inspector ? (
+        <Paper
+          className="project-workspace__tablet-inspector"
+          variant="outlined"
+        >
+          {inspector}
+        </Paper>
+      ) : null}
+
+      {isPhone ? (
+        <Paper className="mobile-project-overview" variant="outlined">
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <LockOutlineRoundedIcon color="primary" />
+            <Box>
+              <Typography variant="subtitle2">{t("mobile.title")}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {t("mobile.description")}
+              </Typography>
+            </Box>
+          </Stack>
+          <Typography variant="body2">{t("mobile.editRestriction")}</Typography>
+        </Paper>
+      ) : null}
     </Stack>
   );
 }
 
-/** Values displayed in the authoritative geometry status strip. */
-type ProjectViewerStatusProps = {
-  readonly level: string;
-  readonly polygons: number;
-  readonly selection: number;
-  readonly revision?: number;
+type WorkspaceModeControlProps = {
+  readonly mode: ProjectWorkspaceMode;
+  readonly onChange: (mode: ProjectWorkspaceMode | null) => void;
 };
 
-/** Renders the compact authoritative geometry status values. */
-function ProjectViewerStatus({ level, polygons, selection, revision }: ProjectViewerStatusProps) {
+/** Renders the View/Edit control independently from future representation choices. */
+function WorkspaceModeControl({ mode, onChange }: WorkspaceModeControlProps) {
   const { t } = useCasaTranslation("project-viewer");
 
   return (
-    <Stack direction="row" spacing={2.5} className="project-viewer-status">
-      <Typography variant="caption">{t("status.level", { level })}</Typography>
-      <Typography variant="caption">{t("status.polygons", { polygons })}</Typography>
-      <Typography variant="caption">{t("status.selection", { selection })}</Typography>
-      <Typography variant="caption">{t("status.revision", { revision })}</Typography>
-    </Stack>
+    <ToggleButtonGroup
+      exclusive
+      size="small"
+      value={mode}
+      onChange={(_event, value: ProjectWorkspaceMode | null) => onChange(value)}
+      aria-label={t("workspace.modeLabel")}
+      className="project-workspace__mode-control"
+    >
+      <ToggleButton value="view" aria-label={t("workspace.view")}>
+        <VisibilityOutlinedIcon fontSize="small" />
+        {t("workspace.view")}
+      </ToggleButton>
+      <ToggleButton value="edit" aria-label={t("workspace.edit")}>
+        <EditRoundedIcon fontSize="small" />
+        {t("workspace.edit")}
+      </ToggleButton>
+    </ToggleButtonGroup>
   );
 }
 
-type ProjectGeometryInspectorProps = {
-  readonly level: GeometryLevel;
-  readonly model: NonNullable<ReturnType<typeof createGeometrySnapshotPresentationModel2D>>;
+type ProjectEditorToolbarProps = {
+  readonly activeTool: ProjectEditorTool | null;
+  readonly onToolChange: (tool: ProjectEditorTool | null) => void;
+};
+
+/** Renders enabled editor tools and explicitly disabled future actions. */
+function ProjectEditorToolbar({
+  activeTool,
+  onToolChange
+}: ProjectEditorToolbarProps) {
+  const { t } = useCasaTranslation("project-viewer");
+  const icons = {
+    select: <NearMeRoundedIcon fontSize="small" />,
+    "draw-wall": <LinearScaleRoundedIcon fontSize="small" />,
+    pan: <PanToolAltRoundedIcon fontSize="small" />
+  } satisfies Record<ProjectEditorTool, ReactNode>;
+
+  return (
+    <Box
+      className="project-editor-toolbar"
+      role="toolbar"
+      aria-label={t("tools.label")}
+    >
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={activeTool}
+        onChange={(_event, value: ProjectEditorTool | null) =>
+          onToolChange(value)
+        }
+      >
+        {projectEditorTools.map((tool) => {
+          const label = t(`tools.${tool.id}`);
+          const tooltip = t(`tools.help.${tool.id}`);
+          const button = (
+            <ToggleButton
+              value={tool.id}
+              disabled={!tool.enabled}
+              selected={activeTool === tool.id}
+              aria-label={
+                tool.enabled ? label : t("tools.comingSoon", { tool: label })
+              }
+            >
+              {icons[tool.id]}
+              <span>{label}</span>
+            </ToggleButton>
+          );
+
+          return tool.enabled ? (
+            <Tooltip key={tool.id} title={tooltip} describeChild>
+              {button}
+            </Tooltip>
+          ) : (
+            <Tooltip key={tool.id} title={tooltip}>
+              <span>{button}</span>
+            </Tooltip>
+          );
+        })}
+      </ToggleButtonGroup>
+
+      <Stack direction="row" spacing={0.5}>
+        <FutureToolButton label={t("tools.undo")} icon={<UndoRoundedIcon />} />
+        <FutureToolButton label={t("tools.redo")} icon={<RedoRoundedIcon />} />
+      </Stack>
+    </Box>
+  );
+}
+
+type ShortcutsHelpControlProps = {
+  readonly open: boolean;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+};
+
+function ShortcutsHelpControl({
+  open,
+  onOpen,
+  onClose
+}: ShortcutsHelpControlProps) {
+  const { t } = useCasaTranslation("project-viewer");
+
+  return (
+    <>
+      <Tooltip title={t("shortcuts.title")}>
+        <IconButton
+          aria-label={t("shortcuts.title")}
+          onClick={onOpen}
+          size="small"
+        >
+          <KeyboardRoundedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Dialog
+        open={open}
+        onClose={onClose}
+        aria-labelledby="project-shortcuts-dialog-title"
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle id="project-shortcuts-dialog-title">
+          {t("shortcuts.title")}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={1.5}>
+            <Typography variant="body2" color="text.secondary">
+              {t("shortcuts.description")}
+            </Typography>
+            <GeometryShortcutGuide showTitle={false} />
+          </Stack>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function FutureToolButton({
+  label,
+  icon
+}: {
+  readonly label: string;
+  readonly icon: ReactNode;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  const accessibleLabel = t("tools.comingSoon", { tool: label });
+
+  return (
+    <Tooltip title={accessibleLabel}>
+      <span>
+        <Button
+          disabled
+          startIcon={icon}
+          aria-label={accessibleLabel}
+          size="small"
+        >
+          {label}
+        </Button>
+      </span>
+    </Tooltip>
+  );
+}
+
+type ProjectLevelControlProps = {
+  readonly mode: ProjectWorkspaceMode;
+  readonly viewLevels: readonly GeometryLevel[];
+  readonly selectedViewLevel?: GeometryLevel;
+  readonly draftLevelIds: readonly {
+    readonly id: string;
+    readonly name: string;
+  }[];
+  readonly activeEditLevelId: string | null;
+  readonly onViewLevelChange: (levelId: string) => void;
+  readonly onEditLevelChange: (levelId: string) => void;
+};
+
+function ProjectLevelControl({
+  mode,
+  viewLevels,
+  selectedViewLevel,
+  draftLevelIds,
+  activeEditLevelId,
+  onViewLevelChange,
+  onEditLevelChange
+}: ProjectLevelControlProps) {
+  const { t } = useCasaTranslation("project-viewer");
+  const levels =
+    mode === "edit"
+      ? draftLevelIds
+      : viewLevels.map((level) => ({
+          id: level.id,
+          name: level.sourceLevelId
+        }));
+  const value =
+    mode === "edit" ? (activeEditLevelId ?? "") : (selectedViewLevel?.id ?? "");
+
+  if (levels.length <= 1) {
+    return value ? (
+      <Chip label={levels[0]?.name ?? value} variant="outlined" />
+    ) : null;
+  }
+
+  return (
+    <FormControl size="small" className="project-level-selector">
+      <InputLabel id="project-geometry-level-selector-label">
+        {t("levelSelector.label")}
+      </InputLabel>
+      <Select
+        labelId="project-geometry-level-selector-label"
+        label={t("levelSelector.label")}
+        value={value}
+        onChange={(event) =>
+          mode === "edit"
+            ? onEditLevelChange(event.target.value)
+            : onViewLevelChange(event.target.value)
+        }
+      >
+        {levels.map((level) => (
+          <MenuItem key={level.id} value={level.id}>
+            {level.name}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
+}
+
+type ProjectWorkspaceInspectorProps = {
+  readonly model: GeometryPresentationModel2D;
   readonly selectionState: GeometrySelectionState;
   readonly options: GeometryDisplayOptions;
   readonly onOptionsChange: (options: GeometryDisplayOptions) => void;
-  readonly revision: number;
+  readonly level: string;
+  readonly revision?: number | null;
+  readonly mode: ProjectWorkspaceMode;
 };
 
-function ProjectGeometryInspector({
-  level,
+/** Provides the durable Layers, Selection, and Properties inspector foundation. */
+function ProjectWorkspaceInspector({
   model,
   selectionState,
   options,
   onOptionsChange,
-  revision
-}: ProjectGeometryInspectorProps) {
+  level,
+  revision,
+  mode
+}: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
+  const [tab, setTab] = useState<"layers" | "selection" | "properties">(
+    "layers"
+  );
 
   return (
-    <Stack spacing={1.5}>
-      <GeometryLayerControls options={options} onOptionsChange={onOptionsChange} />
-      <Divider />
-      <GeometrySelectionDetails model={model} selectionState={selectionState} />
-      <Divider />
-      <GeometryShortcutGuide />
-      <Divider />
-      <Stack spacing={0.5}>
-        <Typography variant="subtitle2">{t("inspector.snapshot")}</Typography>
-        <Typography variant="caption" color="text.secondary">
-          {t("inspector.level", { level: level.sourceLevelId })}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {t("inspector.revision", { revision })}
-        </Typography>
-      </Stack>
-    </Stack>
+    <Box className="project-inspector">
+      <Tabs
+        value={tab}
+        onChange={(_event, value) => setTab(value)}
+        variant="fullWidth"
+        aria-label={t("inspector.tabsLabel")}
+      >
+        <Tab value="layers" label={t("inspector.layers")} />
+        <Tab value="selection" label={t("inspector.selection")} />
+        <Tab value="properties" label={t("inspector.properties")} />
+      </Tabs>
+      <Box className="project-inspector__content" role="tabpanel">
+        {tab === "layers" ? (
+          <GeometryLayerControls
+            options={options}
+            onOptionsChange={onOptionsChange}
+          />
+        ) : tab === "selection" ? (
+          <GeometrySelectionDetails
+            model={model}
+            selectionState={selectionState}
+          />
+        ) : (
+          <Stack spacing={1.5}>
+            <Typography variant="subtitle2">
+              {t(mode === "edit" ? "inspector.draft" : "inspector.snapshot")}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t("inspector.level", { level })}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t("inspector.revision", { revision })}
+            </Typography>
+          </Stack>
+        )}
+      </Box>
+    </Box>
   );
 }
 
@@ -449,19 +947,12 @@ function getConsistencyFailure(
   projectResponse: ReturnType<typeof useProjectQuery>["data"],
   geometryResponse: ReturnType<typeof useProjectGeometryQuery>["data"]
 ): ConsistencyFailure | undefined {
-  if (!projectResponse || !geometryResponse) {
-    return undefined;
-  }
-
-  if (projectResponse.project.id !== geometryResponse.sourceProjectId) {
+  if (!projectResponse || !geometryResponse) return undefined;
+  if (projectResponse.project.id !== geometryResponse.sourceProjectId)
     return "project-id";
-  }
-
-  if (projectResponse.sourceRevision !== geometryResponse.sourceRevision) {
-    return "revision";
-  }
-
-  return undefined;
+  return projectResponse.sourceRevision !== geometryResponse.sourceRevision
+    ? "revision"
+    : undefined;
 }
 
 type ProjectConsistencyErrorProps = {
@@ -499,11 +990,7 @@ function ProjectConsistencyError({
   );
 }
 
-type ProjectViewerErrorProps = {
-  readonly error: unknown;
-};
-
-function ProjectViewerError({ error }: ProjectViewerErrorProps) {
+function ProjectViewerError({ error }: { readonly error: unknown }) {
   const { t } = useCasaTranslation("project-viewer");
   const presentation = describeError(error, t);
 
@@ -522,13 +1009,18 @@ function ProjectViewerError({ error }: ProjectViewerErrorProps) {
   );
 }
 
-type ErrorTranslator = (key: string, options?: Record<string, unknown>) => string;
+type ErrorTranslator = (
+  key: string,
+  options?: Record<string, unknown>
+) => string;
 
 function describeError(error: unknown, t: ErrorTranslator) {
   if (error instanceof ApiAuthenticationUnavailableError) {
-    return { title: t("errors.authentication.title"), detail: t("errors.authentication.detail") };
+    return {
+      title: t("errors.authentication.title"),
+      detail: t("errors.authentication.detail")
+    };
   }
-
   if (error instanceof ApiRequestError && error.status === 403) {
     return {
       title: t("errors.forbidden.title"),
@@ -536,7 +1028,6 @@ function describeError(error: unknown, t: ErrorTranslator) {
       requestId: error.problem?.requestId
     };
   }
-
   if (error instanceof ApiRequestError && error.status === 404) {
     return {
       title: t("errors.notFound.title"),
@@ -544,27 +1035,39 @@ function describeError(error: unknown, t: ErrorTranslator) {
       requestId: error.problem?.requestId
     };
   }
-
-  if (error instanceof ApiRequestError && error.kind === "problem" && error.problem) {
+  if (
+    error instanceof ApiRequestError &&
+    error.kind === "problem" &&
+    error.problem
+  ) {
     return {
       title: error.problem.title,
       detail: error.problem.detail,
       requestId: error.problem.requestId
     };
   }
-
   if (error instanceof ApiRequestError && error.kind === "network") {
-    return { title: t("errors.network.title"), detail: t("errors.network.detail") };
+    return {
+      title: t("errors.network.title"),
+      detail: t("errors.network.detail")
+    };
   }
-
-  return { title: t("errors.unexpected.title"), detail: t("errors.unexpected.detail") };
+  return {
+    title: t("errors.unexpected.title"),
+    detail: t("errors.unexpected.detail")
+  };
 }
 
-const createInitialViewportState = (level: GeometryLevel | undefined): ViewportState => {
+const createInitialViewportState = (
+  level: GeometryLevel | LevelGeometry | undefined
+): ViewportState => {
   let bounds;
-
   try {
-    bounds = level ? collectGeometrySnapshotLevelBounds(level) : undefined;
+    bounds = level
+      ? level instanceof LevelGeometry
+        ? collectLevelBounds(level)
+        : collectGeometrySnapshotLevelBounds(level)
+      : undefined;
   } catch {
     return resetViewportState();
   }

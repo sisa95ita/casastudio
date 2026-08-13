@@ -13,6 +13,18 @@ describe("Redux application state", () => {
     const store = createAppStore();
 
     expect(store.getState()).toEqual({
+      projectEditor: {
+        mode: "view",
+        projectId: null,
+        draft: null,
+        baseRevision: null,
+        dirty: false,
+        activeLevelId: null,
+        activeTool: null,
+        selection: [],
+        hover: undefined,
+        transient: { interaction: null }
+      },
       viewer: { geometrySelection: { selected: [], hovered: undefined } }
     });
   });

@@ -8,15 +8,18 @@ complete proposed Project through an explicit save. This keeps editing latency
 out of the HTTP request path while preserving a single validation,
 authorization, concurrency, and transaction boundary.
 
-The visual editor is not part of this backend contract. The architecture below
-defines what any editor, automation, or other caller can rely on.
+The frontend editor and backend replacement API share the state boundary
+described here. The backend portions define what any editor, automation, or
+other caller can rely on; the frontend portions define how the current 2D
+workspace preserves that contract before persistence is integrated.
 
 ## Authoritative state and editing drafts
 
 PostgreSQL contains authoritative Project state. TanStack Query owns the
-frontend copy of that authoritative response and revision. A future editor will
-clone that Project into Redux, where Redux owns the transient editing draft,
-selection/tool state, and dirty state.
+frontend copy of that authoritative response and revision. The 2D workspace
+clones that Project into Redux only when a user explicitly enters Edit. Redux
+then owns the transient editing draft, active Level, selection, tool,
+interaction, and dirty state.
 
 Interactive operations apply only to the local draft. There is no autosave and
 no HTTP command stream. A user explicitly saves the complete draft when it is
@@ -282,16 +285,95 @@ successful PUT, the next geometry request necessarily reads the committed
 revision and returns matching `sourceProjectId`, `sourceRevision`, and runtime
 geometry derived from the saved Walls and Rooms.
 
-## Frontend integration handoff
+## Frontend View/Edit state contract
 
-The future 2D editor can rely on this sequence:
+The 2D workspace has mutually exclusive interaction modes that are independent
+from any future 2D/3D representation choice:
+
+```text
+View mode                         Edit mode
+TanStack authoritative Project   Redux local Project draft
+authoritative Geometry Snapshot  Geometry Engine runtime build
+snapshot presentation adapter    runtime presentation adapter
+             \                   /
+                GeometrySvgViewer
+```
+
+View never renders the Redux draft. Edit never mutates or replaces TanStack
+Query data. The explicit transition to Edit requires a successfully loaded
+authoritative Project, captures its `sourceRevision` as `baseRevision`, and
+uses a deep independent clone as the draft. A preferred View Level is retained
+when it belongs to the draft; otherwise the first draft Level is selected.
+Selection, hover, active tool, and transient interaction state are reset at the
+session boundary.
+
+The editing session stores:
+
+- `mode`, owning Project ID, complete draft, and `baseRevision`;
+- explicit `dirty` state;
+- active Level and active `select`, `draw-wall`, or `pan` tool;
+- editor selection and hover references;
+- transient interaction state reserved for pointer previews.
+
+The draft keeps `id`, `revision`, `createdAt`, and `updatedAt` from the editing
+base. `draft.revision` remains equal to `baseRevision`; local operations do not
+increment revisions or fabricate timestamps. The committed-draft Redux action
+rejects replacements that change these server-owned fields and marks accepted
+local changes dirty without comparing serialized Project aggregates on render.
+
+### Geometry source boundary
+
+Authoritative View keeps the existing consistency requirement:
+
+```text
+Project sourceRevision == Geometry Snapshot sourceRevision
+```
+
+After that check, the snapshot adapter creates the source-independent 2D
+presentation model. View does not invoke `GeometryEngine.build`.
+
+Edit memoizes `GeometryEngine.build(draft)` at the stable draft boundary, then
+adapts the active runtime Level into the same presentation model consumed by
+`GeometrySvgViewer`. Selection, hover, viewport, tool, and inspector changes do
+not rebuild runtime geometry. Future pointer previews belong in transient
+overlays; a full engine build follows a committed domain edit, not every
+pointer movement. An expected or unexpected local geometry failure renders a
+safe workspace error while preserving the draft and authoritative query data.
+
+### Session exit and navigation safety
+
+A clean editing session may return directly to View and is then removed from
+Redux. A dirty session cannot return to View through the mode control and
+cannot leave through ordinary React Router navigation. The current guard keeps
+the draft intact and exposes no fake Save result. A dirty matching session also
+registers the standard browser `beforeunload` protection; View and clean Edit
+do not register it.
+
+The editing session is keyed by Project ID. Project route changes reset clean
+stale sessions and selection/transient state. Dirty sessions are retained for
+the navigation guard, and a route whose ID does not own the session never
+renders that draft. Query keys and request cancellation continue to prevent
+late authoritative data from the previous route from becoming current data.
+
+### Responsive editing boundary
+
+Desktop provides the canvas with a persistent side inspector. Tablet layouts
+keep Edit available and place the tabbed Layers, Selection, and Properties
+inspector below the canvas. Phone layouts always render the authoritative
+read-only Project preview and explain that advanced editing requires a larger
+screen. A local editing session is never rendered on a phone, but resizing does
+not silently discard it.
+
+### Persistence integration handoff
+
+Explicit Save will extend the existing sequence:
 
 ```text
 GET project summaries or POST a new Project
         ↓
 GET authoritative Project + sourceRevision
         ↓
-clone Project into Redux editing state
+clone Project into the existing Redux editing session
         ↓
 apply pure editing-domain operations locally
         ↓
@@ -314,6 +396,10 @@ entity IDs through local operations. A `409` leaves the local draft intact for
 an explicit user conflict decision. A `422` leaves the server and revision
 unchanged and may be presented using the returned validation paths.
 
-Save and Discard remain explicit user actions. Autosave, granular mutation
+Save and intentional abandonment remain explicit user actions. The current
+frontend does not call PUT and does not claim that either operation succeeded.
+Wall tools will commit pure schema-domain operation results through the
+existing draft-replacement action and use transient state for previews.
+Autosave, granular mutation
 endpoints, HTTP command APIs, collaborative editing, automatic conflict merge,
-and editor UI behavior are not implied by this contract.
+and automatic conflict merge are not implied by this contract.

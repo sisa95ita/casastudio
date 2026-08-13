@@ -7,7 +7,7 @@
 export type GeometryViewerShortcutAction = "CLEAR_SELECTION" | "FIT_VIEWPORT" | "RESET_VIEWPORT";
 
 /**
- * User-facing shortcut metadata consumed by the inspector guide.
+ * User-facing shortcut metadata consumed by the shortcut guide.
  */
 export type GeometryViewerShortcutDefinition = {
   readonly action: GeometryViewerShortcutAction;
@@ -16,7 +16,7 @@ export type GeometryViewerShortcutDefinition = {
 };
 
 /**
- * Stable shortcut registry for the read-only geometry viewer.
+ * Stable shortcut registry for the shared geometry viewer.
  */
 export const geometryViewerShortcuts: readonly GeometryViewerShortcutDefinition[] = Object.freeze([
   Object.freeze({

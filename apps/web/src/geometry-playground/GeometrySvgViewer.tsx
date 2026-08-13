@@ -1,7 +1,13 @@
-import { useRef, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
+import {
+  useRef,
+  type MouseEvent,
+  type PointerEvent,
+  type WheelEvent
+} from "react";
 
 import { useCasaTranslation } from "../i18n";
 import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
+import type { ProjectEditorInteraction } from "../state/project-editor-tools";
 import {
   applyGeometrySelectionClick,
   clearGeometrySelection,
@@ -49,14 +55,15 @@ export type GeometryDisplayOptions = {
 /**
  * Default layers for an interactive geometry viewer.
  */
-export const defaultGeometryDisplayOptions: GeometryDisplayOptions = Object.freeze({
-  polygons: true,
-  boundaryEdges: true,
-  vertices: true,
-  centroids: true,
-  bounds: false,
-  entityLabels: false
-});
+export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
+  Object.freeze({
+    polygons: true,
+    boundaryEdges: true,
+    vertices: true,
+    centroids: true,
+    bounds: false,
+    entityLabels: false
+  });
 
 /**
  * Props for the interactive geometry SVG viewer.
@@ -66,9 +73,17 @@ export type GeometrySvgViewerProps = {
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
   readonly selectionState?: GeometrySelectionState;
-  readonly onSelectionStateChange?: (selectionState: GeometrySelectionState) => void;
+  readonly onSelectionStateChange?: (
+    selectionState: GeometrySelectionState
+  ) => void;
   readonly onViewportChange?: (viewport: ViewportState) => void;
+  readonly interaction?: ProjectEditorInteraction;
 };
+
+const defaultViewerInteraction: ProjectEditorInteraction = Object.freeze({
+  selectionEnabled: true,
+  panEnabled: true
+});
 
 /**
  * Renders a source-independent 2D presentation model as an interactive SVG
@@ -84,7 +99,8 @@ export function GeometrySvgViewer({
   viewport,
   selectionState,
   onSelectionStateChange,
-  onViewportChange
+  onViewportChange,
+  interaction = defaultViewerInteraction
 }: GeometrySvgViewerProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const bounds = presentationModel.bounds;
@@ -93,7 +109,8 @@ export function GeometrySvgViewer({
   const suppressNextBackgroundClickRef = useRef(false);
 
   currentViewportRef.current = viewport;
-  const resolvedSelectionState = selectionState ?? createGeometrySelectionState();
+  const resolvedSelectionState =
+    selectionState ?? createGeometrySelectionState();
   const vertexRadius = Math.max(3, Math.min(6, viewport.zoom * 5));
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
@@ -109,7 +126,12 @@ export function GeometrySvgViewer({
     readonly clientX: number;
     readonly clientY: number;
     readonly currentTarget: SVGSVGElement;
-  }): ScreenPoint => getSvgEventPoint(event, geometrySvgViewport.width, geometrySvgViewport.height);
+  }): ScreenPoint =>
+    getSvgEventPoint(
+      event,
+      geometrySvgViewport.width,
+      geometrySvgViewport.height
+    );
 
   const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
     if (!onViewportChange) {
@@ -128,7 +150,11 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
-    if (!onViewportChange || !isBackgroundPanEvent(event)) {
+    if (
+      !interaction.panEnabled ||
+      !onViewportChange ||
+      !isBackgroundPanEvent(event)
+    ) {
       return;
     }
 
@@ -150,7 +176,10 @@ export function GeometrySvgViewer({
 
     if (Math.abs(delta.x) + Math.abs(delta.y) > 0) {
       suppressNextBackgroundClickRef.current = true;
-      const nextViewport = panViewportState(currentViewportRef.current ?? viewport, delta);
+      const nextViewport = panViewportState(
+        currentViewportRef.current ?? viewport,
+        delta
+      );
       currentViewportRef.current = nextViewport;
       onViewportChange(nextViewport);
       lastPanPointRef.current = nextPoint;
@@ -165,6 +194,10 @@ export function GeometrySvgViewer({
   };
 
   const handleBackgroundClick = (event: MouseEvent<SVGRectElement>) => {
+    if (!interaction.selectionEnabled) {
+      return;
+    }
+
     if (suppressNextBackgroundClickRef.current) {
       suppressNextBackgroundClickRef.current = false;
       return;
@@ -178,19 +211,37 @@ export function GeometrySvgViewer({
     event: MouseEvent<SVGElement>,
     nextSelection: GeometrySelection
   ) => {
+    if (!interaction.selectionEnabled) {
+      return;
+    }
+
     event.stopPropagation();
     onSelectionStateChange?.(
-      applyGeometrySelectionClick(resolvedSelectionState, nextSelection, event.shiftKey)
+      applyGeometrySelectionClick(
+        resolvedSelectionState,
+        nextSelection,
+        event.shiftKey
+      )
     );
   };
 
   const handleHoverChange = (nextHover: GeometryHoverState) => {
-    onSelectionStateChange?.(setGeometryHover(resolvedSelectionState, nextHover));
+    if (interaction.selectionEnabled) {
+      onSelectionStateChange?.(
+        setGeometryHover(resolvedSelectionState, nextHover)
+      );
+    }
   };
 
   return (
     <svg
-      className="geometry-svg"
+      className={`geometry-svg geometry-svg--${
+        interaction.selectionEnabled
+          ? "select"
+          : interaction.panEnabled
+            ? "pan"
+            : "neutral"
+      }`}
       viewBox={`0 0 ${geometrySvgViewport.width} ${geometrySvgViewport.height}`}
       role="img"
       aria-labelledby="geometry-svg-title geometry-svg-description"
@@ -201,9 +252,7 @@ export function GeometrySvgViewer({
       onPointerCancel={handlePointerUp}
     >
       <title id="geometry-svg-title">{t("viewer.svgTitle")}</title>
-      <desc id="geometry-svg-description">
-        {t("viewer.svgDescription")}
-      </desc>
+      <desc id="geometry-svg-description">{t("viewer.svgDescription")}</desc>
 
       <rect
         className="geometry-pan-background"
@@ -228,8 +277,12 @@ export function GeometrySvgViewer({
                   data-geometry-id={polygon.geometryId}
                   points={polygon.svgPoints}
                   className={className}
-                  onClick={(event) => handleEntityClick(event, selectPolygon(polygon.geometryId))}
-                  onMouseEnter={() => handleHoverChange(selectPolygon(polygon.geometryId))}
+                  onClick={(event) =>
+                    handleEntityClick(event, selectPolygon(polygon.geometryId))
+                  }
+                  onMouseEnter={() =>
+                    handleHoverChange(selectPolygon(polygon.geometryId))
+                  }
                   onMouseLeave={() => handleHoverChange(undefined)}
                 />
                 {options.entityLabels ? (
@@ -288,9 +341,14 @@ export function GeometrySvgViewer({
                   x2={formatSvgNumber(edge.end.screen.x)}
                   y2={formatSvgNumber(edge.end.screen.y)}
                   onClick={(event) => {
-                    handleEntityClick(event, selectBoundaryEdge(edge.geometryId));
+                    handleEntityClick(
+                      event,
+                      selectBoundaryEdge(edge.geometryId)
+                    );
                   }}
-                  onMouseEnter={() => handleHoverChange(selectBoundaryEdge(edge.geometryId))}
+                  onMouseEnter={() =>
+                    handleHoverChange(selectBoundaryEdge(edge.geometryId))
+                  }
                   onMouseLeave={() => handleHoverChange(undefined)}
                 />
                 <line
@@ -332,8 +390,12 @@ export function GeometrySvgViewer({
                   cx={formatSvgNumber(vertex.point.x)}
                   cy={formatSvgNumber(vertex.point.y)}
                   r={formatSvgNumber(vertexRadius)}
-                  onClick={(event) => handleEntityClick(event, selectVertex(vertex.geometryId))}
-                  onMouseEnter={() => handleHoverChange(selectVertex(vertex.geometryId))}
+                  onClick={(event) =>
+                    handleEntityClick(event, selectVertex(vertex.geometryId))
+                  }
+                  onMouseEnter={() =>
+                    handleHoverChange(selectVertex(vertex.geometryId))
+                  }
                   onMouseLeave={() => handleHoverChange(undefined)}
                 />
                 {options.entityLabels ? (
@@ -401,7 +463,8 @@ const getSvgEventPoint = (
 };
 
 const isBackgroundPanEvent = (event: PointerEvent<SVGSVGElement>): boolean =>
-  event.target instanceof SVGElement && event.target.dataset.panTarget === "true";
+  event.target instanceof SVGElement &&
+  event.target.dataset.panTarget === "true";
 
 const getEntityClassName = (
   baseClassName: string,

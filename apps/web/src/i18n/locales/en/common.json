@@ -11,8 +11,7 @@
     "goToProjects": "Go to Projects",
     "mode": {
       "label": "Workspace mode",
-      "twoD": "2D",
-      "readOnly": "Read-only"
+      "twoD": "2D"
     },
     "inspector": {
       "label": "Inspector",

@@ -10,6 +10,7 @@ import type { GeometryPresentationModel2D } from "./geometry-presentation-model-
 import type { GeometrySelectionState } from "./geometry-selection-state";
 import { type GeometryDisplayOptions, GeometrySvgViewer } from "./GeometrySvgViewer";
 import type { ViewportState } from "./viewport-transform-2d";
+import type { ProjectEditorInteraction } from "../state/project-editor-tools";
 
 /** Props for the shared interactive 2D geometry viewer panel. */
 export type GeometryViewerPanelProps = {
@@ -24,6 +25,8 @@ export type GeometryViewerPanelProps = {
   readonly onFitViewport: () => void;
   readonly onResetViewport: () => void;
   readonly onZoomViewport: (zoomFactor: number) => void;
+  readonly statusLabel?: string;
+  readonly interaction?: ProjectEditorInteraction;
 };
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
@@ -38,7 +41,9 @@ export function GeometryViewerPanel({
   onViewportChange,
   onFitViewport,
   onResetViewport,
-  onZoomViewport
+  onZoomViewport,
+  statusLabel,
+  interaction
 }: GeometryViewerPanelProps) {
   const { t } = useCasaTranslation("geometry-playground");
 
@@ -49,7 +54,7 @@ export function GeometryViewerPanel({
           <Typography variant="subtitle2" component="h2" id={headingId} noWrap>
             {title}
           </Typography>
-          <Chip label={t("viewer.readOnly")} size="small" variant="outlined" />
+          <Chip label={statusLabel ?? t("viewer.readOnly")} size="small" variant="outlined" />
         </Stack>
         <Stack direction="row" spacing={0.25} role="toolbar" aria-label={t("toolbar.label")}>
           <ViewportButton label={t("toolbar.zoomOut")} onClick={() => onZoomViewport(0.85)}>
@@ -74,6 +79,7 @@ export function GeometryViewerPanel({
           selectionState={selectionState}
           onSelectionStateChange={onSelectionStateChange}
           onViewportChange={onViewportChange}
+          interaction={interaction}
         />
         <Box className="geometry-canvas-hint">
           <Typography variant="caption">{t("viewer.canvasHint")}</Typography>

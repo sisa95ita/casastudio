@@ -85,10 +85,14 @@ describe("GeometrySvgViewer", () => {
     }
 
     const viewerProps = createViewerProps(level);
-    const expectedFirstPolygonPoints = viewerProps.presentationModel.polygons[0]?.svgPoints;
+    const expectedFirstPolygonPoints =
+      viewerProps.presentationModel.polygons[0]?.svgPoints;
 
     const markup = renderToStaticMarkup(
-      <GeometrySvgViewer {...viewerProps} options={defaultGeometryDisplayOptions} />
+      <GeometrySvgViewer
+        {...viewerProps}
+        options={defaultGeometryDisplayOptions}
+      />
     );
 
     expect(markup.match(/data-testid="geometry-polygon"/g)).toHaveLength(2);
@@ -100,11 +104,16 @@ describe("GeometrySvgViewer", () => {
     const useCounts = countBoundaryEdgeUses(level);
 
     const markup = renderToStaticMarkup(
-      <GeometrySvgViewer {...createViewerProps(level)} options={defaultGeometryDisplayOptions} />
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        options={defaultGeometryDisplayOptions}
+      />
     );
 
     expect(level.boundaryEdges).toHaveLength(7);
-    expect([...useCounts.values()].filter((useCount) => useCount === 2)).toHaveLength(1);
+    expect(
+      [...useCounts.values()].filter((useCount) => useCount === 2)
+    ).toHaveLength(1);
     expect(markup.match(/data-testid="boundary-edge"/g)).toHaveLength(7);
     expect(markup.match(/data-shared="true"/g)).toHaveLength(1);
   });
@@ -121,14 +130,22 @@ describe("GeometrySvgViewer", () => {
     const hiddenMarkup = renderToStaticMarkup(
       <GeometrySvgViewer
         {...createViewerProps(level)}
-        options={{ ...defaultGeometryDisplayOptions, vertices: false, bounds: false }}
+        options={{
+          ...defaultGeometryDisplayOptions,
+          vertices: false,
+          bounds: false
+        }}
       />
     );
 
-    expect(visibleMarkup.match(/data-testid="geometry-vertex"/g)).toHaveLength(6);
-    expect(visibleMarkup.match(/data-testid="polygon-bounds"/g)).toHaveLength(2);
-    expect(hiddenMarkup).not.toContain("data-testid=\"geometry-vertex\"");
-    expect(hiddenMarkup).not.toContain("data-testid=\"polygon-bounds\"");
+    expect(visibleMarkup.match(/data-testid="geometry-vertex"/g)).toHaveLength(
+      6
+    );
+    expect(visibleMarkup.match(/data-testid="polygon-bounds"/g)).toHaveLength(
+      2
+    );
+    expect(hiddenMarkup).not.toContain('data-testid="geometry-vertex"');
+    expect(hiddenMarkup).not.toContain('data-testid="polygon-bounds"');
   });
 
   it("renders a stable empty state for levels with no runtime geometry", () => {
@@ -162,7 +179,10 @@ describe("GeometrySvgViewer", () => {
     }
 
     const markup = renderToStaticMarkup(
-      <GeometrySvgViewer {...createViewerProps(level)} options={defaultGeometryDisplayOptions} />
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        options={defaultGeometryDisplayOptions}
+      />
     );
 
     expect(markup).toContain("No runtime geometry to display for this level.");
@@ -268,7 +288,9 @@ describe("GeometrySvgViewer", () => {
       throw new Error("Expected a polygon.");
     }
 
-    const initialSelectionState = createGeometrySelectionState([selectPolygon(selectedPolygon.id)]);
+    const initialSelectionState = createGeometrySelectionState([
+      selectPolygon(selectedPolygon.id)
+    ]);
 
     const { container, unmount } = render(
       <GeometrySvgViewer
@@ -307,7 +329,9 @@ describe("GeometrySvgViewer", () => {
       />
     );
 
-    const polygon = toggleRender.container.querySelector('[data-testid="geometry-polygon"]');
+    const polygon = toggleRender.container.querySelector(
+      '[data-testid="geometry-polygon"]'
+    );
 
     if (!polygon) {
       throw new Error("Expected a polygon hit target.");
@@ -316,6 +340,34 @@ describe("GeometrySvgViewer", () => {
     fireEvent.click(polygon, { shiftKey: true });
 
     expect(handleToggleSelection).toHaveBeenCalledWith({
+      selected: [],
+      hovered: undefined
+    });
+  });
+
+  it("deselects an already-selected entity on a plain click", () => {
+    const level = getPlaygroundLevel();
+    const selectedPolygon = level.polygons[0];
+    const handleSelectionStateChange = vi.fn();
+
+    if (!selectedPolygon) {
+      throw new Error("Expected a polygon.");
+    }
+
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(
+          level,
+          createGeometrySelectionState([selectPolygon(selectedPolygon.id)])
+        )}
+        options={defaultGeometryDisplayOptions}
+        onSelectionStateChange={handleSelectionStateChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByTestId("geometry-polygon")[0]!);
+
+    expect(handleSelectionStateChange).toHaveBeenCalledWith({
       selected: [],
       hovered: undefined
     });
@@ -359,7 +411,9 @@ describe("GeometrySvgViewer", () => {
         offsetY: expect.any(Number)
       })
     );
-    expect(handleViewportChange.mock.calls[0]?.[0].zoom).toBeGreaterThan(viewport.zoom);
+    expect(handleViewportChange.mock.calls[0]?.[0].zoom).toBeGreaterThan(
+      viewport.zoom
+    );
   });
 
   it("emits pan viewport updates from background dragging", () => {
@@ -394,7 +448,11 @@ describe("GeometrySvgViewer", () => {
     svg.setPointerCapture = vi.fn();
     svg.releasePointerCapture = vi.fn();
 
-    fireEvent.pointerDown(background, { clientX: 40, clientY: 60, pointerId: 1 });
+    fireEvent.pointerDown(background, {
+      clientX: 40,
+      clientY: 60,
+      pointerId: 1
+    });
     fireEvent.pointerMove(svg, { clientX: 70, clientY: 80, pointerId: 1 });
 
     expect(handleViewportChange).toHaveBeenCalledWith({

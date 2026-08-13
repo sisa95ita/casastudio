@@ -5,6 +5,8 @@
   },
   "status": {
     "loading": "Loading authoritative Project geometry",
+    "saved": "Saved · Level {{level}} · Revision {{revision}}",
+    "editing": "Editing locally · Level {{level}} · Base revision {{revision}}",
     "level": "Level {{level}}",
     "polygons": "{{polygons}} spaces",
     "selection": "{{selection}} selected",
@@ -13,7 +15,40 @@
   },
   "loading": "Loading Project and Geometry data…",
   "intro": {
-    "eyebrow": "Authoritative project geometry"
+    "eyebrow": "Authoritative project geometry",
+    "editEyebrow": "Local project draft"
+  },
+  "workspace": {
+    "modeLabel": "Project workspace mode",
+    "view": "View",
+    "edit": "Edit",
+    "editing": "Editing",
+    "saved": "Saved",
+    "unsaved": "Unsaved changes",
+    "readOnly": "Read-only"
+  },
+  "tools": {
+    "label": "Editing tools",
+    "select": "Select",
+    "draw-wall": "Draw Wall",
+    "pan": "Pan",
+    "undo": "Undo",
+    "redo": "Redo",
+    "comingSoon": "{{tool}} — coming soon",
+    "help": {
+      "select": "Select elements in the plan.",
+      "draw-wall": "Draw walls by placing start and end points. Not available yet.",
+      "pan": "Move around the plan without changing geometry."
+    }
+  },
+  "shortcuts": {
+    "title": "Shortcuts",
+    "description": "Keyboard controls available in this workspace."
+  },
+  "guard": {
+    "keepEditing": "Keep editing",
+    "navigationBlocked": "This Project has unsaved local changes. Navigation is blocked so the draft is not lost.",
+    "viewBlocked": "Unsaved local changes must be resolved before returning to View. The draft remains intact."
   },
   "viewer": {
     "title": "Project plan",
@@ -21,7 +56,8 @@
   },
   "mobile": {
     "title": "Reduced project view",
-    "description": "Geometry is available for review. Advanced workspace panels are best used on a larger screen.",
+    "description": "Geometry is available for review in this read-only Project preview.",
+    "editRestriction": "Advanced editing is available on larger screens.",
     "level": "Level",
     "spaces": "Spaces",
     "revision": "Revision"
@@ -39,7 +75,12 @@
     "agreement": "Revision {{revision}}"
   },
   "inspector": {
+    "tabsLabel": "Project inspector sections",
+    "layers": "Layers",
+    "selection": "Selection",
+    "properties": "Properties",
     "snapshot": "Geometry snapshot",
+    "draft": "Local Project draft",
     "level": "Source level: {{level}}",
     "revision": "Source revision: {{revision}}"
   },
@@ -73,6 +114,10 @@
     "unexpected": {
       "title": "Project data unavailable",
       "detail": "CasaStudio received an unexpected response while loading this project."
+    },
+    "editGeometry": {
+      "title": "The local draft cannot be displayed",
+      "detail": "Your draft is preserved. Adjustments can resume after the geometry is renderable again."
     },
     "requestId": "Request ID: {{requestId}}"
   }
