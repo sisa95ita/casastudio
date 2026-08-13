@@ -55,6 +55,20 @@
       }
     ]
   },
+  "variable": [
+    {
+      "key": "baseRevision",
+      "value": "1"
+    },
+    {
+      "key": "staleBaseRevision",
+      "value": "1"
+    },
+    {
+      "key": "projectDraft",
+      "value": "{}"
+    }
+  ],
   "item": [
     {
       "name": "Health",
@@ -140,6 +154,94 @@
       "name": "Projects",
       "item": [
         {
+          "name": "List Projects",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"body contains lightweight summaries\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.projects).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Project\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"new project starts at revision one\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.sourceRevision).to.eql(1);",
+                  "  pm.expect(body.project.revision).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Get Demo Project",
           "request": {
             "auth": {
@@ -174,6 +276,116 @@
                   "  const body = pm.response.json();",
                   "  pm.expect(body.project.id).to.eql(pm.environment.get(\"projectId\"));",
                   "  pm.expect(body.sourceRevision).to.eql(body.project.revision);",
+                  "  pm.collectionVariables.set(\"baseRevision\", body.sourceRevision);",
+                  "  pm.collectionVariables.set(\"projectDraft\", JSON.stringify(body.project));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save Current Demo Project",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"staleBaseRevision\", pm.collectionVariables.get(\"baseRevision\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test(\"revision increments exactly once\", function () {",
+                  "  pm.expect(body.sourceRevision).to.eql(Number(pm.collectionVariables.get(\"staleBaseRevision\")) + 1);",
+                  "});",
+                  "pm.collectionVariables.set(\"baseRevision\", body.sourceRevision);",
+                  "pm.collectionVariables.set(\"projectDraft\", JSON.stringify(body.project));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"baseRevision\": {{baseRevision}},\n  \"project\": {{projectDraft}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects/{{projectId}}",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save Demo Project With Stale Revision",
+          "request": {
+            "auth": {
+              "type": "inherit"
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"baseRevision\": {{staleBaseRevision}},\n  \"project\": {{projectDraft}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/v1/projects/{{projectId}}",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test(\"problem code is PROJECT_REVISION_CONFLICT\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"PROJECT_REVISION_CONFLICT\");",
                   "});"
                 ]
               }

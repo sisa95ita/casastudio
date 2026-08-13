@@ -62,21 +62,25 @@ export class ProjectPersistenceWriter {
     await this.createProjectInTransaction(tx, canonicalProject, metadata);
   }
 
-  private async createProjectInTransaction(
+  /**
+   * Creates a complete normalized Project aggregate inside an existing transaction.
+   */
+  async createProjectInTransaction(
     tx: Prisma.TransactionClient,
     project: Project,
     metadata: NewProjectMetadata
   ): Promise<void> {
+    const canonicalProject = validateProjectForPersistence(project);
     const dbProject = await tx.project.create({
       data: {
-        domainId: project.id,
-        name: project.name,
-        schemaVersion: project.schemaVersion,
-        revision: project.revision,
-        domainCreatedAt: project.createdAt,
-        domainUpdatedAt: project.updatedAt,
-        unitLength: project.units.length,
-        unitAngle: project.units.angle,
+        domainId: canonicalProject.id,
+        name: canonicalProject.name,
+        schemaVersion: canonicalProject.schemaVersion,
+        revision: canonicalProject.revision,
+        domainCreatedAt: canonicalProject.createdAt,
+        domainUpdatedAt: canonicalProject.updatedAt,
+        unitLength: canonicalProject.units.length,
+        unitAngle: canonicalProject.units.angle,
         ownerSubject: metadata.ownerSubject,
         createdBySubject: metadata.createdBySubject,
         updatedBySubject: metadata.updatedBySubject,
@@ -85,9 +89,74 @@ export class ProjectPersistenceWriter {
       }
     });
 
+    await this.createSubordinateRecords(tx, canonicalProject, dbProject.id);
+  }
+
+  /**
+   * Replaces the domain state beneath an existing persistence Project row.
+   *
+   * The technical root row, ownership, creator metadata, and database creation
+   * timestamp remain unchanged. All subordinate rows are recreated in
+   * deterministic canonical order, and the surrounding transaction guarantees
+   * rollback if any delete or insert fails.
+   */
+  async replaceProjectStateInTransaction(
+    tx: Prisma.TransactionClient,
+    persistenceProjectId: string,
+    project: Project,
+    updatedBySubject: string
+  ): Promise<void> {
+    const canonicalProject = validateProjectForPersistence(project);
+
+    await tx.project.update({
+      where: { id: persistenceProjectId },
+      data: {
+        name: canonicalProject.name,
+        schemaVersion: canonicalProject.schemaVersion,
+        revision: canonicalProject.revision,
+        domainUpdatedAt: canonicalProject.updatedAt,
+        unitLength: canonicalProject.units.length,
+        unitAngle: canonicalProject.units.angle,
+        updatedBySubject
+      }
+    });
+
+    await this.deleteSubordinateRecords(tx, persistenceProjectId);
+    await this.createSubordinateRecords(tx, canonicalProject, persistenceProjectId);
+  }
+
+  private async deleteSubordinateRecords(
+    tx: Prisma.TransactionClient,
+    persistenceProjectId: string
+  ): Promise<void> {
+    const where = { projectId: persistenceProjectId };
+
+    await tx.renderResult.deleteMany({ where });
+    await tx.renderRequest.deleteMany({ where });
+    await tx.baseImage.deleteMany({ where });
+    await tx.viewpoint.deleteMany({ where });
+    await tx.designBrief.deleteMany({ where });
+    await tx.roomBoundaryEdge.deleteMany({ where });
+    await tx.openingConnectedRoomReference.deleteMany({ where });
+    await tx.wallRoomReference.deleteMany({ where });
+    await tx.opening.deleteMany({ where });
+    await tx.stairFlight.deleteMany({ where });
+    await tx.stairLanding.deleteMany({ where });
+    await tx.staircase.deleteMany({ where });
+    await tx.wall.deleteMany({ where });
+    await tx.room.deleteMany({ where });
+    await tx.level.deleteMany({ where });
+    await tx.building.deleteMany({ where: { projectId: persistenceProjectId } });
+  }
+
+  private async createSubordinateRecords(
+    tx: Prisma.TransactionClient,
+    project: Project,
+    persistenceProjectId: string
+  ): Promise<void> {
     const dbBuilding = await tx.building.create({
       data: {
-        projectId: dbProject.id,
+        projectId: persistenceProjectId,
         domainId: project.building.id,
         name: project.building.name,
         type: project.building.type
@@ -105,7 +174,7 @@ export class ProjectPersistenceWriter {
     for (const [levelPosition, level] of project.building.levels.entries()) {
       const dbLevel = await tx.level.create({
         data: {
-          projectId: dbProject.id,
+          projectId: persistenceProjectId,
           buildingId: dbBuilding.id,
           domainId: level.id,
           position: levelPosition,
@@ -119,7 +188,7 @@ export class ProjectPersistenceWriter {
       for (const [roomPosition, room] of level.rooms.entries()) {
         const dbRoom = await tx.room.create({
           data: {
-            projectId: dbProject.id,
+            projectId: persistenceProjectId,
             levelId: dbLevel.id,
             domainId: room.id,
             position: roomPosition,
@@ -136,7 +205,7 @@ export class ProjectPersistenceWriter {
       for (const [wallPosition, wall] of level.walls.entries()) {
         const dbWall = await tx.wall.create({
           data: {
-            projectId: dbProject.id,
+            projectId: persistenceProjectId,
             levelId: dbLevel.id,
             domainId: wall.id,
             position: wallPosition,
@@ -162,7 +231,7 @@ export class ProjectPersistenceWriter {
         for (const [boundaryPosition, boundaryEdge] of room.boundary.entries()) {
           await tx.roomBoundaryEdge.create({
             data: {
-              projectId: dbProject.id,
+              projectId: persistenceProjectId,
               roomId: dbRoom.id,
               wallId: getRequired(walls, boundaryEdge.wallId, "Wall").id,
               position: boundaryPosition,
@@ -178,7 +247,7 @@ export class ProjectPersistenceWriter {
         for (const [roomReferencePosition, roomId] of wall.roomIds.entries()) {
           await tx.wallRoomReference.create({
             data: {
-              projectId: dbProject.id,
+              projectId: persistenceProjectId,
               wallId: dbWall.id,
               roomId: getRequired(rooms, roomId, "Room").id,
               position: roomReferencePosition
@@ -189,7 +258,7 @@ export class ProjectPersistenceWriter {
         for (const [openingPosition, opening] of wall.openings.entries()) {
           const dbOpening = await tx.opening.create({
             data: {
-              projectId: dbProject.id,
+              projectId: persistenceProjectId,
               wallId: dbWall.id,
               domainId: opening.id,
               position: openingPosition,
@@ -207,7 +276,7 @@ export class ProjectPersistenceWriter {
             for (const [connectedRoomPosition, roomId] of (opening.connectedRoomIds ?? []).entries()) {
               await tx.openingConnectedRoomReference.create({
                 data: {
-                  projectId: dbProject.id,
+                  projectId: persistenceProjectId,
                   openingId: dbOpening.id,
                   roomId: getRequired(rooms, roomId, "Room").id,
                   position: connectedRoomPosition
@@ -221,7 +290,7 @@ export class ProjectPersistenceWriter {
       for (const [staircasePosition, staircase] of level.staircases.entries()) {
         const dbStaircase = await tx.staircase.create({
           data: {
-            projectId: dbProject.id,
+            projectId: persistenceProjectId,
             owningLevelId: getRequired(levels, level.id, "Level").id,
             domainId: staircase.id,
             position: staircasePosition,
@@ -238,7 +307,7 @@ export class ProjectPersistenceWriter {
         for (const [flightPosition, flight] of staircase.flights.entries()) {
           await tx.stairFlight.create({
             data: {
-              projectId: dbProject.id,
+              projectId: persistenceProjectId,
               staircaseId: dbStaircase.id,
               domainId: flight.id,
               position: flightPosition,
@@ -259,7 +328,7 @@ export class ProjectPersistenceWriter {
         for (const [landingPosition, landing] of staircase.landings.entries()) {
           await tx.stairLanding.create({
             data: {
-              projectId: dbProject.id,
+              projectId: persistenceProjectId,
               staircaseId: dbStaircase.id,
               domainId: landing.id,
               position: landingPosition,
@@ -279,7 +348,7 @@ export class ProjectPersistenceWriter {
     for (const [viewpointPosition, viewpoint] of project.viewpoints.entries()) {
       const dbViewpoint = await tx.viewpoint.create({
         data: {
-          projectId: dbProject.id,
+          projectId: persistenceProjectId,
           domainId: viewpoint.id,
           position: viewpointPosition,
           name: viewpoint.name,
@@ -303,7 +372,7 @@ export class ProjectPersistenceWriter {
     for (const [baseImagePosition, baseImage] of project.baseImages.entries()) {
       const dbBaseImage = await tx.baseImage.create({
         data: {
-          projectId: dbProject.id,
+          projectId: persistenceProjectId,
           viewpointId: getRequired(viewpoints, baseImage.viewpointId, "Viewpoint").id,
           domainId: baseImage.id,
           position: baseImagePosition,
@@ -323,7 +392,7 @@ export class ProjectPersistenceWriter {
     for (const [designBriefPosition, designBrief] of project.designBriefs.entries()) {
       const dbDesignBrief = await tx.designBrief.create({
         data: {
-          projectId: dbProject.id,
+          projectId: persistenceProjectId,
           domainId: designBrief.id,
           position: designBriefPosition,
           name: designBrief.name,
@@ -339,7 +408,7 @@ export class ProjectPersistenceWriter {
       for (const [position, value] of designBrief.constraints.entries()) {
         await tx.designBriefConstraint.create({
           data: {
-            projectId: dbProject.id,
+            projectId: persistenceProjectId,
             designBriefId: dbDesignBrief.id,
             position,
             value
@@ -350,7 +419,7 @@ export class ProjectPersistenceWriter {
       for (const [position, value] of designBrief.palette.entries()) {
         await tx.designBriefPaletteEntry.create({
           data: {
-            projectId: dbProject.id,
+            projectId: persistenceProjectId,
             designBriefId: dbDesignBrief.id,
             position,
             value
@@ -361,7 +430,7 @@ export class ProjectPersistenceWriter {
       for (const [position, assetRef] of designBrief.referenceAssetRefs.entries()) {
         await tx.designBriefReferenceAsset.create({
           data: {
-            projectId: dbProject.id,
+            projectId: persistenceProjectId,
             designBriefId: dbDesignBrief.id,
             position,
             assetRef
@@ -373,7 +442,7 @@ export class ProjectPersistenceWriter {
     for (const [renderRequestPosition, renderRequest] of project.renderRequests.entries()) {
       const dbRenderRequest = await tx.renderRequest.create({
         data: {
-          projectId: dbProject.id,
+          projectId: persistenceProjectId,
           viewpointId: getRequired(viewpoints, renderRequest.viewpointId, "Viewpoint").id,
           baseImageId: getRequired(baseImages, renderRequest.baseImageId, "BaseImage").id,
           designBriefId: getRequired(designBriefs, renderRequest.designBriefId, "DesignBrief").id,
@@ -398,7 +467,7 @@ export class ProjectPersistenceWriter {
     for (const [renderResultPosition, renderResult] of project.renderResults.entries()) {
       await tx.renderResult.create({
         data: {
-          projectId: dbProject.id,
+          projectId: persistenceProjectId,
           renderRequestId: getRequired(renderRequests, renderResult.renderRequestId, "RenderRequest").id,
           domainId: renderResult.id,
           position: renderResultPosition,

@@ -15,6 +15,11 @@ export enum ApiErrorCode {
   ProjectAccessForbidden = "PROJECT_ACCESS_FORBIDDEN",
   ProjectPersistedStateInvalid = "PROJECT_PERSISTED_STATE_INVALID",
   ProjectReadFailed = "PROJECT_READ_FAILED",
+  ProjectAggregateIdMismatch = "PROJECT_AGGREGATE_ID_MISMATCH",
+  ProjectServerFieldsInvalid = "PROJECT_SERVER_FIELDS_INVALID",
+  ProjectStateInvalid = "PROJECT_STATE_INVALID",
+  ProjectRevisionConflict = "PROJECT_REVISION_CONFLICT",
+  ProjectWriteFailed = "PROJECT_WRITE_FAILED",
   ProjectGeometryBuildFailed = "PROJECT_GEOMETRY_BUILD_FAILED",
   ProjectGeometryInvalid = "PROJECT_GEOMETRY_INVALID",
   ProjectGeometrySerializationFailed = "PROJECT_GEOMETRY_SERIALIZATION_FAILED"

@@ -36,3 +36,9 @@ tokens, refresh tokens, or admin credentials.
 
 Swagger remains the authoritative API contract. This collection is an executable
 development aid for common local checks, not a replacement for OpenAPI.
+
+The Projects folder includes authenticated list/create requests plus a complete
+Project save and stale-revision conflict example. Run `Get Demo Project` before
+the save examples so the collection captures the current authoritative Project
+and base revision. The successful save intentionally increments the Demo
+Project revision while preserving its complete canonical state.

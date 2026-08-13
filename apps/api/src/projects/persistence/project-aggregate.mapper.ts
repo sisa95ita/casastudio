@@ -2,6 +2,7 @@ import {
   ProjectSchema,
   validateProjectCrossReferences,
   validateProjectGeometry,
+  validateProjectIdentifierUniqueness,
   validateProjectReferenceConsistency,
   type Project,
   type ValidationError,
@@ -285,6 +286,7 @@ export class ProjectAggregateMapper {
 export function validateProjectForPersistence(project: unknown): Project {
   const parsed = parseProject(project);
   const validationErrors = [
+    ...validateProjectIdentifierUniqueness(parsed).errors,
     ...validateProjectCrossReferences(parsed).errors,
     ...validateProjectReferenceConsistency(parsed).errors,
     ...validateProjectGeometry(parsed).errors

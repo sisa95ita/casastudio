@@ -24,6 +24,7 @@ RUN pnpm install --frozen-lockfile
 FROM dependencies AS development
 COPY . .
 RUN pnpm --filter @casastudio/api db:generate
+RUN pnpm --filter @casastudio/api^... build
 EXPOSE 3000
 CMD ["pnpm", "--filter", "@casastudio/api", "dev"]
 

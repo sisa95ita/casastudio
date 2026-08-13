@@ -41,7 +41,7 @@ export class ProjectNotFoundError extends ApiProblemError {
 }
 
 /**
- * Raised when an authenticated caller is not the owner and lacks admin override.
+ * Raised when an authenticated caller lacks Project ownership and admin override.
  *
  * The response intentionally avoids exposing owner metadata or authorization
  * internals beyond the stable forbidden code.
@@ -52,7 +52,7 @@ export class ProjectAccessForbiddenError extends ApiProblemError {
       type: "/problems/project-access-forbidden",
       title: "Project access forbidden",
       status: HttpStatus.FORBIDDEN,
-      detail: `You are not allowed to read project "${projectId}".`,
+      detail: `You are not allowed to access project "${projectId}".`,
       code: ApiErrorCode.ProjectAccessForbidden
     });
     this.name = "ProjectAccessForbiddenError";
