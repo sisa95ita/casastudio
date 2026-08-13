@@ -1,6 +1,7 @@
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { Provider as ReduxProvider } from "react-redux";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./app-shell/AppShell";
@@ -13,15 +14,31 @@ import {
   readKeycloakAuthConfiguration
 } from "./auth/keycloak-auth-client";
 import { RequireAuth } from "./auth/RequireAuth";
-import { GeometryPlaygroundPage } from "./geometry-playground/GeometryPlaygroundPage";
-import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
-import { PublicLandingPage } from "./pages/PublicLandingPage";
-import { ProjectViewerPage } from "./pages/ProjectViewerPage";
+import { useCasaTranslation } from "./i18n";
 import { appQueryClient, createAppQueryClient } from "./queries/query-client";
 import { appStore, createAppStore, type AppStore } from "./state/store";
 import "./styles.css";
 import { casaStudioTheme } from "./theme/casaStudioTheme";
+
+/** Lazily loaded public route that owns the product imagery bundle. */
+const PublicLandingPage = lazy(() =>
+  import("./pages/PublicLandingPage").then((module) => ({ default: module.PublicLandingPage }))
+);
+/** Lazily loaded authenticated Projects entry route. */
+const HomePage = lazy(() =>
+  import("./pages/HomePage").then((module) => ({ default: module.HomePage }))
+);
+/** Lazily loaded authoritative Project Viewer route. */
+const ProjectViewerPage = lazy(() =>
+  import("./pages/ProjectViewerPage").then((module) => ({ default: module.ProjectViewerPage }))
+);
+/** Lazily loaded technical geometry route kept outside primary navigation. */
+const GeometryPlaygroundPage = lazy(() =>
+  import("./geometry-playground/GeometryPlaygroundPage").then((module) => ({
+    default: module.GeometryPlaygroundPage
+  }))
+);
 
 /**
  * Props for bootstrapping the CasaStudio web application.
@@ -84,17 +101,26 @@ export function getDefaultAuthClient(): AuthClient {
  */
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<PublicLandingPage />} />
-      <Route element={<RequireAuth />}>
-        <Route path="/app" element={<AppShell />}>
-          <Route index element={<HomePage />} />
-          <Route path="geometry-playground" element={<GeometryPlaygroundPage />} />
-          <Route path="projects/:projectId" element={<ProjectViewerPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+    <Suspense fallback={<RouteLoadingStatus />}>
+      <Routes>
+        <Route path="/" element={<PublicLandingPage />} />
+        <Route element={<RequireAuth />}>
+          <Route path="/app" element={<AppShell />}>
+            <Route index element={<HomePage />} />
+            <Route path="geometry-playground" element={<GeometryPlaygroundPage />} />
+            <Route path="projects/:projectId" element={<ProjectViewerPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Route>
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
+}
+
+/** Renders a localized route-chunk loading state. */
+function RouteLoadingStatus() {
+  const { t } = useCasaTranslation("common");
+
+  return <div role="status" className="route-loading-status">{t("shell.loadingPage")}</div>;
 }

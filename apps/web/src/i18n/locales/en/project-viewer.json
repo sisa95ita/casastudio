@@ -5,7 +5,10 @@
   },
   "status": {
     "loading": "Loading authoritative Project geometry",
-    "ready": "Level {{level}} | {{polygons}} polygons | {{selection}} selected",
+    "level": "Level {{level}}",
+    "polygons": "{{polygons}} spaces",
+    "selection": "{{selection}} selected",
+    "revision": "Revision {{revision}}",
     "unavailable": "Project geometry unavailable"
   },
   "loading": "Loading Project and Geometry data…",
@@ -15,6 +18,13 @@
   "viewer": {
     "title": "Project plan",
     "noLevels": "This Project has no geometry levels to display."
+  },
+  "mobile": {
+    "title": "Reduced project view",
+    "description": "Geometry is available for review. Advanced workspace panels are best used on a larger screen.",
+    "level": "Level",
+    "spaces": "Spaces",
+    "revision": "Revision"
   },
   "levelSelector": {
     "label": "Level"

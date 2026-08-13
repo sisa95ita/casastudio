@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { configureApiApplication } from "./bootstrap/create-api-application";
 import { ApiErrorCode } from "./common/problem-details/api-error-code";
 import { createValidatedConfiguration } from "./config/app-configuration";
+import { apiEnvironmentFilePaths } from "./config/environment-files";
 import { principalFromKeycloakClaims } from "./auth/keycloak-claims";
 import { HealthStatus } from "./health/health.dto";
 import { PrismaService } from "./persistence/prisma.service";
@@ -57,6 +58,7 @@ describe("API configuration", () => {
   it("accepts a valid environment", () => {
     expect(createValidatedConfiguration(defaultTestEnvironment)).toMatchObject({
       apiPort: 3000,
+      apiHost: "0.0.0.0",
       corsAllowedOrigins: ["http://localhost:5173", "http://localhost:8081"],
       databaseUrl: defaultTestEnvironment.DATABASE_URL,
       keycloak: {
@@ -82,6 +84,26 @@ describe("API configuration", () => {
       }).swaggerEnabled
     ).toBe(false);
   });
+
+  it("loads the ignored root local override before repository defaults", () => {
+    expect(apiEnvironmentFilePaths[0]).toMatch(/\.env\.local$/);
+    expect(apiEnvironmentFilePaths[1]).toMatch(/\.env$/);
+  });
+
+  it("accepts explicit private-network service URLs and CORS origins", () => {
+    const configuration = createValidatedConfiguration({
+      ...defaultTestEnvironment,
+      KEYCLOAK_BASE_URL: "http://192.0.2.10:8080",
+      KEYCLOAK_ISSUER: "http://192.0.2.10:8080/realms/casastudio",
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://192.0.2.10:5173"
+    });
+
+    expect(configuration.keycloak.baseUrl).toBe("http://192.0.2.10:8080");
+    expect(configuration.corsAllowedOrigins).toEqual([
+      "http://localhost:5173",
+      "http://192.0.2.10:5173"
+    ]);
+  });
 });
 
 describe("CORS", () => {
@@ -98,6 +120,36 @@ describe("CORS", () => {
     expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
     expect(response.headers["access-control-allow-headers"]).toContain("Authorization");
 
+    await context.app.close();
+  });
+
+  it("allows a configured LAN frontend origin explicitly", async () => {
+    const context = await createTestApp({
+      environment: {
+        CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://192.0.2.10:5173"
+      }
+    });
+
+    const response = await request(context.app.getHttpServer())
+      .options("/api/v1/health/live")
+      .set("origin", "http://192.0.2.10:5173")
+      .set("access-control-request-method", "GET")
+      .expect(204);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://192.0.2.10:5173");
+    await context.app.close();
+  });
+
+  it("does not allow an unrelated frontend origin", async () => {
+    const context = await createTestApp();
+
+    const response = await request(context.app.getHttpServer())
+      .options("/api/v1/health/live")
+      .set("origin", "http://unrelated.example")
+      .set("access-control-request-method", "GET")
+      .expect(204);
+
+    expect(response.headers).not.toHaveProperty("access-control-allow-origin");
     await context.app.close();
   });
 });

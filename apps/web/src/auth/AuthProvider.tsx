@@ -6,10 +6,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 
 import { useCasaTranslation } from "../i18n";
+import { ProductBrand } from "../components/ProductBrand";
 import type { AuthClient, AuthState } from "./auth-client";
 
 /**
@@ -45,6 +47,7 @@ export function AuthProvider({ client, children }: AuthProviderProps) {
   const { t } = useCasaTranslation("auth");
   const [state, setState] = useState<AuthState>(initialAuthState);
   const [initializationFailed, setInitializationFailed] = useState(false);
+  const loginAttempt = useRef<Promise<void> | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -68,7 +71,10 @@ export function AuthProvider({ client, children }: AuthProviderProps) {
     };
   }, [client]);
 
-  const login = useCallback(() => client.login(), [client]);
+  const login = useCallback(() => {
+    loginAttempt.current ??= client.login();
+    return loginAttempt.current;
+  }, [client]);
   const logout = useCallback(() => client.logout(), [client]);
   const getAccessToken = useCallback(async () => {
     const token = await client.getAccessToken();
@@ -89,7 +95,7 @@ export function AuthProvider({ client, children }: AuthProviderProps) {
       {!state.initialized ? (
         <AuthInitializationStatus />
       ) : initializationFailed ? (
-        <Box sx={{ display: "grid", minHeight: "100vh", placeItems: "center", p: 2 }}>
+        <Box className="auth-screen">
           <Alert severity="error">{t("initialization.failed")}</Alert>
         </Box>
       ) : (
@@ -117,9 +123,10 @@ function AuthInitializationStatus() {
   const { t } = useCasaTranslation("auth");
 
   return (
-    <Box sx={{ display: "grid", minHeight: "100vh", placeItems: "center", p: 2 }}>
-      <Stack role="status" spacing={1.5} sx={{ alignItems: "center" }}>
-        <CircularProgress size={28} />
+    <Box className="auth-screen">
+      <Stack role="status" spacing={2} sx={{ alignItems: "center" }}>
+        <ProductBrand />
+        <CircularProgress size={26} thickness={3.5} />
         <Typography variant="body2" color="text.secondary">
           {t("initialization.loading")}
         </Typography>

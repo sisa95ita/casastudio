@@ -13,6 +13,7 @@ export async function bootstrapApi(): Promise<void> {
   const app = await createApiApplication();
   const configService = app.get(ConfigService<AppConfiguration, true>);
   const apiPort = configService.get("apiPort", { infer: true });
+  const apiHost = configService.get("apiHost", { infer: true });
 
-  await app.listen(apiPort);
+  await app.listen(apiPort, apiHost);
 }

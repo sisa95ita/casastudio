@@ -1,7 +1,9 @@
 {
   "realm": "casastudio",
   "enabled": true,
-  "displayName": "CasaStudio Development",
+  "displayName": "CasaStudio",
+  "displayNameHtml": "CasaStudio",
+  "loginTheme": "casastudio",
   "sslRequired": "external",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
@@ -22,11 +24,13 @@
       "redirectUris": [
         "http://localhost:5173/*",
         "http://localhost:8081/*",
+        "${CASASTUDIO_WEB_LAN_ORIGIN}/*",
         "https://oauth.pstmn.io/v1/browser-callback"
       ],
       "webOrigins": [
         "http://localhost:5173",
-        "http://localhost:8081"
+        "http://localhost:8081",
+        "${CASASTUDIO_WEB_LAN_ORIGIN}"
       ],
       "protocolMappers": [
         {

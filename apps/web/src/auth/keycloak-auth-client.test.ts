@@ -73,6 +73,30 @@ describe("KeycloakAuthClient", () => {
     expect(keycloak.init).toHaveBeenCalledOnce();
   });
 
+  it("reports development-safe initialization diagnostics without adapter state", async () => {
+    const failure = new Error("Failed to fetch");
+    const keycloak = createKeycloakStub({
+      init: vi.fn().mockRejectedValue(failure)
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const client = new KeycloakAuthClient(
+      keycloak,
+      "casastudio-api",
+      "http://192.0.2.10:8080"
+    );
+
+    await expect(client.initialize()).rejects.toBe(failure);
+    expect(consoleError).toHaveBeenCalledWith(
+      "CasaStudio authentication initialization failed.",
+      {
+        cause: "Failed to fetch",
+        keycloakOrigin: "http://192.0.2.10:8080"
+      }
+    );
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("access-token");
+    consoleError.mockRestore();
+  });
+
   it("refreshes an expiring token before returning the in-memory access token", async () => {
     const keycloak = createKeycloakStub();
     const client = new KeycloakAuthClient(keycloak, "casastudio-api");
@@ -185,5 +209,27 @@ describe("readKeycloakAuthConfiguration", () => {
     expect(() => readKeycloakAuthConfiguration({} as unknown as ImportMetaEnv)).toThrow(
       "VITE_KEYCLOAK_BASE_URL"
     );
+  });
+
+  it("accepts an HTTP Keycloak endpoint on a private-network host", () => {
+    expect(
+      readKeycloakAuthConfiguration({
+        VITE_KEYCLOAK_BASE_URL: "http://192.0.2.10:8080",
+        VITE_KEYCLOAK_REALM: "casastudio",
+        VITE_KEYCLOAK_CLIENT_ID: "casastudio-web",
+        VITE_KEYCLOAK_ROLE_CLIENT_ID: "casastudio-api"
+      } as unknown as ImportMetaEnv).baseUrl
+    ).toBe("http://192.0.2.10:8080");
+  });
+
+  it("rejects a non-HTTP Keycloak endpoint", () => {
+    expect(() =>
+      readKeycloakAuthConfiguration({
+        VITE_KEYCLOAK_BASE_URL: "file:///tmp/keycloak",
+        VITE_KEYCLOAK_REALM: "casastudio",
+        VITE_KEYCLOAK_CLIENT_ID: "casastudio-web",
+        VITE_KEYCLOAK_ROLE_CLIENT_ID: "casastudio-api"
+      } as unknown as ImportMetaEnv)
+    ).toThrow("VITE_KEYCLOAK_BASE_URL must use the http or https protocol");
   });
 });

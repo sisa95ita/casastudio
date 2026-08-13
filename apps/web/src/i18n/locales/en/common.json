@@ -6,10 +6,20 @@
     "defaultTitle": "CasaStudio",
     "defaultBreadcrumb": "Workspace",
     "defaultStatus": "Ready",
+    "loadingPage": "Loading workspace…",
     "workspace": "Workspace",
+    "goToProjects": "Go to Projects",
+    "mode": {
+      "label": "Workspace mode",
+      "twoD": "2D",
+      "readOnly": "Read-only"
+    },
     "inspector": {
       "label": "Inspector",
-      "empty": "No route inspector available."
+      "eyebrow": "Project context",
+      "empty": "Select geometry to inspect its details.",
+      "open": "Open inspector",
+      "close": "Close inspector"
     },
     "statusBar": {
       "label": "Status bar"
@@ -20,14 +30,19 @@
   },
   "routes": {
     "home": {
-      "title": "Home",
-      "eyebrow": "CasaStudio",
+      "title": "Projects",
+      "eyebrow": "Project workspace",
       "heading": "Projects",
-      "description": "Open a Project to view its authoritative geometry.",
-      "inspectorTitle": "Project workspace",
-      "inspectorDescription": "Select a Project to open its read-only plan and geometry inspector.",
-      "status": "Projects ready",
-      "openProject": "Open project"
+      "description": "Projects bring a space's structure, levels, and geometry into one focused workspace. Open the available project to inspect its current plan.",
+      "status": "1 project available",
+      "availableProjects": "Available projects",
+      "projectCount": "{{count}} project",
+      "projectType": "Interior space project",
+      "projectDescription": "Open the authoritative project viewer to inspect levels, geometry layers, and individual spatial elements.",
+      "readOnly": "Read-only viewer",
+      "authoritativeGeometry": "Authoritative geometry",
+      "openProject": "Open project",
+      "futureListNote": "This project source is ready to be replaced by the product project list when that service becomes available."
     },
     "notFound": {
       "title": "Not found",

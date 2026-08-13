@@ -47,7 +47,8 @@ export function createKeycloakAuthClient(
       realm: configuration.realm,
       clientId: configuration.webClientId
     }),
-    configuration.roleClientId
+    configuration.roleClientId,
+    new URL(configuration.baseUrl).origin
   );
 }
 
@@ -62,7 +63,8 @@ export class KeycloakAuthClient implements AuthClient {
    */
   constructor(
     private readonly keycloak: Keycloak,
-    private readonly roleClientId: string
+    private readonly roleClientId: string,
+    private readonly providerOrigin?: string
   ) {}
 
   /**
@@ -107,13 +109,20 @@ export class KeycloakAuthClient implements AuthClient {
 
   /** Performs the single underlying adapter initialization. */
   private async initializeKeycloak(): Promise<AuthSession> {
-    const authenticated = await this.keycloak.init({
-      checkLoginIframe: false,
-      flow: "standard",
-      onLoad: "check-sso",
-      pkceMethod: "S256",
-      responseMode: "fragment"
-    });
+    let authenticated: boolean;
+
+    try {
+      authenticated = await this.keycloak.init({
+        checkLoginIframe: false,
+        flow: "standard",
+        onLoad: "check-sso",
+        pkceMethod: "S256",
+        responseMode: "fragment"
+      });
+    } catch (error) {
+      reportAuthenticationInitializationFailure(error, this.providerOrigin);
+      throw error;
+    }
 
     if (!authenticated) {
       return { authenticated: false };
@@ -124,6 +133,21 @@ export class KeycloakAuthClient implements AuthClient {
       user: mapKeycloakTokenToUser(this.keycloak.tokenParsed, this.roleClientId)
     };
   }
+}
+
+/** Reports development-safe identity-provider diagnostics without credential material. */
+function reportAuthenticationInitializationFailure(
+  error: unknown,
+  providerOrigin: string | undefined
+): void {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+
+  console.error("CasaStudio authentication initialization failed.", {
+    cause: error instanceof Error ? error.message : "Unknown authentication initialization failure",
+    keycloakOrigin: providerOrigin ?? "Unavailable"
+  });
 }
 
 /**

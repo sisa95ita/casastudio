@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
@@ -31,6 +31,7 @@ type RealmUser = {
 
 type RealmConfig = {
   readonly realm?: unknown;
+  readonly loginTheme?: unknown;
   readonly clients?: readonly RealmClient[];
   readonly users?: readonly RealmUser[];
 };
@@ -43,6 +44,7 @@ describe("Keycloak development realm configuration", () => {
     const audienceMapper = findMapper(apiClient, "casastudio-api-audience");
 
     expect(realmConfig.realm).toBe("casastudio");
+    expect(realmConfig.loginTheme).toBe("casastudio");
     expect(apiClient).toMatchObject({
       clientId: "casastudio-api",
       publicClient: false,
@@ -75,10 +77,17 @@ describe("Keycloak development realm configuration", () => {
       expect.arrayContaining([
         "http://localhost:5173/*",
         "http://localhost:8081/*",
+        "${CASASTUDIO_WEB_LAN_ORIGIN}/*",
         "https://oauth.pstmn.io/v1/browser-callback"
       ])
     );
-    expect(webClient.webOrigins).toEqual(expect.arrayContaining(["http://localhost:5173", "http://localhost:8081"]));
+    expect(webClient.webOrigins).toEqual(
+      expect.arrayContaining([
+        "http://localhost:5173",
+        "http://localhost:8081",
+        "${CASASTUDIO_WEB_LAN_ORIGIN}"
+      ])
+    );
     expect(audienceMapper).toMatchObject({
       protocolMapper: "oidc-audience-mapper",
       config: {
@@ -97,6 +106,27 @@ describe("Keycloak development realm configuration", () => {
       username: "demo"
     });
     expect(demoUser?.clientRoles?.["casastudio-api"]).toEqual(expect.arrayContaining(["casastudio-user"]));
+  });
+
+  it("includes the inherited CasaStudio login theme and lightweight brand assets", () => {
+    const themeRoot = new URL("../../../../docker/keycloak/themes/casastudio/login/", import.meta.url);
+
+    expect(readFileSync(new URL("theme.properties", themeRoot), "utf8")).toContain(
+      "parent=keycloak.v2"
+    );
+    expect(existsSync(new URL("resources/css/casastudio-login.css", themeRoot))).toBe(true);
+    expect(existsSync(new URL("resources/img/casastudio-mark.svg", themeRoot))).toBe(true);
+    expect(existsSync(new URL("messages/messages_en.properties", themeRoot))).toBe(true);
+  });
+
+  it("mounts the repository theme and keeps machine overrides out of Git", () => {
+    const compose = readFileSync(new URL("../../../../compose.yml", import.meta.url), "utf8");
+    const gitignore = readFileSync(new URL("../../../../.gitignore", import.meta.url), "utf8");
+
+    expect(compose).toContain("./docker/keycloak/themes:/opt/keycloak/themes:ro");
+    expect(compose).toContain("CASASTUDIO_WEB_LAN_ORIGIN");
+    expect(compose).toContain("CASASTUDIO_KEYCLOAK_HOSTNAME");
+    expect(gitignore.split(/\r?\n/)).toContain(".env.local");
   });
 });
 

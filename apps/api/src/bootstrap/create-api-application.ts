@@ -61,6 +61,7 @@ export function readAppConfiguration(
   return {
     nodeEnv: configService.get("nodeEnv", { infer: true }),
     apiPort: configService.get("apiPort", { infer: true }),
+    apiHost: configService.get("apiHost", { infer: true }),
     databaseUrl: configService.get("databaseUrl", { infer: true }),
     corsAllowedOrigins: configService.get("corsAllowedOrigins", { infer: true }),
     keycloak: configService.get("keycloak", { infer: true }),

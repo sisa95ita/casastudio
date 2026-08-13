@@ -12,6 +12,8 @@
     "title": "SVG Technical Viewer",
     "svgTitle": "Interactive 2D geometry viewer",
     "svgDescription": "Interactive SVG projection of read-only level geometry.",
+    "readOnly": "Read-only",
+    "canvasHint": "Drag the canvas to pan · Scroll to zoom",
     "empty": "No runtime geometry to display for this level.",
     "noLevels": "GeometryEngine produced a model with no levels."
   },
@@ -19,6 +21,7 @@
     "label": "Level"
   },
   "toolbar": {
+    "label": "Viewport controls",
     "fit": "Fit to view",
     "reset": "Reset viewport",
     "zoomIn": "Zoom in",

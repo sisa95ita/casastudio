@@ -1,0 +1,57 @@
+{
+  "header": {
+    "homeLabel": "CasaStudio home",
+    "navigationLabel": "Public navigation",
+    "workflow": "Workflow",
+    "aiDesign": "AI design"
+  },
+  "actions": {
+    "openWorkspace": "Open workspace",
+    "exploreWorkflow": "Explore the workflow"
+  },
+  "hero": {
+    "eyebrow": "Plan · Understand · Explore",
+    "heading": "Design spaces with confidence",
+    "description": "Turn accurate project geometry into a clear 2D understanding of your space—then carry that foundation toward 3D visualization and thoughtful, AI-assisted design exploration.",
+    "imageAlt": "A floor plan progressing into a warm three-dimensional interior concept"
+  },
+  "workflow": {
+    "eyebrow": "A geometry-first workflow",
+    "heading": "One accurate foundation, from plan to possibility",
+    "description": "CasaStudio keeps the structure of your project at the center, so every visual layer can build on the same spatial understanding.",
+    "imageAlt": "A detailed project plan paired with a three-dimensional interior visualization",
+    "steps": {
+      "geometry": {
+        "title": "Project geometry",
+        "description": "Start from the dimensions, rooms, and boundaries that define the real space."
+      },
+      "understanding": {
+        "title": "2D understanding",
+        "description": "Inspect levels, spaces, shared edges, and geometry in a focused read-only plan."
+      },
+      "visualization": {
+        "title": "3D visualization",
+        "description": "Carry accurate structure into an immersive view as CasaStudio's capabilities evolve."
+      },
+      "assistant": {
+        "title": "Design exploration",
+        "description": "Explore materials, atmosphere, and layout directions with future AI assistance."
+      }
+    }
+  },
+  "ai": {
+    "eyebrow": "AI, grounded in the space",
+    "heading": "A design assistant—not a geometry substitute",
+    "description": "CasaStudio's direction is to layer design suggestions over reliable project geometry. That means inspiration can stay connected to the shape, scale, and constraints of the space it serves.",
+    "roadmapNote": "AI-assisted design exploration is an evolving capability. The current product experience focuses on authoritative project geometry and the 2D viewer.",
+    "imageAlt": "An interior scene surrounded by material palettes and AI-assisted design variations"
+  },
+  "final": {
+    "eyebrow": "Your space, clearly understood",
+    "heading": "Begin with the project. Build toward the design.",
+    "description": "Enter CasaStudio to open the available project and inspect its authoritative 2D geometry."
+  },
+  "footer": {
+    "tagline": "Accurate space planning with a warmer point of view."
+  }
+}

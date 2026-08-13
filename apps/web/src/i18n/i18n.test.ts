@@ -11,13 +11,14 @@ describe("CasaStudio i18n", () => {
 
   it("looks up translations across UI namespaces", () => {
     expect(casaI18n.t("common:brand.name")).toBe("CasaStudio");
-    expect(casaI18n.t("navigation:items.home")).toBe("Home");
+    expect(casaI18n.t("navigation:items.projects")).toBe("Projects");
+    expect(casaI18n.t("landing:hero.heading")).toBe("Design spaces with confidence");
     expect(casaI18n.t("inspector:layers.showPolygons")).toBe("Show polygons");
   });
 
   it("falls back to English resources for unsupported locales", () => {
     const unsupportedLocaleTranslator = casaI18n.getFixedT("it");
 
-    expect(unsupportedLocaleTranslator("common:routes.home.title")).toBe("Home");
+    expect(unsupportedLocaleTranslator("common:routes.home.title")).toBe("Projects");
   });
 });

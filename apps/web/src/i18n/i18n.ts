@@ -6,6 +6,7 @@ import authEn from "./locales/en/auth.json";
 import commonEn from "./locales/en/common.json";
 import geometryPlaygroundEn from "./locales/en/geometry-playground.json";
 import inspectorEn from "./locales/en/inspector.json";
+import landingEn from "./locales/en/landing.json";
 import navigationEn from "./locales/en/navigation.json";
 import projectViewerEn from "./locales/en/project-viewer.json";
 
@@ -26,7 +27,8 @@ export const I18N_NAMESPACES = [
   "project-viewer",
   "navigation",
   "geometry-playground",
-  "inspector"
+  "inspector",
+  "landing"
 ] as const;
 
 /**
@@ -44,7 +46,8 @@ export const casaI18nResources = {
     "project-viewer": projectViewerEn,
     navigation: navigationEn,
     "geometry-playground": geometryPlaygroundEn,
-    inspector: inspectorEn
+    inspector: inspectorEn,
+    landing: landingEn
   }
 } as const;
 

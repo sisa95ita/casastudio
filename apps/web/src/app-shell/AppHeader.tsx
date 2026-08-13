@@ -1,52 +1,67 @@
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
+import { Box, Chip, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import type { ReactNode } from "react";
+import { Link as RouterLink } from "react-router-dom";
 
+import { ProductBrand } from "../components/ProductBrand";
 import { useCasaTranslation } from "../i18n";
 
-/**
- * Props for the compact CasaStudio application header.
- */
+/** Props for the CasaStudio workspace header. */
 export type AppHeaderProps = {
   readonly title: string;
   readonly breadcrumb?: string;
   readonly accessory?: ReactNode;
+  readonly inspectorAvailable?: boolean;
+  readonly onOpenInspector?: () => void;
 };
 
-/**
- * Renders the top application header shared by nested routes.
- *
- * The header is intentionally short so it identifies the product and current
- * route without stealing vertical space from the design workspace.
- */
-export function AppHeader({ title, breadcrumb, accessory }: AppHeaderProps) {
+/** Renders persistent product, project, mode, and account context. */
+export function AppHeader({
+  title,
+  breadcrumb,
+  accessory,
+  inspectorAvailable = false,
+  onOpenInspector
+}: AppHeaderProps) {
   const { t } = useCasaTranslation("common");
 
   return (
-    <Box
-      component="header"
-      sx={{
-        alignItems: "center",
-        bgcolor: "#fbfcfb",
-        borderBottom: 1,
-        borderColor: "divider",
-        display: "flex",
-        gap: 2,
-        minHeight: 52,
-        px: 2
-      }}
-    >
-      <Stack direction="row" spacing={1.25} sx={{ alignItems: "baseline", minWidth: 0 }}>
-        <Typography variant="subtitle1" component="div" sx={{ fontWeight: 800 }}>
-          {t("brand.name")}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" noWrap>
-          {breadcrumb ? `${breadcrumb} / ${title}` : title}
-        </Typography>
-      </Stack>
+    <Box component="header" className="workspace-header">
+      <Box component={RouterLink} to="/app" className="workspace-header__brand" aria-label={t("shell.goToProjects")}>
+        <ProductBrand compact />
+      </Box>
 
-      <Box sx={{ flex: 1 }} />
+      <Box className="workspace-header__context">
+        <Typography variant="caption" color="text.secondary" noWrap>
+          {breadcrumb}
+        </Typography>
+        <Typography variant="subtitle1" component="div" noWrap>
+          {title}
+        </Typography>
+      </Box>
 
-      {accessory ? accessory : <Chip label={t("shell.workspace")} variant="outlined" />}
+      <Box className="workspace-mode" aria-label={t("shell.mode.label")}>
+        <Chip label={t("shell.mode.twoD")} color="primary" />
+        <Typography variant="caption" color="text.secondary">
+          {t("shell.mode.readOnly")}
+        </Typography>
+      </Box>
+
+      <Box className="workspace-header__spacer" />
+
+      {inspectorAvailable ? (
+        <Tooltip title={t("shell.inspector.open")}>
+          <IconButton
+            className="workspace-header__inspector-button"
+            aria-label={t("shell.inspector.open")}
+            onClick={onOpenInspector}
+          >
+            <TuneRoundedIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+
+      {accessory ? <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>{accessory}</Stack> : null}
     </Box>
   );
 }
