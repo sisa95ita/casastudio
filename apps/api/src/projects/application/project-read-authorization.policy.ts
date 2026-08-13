@@ -5,7 +5,7 @@ import { KeycloakRole } from "../../auth/keycloak-role";
 import type { LoadedProjectMetadata } from "../persistence/project.repository";
 
 /**
- * Authorizes read access to a loaded Project aggregate.
+ * Authorizes access to Project aggregates and lifecycle operations.
  *
  * Regular users may read only Projects whose persisted owner subject equals
  * their validated Keycloak `sub`; administrators may read any Project. The
@@ -18,6 +18,13 @@ export class ProjectReadAuthorizationPolicy {
    */
   canReadProject(principal: AuthenticatedPrincipal, metadata: LoadedProjectMetadata): boolean {
     return this.isAdministrator(principal) || (this.isUser(principal) && metadata.ownerSubject === principal.subject);
+  }
+
+  /**
+   * Returns whether the principal may create and discover Project resources.
+   */
+  canUseProjects(principal: AuthenticatedPrincipal): boolean {
+    return this.isAdministrator(principal) || this.isUser(principal);
   }
 
   /**

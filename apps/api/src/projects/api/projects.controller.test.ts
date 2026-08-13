@@ -114,6 +114,176 @@ describe("ProjectsController", () => {
     await context.app.close();
   }, coldControllerBootstrapTimeoutMs);
 
+  it("lists lightweight owner-scoped Project summaries", async () => {
+    const context = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject)
+    });
+
+    const response = await request(context.app.getHttpServer())
+      .get("/api/v1/projects")
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({ subject: ownerSubject, roles: ["casastudio-user"] })}`
+      )
+      .expect(200);
+
+    expect(response.body).toEqual({
+      projects: [
+        {
+          id: canonicalProject.id,
+          name: canonicalProject.name,
+          revision: canonicalProject.revision,
+          updatedAt: canonicalProject.updatedAt
+        }
+      ]
+    });
+    expect(context.repository.listProjectSummaries).toHaveBeenCalledWith(ownerSubject);
+    expect(JSON.stringify(response.body)).not.toContain("building");
+
+    await context.app.close();
+  });
+
+  it("creates a canonical revision-one Project owned by the caller intent", async () => {
+    const context = await createTestApp({ loadedProject: null });
+
+    const response = await request(context.app.getHttpServer())
+      .post("/api/v1/projects")
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({ subject: ownerSubject, roles: ["casastudio-user"] })}`
+      )
+      .send({ name: "My apartment" })
+      .expect(201);
+
+    expect(response.body.sourceRevision).toBe(1);
+    expect(response.body.project).toMatchObject({
+      name: "My apartment",
+      revision: 1,
+      building: {
+        name: "My apartment",
+        levels: [
+          {
+            name: "Ground Floor",
+            elevation: 0,
+            rooms: [],
+            walls: [],
+            staircases: []
+          }
+        ]
+      }
+    });
+    expect(context.repository.createProject).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "My apartment", revision: 1 }),
+      ownerSubject
+    );
+
+    await context.app.close();
+  });
+
+  it("replaces a complete Project and returns the next authoritative revision", async () => {
+    const context = await createTestApp({ loadedProject: createLoadedProject(canonicalProject) });
+    const proposedProject = { ...canonicalProject, name: "Updated apartment" };
+
+    const response = await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({ subject: ownerSubject, roles: ["casastudio-user"] })}`
+      )
+      .send({ baseRevision: canonicalProject.revision, project: proposedProject })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sourceRevision: canonicalProject.revision + 1,
+      project: {
+        id: canonicalProject.id,
+        name: "Updated apartment",
+        revision: canonicalProject.revision + 1
+      }
+    });
+    expect(context.repository.replaceProject).toHaveBeenCalledTimes(1);
+
+    await context.app.close();
+  });
+
+  it("maps malformed, identity, invalid-state, and stale saves to stable Problems", async () => {
+    const context = await createTestApp({ loadedProject: createLoadedProject(canonicalProject) });
+    const authorization = `Bearer ${signingKeys.signToken({
+      subject: ownerSubject,
+      roles: ["casastudio-user"]
+    })}`;
+
+    const malformed = await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .set("authorization", authorization)
+      .send({ baseRevision: "not-a-revision", project: canonicalProject })
+      .expect(400);
+    expect(malformed.body.code).toBe(ApiErrorCode.InvalidRequest);
+
+    const mismatch = await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .set("authorization", authorization)
+      .send({
+        baseRevision: canonicalProject.revision,
+        project: { ...canonicalProject, id: "another-project" }
+      })
+      .expect(400);
+    expect(mismatch.body.code).toBe(ApiErrorCode.ProjectAggregateIdMismatch);
+
+    const invalidProject = structuredClone(canonicalProject);
+    const invalidWall = invalidProject.building.levels[0]?.walls[0];
+    if (!invalidWall) throw new Error("Canonical fixture requires a Wall.");
+    invalidWall.end = invalidWall.start;
+    const invalid = await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .set("authorization", authorization)
+      .send({ baseRevision: canonicalProject.revision, project: invalidProject })
+      .expect(422);
+    expect(invalid.body.code).toBe(ApiErrorCode.ProjectStateInvalid);
+
+    const stale = await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .set("authorization", authorization)
+      .send({
+        baseRevision: canonicalProject.revision + 1,
+        project: { ...canonicalProject, revision: canonicalProject.revision + 1 }
+      })
+      .expect(409);
+    expect(stale.body.code).toBe(ApiErrorCode.ProjectRevisionConflict);
+
+    await context.app.close();
+  });
+
+  it("enforces unauthenticated, owner, non-owner, and administrator update access", async () => {
+    const context = await createTestApp({ loadedProject: createLoadedProject(canonicalProject) });
+    const payload = { baseRevision: canonicalProject.revision, project: canonicalProject };
+
+    await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .send(payload)
+      .expect(401);
+
+    await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({ subject: "other-subject", roles: ["casastudio-user"] })}`
+      )
+      .send(payload)
+      .expect(403);
+
+    await request(context.app.getHttpServer())
+      .put(`/api/v1/projects/${canonicalProject.id}`)
+      .set(
+        "authorization",
+        `Bearer ${signingKeys.signToken({ subject: "admin-subject", roles: ["casastudio-admin"] })}`
+      )
+      .send(payload)
+      .expect(200);
+
+    await context.app.close();
+  });
+
   it("requires authentication", async () => {
     const context = await createTestApp({
       loadedProject: createLoadedProject(canonicalProject)
@@ -516,7 +686,7 @@ describe("Projects OpenAPI contract", () => {
     vi.unstubAllEnvs();
   });
 
-  it("documents the read-only Project and geometry endpoints without internal metadata or write APIs", async () => {
+  it("documents Project lifecycle, full replacement, read, and geometry contracts", async () => {
     const context = await createTestApp({
       environment: {
         NODE_ENV: "development"
@@ -527,10 +697,16 @@ describe("Projects OpenAPI contract", () => {
     const response = await request(context.app.getHttpServer()).get("/api/docs-json").expect(200);
     const documentJson = JSON.stringify(response.body);
     const operation = response.body.paths["/api/v1/projects/{id}"].get;
+    const listOperation = response.body.paths["/api/v1/projects"].get;
+    const createOperation = response.body.paths["/api/v1/projects"].post;
+    const replaceOperation = response.body.paths["/api/v1/projects/{id}"].put;
     const geometryOperation = response.body.paths["/api/v1/projects/{id}/geometry"].get;
     const schemas = response.body.components.schemas;
 
     expect(operation).toBeDefined();
+    expect(listOperation).toBeDefined();
+    expect(createOperation).toBeDefined();
+    expect(replaceOperation).toBeDefined();
     expect(operation.security).toEqual([{ bearer: [] }]);
     expect(operation.parameters).toEqual(
       expect.arrayContaining([
@@ -543,6 +719,11 @@ describe("Projects OpenAPI contract", () => {
     );
     expect(Object.keys(operation.responses)).toEqual(expect.arrayContaining(["200", "400", "401", "403", "404", "500"]));
     expect(schemas.ProjectResponseDto).toBeDefined();
+    expect(schemas.ProjectListResponseDto).toBeDefined();
+    expect(Object.keys(createOperation.responses)).toEqual(expect.arrayContaining(["201", "400", "401", "403", "422", "500"]));
+    expect(Object.keys(replaceOperation.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "401", "403", "404", "409", "422", "500"])
+    );
     expect(geometryOperation).toBeDefined();
     expect(geometryOperation.security).toEqual([{ bearer: [] }]);
     expect(geometryOperation.parameters).toEqual(
@@ -578,8 +759,6 @@ describe("Projects OpenAPI contract", () => {
     expect(Object.keys(response.body.paths).some((path) => path.includes("/geometry/rebuild"))).toBe(false);
     expect(Object.keys(response.body.paths).some((path) => path.includes("/geometry/validate"))).toBe(false);
     expect(Object.keys(response.body.paths).some((path) => path.includes("/geometry/{geometryId}"))).toBe(false);
-    expect(Object.values(response.body.paths).some((pathItem) => "post" in (pathItem as Record<string, unknown>))).toBe(false);
-    expect(Object.values(response.body.paths).some((pathItem) => "put" in (pathItem as Record<string, unknown>))).toBe(false);
     expect(Object.values(response.body.paths).some((pathItem) => "patch" in (pathItem as Record<string, unknown>))).toBe(false);
     expect(Object.values(response.body.paths).some((pathItem) => "delete" in (pathItem as Record<string, unknown>))).toBe(false);
 
@@ -663,6 +842,29 @@ async function createTestApp(options: {
 function createRepository(input: { readonly loadedProject?: LoadedProject | null; readonly error?: Error }): ProjectsRepository {
   return {
     findByDomainId: vi.fn<ProjectsRepository["findByDomainId"]>(),
+    listProjectSummaries: vi.fn<ProjectsRepository["listProjectSummaries"]>(async () =>
+      input.loadedProject
+        ? [
+            {
+              id: input.loadedProject.project.id,
+              name: input.loadedProject.project.name,
+              revision: input.loadedProject.project.revision,
+              updatedAt: input.loadedProject.project.updatedAt
+            }
+          ]
+        : []
+    ),
+    createProject: vi.fn<ProjectsRepository["createProject"]>(async (project) =>
+      createLoadedProject(project)
+    ),
+    replaceProject: vi.fn<ProjectsRepository["replaceProject"]>(async ({ project }) => ({
+      status: "updated",
+      loadedProject: createLoadedProject({
+        ...project,
+        revision: project.revision + 1,
+        updatedAt: "2026-08-13T12:00:00.000Z"
+      })
+    })),
     findLoadedByDomainId: vi.fn<ProjectsRepository["findLoadedByDomainId"]>(async () => {
       if (input.error) {
         throw input.error;

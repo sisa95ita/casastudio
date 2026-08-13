@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsInt, IsObject, IsString, Min, MinLength } from "class-validator";
 import {
   BuildingTypeValues,
   OpeningTypeValues,
@@ -522,4 +523,45 @@ export class ProjectResponseDto {
 
   @ApiProperty({ type: Number, description: "Authoritative persisted Project revision used as the response source." })
   readonly sourceRevision!: number;
+}
+
+/** Lightweight Project representation used for discovery and navigation. */
+export class ProjectSummaryDto {
+  @ApiProperty({ type: String })
+  readonly id!: string;
+
+  @ApiProperty({ type: String })
+  readonly name!: string;
+
+  @ApiProperty({ type: Number })
+  readonly revision!: number;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  readonly updatedAt!: string;
+}
+
+/** Authenticated Project discovery response. */
+export class ProjectListResponseDto {
+  @ApiProperty({ type: () => [ProjectSummaryDto] })
+  readonly projects!: readonly ProjectSummaryDto[];
+}
+
+/** Intent-focused request for creating an editable Project. */
+export class CreateProjectRequestDto {
+  @ApiProperty({ type: String, example: "My apartment" })
+  @IsString()
+  @MinLength(1)
+  readonly name!: string;
+}
+
+/** Complete aggregate replacement request based on an authoritative revision. */
+export class ReplaceProjectRequestDto {
+  @ApiProperty({ type: Number, minimum: 1 })
+  @IsInt()
+  @Min(1)
+  readonly baseRevision!: number;
+
+  @ApiProperty({ type: () => ProjectDto })
+  @IsObject()
+  readonly project!: ProjectDto;
 }

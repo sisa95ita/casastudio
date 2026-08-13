@@ -40,6 +40,8 @@ import type {
   ViewpointDto,
   WallDto
 } from "./project.dto";
+import type { ProjectSummary } from "../persistence/project.repository";
+import type { ProjectListResponseDto } from "./project.dto";
 
 /**
  * Maps canonical Project aggregates to backend-owned HTTP response DTOs.
@@ -50,6 +52,13 @@ import type {
  */
 @Injectable()
 export class ProjectApiMapper {
+  /** Builds the discovery response without reconstructing full aggregates. */
+  toProjectListResponse(summaries: readonly ProjectSummary[]): ProjectListResponseDto {
+    return {
+      projects: summaries.map((summary) => ({ ...summary }))
+    };
+  }
+
   /**
    * Builds the authoritative read response envelope for a canonical Project.
    */

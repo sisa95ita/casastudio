@@ -74,13 +74,28 @@ describe("Postman development artifacts", () => {
     );
   });
 
-  it("defines only read requests whose URLs resolve from environment variables", () => {
+  it("defines lifecycle and read requests whose URLs resolve from environment variables", () => {
     const requests = flattenRequests(collection.item ?? []);
 
-    expect(requests.map((request) => request.method)).toEqual(["GET", "GET", "GET", "GET", "GET", "GET"]);
+    expect(requests.map((request) => request.method)).toEqual([
+      "GET",
+      "GET",
+      "GET",
+      "POST",
+      "GET",
+      "PUT",
+      "PUT",
+      "GET",
+      "GET",
+      "GET"
+    ]);
     expect(requests.map((request) => request.url)).toEqual([
       "{{apiBaseUrl}}/api/v1/health/live",
       "{{apiBaseUrl}}/api/v1/health/ready",
+      "{{apiBaseUrl}}/api/v1/projects",
+      "{{apiBaseUrl}}/api/v1/projects",
+      "{{apiBaseUrl}}/api/v1/projects/{{projectId}}",
+      "{{apiBaseUrl}}/api/v1/projects/{{projectId}}",
       "{{apiBaseUrl}}/api/v1/projects/{{projectId}}",
       "{{apiBaseUrl}}/api/v1/projects/unknown-project",
       "{{apiBaseUrl}}/api/v1/projects/{{projectId}}/geometry",

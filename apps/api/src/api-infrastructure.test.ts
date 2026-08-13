@@ -123,6 +123,24 @@ describe("CORS", () => {
     await context.app.close();
   });
 
+  it("allows authenticated Project creation and replacement methods", async () => {
+    const context = await createTestApp();
+
+    const response = await request(context.app.getHttpServer())
+      .options("/api/v1/projects/demo-project")
+      .set("origin", "http://localhost:5173")
+      .set("access-control-request-method", "PUT")
+      .set("access-control-request-headers", "authorization,content-type")
+      .expect(204);
+
+    expect(response.headers["access-control-allow-methods"]).toContain("POST");
+    expect(response.headers["access-control-allow-methods"]).toContain("PUT");
+    expect(response.headers["access-control-allow-headers"]).toContain("Authorization");
+    expect(response.headers["access-control-allow-headers"]).toContain("Content-Type");
+
+    await context.app.close();
+  });
+
   it("allows a configured LAN frontend origin explicitly", async () => {
     const context = await createTestApp({
       environment: {

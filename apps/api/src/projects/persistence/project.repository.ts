@@ -25,6 +25,35 @@ export type LoadedProject = {
   readonly metadata: LoadedProjectMetadata;
 };
 
+/** Lightweight authoritative metadata used for Project discovery. */
+export type ProjectSummary = {
+  readonly id: string;
+  readonly name: string;
+  readonly revision: number;
+  readonly updatedAt: string;
+};
+
+/** Parameters for an atomic complete-aggregate Project replacement. */
+export type ReplaceProjectInput = {
+  readonly projectId: string;
+  readonly baseRevision: number;
+  readonly project: Project;
+  readonly actorSubject: string;
+  readonly requiredOwnerSubject?: string;
+};
+
+/**
+ * Outcome of a compare-and-swap Project replacement.
+ *
+ * Expected absence, authorization, and revision conflicts are values rather
+ * than provider exceptions so application services can map them explicitly.
+ */
+export type ReplaceProjectResult =
+  | { readonly status: "updated"; readonly loadedProject: LoadedProject }
+  | { readonly status: "not-found" }
+  | { readonly status: "forbidden" }
+  | { readonly status: "revision-conflict"; readonly currentRevision: number };
+
 /**
  * Repository boundary for loading canonical CasaStudio Projects by domain ID.
  *
@@ -36,4 +65,7 @@ export type LoadedProject = {
 export interface ProjectsRepository {
   findByDomainId(projectId: string): Promise<Project | null>;
   findLoadedByDomainId(projectId: string): Promise<LoadedProject | null>;
+  listProjectSummaries(ownerSubject?: string): Promise<readonly ProjectSummary[]>;
+  createProject(project: Project, ownerSubject: string): Promise<LoadedProject>;
+  replaceProject(input: ReplaceProjectInput): Promise<ReplaceProjectResult>;
 }

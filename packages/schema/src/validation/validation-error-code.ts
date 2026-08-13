@@ -21,6 +21,26 @@ export enum ValidationErrorCode {
   DUPLICATE_WALL_ID = "DUPLICATE_WALL_ID",
 
   /**
+   * A caller supplied an identifier already used by an entity of the same domain kind.
+   */
+  DUPLICATE_IDENTIFIER = "DUPLICATE_IDENTIFIER",
+
+  /**
+   * A caller supplied an identifier outside CasaStudio's persisted identifier format.
+   */
+  INVALID_IDENTIFIER = "INVALID_IDENTIFIER",
+
+  /**
+   * A domain editing operation received an endpoint that is not a valid finite point.
+   */
+  INVALID_WALL_ENDPOINT = "INVALID_WALL_ENDPOINT",
+
+  /**
+   * Removing a Wall would leave one or more canonical Room references dangling.
+   */
+  WALL_IS_REFERENCED = "WALL_IS_REFERENCED",
+
+  /**
    * A domain operation produced a Project that no longer satisfies the structural schema.
    */
   PROJECT_SCHEMA_VALIDATION_FAILED = "PROJECT_SCHEMA_VALIDATION_FAILED",
