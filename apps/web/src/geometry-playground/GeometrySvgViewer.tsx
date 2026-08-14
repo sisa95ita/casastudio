@@ -22,11 +22,14 @@ import {
 } from "./geometry-selection-state";
 import { formatSvgNumber } from "./geometry-svg-helpers";
 import {
+  createViewportTransform2D,
   panViewportState,
   zoomViewportState,
   type ScreenPoint,
-  type ViewportState
+  type ViewportState,
+  type WorldPointXZ
 } from "./viewport-transform-2d";
+import type { WallEndpoint } from "@casastudio/schema";
 
 /**
  * Fixed internal SVG viewport dimensions for the technical geometry viewer.
@@ -78,11 +81,43 @@ export type GeometrySvgViewerProps = {
   ) => void;
   readonly onViewportChange?: (viewport: ViewportState) => void;
   readonly interaction?: ProjectEditorInteraction;
+  readonly editorOverlay?: GeometryEditorOverlay;
+  readonly onEditorCanvasClick?: (point: WorldPointXZ) => void;
+  readonly onEditorPointerMove?: (
+    point: WorldPointXZ,
+    pointerId: number
+  ) => void;
+  readonly onWallEndpointPointerDown?: (
+    endpoint: WallEndpoint,
+    pointerId: number
+  ) => void;
+  readonly onWallEndpointPointerUp?: (
+    point: WorldPointXZ,
+    pointerId: number
+  ) => void;
+  readonly onWallEndpointPointerCancel?: (pointerId: number) => void;
+};
+
+/** Editor-only geometry rendered above the stable presentation model. */
+export type GeometryEditorOverlay = {
+  readonly drawWall?: {
+    readonly start: WorldPointXZ;
+    readonly end: WorldPointXZ;
+  };
+  readonly selectedWall?: {
+    readonly wallId: string;
+    readonly start: WorldPointXZ;
+    readonly end: WorldPointXZ;
+    readonly endpointEditingAvailable: boolean;
+    readonly draggingEndpoint?: WallEndpoint;
+  };
 };
 
 const defaultViewerInteraction: ProjectEditorInteraction = Object.freeze({
   selectionEnabled: true,
-  panEnabled: true
+  panEnabled: true,
+  drawWallEnabled: false,
+  wallEndpointEditingEnabled: false
 });
 
 /**
@@ -100,17 +135,25 @@ export function GeometrySvgViewer({
   selectionState,
   onSelectionStateChange,
   onViewportChange,
-  interaction = defaultViewerInteraction
+  interaction = defaultViewerInteraction,
+  editorOverlay,
+  onEditorCanvasClick,
+  onEditorPointerMove,
+  onWallEndpointPointerDown,
+  onWallEndpointPointerUp,
+  onWallEndpointPointerCancel
 }: GeometrySvgViewerProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const bounds = presentationModel.bounds;
   const lastPanPointRef = useRef<ScreenPoint | undefined>(undefined);
   const currentViewportRef = useRef<ViewportState | undefined>(undefined);
   const suppressNextBackgroundClickRef = useRef(false);
+  const endpointPointerIdRef = useRef<number | undefined>(undefined);
 
   currentViewportRef.current = viewport;
   const resolvedSelectionState =
     selectionState ?? createGeometrySelectionState();
+  const transform = createViewportTransform2D(viewport);
   const vertexRadius = Math.max(3, Math.min(6, viewport.zoom * 5));
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
@@ -164,6 +207,11 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    onEditorPointerMove?.(
+      transform.screenToWorld(getEventPoint(event)),
+      event.pointerId
+    );
+
     if (!onViewportChange || !lastPanPointRef.current) {
       return;
     }
@@ -187,10 +235,56 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    if (endpointPointerIdRef.current === event.pointerId) {
+      onWallEndpointPointerUp?.(
+        transform.screenToWorld(getEventPoint(event)),
+        event.pointerId
+      );
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      endpointPointerIdRef.current = undefined;
+      return;
+    }
+
     if (lastPanPointRef.current) {
       event.currentTarget.releasePointerCapture(event.pointerId);
       lastPanPointRef.current = undefined;
     }
+  };
+
+  const handlePointerCancel = (event: PointerEvent<SVGSVGElement>) => {
+    if (endpointPointerIdRef.current === event.pointerId) {
+      onWallEndpointPointerCancel?.(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      endpointPointerIdRef.current = undefined;
+    }
+    lastPanPointRef.current = undefined;
+  };
+
+  const handleSvgClick = (event: MouseEvent<SVGSVGElement>) => {
+    if (interaction.drawWallEnabled) {
+      onEditorCanvasClick?.(transform.screenToWorld(getEventPoint(event)));
+    }
+  };
+
+  const handleEndpointPointerDown = (
+    event: PointerEvent<SVGCircleElement>,
+    endpoint: WallEndpoint
+  ) => {
+    if (!interaction.wallEndpointEditingEnabled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    endpointPointerIdRef.current = event.pointerId;
+    svg.setPointerCapture(event.pointerId);
+    onWallEndpointPointerDown?.(endpoint, event.pointerId);
   };
 
   const handleBackgroundClick = (event: MouseEvent<SVGRectElement>) => {
@@ -236,11 +330,13 @@ export function GeometrySvgViewer({
   return (
     <svg
       className={`geometry-svg geometry-svg--${
-        interaction.selectionEnabled
-          ? "select"
-          : interaction.panEnabled
-            ? "pan"
-            : "neutral"
+        interaction.drawWallEnabled
+          ? "draw-wall"
+          : interaction.selectionEnabled
+            ? "select"
+            : interaction.panEnabled
+              ? "pan"
+              : "neutral"
       }`}
       viewBox={`0 0 ${geometrySvgViewport.width} ${geometrySvgViewport.height}`}
       role="img"
@@ -249,7 +345,8 @@ export function GeometrySvgViewer({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onClick={handleSvgClick}
     >
       <title id="geometry-svg-title">{t("viewer.svgTitle")}</title>
       <desc id="geometry-svg-description">{t("viewer.svgDescription")}</desc>
@@ -325,10 +422,16 @@ export function GeometrySvgViewer({
         <g data-layer="boundary-edges">
           {presentationModel.boundaryEdges.map((edge) => {
             const isShared = edge.sharedUsageCount === 2;
-            const className = getEntityClassName(
+            const stableClassName = getEntityClassName(
               isShared ? "geometry-edge geometry-edge-shared" : "geometry-edge",
               edge
             );
+            const isDragSource =
+              editorOverlay?.selectedWall?.draggingEndpoint !== undefined &&
+              editorOverlay.selectedWall.wallId === edge.sourceWallId;
+            const className = `${stableClassName}${
+              isDragSource ? " geometry-edge--drag-source" : ""
+            }`;
 
             return (
               <g key={edge.geometryId}>
@@ -441,7 +544,126 @@ export function GeometrySvgViewer({
           ))}
         </g>
       ) : null}
+
+      <GeometryEditorOverlayLayer
+        overlay={editorOverlay}
+        transform={transform}
+        endpointEditingEnabled={interaction.wallEndpointEditingEnabled}
+        onEndpointPointerDown={handleEndpointPointerDown}
+      />
     </svg>
+  );
+}
+
+function GeometryEditorOverlayLayer({
+  overlay,
+  transform,
+  endpointEditingEnabled,
+  onEndpointPointerDown
+}: {
+  readonly overlay?: GeometryEditorOverlay;
+  readonly transform: ReturnType<typeof createViewportTransform2D>;
+  readonly endpointEditingEnabled: boolean;
+  readonly onEndpointPointerDown: (
+    event: PointerEvent<SVGCircleElement>,
+    endpoint: WallEndpoint
+  ) => void;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  const drawStart = overlay?.drawWall
+    ? transform.worldToScreen(overlay.drawWall.start)
+    : undefined;
+  const drawEnd = overlay?.drawWall
+    ? transform.worldToScreen(overlay.drawWall.end)
+    : undefined;
+  const selectedStart = overlay?.selectedWall
+    ? transform.worldToScreen(overlay.selectedWall.start)
+    : undefined;
+  const selectedEnd = overlay?.selectedWall
+    ? transform.worldToScreen(overlay.selectedWall.end)
+    : undefined;
+
+  return (
+    <g data-layer="editor-overlay">
+      {drawStart && drawEnd ? (
+        <g aria-hidden="true" data-testid="draw-wall-preview">
+          <line
+            className="geometry-wall-preview"
+            x1={formatSvgNumber(drawStart.x)}
+            y1={formatSvgNumber(drawStart.y)}
+            x2={formatSvgNumber(drawEnd.x)}
+            y2={formatSvgNumber(drawEnd.y)}
+          />
+          <circle
+            className="geometry-wall-preview-point"
+            cx={formatSvgNumber(drawStart.x)}
+            cy={formatSvgNumber(drawStart.y)}
+            r="4"
+          />
+          <circle
+            className="geometry-wall-preview-point"
+            cx={formatSvgNumber(drawEnd.x)}
+            cy={formatSvgNumber(drawEnd.y)}
+            r="4"
+          />
+        </g>
+      ) : null}
+      {selectedStart && selectedEnd && overlay?.selectedWall ? (
+        <g data-testid="selected-wall-overlay">
+          <line
+            aria-hidden="true"
+            className={`geometry-selected-wall${
+              overlay.selectedWall.draggingEndpoint
+                ? " geometry-selected-wall--dragging"
+                : ""
+            }`}
+            x1={formatSvgNumber(selectedStart.x)}
+            y1={formatSvgNumber(selectedStart.y)}
+            x2={formatSvgNumber(selectedEnd.x)}
+            y2={formatSvgNumber(selectedEnd.y)}
+          />
+          {endpointEditingEnabled &&
+          overlay.selectedWall.endpointEditingAvailable ? (
+            <>
+              <circle
+                className="geometry-wall-endpoint-hit-target"
+                role="button"
+                aria-label={t("wall.startEndpoint")}
+                tabIndex={0}
+                cx={formatSvgNumber(selectedStart.x)}
+                cy={formatSvgNumber(selectedStart.y)}
+                r="10"
+                onPointerDown={(event) => onEndpointPointerDown(event, "start")}
+              />
+              <circle
+                className="geometry-wall-endpoint"
+                aria-hidden="true"
+                cx={formatSvgNumber(selectedStart.x)}
+                cy={formatSvgNumber(selectedStart.y)}
+                r="5"
+              />
+              <circle
+                className="geometry-wall-endpoint-hit-target"
+                role="button"
+                aria-label={t("wall.endEndpoint")}
+                tabIndex={0}
+                cx={formatSvgNumber(selectedEnd.x)}
+                cy={formatSvgNumber(selectedEnd.y)}
+                r="10"
+                onPointerDown={(event) => onEndpointPointerDown(event, "end")}
+              />
+              <circle
+                className="geometry-wall-endpoint"
+                aria-hidden="true"
+                cx={formatSvgNumber(selectedEnd.x)}
+                cy={formatSvgNumber(selectedEnd.y)}
+                r="5"
+              />
+            </>
+          ) : null}
+        </g>
+      ) : null}
+    </g>
   );
 }
 

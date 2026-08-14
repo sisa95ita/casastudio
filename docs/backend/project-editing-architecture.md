@@ -236,6 +236,10 @@ The first operations are:
   entities, non-finite points, and a zero-length result.
 - `deleteWall(project, { levelId, wallId })`: removes an unreferenced Wall and
   rejects deletion when a Room boundary or reciprocal `roomIds` would dangle.
+- `updateWallProperties(project, { levelId, wallId, height?, thickness? })`:
+  updates supported scalar properties while preserving Wall identity,
+  endpoints, references, Openings, and server-owned Project fields. The
+  canonical Wall schema validates the proposed result without clamping.
 
 Each operation returns a discriminated `{ ok, project | errors }` result using
 stable validation error codes. Expected failures do not throw. Success uses
@@ -307,13 +311,18 @@ when it belongs to the draft; otherwise the first draft Level is selected.
 Selection, hover, active tool, and transient interaction state are reset at the
 session boundary.
 
+Changing between Select, Draw Wall, Pan, and the neutral tool state clears
+editor geometry selection, hover, and incompatible transient interaction
+state. Re-dispatching the already active tool is a no-op. Tool changes do not
+replace the draft or rebuild runtime geometry.
+
 The editing session stores:
 
 - `mode`, owning Project ID, complete draft, and `baseRevision`;
 - explicit `dirty` state;
 - active Level and active `select`, `draw-wall`, or `pan` tool;
 - editor selection and hover references;
-- transient interaction state reserved for pointer previews.
+- transient Draw Wall and Wall-endpoint pointer previews.
 
 The draft keeps `id`, `revision`, `createdAt`, and `updatedAt` from the editing
 base. `draft.revision` remains equal to `baseRevision`; local operations do not
@@ -339,6 +348,112 @@ not rebuild runtime geometry. Future pointer previews belong in transient
 overlays; a full engine build follows a committed domain edit, not every
 pointer movement. An expected or unexpected local geometry failure renders a
 safe workspace error while preserving the draft and authoritative query data.
+
+Standalone Walls are valid local draft geometry before they belong to a Room.
+The Geometry Engine therefore emits a physical boundary edge and endpoints for
+every Wall in a Level; Room references additionally produce edge uses, loops,
+and polygons. This lets the runtime adapter and shared viewer render a newly
+created Wall without inserting preview objects into runtime geometry.
+
+### Transient interaction and commit boundary
+
+The Redux Project draft is stable canonical state. An unfinished Draw Wall
+segment or endpoint drag is editor-only transient state:
+
+```text
+pointermove
+≠ Project mutation
+≠ Geometry Engine build
+
+pointer interaction commit
+↓ schema domain operation
+new immutable Project
+↓ Redux draft replacement
+dirty = true
+↓ Geometry Engine build
+```
+
+Draw Wall stores only its canonical start point and current pointer point until
+the second click. Endpoint dragging stores the stable Wall ID, endpoint name,
+pointer ID, and proposed point until pointer release. Escape, tool changes, and
+Level changes discard these previews without touching the draft. Failed domain
+operations also discard the proposal, preserve the draft and prior dirty state,
+and expose translated local error feedback.
+
+Transient Wall proposals use a light, short-dashed construction-line style.
+During endpoint dragging, the stable boundary edge whose `sourceWallId`
+matches the active proposal is visually suppressed while every other stable
+entity remains unchanged. Cancelled and failed interactions clear the overlay,
+which automatically restores the stable edge without mutating the presentation
+model.
+
+### Pointer coordinate boundary
+
+The shared SVG viewer converts pointer coordinates at one renderer-adjacent
+boundary. Client coordinates are normalized through the SVG bounding rectangle
+and fixed viewBox, then passed through the inverse of the current viewport
+transform. The inverse preserves the established orientation in which Project
+`x` maps right and increasing Project `z` maps upward while SVG `y` increases
+downward:
+
+```text
+PointerEvent client XY
+↓ SVG viewBox XY
+↓ inverse scale and pan offsets
+Project level-local {x, z}
+```
+
+Draw and drag commits therefore resolve to the same Project coordinates at any
+zoom or pan state. No handler derives domain coordinates from raw CSS pixels.
+
+### Wall overlay, identity, and operations
+
+`GeometrySvgViewer` retains one stable presentation renderer and adds one small
+editor overlay above polygons, edges, vertices, and centroids. The overlay
+renders the unfinished Draw Wall segment, selected-Wall emphasis, and two
+screen-relative endpoint handles. Overlay entities never enter the Project or
+`GeometryPresentationModel2D`.
+
+Runtime and snapshot boundary edges preserve `sourceWallId`. Edit-mode
+selection continues to store the presented geometry reference; exactly one
+selected boundary edge resolves through `sourceWallId` to `{ levelId, wallId }`
+in the draft. No array index or coordinate matching participates in identity.
+Multiple geometry selections remain supported but intentionally expose no
+ambiguous endpoint handles.
+
+Draw Wall uses collision-resistant `wall-<uuid>` identifiers compatible with
+the lowercase kebab-case schema. New standalone Walls use the established
+centimeter defaults of 300 height and 20 thickness, with no Room IDs or
+Openings. These defaults are centralized in the frontend Wall-editing helper.
+A successful second click calls `createWall`, clears only the preview, and
+leaves Draw Wall active for another independent segment.
+
+Endpoint release calls `moveWallEndpoint` once for a standalone Wall. The
+selected Wall ID and fixed opposite endpoint are preserved; pointer movement
+changes only the overlay. A Wall with non-empty `roomIds`, or one referenced by
+an owning Level Room boundary, remains selectable but exposes no endpoint
+handles. The commit boundary rechecks the same canonical references and does
+not call `moveWallEndpoint` for such a Wall. This prevents independent endpoint
+movement from making a Room boundary discontinuous while retaining inspection,
+property editing, and the existing non-cascading delete restriction.
+Deletion from Delete/Backspace or the Selection inspector shares one action
+that calls `deleteWall`. Keyboard deletion is ignored in editable controls and
+all Wall mutation paths are unavailable in View and phone layouts. Referenced
+Wall rejection is presented without cascading into Room changes.
+
+The Edit-mode Selection inspector dispatches on runtime geometry kind. A
+selected Wall reads canonical length, thickness, height, and endpoints from the
+active draft and Project units. Length and endpoints remain read-only. Height
+and thickness use controlled numeric fields whose intermediary text remains
+local; blur or Enter commits through `updateWallProperties`, while rejected
+values restore the canonical value and leave the draft unchanged.
+
+A selected runtime Vertex remains a presentation entity rather than a
+persisted Project entity. Its inspector shows runtime X/Z coordinates and
+derives incident boundary edges by exact runtime vertex IDs. Connected stable
+Wall IDs come from those edges' `sourceWallId` values; no coordinate matching
+or Vertex mutation API is involved. Other geometry kinds continue through the
+generic geometry inspector.
 
 ### Session exit and navigation safety
 
@@ -398,8 +513,8 @@ unchanged and may be presented using the returned validation paths.
 
 Save and intentional abandonment remain explicit user actions. The current
 frontend does not call PUT and does not claim that either operation succeeded.
-Wall tools will commit pure schema-domain operation results through the
+Wall tools commit pure schema-domain operation results through the
 existing draft-replacement action and use transient state for previews.
 Autosave, granular mutation
 endpoints, HTTP command APIs, collaborative editing, automatic conflict merge,
-and automatic conflict merge are not implied by this contract.
+and persistence of local edits are not implied by this contract.

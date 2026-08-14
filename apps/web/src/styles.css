@@ -790,6 +790,18 @@ img {
   cursor: default;
 }
 
+.geometry-svg--neutral.geometry-svg {
+  cursor: default;
+}
+
+.geometry-svg--draw-wall,
+.geometry-svg--draw-wall .geometry-pan-background,
+.geometry-svg--draw-wall .geometry-polygon,
+.geometry-svg--draw-wall .geometry-edge-hit-target,
+.geometry-svg--draw-wall .geometry-vertex {
+  cursor: crosshair;
+}
+
 .geometry-polygon {
   cursor: pointer;
   fill: rgba(72, 102, 90, 0.1);
@@ -856,6 +868,61 @@ img {
 .geometry-entity-selected {
   stroke: var(--casa-terracotta) !important;
   stroke-width: 7;
+}
+
+.geometry-wall-preview,
+.geometry-selected-wall {
+  fill: none;
+  pointer-events: none;
+  stroke: var(--casa-terracotta);
+  stroke-linecap: round;
+  stroke-width: 5;
+}
+
+.geometry-wall-preview {
+  opacity: 0.68;
+  stroke-dasharray: 2 5;
+  stroke-width: 2.5;
+}
+
+.geometry-wall-preview-point,
+.geometry-wall-endpoint {
+  fill: var(--casa-paper);
+  pointer-events: none;
+  stroke: var(--casa-terracotta);
+  stroke-width: 2;
+}
+
+.geometry-selected-wall {
+  opacity: 0.9;
+  stroke-width: 7;
+}
+
+.geometry-selected-wall--dragging {
+  opacity: 0.72;
+  stroke-dasharray: 2 5;
+  stroke-width: 2.5;
+}
+
+.geometry-edge--drag-source {
+  opacity: 0;
+}
+
+.geometry-wall-endpoint-hit-target {
+  cursor: grab;
+  fill: transparent;
+  stroke: transparent;
+}
+
+.geometry-wall-endpoint-hit-target:active {
+  cursor: grabbing;
+}
+
+.geometry-wall-endpoint-hit-target:focus-visible {
+  fill: rgba(199, 85, 50, 0.16);
+  outline: none;
+  stroke: var(--casa-terracotta);
+  stroke-width: 2;
 }
 .geometry-polygon.geometry-entity-selected {
   fill: rgba(199, 85, 50, 0.16);

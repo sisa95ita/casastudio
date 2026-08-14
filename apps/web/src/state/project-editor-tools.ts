@@ -5,6 +5,8 @@ export type ProjectEditorTool = "select" | "draw-wall" | "pan";
 export type ProjectEditorInteraction = {
   readonly selectionEnabled: boolean;
   readonly panEnabled: boolean;
+  readonly drawWallEnabled: boolean;
+  readonly wallEndpointEditingEnabled: boolean;
 };
 
 /** Durable UI and interaction contract for one editor tool. */
@@ -20,17 +22,32 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
     {
       id: "select",
       enabled: true,
-      interaction: { selectionEnabled: true, panEnabled: true }
+      interaction: {
+        selectionEnabled: true,
+        panEnabled: true,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: true
+      }
     },
     {
       id: "draw-wall",
-      enabled: false,
-      interaction: { selectionEnabled: false, panEnabled: false }
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: false,
+        drawWallEnabled: true,
+        wallEndpointEditingEnabled: false
+      }
     },
     {
       id: "pan",
       enabled: true,
-      interaction: { selectionEnabled: false, panEnabled: true }
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: true,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false
+      }
     }
   ]);
 
@@ -42,7 +59,9 @@ export function getProjectEditorInteraction(
     projectEditorTools.find((definition) => definition.id === tool)
       ?.interaction ?? {
       selectionEnabled: false,
-      panEnabled: false
+      panEnabled: false,
+      drawWallEnabled: false,
+      wallEndpointEditingEnabled: false
     }
   );
 }

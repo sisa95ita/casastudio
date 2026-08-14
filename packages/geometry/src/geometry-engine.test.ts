@@ -20,7 +20,9 @@ type RectangleFixtureOptions = {
   readonly clockwise?: boolean;
 };
 
-const buildRectangularRoomProject = ({ clockwise = false }: RectangleFixtureOptions = {}): Project =>
+const buildRectangularRoomProject = ({
+  clockwise = false
+}: RectangleFixtureOptions = {}): Project =>
   ProjectSchema.parse({
     id: "geometry-slice-project",
     name: "Geometry Slice Project",
@@ -393,14 +395,24 @@ const getOnlyPolygon = (level: LevelGeometry): Polygon => {
   return polygon as Polygon;
 };
 
-const findPolygonBySourceRoomId = (level: LevelGeometry, sourceRoomId: string): Polygon => {
-  const polygon = level.polygons.find((candidate) => candidate.sourceRoomId === sourceRoomId);
+const findPolygonBySourceRoomId = (
+  level: LevelGeometry,
+  sourceRoomId: string
+): Polygon => {
+  const polygon = level.polygons.find(
+    (candidate) => candidate.sourceRoomId === sourceRoomId
+  );
   expect(polygon).toBeDefined();
   return polygon as Polygon;
 };
 
-const findEdgeUseBySourceWallId = (polygon: Polygon, sourceWallId: string): BoundaryEdgeUse => {
-  const edgeUse = polygon.edgeUses.find((candidate) => candidate.boundaryEdge.sourceWallId === sourceWallId);
+const findEdgeUseBySourceWallId = (
+  polygon: Polygon,
+  sourceWallId: string
+): BoundaryEdgeUse => {
+  const edgeUse = polygon.edgeUses.find(
+    (candidate) => candidate.boundaryEdge.sourceWallId === sourceWallId
+  );
   expect(edgeUse).toBeDefined();
   return edgeUse as BoundaryEdgeUse;
 };
@@ -428,6 +440,30 @@ describe("GeometryEngine", () => {
     expect(level.polygons).toEqual([]);
   });
 
+  it("emits standalone Walls before they are referenced by a Room", () => {
+    const project = buildRectangularRoomProject();
+    project.building.levels[0]!.walls.push({
+      id: "standalone-wall",
+      start: { x: 40, z: 40 },
+      end: { x: 160, z: 90 },
+      height: 300,
+      thickness: 20,
+      roomIds: [],
+      openings: []
+    });
+
+    const level = getRectangularLevel(expectOk(GeometryEngine.build(project)));
+    const edge = level.boundaryEdges.find(
+      (candidate) => candidate.sourceWallId === "standalone-wall"
+    );
+
+    expect(edge).toBeDefined();
+    expect(edge?.startVertex).toMatchObject({ x: 40, z: 40 });
+    expect(edge?.endVertex).toMatchObject({ x: 160, z: 90 });
+    expect(level.boundaryEdgeUses).toHaveLength(4);
+    expect(level.polygons).toHaveLength(1);
+  });
+
   it("builds one rectangular room into deterministic level topology", () => {
     const model = expectOk(GeometryEngine.build(buildRectangularRoomProject()));
     const level = getRectangularLevel(model);
@@ -452,7 +488,11 @@ describe("GeometryEngine", () => {
   });
 
   it("derives polygon metrics from counter-clockwise runtime vertex order", () => {
-    const polygon = getOnlyPolygon(getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject()))));
+    const polygon = getOnlyPolygon(
+      getRectangularLevel(
+        expectOk(GeometryEngine.build(buildRectangularRoomProject()))
+      )
+    );
     const expectedBounds: BoundingBox = {
       minX: 0,
       minZ: 0,
@@ -470,7 +510,11 @@ describe("GeometryEngine", () => {
 
   it("derives clockwise polygon winding and preserves signed area without normalization", () => {
     const polygon = getOnlyPolygon(
-      getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject({ clockwise: true }))))
+      getRectangularLevel(
+        expectOk(
+          GeometryEngine.build(buildRectangularRoomProject({ clockwise: true }))
+        )
+      )
     );
 
     expect(polygon.vertices.map((vertex) => vertex.id)).toEqual([
@@ -492,7 +536,9 @@ describe("GeometryEngine", () => {
   });
 
   it("preserves persisted room-boundary order and traversal relationships", () => {
-    const level = getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject())));
+    const level = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildRectangularRoomProject()))
+    );
     const polygon = getOnlyPolygon(level);
     const loop = polygon.outerLoop;
     const [northUse, eastUse, southUse, westUse] = loop.edgeUses as [
@@ -511,31 +557,25 @@ describe("GeometryEngine", () => {
     expect(loop.kind).toBe("OUTER");
     expect(loop.polygon).toBe(polygon);
     expect(loop.edgeUses).toEqual([northUse, eastUse, southUse, westUse]);
-    expect([northUse, eastUse, southUse, westUse].map((edgeUse) => edgeUse.index)).toEqual([0, 1, 2, 3]);
-    expect([northUse, eastUse, southUse, westUse].map((edgeUse) => edgeUse.loop)).toEqual([
-      loop,
-      loop,
-      loop,
-      loop
-    ]);
-    expect([northUse, eastUse, southUse, westUse].map((edgeUse) => edgeUse.boundaryEdge)).toEqual([
-      northEdge,
-      eastEdge,
-      southEdge,
-      westEdge
-    ]);
-    expect([northEdge, eastEdge, southEdge, westEdge].map((edge) => edge.sourceWallId)).toEqual([
-      "north-wall",
-      "east-wall",
-      "south-wall",
-      "west-wall"
-    ]);
-    expect([northUse, eastUse, southUse, westUse].map((edgeUse) => edgeUse.direction)).toEqual([
-      "FORWARD",
-      "FORWARD",
-      "REVERSE",
-      "FORWARD"
-    ]);
+    expect(
+      [northUse, eastUse, southUse, westUse].map((edgeUse) => edgeUse.index)
+    ).toEqual([0, 1, 2, 3]);
+    expect(
+      [northUse, eastUse, southUse, westUse].map((edgeUse) => edgeUse.loop)
+    ).toEqual([loop, loop, loop, loop]);
+    expect(
+      [northUse, eastUse, southUse, westUse].map(
+        (edgeUse) => edgeUse.boundaryEdge
+      )
+    ).toEqual([northEdge, eastEdge, southEdge, westEdge]);
+    expect(
+      [northEdge, eastEdge, southEdge, westEdge].map(
+        (edge) => edge.sourceWallId
+      )
+    ).toEqual(["north-wall", "east-wall", "south-wall", "west-wall"]);
+    expect(
+      [northUse, eastUse, southUse, westUse].map((edgeUse) => edgeUse.direction)
+    ).toEqual(["FORWARD", "FORWARD", "REVERSE", "FORWARD"]);
     expect(northUse.startVertex).toBe(northEdge.startVertex);
     expect(northUse.endVertex).toBe(northEdge.endVertex);
     expect(southUse.startVertex).toBe(southEdge.endVertex);
@@ -543,10 +583,14 @@ describe("GeometryEngine", () => {
   });
 
   it("builds two rectangular rooms that share one physical boundary edge", () => {
-    const level = getRectangularLevel(expectOk(GeometryEngine.build(buildSharedWallProject())));
+    const level = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildSharedWallProject()))
+    );
     const roomA = findPolygonBySourceRoomId(level, "room-a");
     const roomB = findPolygonBySourceRoomId(level, "room-b");
-    const sharedEdge = level.boundaryEdges.find((edge) => edge.sourceWallId === "shared-wall");
+    const sharedEdge = level.boundaryEdges.find(
+      (edge) => edge.sourceWallId === "shared-wall"
+    );
 
     expect(level.polygons).toHaveLength(2);
     expect(level.loops).toHaveLength(2);
@@ -560,7 +604,9 @@ describe("GeometryEngine", () => {
   });
 
   it("reuses the same shared BoundaryEdge object across room-specific edge uses", () => {
-    const level = getRectangularLevel(expectOk(GeometryEngine.build(buildSharedWallProject())));
+    const level = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildSharedWallProject()))
+    );
     const roomA = findPolygonBySourceRoomId(level, "room-a");
     const roomB = findPolygonBySourceRoomId(level, "room-b");
     const roomASharedUse = findEdgeUseBySourceWallId(roomA, "shared-wall");
@@ -574,7 +620,9 @@ describe("GeometryEngine", () => {
   });
 
   it("preserves opposite traversal directions for shared boundary edge uses", () => {
-    const level = getRectangularLevel(expectOk(GeometryEngine.build(buildSharedWallProject())));
+    const level = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildSharedWallProject()))
+    );
     const roomA = findPolygonBySourceRoomId(level, "room-a");
     const roomB = findPolygonBySourceRoomId(level, "room-b");
     const roomASharedUse = findEdgeUseBySourceWallId(roomA, "shared-wall");
@@ -590,7 +638,9 @@ describe("GeometryEngine", () => {
   });
 
   it("deduplicates level-local vertices by exact XZ coordinate equality", () => {
-    const level = getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject())));
+    const level = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildRectangularRoomProject()))
+    );
     const [northEdge, eastEdge, southEdge, westEdge] = level.boundaryEdges as [
       BoundaryEdge,
       BoundaryEdge,
@@ -617,49 +667,84 @@ describe("GeometryEngine", () => {
   });
 
   it("produces deterministic runtime identifiers for identical source input", () => {
-    const first = getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject())));
-    const second = getRectangularLevel(expectOk(GeometryEngine.build(buildRectangularRoomProject())));
+    const first = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildRectangularRoomProject()))
+    );
+    const second = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildRectangularRoomProject()))
+    );
 
     expect(second.id).toBe(first.id);
-    expect(second.vertices.map((vertex) => vertex.id)).toEqual(first.vertices.map((vertex) => vertex.id));
-    expect(second.boundaryEdges.map((edge) => edge.id)).toEqual(first.boundaryEdges.map((edge) => edge.id));
+    expect(second.vertices.map((vertex) => vertex.id)).toEqual(
+      first.vertices.map((vertex) => vertex.id)
+    );
+    expect(second.boundaryEdges.map((edge) => edge.id)).toEqual(
+      first.boundaryEdges.map((edge) => edge.id)
+    );
     expect(second.boundaryEdgeUses.map((edgeUse) => edgeUse.id)).toEqual(
       first.boundaryEdgeUses.map((edgeUse) => edgeUse.id)
     );
-    expect(second.loops.map((loop) => loop.id)).toEqual(first.loops.map((loop) => loop.id));
-    expect(second.polygons.map((polygon) => polygon.id)).toEqual(first.polygons.map((polygon) => polygon.id));
-    expect(second.polygons.map((polygon) => polygon.vertices.map((vertex) => vertex.id))).toEqual(
-      first.polygons.map((polygon) => polygon.vertices.map((vertex) => vertex.id))
+    expect(second.loops.map((loop) => loop.id)).toEqual(
+      first.loops.map((loop) => loop.id)
+    );
+    expect(second.polygons.map((polygon) => polygon.id)).toEqual(
+      first.polygons.map((polygon) => polygon.id)
+    );
+    expect(
+      second.polygons.map((polygon) =>
+        polygon.vertices.map((vertex) => vertex.id)
+      )
+    ).toEqual(
+      first.polygons.map((polygon) =>
+        polygon.vertices.map((vertex) => vertex.id)
+      )
     );
     expect(second.polygons.map((polygon) => polygon.signedArea)).toEqual(
       first.polygons.map((polygon) => polygon.signedArea)
     );
-    expect(second.polygons.map((polygon) => polygon.area)).toEqual(first.polygons.map((polygon) => polygon.area));
+    expect(second.polygons.map((polygon) => polygon.area)).toEqual(
+      first.polygons.map((polygon) => polygon.area)
+    );
     expect(second.polygons.map((polygon) => polygon.winding)).toEqual(
       first.polygons.map((polygon) => polygon.winding)
     );
-    expect(second.polygons.map((polygon) => polygon.bounds)).toEqual(first.polygons.map((polygon) => polygon.bounds));
+    expect(second.polygons.map((polygon) => polygon.bounds)).toEqual(
+      first.polygons.map((polygon) => polygon.bounds)
+    );
     expect(second.polygons.map((polygon) => polygon.centroid)).toEqual(
       first.polygons.map((polygon) => polygon.centroid)
     );
   });
 
   it("produces deterministic shared-edge relationships for identical source input", () => {
-    const first = getRectangularLevel(expectOk(GeometryEngine.build(buildSharedWallProject())));
-    const second = getRectangularLevel(expectOk(GeometryEngine.build(buildSharedWallProject())));
+    const first = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildSharedWallProject()))
+    );
+    const second = getRectangularLevel(
+      expectOk(GeometryEngine.build(buildSharedWallProject()))
+    );
     const firstRoomA = findPolygonBySourceRoomId(first, "room-a");
     const firstRoomB = findPolygonBySourceRoomId(first, "room-b");
     const secondRoomA = findPolygonBySourceRoomId(second, "room-a");
     const secondRoomB = findPolygonBySourceRoomId(second, "room-b");
-    const firstSharedUses = [findEdgeUseBySourceWallId(firstRoomA, "shared-wall"), findEdgeUseBySourceWallId(firstRoomB, "shared-wall")];
+    const firstSharedUses = [
+      findEdgeUseBySourceWallId(firstRoomA, "shared-wall"),
+      findEdgeUseBySourceWallId(firstRoomB, "shared-wall")
+    ];
     const secondSharedUses = [
       findEdgeUseBySourceWallId(secondRoomA, "shared-wall"),
       findEdgeUseBySourceWallId(secondRoomB, "shared-wall")
     ];
 
-    expect(second.boundaryEdges.map((edge) => edge.id)).toEqual(first.boundaryEdges.map((edge) => edge.id));
-    expect(second.polygons.map((polygon) => polygon.id)).toEqual(first.polygons.map((polygon) => polygon.id));
-    expect(secondSharedUses.map((edgeUse) => edgeUse.id)).toEqual(firstSharedUses.map((edgeUse) => edgeUse.id));
+    expect(second.boundaryEdges.map((edge) => edge.id)).toEqual(
+      first.boundaryEdges.map((edge) => edge.id)
+    );
+    expect(second.polygons.map((polygon) => polygon.id)).toEqual(
+      first.polygons.map((polygon) => polygon.id)
+    );
+    expect(secondSharedUses.map((edgeUse) => edgeUse.id)).toEqual(
+      firstSharedUses.map((edgeUse) => edgeUse.id)
+    );
     expect(secondSharedUses.map((edgeUse) => edgeUse.direction)).toEqual(
       firstSharedUses.map((edgeUse) => edgeUse.direction)
     );
@@ -679,11 +764,23 @@ describe("GeometryEngine", () => {
     project.building.levels[0]?.rooms.splice(0);
 
     expect(level.polygons).toHaveLength(1);
-    expect(() => (model.levels as LevelGeometry[]).push(level)).toThrow(TypeError);
-    expect(() => (level.vertices as Vertex[]).push(level.vertices[0] as Vertex)).toThrow(TypeError);
-    expect(() => (getOnlyPolygon(level).innerLoops as Loop[]).push(getOnlyPolygon(level).outerLoop)).toThrow(TypeError);
-    expect(() => ((getOnlyPolygon(level).bounds as { minX: number }).minX = -1)).toThrow(TypeError);
-    expect(() => ((getOnlyPolygon(level).centroid as { x: number }).x = -1)).toThrow(TypeError);
+    expect(() => (model.levels as LevelGeometry[]).push(level)).toThrow(
+      TypeError
+    );
+    expect(() =>
+      (level.vertices as Vertex[]).push(level.vertices[0] as Vertex)
+    ).toThrow(TypeError);
+    expect(() =>
+      (getOnlyPolygon(level).innerLoops as Loop[]).push(
+        getOnlyPolygon(level).outerLoop
+      )
+    ).toThrow(TypeError);
+    expect(
+      () => ((getOnlyPolygon(level).bounds as { minX: number }).minX = -1)
+    ).toThrow(TypeError);
+    expect(
+      () => ((getOnlyPolygon(level).centroid as { x: number }).x = -1)
+    ).toThrow(TypeError);
   });
 
   it("returns geometry build errors instead of throwing for missing source entities", () => {
@@ -697,7 +794,8 @@ describe("GeometryEngine", () => {
       errors: [
         {
           code: GeometryBuildErrorCode.MISSING_SOURCE_ENTITY,
-          message: 'Room "living-room" boundary references missing wall "west-wall".',
+          message:
+            'Room "living-room" boundary references missing wall "west-wall".',
           path: "building.levels[0].rooms[0].boundary[3].wallId",
           sourceId: "west-wall"
         }
@@ -729,7 +827,8 @@ describe("GeometryEngine", () => {
       errors: [
         {
           code: GeometryBuildErrorCode.NON_MANIFOLD_BOUNDARY_EDGE,
-          message: 'Boundary edge "shared-wall" is used by 3 room boundaries, but at most 2 are supported.',
+          message:
+            'Boundary edge "shared-wall" is used by 3 room boundaries, but at most 2 are supported.',
           path: "building.levels[0].walls[1]",
           sourceId: "shared-wall"
         }

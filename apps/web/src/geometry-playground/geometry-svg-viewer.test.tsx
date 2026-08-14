@@ -118,6 +118,83 @@ describe("GeometrySvgViewer", () => {
     expect(markup.match(/data-shared="true"/g)).toHaveLength(1);
   });
 
+  it("renders lightweight transient proposals and suppresses only the active drag source", () => {
+    const level = getPlaygroundLevel();
+    const edge = level.boundaryEdges[0]!;
+    const viewerProps = createViewerProps(level);
+    const { rerender } = render(
+      <GeometrySvgViewer
+        {...viewerProps}
+        options={defaultGeometryDisplayOptions}
+        interaction={{
+          selectionEnabled: true,
+          panEnabled: true,
+          drawWallEnabled: false,
+          wallEndpointEditingEnabled: true
+        }}
+        editorOverlay={{
+          drawWall: { start: { x: 0, z: 0 }, end: { x: 25, z: 25 } },
+          selectedWall: {
+            wallId: edge.sourceWallId,
+            start: edge.startVertex,
+            end: { x: edge.endVertex.x + 10, z: edge.endVertex.z + 10 },
+            endpointEditingAvailable: true,
+            draggingEndpoint: "end"
+          }
+        }}
+      />
+    );
+
+    expect(
+      screen
+        .getByTestId("draw-wall-preview")
+        .querySelector("line")
+        ?.getAttribute("class")
+    ).toBe("geometry-wall-preview");
+    expect(
+      screen
+        .getByTestId("selected-wall-overlay")
+        .querySelector("line")
+        ?.getAttribute("class")
+    ).toContain("geometry-selected-wall--dragging");
+    const stableEdges = screen.getAllByTestId("boundary-edge");
+    expect(
+      stableEdges.filter((stableEdge) =>
+        stableEdge.getAttribute("class")?.includes("geometry-edge--drag-source")
+      )
+    ).toHaveLength(1);
+
+    rerender(
+      <GeometrySvgViewer
+        {...viewerProps}
+        options={defaultGeometryDisplayOptions}
+        interaction={{
+          selectionEnabled: true,
+          panEnabled: true,
+          drawWallEnabled: false,
+          wallEndpointEditingEnabled: true
+        }}
+        editorOverlay={{
+          selectedWall: {
+            wallId: edge.sourceWallId,
+            start: edge.startVertex,
+            end: edge.endVertex,
+            endpointEditingAvailable: true
+          }
+        }}
+      />
+    );
+    expect(
+      screen
+        .getAllByTestId("boundary-edge")
+        .some((stableEdge) =>
+          stableEdge
+            .getAttribute("class")
+            ?.includes("geometry-edge--drag-source")
+        )
+    ).toBe(false);
+  });
+
   it("uses layer options to hide and show diagnostic vertices and bounds", () => {
     const level = getPlaygroundLevel();
 

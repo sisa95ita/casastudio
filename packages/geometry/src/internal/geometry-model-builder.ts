@@ -1,6 +1,9 @@
 import type { Level, Project, Wall } from "@casastudio/schema";
 
-import { GeometryBuildErrorCode, type GeometryBuildError } from "../geometry-build-error.js";
+import {
+  GeometryBuildErrorCode,
+  type GeometryBuildError
+} from "../geometry-build-error.js";
 import type { GeometryBuildResult } from "../geometry-build-result.js";
 import {
   BoundaryEdge,
@@ -61,14 +64,19 @@ export class GeometryModelBuilder {
     };
   }
 
-  private buildLevelGeometry(level: Level, levelIndex: number): LevelGeometry | undefined {
+  private buildLevelGeometry(
+    level: Level,
+    levelIndex: number
+  ): LevelGeometry | undefined {
     const vertexEntriesByCoordinate = new Map<string, MutableVertexEntry>();
     const boundaryEdgesByWallId = new Map<string, BoundaryEdge>();
     const boundaryEdgeUses: BoundaryEdgeUse[] = [];
     const loops: Loop[] = [];
     const polygons: Polygon[] = [];
     const wallsById = new Map(level.walls.map((wall) => [wall.id, wall]));
-    const wallIndexesById = new Map(level.walls.map((wall, wallIndex) => [wall.id, wallIndex]));
+    const wallIndexesById = new Map(
+      level.walls.map((wall, wallIndex) => [wall.id, wallIndex])
+    );
 
     const getOrCreateVertex = (x: number, z: number): MutableVertexEntry => {
       const key = coordinateKey(x, z);
@@ -80,7 +88,12 @@ export class GeometryModelBuilder {
 
       const incidentEdges: BoundaryEdge[] = [];
       const entry: MutableVertexEntry = {
-        vertex: new Vertex(runtimeId.vertex(level, x, z), x, z, () => incidentEdges),
+        vertex: new Vertex(
+          runtimeId.vertex(level, x, z),
+          x,
+          z,
+          () => incidentEdges
+        ),
         incidentEdges
       };
 
@@ -111,6 +124,10 @@ export class GeometryModelBuilder {
       endVertexEntry.incidentEdges.push(edge);
       return edge;
     };
+
+    // Physical Walls remain visible and selectable even when no Room boundary
+    // references them yet, as is normal during local drafting.
+    level.walls.forEach(getOrCreateBoundaryEdge);
 
     level.rooms.forEach((room, roomIndex) => {
       if (room.boundary.length === 0) {
@@ -184,7 +201,9 @@ export class GeometryModelBuilder {
         return;
       }
 
-      const metrics = calculatePolygonMetrics(roomEdgeUses.map((edgeUse) => edgeUse.startVertex));
+      const metrics = calculatePolygonMetrics(
+        roomEdgeUses.map((edgeUse) => edgeUse.startVertex)
+      );
 
       if (metrics.centroid === undefined || metrics.winding === "DEGENERATE") {
         this.addError({
@@ -196,20 +215,33 @@ export class GeometryModelBuilder {
         return;
       }
 
-      loopCell.value = new Loop(runtimeId.outerLoop(room), "OUTER", roomEdgeUses, () =>
-        this.requireBuilt(polygonCell.value, "Loop.polygon")
+      loopCell.value = new Loop(
+        runtimeId.outerLoop(room),
+        "OUTER",
+        roomEdgeUses,
+        () => this.requireBuilt(polygonCell.value, "Loop.polygon")
       );
-      polygonCell.value = new Polygon(runtimeId.polygon(room), room.id, loopCell.value, [], {
-        ...metrics,
-        centroid: metrics.centroid
-      });
+      polygonCell.value = new Polygon(
+        runtimeId.polygon(room),
+        room.id,
+        loopCell.value,
+        [],
+        {
+          ...metrics,
+          centroid: metrics.centroid
+        }
+      );
 
       boundaryEdgeUses.push(...roomEdgeUses);
       loops.push(loopCell.value);
       polygons.push(polygonCell.value);
     });
 
-    this.validateBoundaryEdgeUseCounts(boundaryEdgeUses, wallIndexesById, levelIndex);
+    this.validateBoundaryEdgeUseCounts(
+      boundaryEdgeUses,
+      wallIndexesById,
+      levelIndex
+    );
 
     if (this.errors.length > 0) {
       return undefined;
@@ -227,11 +259,16 @@ export class GeometryModelBuilder {
     );
   }
 
-  private findDiscontinuityIndex(edgeUses: readonly BoundaryEdgeUse[]): number | undefined {
+  private findDiscontinuityIndex(
+    edgeUses: readonly BoundaryEdgeUse[]
+  ): number | undefined {
     const discontinuityIndex = edgeUses.findIndex((edgeUse, index) => {
       const nextEdgeUse = edgeUses[(index + 1) % edgeUses.length];
 
-      return nextEdgeUse === undefined || edgeUse.endVertex !== nextEdgeUse.startVertex;
+      return (
+        nextEdgeUse === undefined ||
+        edgeUse.endVertex !== nextEdgeUse.startVertex
+      );
     });
 
     return discontinuityIndex === -1 ? undefined : discontinuityIndex;
@@ -257,7 +294,10 @@ export class GeometryModelBuilder {
 
     boundaryEdgeUses.forEach((edgeUse) => {
       const sourceWallId = edgeUse.boundaryEdge.sourceWallId;
-      useCountsByWallId.set(sourceWallId, (useCountsByWallId.get(sourceWallId) ?? 0) + 1);
+      useCountsByWallId.set(
+        sourceWallId,
+        (useCountsByWallId.get(sourceWallId) ?? 0) + 1
+      );
     });
 
     useCountsByWallId.forEach((useCount, sourceWallId) => {
@@ -280,7 +320,9 @@ export class GeometryModelBuilder {
 
   private requireBuilt<Value>(value: Value | undefined, name: string): Value {
     if (value === undefined) {
-      throw new Error(`Geometry build invariant violated: ${name} was read before finalization.`);
+      throw new Error(
+        `Geometry build invariant violated: ${name} was read before finalization.`
+      );
     }
 
     return value;

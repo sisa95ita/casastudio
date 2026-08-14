@@ -162,6 +162,25 @@ function successFetch(): typeof fetch {
   }) as typeof fetch;
 }
 
+function prepareSvgPointerCoordinates(svg: SVGSVGElement) {
+  vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 800,
+    bottom: 520,
+    width: 800,
+    height: 520,
+    toJSON: () => ({})
+  });
+  Object.defineProperties(svg, {
+    setPointerCapture: { configurable: true, value: vi.fn() },
+    releasePointerCapture: { configurable: true, value: vi.fn() },
+    hasPointerCapture: { configurable: true, value: vi.fn(() => true) }
+  });
+}
+
 function problemFetch(status: number): typeof fetch {
   const title = status === 403 ? "Forbidden" : "Not found";
   return vi.fn().mockResolvedValue(
@@ -274,9 +293,7 @@ describe("ProjectViewerPage", () => {
 
     const select = screen.getByRole("button", { name: "Select" });
     const pan = screen.getByRole("button", { name: "Pan" });
-    const drawWall = screen.getByRole("button", {
-      name: "Draw Wall — coming soon"
-    });
+    const drawWall = screen.getByRole("button", { name: "Draw Wall" });
 
     expect(store.getState().projectEditor.activeTool).toBeNull();
     expect(select.getAttribute("aria-pressed")).toBe("false");
@@ -298,7 +315,10 @@ describe("ProjectViewerPage", () => {
     expect(pan.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(drawWall);
-    expect(drawWall.hasAttribute("disabled")).toBe(true);
+    expect(drawWall.hasAttribute("disabled")).toBe(false);
+    expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
+
+    fireEvent.click(drawWall);
     expect(store.getState().projectEditor.activeTool).toBeNull();
   });
 
@@ -314,12 +334,10 @@ describe("ProjectViewerPage", () => {
     fireEvent.mouseLeave(select);
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
 
-    const drawWall = screen.getByRole("button", {
-      name: "Draw Wall — coming soon"
-    });
-    fireEvent.mouseOver(drawWall.parentElement!);
+    const drawWall = screen.getByRole("button", { name: "Draw Wall" });
+    fireEvent.mouseOver(drawWall);
     expect((await screen.findByRole("tooltip")).textContent).toBe(
-      "Draw walls by placing start and end points. Not available yet."
+      "Draw walls by choosing a start and end point."
     );
   });
 
@@ -365,6 +383,368 @@ describe("ProjectViewerPage", () => {
     expect(buildSpy).toHaveBeenCalledTimes(buildCount);
   });
 
+  it("keeps Draw Wall pointer previews out of the draft and Geometry Engine", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const draft = store.getState().projectEditor.draft;
+    const buildCount = buildSpy.mock.calls.length;
+
+    fireEvent.click(svg, { clientX: 100, clientY: 350 });
+    fireEvent.pointerMove(svg, {
+      clientX: 160,
+      clientY: 300,
+      pointerId: 1
+    });
+    fireEvent.pointerMove(svg, {
+      clientX: 180,
+      clientY: 280,
+      pointerId: 1
+    });
+
+    expect(screen.getByTestId("draw-wall-preview")).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("draw-wall-preview")).toBeNull();
+    expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
+    expect(store.getState().projectEditor.draft).toBe(draft);
+  });
+
+  it("commits a new stable Wall once and leaves Draw Wall active", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const authoritative = structuredClone(demoProjectFixture);
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const originalWallCount =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls.length;
+    const buildCount = buildSpy.mock.calls.length;
+
+    fireEvent.click(svg, { clientX: 100, clientY: 350 });
+    fireEvent.pointerMove(svg, {
+      clientX: 220,
+      clientY: 300,
+      pointerId: 1
+    });
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+    fireEvent.click(svg, { clientX: 220, clientY: 300 });
+
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls
+      ).toHaveLength(originalWallCount + 1)
+    );
+    const state = store.getState().projectEditor;
+    const wall = state.draft!.building.levels[0]!.walls.at(-1)!;
+    expect(wall.id).toMatch(/^wall-[a-z0-9-]+$/);
+    expect(wall.start.x).toBeCloseTo(66.67, 1);
+    expect(wall.start.z).toBeCloseTo(50, 1);
+    expect(wall.end.x).toBeCloseTo(200, 1);
+    expect(wall.end.z).toBeCloseTo(105.56, 1);
+    expect(state.activeTool).toBe("draw-wall");
+    expect(state.transient.interaction).toBeNull();
+    expect(state.dirty).toBe(true);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
+    expect(state.draft).toMatchObject({
+      id: authoritative.id,
+      revision: authoritative.revision,
+      createdAt: authoritative.createdAt,
+      updatedAt: authoritative.updatedAt
+    });
+    expect(authoritative).toEqual(demoProjectFixture);
+    expect(document.querySelectorAll(".geometry-edge-hit-target")).toHaveLength(
+      originalWallCount + 1
+    );
+  });
+
+  it("rejects a zero-length Wall without dirtying the draft", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const draft = store.getState().projectEditor.draft;
+
+    fireEvent.click(svg, { clientX: 120, clientY: 320 });
+    fireEvent.click(svg, { clientX: 120, clientY: 320 });
+
+    expect(
+      await screen.findByText("Wall cannot have zero length.")
+    ).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+  });
+
+  it("selects a Wall, previews one endpoint, commits once, and deletes it", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.click(svg, { clientX: 100, clientY: 350 });
+    fireEvent.click(svg, { clientX: 220, clientY: 300 });
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll(".geometry-edge-hit-target")
+      ).toHaveLength(8)
+    );
+    const newWall = store
+      .getState()
+      .projectEditor.draft!.building.levels[0]!.walls.at(-1)!;
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const hitTargets = document.querySelectorAll(".geometry-edge-hit-target");
+    fireEvent.click(hitTargets[hitTargets.length - 1]!);
+    expect(screen.getByTestId("selected-wall-overlay")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "End endpoint" })).toBeTruthy();
+
+    const buildCount = buildSpy.mock.calls.length;
+    const startBefore = { ...newWall.start };
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Start endpoint" }),
+      {
+        clientX: 100,
+        clientY: 350,
+        pointerId: 9
+      }
+    );
+    fireEvent.pointerMove(svg, {
+      clientX: 130,
+      clientY: 330,
+      pointerId: 9
+    });
+    expect(
+      screen
+        .getByTestId("selected-wall-overlay")
+        .querySelector(".geometry-selected-wall--dragging")
+    ).toBeTruthy();
+    expect(
+      document.querySelectorAll(".geometry-edge--drag-source")
+    ).toHaveLength(1);
+    expect(
+      store.getState().projectEditor.draft!.building.levels[0]!.walls.at(-1)!
+        .start
+    ).toEqual(startBefore);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    expect(
+      store.getState().projectEditor.draft!.building.levels[0]!.walls.at(-1)!
+        .start
+    ).toEqual(startBefore);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+    expect(
+      document.querySelectorAll(".geometry-edge--drag-source")
+    ).toHaveLength(0);
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Start endpoint" }),
+      {
+        clientX: 100,
+        clientY: 350,
+        pointerId: 9
+      }
+    );
+    fireEvent.pointerMove(svg, {
+      clientX: 130,
+      clientY: 330,
+      pointerId: 9
+    });
+
+    fireEvent.pointerUp(svg, {
+      clientX: 140,
+      clientY: 325,
+      pointerId: 9
+    });
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls.at(-1)!
+          .start
+      ).not.toEqual(startBefore)
+    );
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
+    expect(
+      document.querySelectorAll(".geometry-edge--drag-source")
+    ).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
+
+    const movedDraft = store.getState().projectEditor.draft;
+    const startHandle = screen.getByRole("button", { name: "Start endpoint" });
+    const endHandle = screen.getByRole("button", { name: "End endpoint" });
+    fireEvent.pointerDown(endHandle, { pointerId: 10 });
+    fireEvent.pointerUp(svg, {
+      clientX: Number(startHandle.getAttribute("cx")),
+      clientY: Number(startHandle.getAttribute("cy")),
+      pointerId: 10
+    });
+    expect(
+      await screen.findByText("Wall cannot have zero length.")
+    ).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(movedDraft);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
+    expect(
+      document.querySelectorAll(".geometry-edge--drag-source")
+    ).toHaveLength(0);
+
+    fireEvent.keyDown(window, { key: "Delete" });
+    await waitFor(() =>
+      expect(
+        store
+          .getState()
+          .projectEditor.draft!.building.levels[0]!.walls.some(
+            (wall) => wall.id === newWall.id
+          )
+      ).toBe(false)
+    );
+    expect(store.getState().projectEditor.selection).toEqual([]);
+    expect(screen.queryByTestId("selected-wall-overlay")).toBeNull();
+  });
+
+  it("keeps referenced Walls and native text deletion safe", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const wallCount =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls.length;
+    fireEvent.click(document.querySelector(".geometry-edge-hit-target")!);
+    const referencedDraft = store.getState().projectEditor.draft;
+    const buildCount = buildSpy.mock.calls.length;
+    fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
+    expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull();
+    expect(
+      screen.getByText(/endpoints cannot be moved independently yet/i)
+    ).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(referencedDraft);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    fireEvent.keyDown(input, { key: "Backspace" });
+    expect(
+      store.getState().projectEditor.draft!.building.levels[0]!.walls
+    ).toHaveLength(wallCount);
+    input.remove();
+
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(
+      await screen.findByText(
+        "Cannot delete this wall because it belongs to a room."
+      )
+    ).toBeTruthy();
+    expect(
+      store.getState().projectEditor.draft!.building.levels[0]!.walls
+    ).toHaveLength(wallCount);
+    expect(store.getState().projectEditor.selection).toHaveLength(1);
+  });
+
+  it("shows runtime Vertex topology in the Edit selection inspector", async () => {
+    renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getAllByTestId("geometry-vertex")[0]!);
+    fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
+
+    expect(screen.getByText("Vertex")).toBeTruthy();
+    expect(screen.getByText(/X: 0 cm · Z: 0 cm/)).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+    expect(
+      screen.queryByText("Select a wall in the plan to inspect it.")
+    ).toBeNull();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+  });
+
+  it("clears selected geometry when entering Draw Wall or Pan", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.click(svg, { clientX: 100, clientY: 350 });
+    fireEvent.click(svg, { clientX: 220, clientY: 300 });
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll(".geometry-edge-hit-target")
+      ).toHaveLength(8)
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(document.querySelectorAll(".geometry-edge-hit-target")[7]!);
+    expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
+    const buildCount = buildSpy.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    expect(store.getState().projectEditor.selection).toEqual([]);
+    expect(screen.queryByTestId("selected-wall-overlay")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull();
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(document.querySelectorAll(".geometry-edge-hit-target")[7]!);
+    expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pan" }));
+    expect(store.getState().projectEditor.selection).toEqual([]);
+    expect(screen.queryByTestId("selected-wall-overlay")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull();
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+  });
+
+  it("commits Wall properties on blur and rejects invalid intermediary input", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(document.querySelector(".geometry-edge-hit-target")!);
+    fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
+    const height = screen.getByRole("spinbutton", { name: "Height (cm)" });
+    const wallId =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls[0]!.id;
+    const originalDraft = store.getState().projectEditor.draft;
+    const buildCount = buildSpy.mock.calls.length;
+
+    fireEvent.change(height, { target: { value: "325" } });
+    expect(store.getState().projectEditor.draft).toBe(originalDraft);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+    fireEvent.blur(height);
+    await waitFor(() =>
+      expect(store.getState().projectEditor.draft).not.toBe(originalDraft)
+    );
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(
+      store
+        .getState()
+        .projectEditor.draft!.building.levels[0]!.walls.find(
+          (wall) => wall.id === wallId
+        )?.height
+    ).toBe(325);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
+
+    const validDraft = store.getState().projectEditor.draft;
+    const thickness = screen.getByRole("spinbutton", {
+      name: "Thickness (cm)"
+    });
+    fireEvent.change(thickness, { target: { value: "0" } });
+    expect(store.getState().projectEditor.draft).toBe(validDraft);
+    fireEvent.blur(thickness);
+    expect(await screen.findByText("Invalid wall thickness.")).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(validDraft);
+    expect(thickness).toHaveProperty("value", "20");
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
+  });
+
   it("preserves the local draft when edit geometry cannot be built", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
@@ -404,10 +784,10 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     expect(
-      (
-        await screen.findByRole("button", { name: "Draw Wall — coming soon" })
-      ).hasAttribute("disabled")
-    ).toBe(true);
+      (await screen.findByRole("button", { name: "Draw Wall" })).hasAttribute(
+        "disabled"
+      )
+    ).toBe(false);
     expect(
       screen
         .getByRole("button", { name: "Undo — coming soon" })
@@ -593,15 +973,17 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Shortcuts" });
-    expect(within(dialog).getByText("Clear selection")).toBeTruthy();
+    expect(
+      within(dialog).getByText("Cancel interaction / clear selection")
+    ).toBeTruthy();
     expect(within(dialog).getByText("Escape")).toBeTruthy();
     expect(within(dialog).getByText("Fit viewport")).toBeTruthy();
     expect(within(dialog).getByText("F")).toBeTruthy();
     expect(within(dialog).getByText("Reset viewport")).toBeTruthy();
     expect(within(dialog).getByText("R")).toBeTruthy();
-    expect(
-      within(dialog).queryByText(/Delete|Backspace|Draw Wall|Zoom/i)
-    ).toBeNull();
+    expect(within(dialog).getByText("Delete selected wall")).toBeTruthy();
+    expect(within(dialog).getByText("Delete / Backspace")).toBeTruthy();
+    expect(within(dialog).queryByText(/Draw Wall|Zoom/i)).toBeNull();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() =>

@@ -9,7 +9,11 @@ import {
   editingSessionMarkedDirty,
   editorActiveLevelChanged,
   editorActiveToolChanged,
+  editorDrawWallStarted,
+  editorEndpointDragStarted,
   editorSelectionChanged,
+  editorTransientInteractionCleared,
+  editorTransientPointerMoved,
   initialProjectEditorState,
   projectEditorReducer,
   projectRouteChanged
@@ -115,6 +119,58 @@ describe("Project editor state", () => {
     expect(state.transient).toEqual({ interaction: null });
   });
 
+  it("keeps draw and endpoint previews transient and clears them hierarchically", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("draw-wall"));
+    state = projectEditorReducer(
+      state,
+      editorDrawWallStarted({ x: 10, z: 20 })
+    );
+    const draft = state.draft;
+
+    state = projectEditorReducer(
+      state,
+      editorTransientPointerMoved({ point: { x: 30, z: 40 }, pointerId: 1 })
+    );
+    expect(state.transient.interaction).toMatchObject({
+      kind: "draw-wall",
+      startPoint: { x: 10, z: 20 },
+      currentPointerPoint: { x: 30, z: 40 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+
+    state = projectEditorReducer(state, editorTransientInteractionCleared());
+    state = projectEditorReducer(state, editorActiveToolChanged("select"));
+    state = projectEditorReducer(
+      state,
+      editorEndpointDragStarted({
+        levelId: "ground-floor",
+        wallId: "left-room-north-wall",
+        endpoint: "start",
+        pointerId: 7,
+        point: { x: 0, z: 0 }
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editorTransientPointerMoved({ point: { x: 50, z: 60 }, pointerId: 7 })
+    );
+
+    expect(state.transient.interaction).toMatchObject({
+      kind: "move-wall-endpoint",
+      currentPointerPoint: { x: 50, z: 60 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+  });
+
   it("clears selection and transient state when the active Level changes", () => {
     const secondLevel = {
       ...demoProjectFixture.building.levels[0]!,
@@ -147,6 +203,42 @@ describe("Project editor state", () => {
     expect(state.hover).toBeUndefined();
     expect(state.transient).toEqual({ interaction: null });
   });
+
+  it.each(["draw-wall", "pan"] as const)(
+    "clears Select geometry and transient state when switching to %s",
+    (nextTool) => {
+      let state = projectEditorReducer(
+        undefined,
+        editingSessionEntered({
+          project: demoProjectFixture,
+          baseRevision: demoProjectFixture.revision
+        })
+      );
+      state = projectEditorReducer(state, editorActiveToolChanged("select"));
+      const selected = selectPolygon("polygon-one");
+      state = projectEditorReducer(
+        state,
+        editorSelectionChanged({ selected: [selected], hovered: selected })
+      );
+      state = projectEditorReducer(
+        state,
+        editorEndpointDragStarted({
+          levelId: state.activeLevelId!,
+          wallId: "standalone-wall",
+          endpoint: "start",
+          pointerId: 2,
+          point: { x: 0, z: 0 }
+        })
+      );
+
+      state = projectEditorReducer(state, editorActiveToolChanged(nextTool));
+
+      expect(state.activeTool).toBe(nextTool);
+      expect(state.selection).toEqual([]);
+      expect(state.hover).toBeUndefined();
+      expect(state.transient.interaction).toBeNull();
+    }
+  );
 
   it("leaves a clean Edit session but preserves a dirty session", () => {
     const editingState = projectEditorReducer(

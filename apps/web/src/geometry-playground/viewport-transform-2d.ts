@@ -117,6 +117,16 @@ export class ViewportTransform2D {
   }
 
   /**
+   * Inverts the SVG projection into canonical level-local Project coordinates.
+   */
+  screenToWorld(point: ScreenPoint): WorldPointXZ {
+    return {
+      x: (point.x - this.offsetX) / this.scale,
+      z: -(point.y - this.offsetY) / this.scale
+    };
+  }
+
+  /**
    * Scales a world-space length with the same uniform factor used for points.
    */
   scaleLength(length: number): number {
@@ -137,7 +147,9 @@ export const defaultViewportState: ViewportState = Object.freeze({
  * Converts a `ViewportState` into the immutable projection object consumed by
  * presentation adapters and SVG helpers.
  */
-export const createViewportTransform2D = (viewport: ViewportState): ViewportTransform2D =>
+export const createViewportTransform2D = (
+  viewport: ViewportState
+): ViewportTransform2D =>
   new ViewportTransform2D({
     scale: viewport.zoom,
     offsetX: viewport.offsetX,
@@ -189,7 +201,10 @@ export const createFitViewportState = ({
   const fitHeight = Math.max(1, rawHeight);
   const availableWidth = Math.max(1, safeViewportWidth - safePadding * 2);
   const availableHeight = Math.max(1, safeViewportHeight - safePadding * 2);
-  const scale = Math.min(availableWidth / fitWidth, availableHeight / fitHeight);
+  const scale = Math.min(
+    availableWidth / fitWidth,
+    availableHeight / fitHeight
+  );
   const contentWidth = rawWidth * scale;
   const contentHeight = rawHeight * scale;
   const left = (safeViewportWidth - contentWidth) / 2;
@@ -231,7 +246,10 @@ export const zoomViewportState = ({
   minZoom = 0.05,
   maxZoom = 20
 }: ZoomViewportOptions): ViewportState => {
-  const nextZoom = Math.min(maxZoom, Math.max(minZoom, viewport.zoom * zoomFactor));
+  const nextZoom = Math.min(
+    maxZoom,
+    Math.max(minZoom, viewport.zoom * zoomFactor)
+  );
   const appliedFactor = nextZoom / viewport.zoom;
 
   return Object.freeze({

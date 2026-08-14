@@ -36,6 +36,16 @@ export enum ValidationErrorCode {
   INVALID_WALL_ENDPOINT = "INVALID_WALL_ENDPOINT",
 
   /**
+   * A domain editing operation received an invalid Wall height.
+   */
+  INVALID_WALL_HEIGHT = "INVALID_WALL_HEIGHT",
+
+  /**
+   * A domain editing operation received an invalid Wall thickness.
+   */
+  INVALID_WALL_THICKNESS = "INVALID_WALL_THICKNESS",
+
+  /**
    * Removing a Wall would leave one or more canonical Room references dangling.
    */
   WALL_IS_REFERENCED = "WALL_IS_REFERENCED",

@@ -44,6 +44,14 @@ export type DeleteWallInput = {
   readonly wallId: Identifier;
 };
 
+/** Input required to update the supported scalar properties of an existing Wall. */
+export type UpdateWallPropertiesInput = {
+  readonly levelId: Identifier;
+  readonly wallId: Identifier;
+  readonly height?: number;
+  readonly thickness?: number;
+};
+
 /**
  * Appends a Wall to an existing Level while preserving the caller-supplied ID.
  *
@@ -51,8 +59,13 @@ export type DeleteWallInput = {
  * Project, cross-reference, renderability, and runtime-geometry validation
  * remain responsibilities of the authoritative save boundary.
  */
-export function createWall(project: Project, input: CreateWallInput): ProjectEditingResult {
-  const levelIndex = project.building.levels.findIndex((level) => level.id === input.levelId);
+export function createWall(
+  project: Project,
+  input: CreateWallInput
+): ProjectEditingResult {
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
 
   if (levelIndex < 0) {
     return failure(levelNotFound(input.levelId));
@@ -112,10 +125,12 @@ export function createWall(project: Project, input: CreateWallInput): ProjectEdi
     });
   }
 
-  return success(mapLevel(project, levelIndex, (level) => ({
-    ...level,
-    walls: [...level.walls, wallResult.data]
-  })));
+  return success(
+    mapLevel(project, levelIndex, (level) => ({
+      ...level,
+      walls: [...level.walls, wallResult.data]
+    }))
+  );
 }
 
 /**
@@ -128,14 +143,17 @@ export function moveWallEndpoint(
   project: Project,
   input: MoveWallEndpointInput
 ): ProjectEditingResult {
-  const levelIndex = project.building.levels.findIndex((level) => level.id === input.levelId);
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
 
   if (levelIndex < 0) {
     return failure(levelNotFound(input.levelId));
   }
 
   const level = project.building.levels[levelIndex];
-  const wallIndex = level?.walls.findIndex((wall) => wall.id === input.wallId) ?? -1;
+  const wallIndex =
+    level?.walls.findIndex((wall) => wall.id === input.wallId) ?? -1;
 
   if (!level || wallIndex < 0) {
     return failure(wallNotFound(input.levelId, input.wallId));
@@ -165,14 +183,101 @@ export function moveWallEndpoint(
     );
   }
 
-  return success(mapLevel(project, levelIndex, (currentLevel) => ({
-    ...currentLevel,
-    walls: currentLevel.walls.map((currentWall, currentWallIndex) =>
-      currentWallIndex === wallIndex
-        ? { ...currentWall, [input.endpoint]: positionResult.data }
-        : currentWall
-    )
-  })));
+  return success(
+    mapLevel(project, levelIndex, (currentLevel) => ({
+      ...currentLevel,
+      walls: currentLevel.walls.map((currentWall, currentWallIndex) =>
+        currentWallIndex === wallIndex
+          ? { ...currentWall, [input.endpoint]: positionResult.data }
+          : currentWall
+      )
+    }))
+  );
+}
+
+/**
+ * Updates supported Wall properties without changing identity or geometry references.
+ *
+ * The resulting Wall is validated by the canonical Wall schema. Invalid values
+ * are rejected without clamping and the input Project is never mutated.
+ */
+export function updateWallProperties(
+  project: Project,
+  input: UpdateWallPropertiesInput
+): ProjectEditingResult {
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
+
+  if (levelIndex < 0) {
+    return failure(levelNotFound(input.levelId));
+  }
+
+  const level = project.building.levels[levelIndex];
+  const wallIndex =
+    level?.walls.findIndex((wall) => wall.id === input.wallId) ?? -1;
+
+  if (!level || wallIndex < 0) {
+    return failure(wallNotFound(input.levelId, input.wallId));
+  }
+
+  const wall = level.walls[wallIndex];
+  if (!wall) {
+    return failure(wallNotFound(input.levelId, input.wallId));
+  }
+
+  const candidate = {
+    ...wall,
+    ...(input.height === undefined ? {} : { height: input.height }),
+    ...(input.thickness === undefined ? {} : { thickness: input.thickness })
+  };
+  const wallResult = WallSchema.safeParse(candidate);
+
+  if (!wallResult.success) {
+    const errors = wallResult.error.issues.flatMap(
+      (issue): ValidationError[] => {
+        const property = issue.path[0];
+        const path = `building.levels[${levelIndex}].walls[${wallIndex}].${String(property)}`;
+
+        if (property === "height") {
+          return [
+            {
+              code: ValidationErrorCode.INVALID_WALL_HEIGHT,
+              path,
+              message: "Wall height must be a finite positive measurement."
+            }
+          ];
+        }
+        if (property === "thickness") {
+          return [
+            {
+              code: ValidationErrorCode.INVALID_WALL_THICKNESS,
+              path,
+              message: "Wall thickness must be a finite positive measurement."
+            }
+          ];
+        }
+        return [];
+      }
+    );
+
+    return errors.length > 0
+      ? { ok: false, errors }
+      : failure({
+          code: ValidationErrorCode.PROJECT_SCHEMA_VALIDATION_FAILED,
+          path: `building.levels[${levelIndex}].walls[${wallIndex}]`,
+          message: `Wall "${input.wallId}" does not satisfy the Wall contract.`
+        });
+  }
+
+  return success(
+    mapLevel(project, levelIndex, (currentLevel) => ({
+      ...currentLevel,
+      walls: currentLevel.walls.map((currentWall, currentWallIndex) =>
+        currentWallIndex === wallIndex ? wallResult.data : currentWall
+      )
+    }))
+  );
 }
 
 /**
@@ -181,15 +286,21 @@ export function moveWallEndpoint(
  * A Wall used by a Room boundary or carrying reciprocal `roomIds` is rejected
  * so the operation cannot create dangling canonical references implicitly.
  */
-export function deleteWall(project: Project, input: DeleteWallInput): ProjectEditingResult {
-  const levelIndex = project.building.levels.findIndex((level) => level.id === input.levelId);
+export function deleteWall(
+  project: Project,
+  input: DeleteWallInput
+): ProjectEditingResult {
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
 
   if (levelIndex < 0) {
     return failure(levelNotFound(input.levelId));
   }
 
   const level = project.building.levels[levelIndex];
-  const wallIndex = level?.walls.findIndex((wall) => wall.id === input.wallId) ?? -1;
+  const wallIndex =
+    level?.walls.findIndex((wall) => wall.id === input.wallId) ?? -1;
 
   if (!level || wallIndex < 0) {
     return failure(wallNotFound(input.levelId, input.wallId));
@@ -197,7 +308,9 @@ export function deleteWall(project: Project, input: DeleteWallInput): ProjectEdi
 
   const wall = level.walls[wallIndex];
   const referencingRoomIds = level.rooms
-    .filter((room) => room.boundary.some((edge) => edge.wallId === input.wallId))
+    .filter((room) =>
+      room.boundary.some((edge) => edge.wallId === input.wallId)
+    )
     .map((room) => room.id);
 
   if ((wall?.roomIds.length ?? 0) > 0 || referencingRoomIds.length > 0) {
@@ -208,16 +321,22 @@ export function deleteWall(project: Project, input: DeleteWallInput): ProjectEdi
     });
   }
 
-  return success(mapLevel(project, levelIndex, (currentLevel) => ({
-    ...currentLevel,
-    walls: currentLevel.walls.filter((_, currentWallIndex) => currentWallIndex !== wallIndex)
-  })));
+  return success(
+    mapLevel(project, levelIndex, (currentLevel) => ({
+      ...currentLevel,
+      walls: currentLevel.walls.filter(
+        (_, currentWallIndex) => currentWallIndex !== wallIndex
+      )
+    }))
+  );
 }
 
 function mapLevel(
   project: Project,
   levelIndex: number,
-  transform: (level: Project["building"]["levels"][number]) => Project["building"]["levels"][number]
+  transform: (
+    level: Project["building"]["levels"][number]
+  ) => Project["building"]["levels"][number]
 ): Project {
   return {
     ...project,
@@ -230,7 +349,10 @@ function mapLevel(
   };
 }
 
-function findWallPath(project: Project, wallId: Identifier): string | undefined {
+function findWallPath(
+  project: Project,
+  wallId: Identifier
+): string | undefined {
   for (const [levelIndex, level] of project.building.levels.entries()) {
     const wallIndex = level.walls.findIndex((wall) => wall.id === wallId);
     if (wallIndex >= 0) {
@@ -241,7 +363,9 @@ function findWallPath(project: Project, wallId: Identifier): string | undefined 
   return undefined;
 }
 
-function findDuplicateOpening(wall: Wall): { readonly id: Identifier; readonly path: string } | undefined {
+function findDuplicateOpening(
+  wall: Wall
+): { readonly id: Identifier; readonly path: string } | undefined {
   const seen = new Set<Identifier>();
 
   for (const [openingIndex, opening] of wall.openings.entries()) {
@@ -263,7 +387,9 @@ function findOpeningPath(
 
   for (const [levelIndex, level] of project.building.levels.entries()) {
     for (const [wallIndex, wall] of level.walls.entries()) {
-      const openingIndex = wall.openings.findIndex((opening) => openingIdSet.has(opening.id));
+      const openingIndex = wall.openings.findIndex((opening) =>
+        openingIdSet.has(opening.id)
+      );
       if (openingIndex >= 0) {
         const opening = wall.openings[openingIndex];
         if (opening) {
@@ -291,7 +417,10 @@ function levelNotFound(levelId: Identifier): ValidationError {
   };
 }
 
-function wallNotFound(levelId: Identifier, wallId: Identifier): ValidationError {
+function wallNotFound(
+  levelId: Identifier,
+  wallId: Identifier
+): ValidationError {
   return {
     code: ValidationErrorCode.WALL_NOT_FOUND,
     path: "building.levels[].walls[].id",

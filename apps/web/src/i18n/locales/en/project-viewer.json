@@ -37,7 +37,7 @@
     "comingSoon": "{{tool}} — coming soon",
     "help": {
       "select": "Select elements in the plan.",
-      "draw-wall": "Draw walls by placing start and end points. Not available yet.",
+      "draw-wall": "Draw walls by choosing a start and end point.",
       "pan": "Move around the plan without changing geometry."
     }
   },
@@ -119,6 +119,42 @@
       "title": "The local draft cannot be displayed",
       "detail": "Your draft is preserved. Adjustments can resume after the geometry is renderable again."
     },
-    "requestId": "Request ID: {{requestId}}"
+    "requestId": "Request ID: {{requestId}}",
+    "wall": {
+      "zeroLength": "Wall cannot have zero length.",
+      "referenced": "Cannot delete this wall because it belongs to a room.",
+      "notFound": "The selected wall no longer exists.",
+      "invalidHeight": "Invalid wall height.",
+      "invalidThickness": "Invalid wall thickness.",
+      "invalid": "The wall could not be changed."
+    }
+  },
+  "wall": {
+    "selectionTitle": "Selection",
+    "emptySelection": "Select a wall in the plan to inspect it.",
+    "type": "Wall",
+    "delete": "Delete Wall",
+    "startEndpoint": "Start endpoint",
+    "endEndpoint": "End endpoint",
+    "endpointEditingUnavailable": "This wall belongs to a room. Its endpoints cannot be moved independently yet.",
+    "labels": {
+      "type": "Type",
+      "length": "Length",
+      "thickness": "Thickness",
+      "height": "Height",
+      "start": "Start point",
+      "end": "End point"
+    }
+  },
+  "selection": {
+    "title": "Selection",
+    "empty": "Select geometry in the plan to inspect its details.",
+    "vertex": "Vertex",
+    "labels": {
+      "type": "Type",
+      "position": "Position",
+      "connectedWalls": "Connected walls",
+      "connectedWallIds": "Connected wall IDs"
+    }
   }
 }

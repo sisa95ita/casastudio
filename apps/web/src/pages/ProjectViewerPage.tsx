@@ -1,5 +1,14 @@
 import { GeometryEngine, LevelGeometry } from "@casastudio/geometry";
 import {
+  createWall,
+  deleteWall,
+  moveWallEndpoint,
+  updateWallProperties,
+  type Project,
+  type Wall,
+  type WallEndpoint
+} from "@casastudio/schema";
+import {
   Alert,
   Box,
   Button,
@@ -14,6 +23,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Snackbar,
   Stack,
   Tab,
   Tabs,
@@ -68,13 +78,15 @@ import { getGeometryViewerShortcutAction } from "../geometry-playground/geometry
 import {
   defaultGeometryDisplayOptions,
   geometrySvgViewport,
-  type GeometryDisplayOptions
+  type GeometryDisplayOptions,
+  type GeometryEditorOverlay
 } from "../geometry-playground/GeometrySvgViewer";
 import {
   createFitViewportState,
   createViewportTransform2D,
   resetViewportState,
   type ViewportState,
+  type WorldPointXZ,
   zoomViewportState
 } from "../geometry-playground/viewport-transform-2d";
 import { useCasaTranslation } from "../i18n";
@@ -83,11 +95,16 @@ import { useProjectQuery } from "../queries/project-queries";
 import { useAppDispatch, useAppSelector } from "../state/hooks";
 import {
   cleanEditingSessionLeft,
+  editingDraftReplaced,
   editingSessionEntered,
   editorActiveLevelChanged,
   editorActiveToolChanged,
+  editorDrawWallStarted,
+  editorEndpointDragStarted,
   editorSelectionChanged,
   editorSelectionCleared,
+  editorTransientInteractionCleared,
+  editorTransientPointerMoved,
   projectRouteChanged,
   projectRouteExited,
   selectEditorGeometrySelection,
@@ -101,11 +118,19 @@ import {
   type ProjectEditorTool
 } from "../state/project-editor-tools";
 import {
+  createDraftWall,
+  findProjectWall,
+  getWallEditingErrorKey,
+  isWallReferencedByRoom,
+  type WallEditingErrorKey
+} from "../state/project-wall-editing";
+import {
   geometrySelectionChanged,
   geometrySelectionCleared,
   geometrySelectionReset,
   selectGeometrySelection
 } from "../state/viewer-slice";
+import { ProjectSelectionDetails } from "./ProjectSelectionDetails";
 
 const emptySelectionState = createGeometrySelectionState();
 
@@ -136,6 +161,7 @@ export function ProjectViewerPage() {
   const [viewportOwnerKey, setViewportOwnerKey] = useState("");
   const [dirtyExitBlocked, setDirtyExitBlocked] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [editingError, setEditingError] = useState<WallEditingErrorKey>();
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
@@ -222,6 +248,83 @@ export function ProjectViewerPage() {
     workspaceMode
   ]);
 
+  const selectedEditWall = useMemo(() => {
+    if (
+      workspaceMode !== "edit" ||
+      !presentationResult?.ok ||
+      selectionState.selected.length !== 1 ||
+      selectionState.selected[0]?.kind !== "BOUNDARY_EDGE"
+    ) {
+      return undefined;
+    }
+
+    const selectedEdge = presentationResult.model.boundaryEdges.find(
+      (edge) => edge.geometryId === selectionState.selected[0]?.geometryId
+    );
+    return findProjectWall(
+      editor.draft,
+      editor.activeLevelId,
+      selectedEdge?.sourceWallId
+    );
+  }, [
+    editor.activeLevelId,
+    editor.draft,
+    presentationResult,
+    selectionState.selected,
+    workspaceMode
+  ]);
+  const selectedWallEndpointEditingAvailable =
+    Boolean(selectedEditWall) &&
+    !isWallReferencedByRoom(
+      editor.draft,
+      editor.activeLevelId,
+      selectedEditWall?.id
+    );
+
+  const editorOverlay = useMemo<GeometryEditorOverlay | undefined>(() => {
+    if (workspaceMode !== "edit") return undefined;
+    const transient = editor.transient.interaction;
+    const selectedWall = selectedEditWall
+      ? {
+          wallId: selectedEditWall.id,
+          endpointEditingAvailable: selectedWallEndpointEditingAvailable,
+          start:
+            transient?.kind === "move-wall-endpoint" &&
+            transient.wallId === selectedEditWall.id &&
+            transient.endpoint === "start"
+              ? transient.currentPointerPoint
+              : selectedEditWall.start,
+          end:
+            transient?.kind === "move-wall-endpoint" &&
+            transient.wallId === selectedEditWall.id &&
+            transient.endpoint === "end"
+              ? transient.currentPointerPoint
+              : selectedEditWall.end,
+          draggingEndpoint:
+            transient?.kind === "move-wall-endpoint" &&
+            transient.wallId === selectedEditWall.id
+              ? transient.endpoint
+              : undefined
+        }
+      : undefined;
+
+    return {
+      drawWall:
+        transient?.kind === "draw-wall"
+          ? {
+              start: transient.startPoint,
+              end: transient.currentPointerPoint
+            }
+          : undefined,
+      selectedWall
+    };
+  }, [
+    editor.transient.interaction,
+    selectedEditWall,
+    selectedWallEndpointEditingAvailable,
+    workspaceMode
+  ]);
+
   useEffect(() => {
     dispatch(projectRouteChanged(projectId));
     dispatch(geometrySelectionReset());
@@ -259,7 +362,7 @@ export function ProjectViewerPage() {
   }, [dispatch, geometryIdentity, geometryResponse, viewLevels]);
 
   useEffect(() => {
-    if (!selectedLevel) {
+    if (!selectedLevel || viewportOwnerKey === viewportKey) {
       return;
     }
 
@@ -271,7 +374,14 @@ export function ProjectViewerPage() {
       dispatch(geometrySelectionReset());
       setSelectionOwnerSnapshot(geometryResponse?.geometry);
     }
-  }, [dispatch, geometryResponse, selectedLevel, viewportKey, workspaceMode]);
+  }, [
+    dispatch,
+    geometryResponse,
+    selectedLevel,
+    viewportKey,
+    viewportOwnerKey,
+    workspaceMode
+  ]);
 
   const handleSelectionStateChange = useCallback(
     (nextSelectionState: GeometrySelectionState) => {
@@ -303,6 +413,210 @@ export function ProjectViewerPage() {
     );
   }, []);
 
+  const handleEditorCanvasClick = useCallback(
+    (point: WorldPointXZ) => {
+      if (
+        workspaceMode !== "edit" ||
+        editor.activeTool !== "draw-wall" ||
+        !editor.draft ||
+        !editor.activeLevelId
+      ) {
+        return;
+      }
+
+      const interaction = editor.transient.interaction;
+      if (interaction?.kind !== "draw-wall") {
+        setEditingError(undefined);
+        dispatch(editorDrawWallStarted(point));
+        return;
+      }
+
+      const result = createWall(editor.draft, {
+        levelId: editor.activeLevelId,
+        wall: createDraftWall(interaction.startPoint, point)
+      });
+      dispatch(editorTransientInteractionCleared());
+
+      if (result.ok) {
+        setEditingError(undefined);
+        dispatch(editingDraftReplaced(result.project));
+      } else {
+        setEditingError(getWallEditingErrorKey(result));
+      }
+    },
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.activeTool,
+      editor.draft,
+      editor.transient.interaction,
+      workspaceMode
+    ]
+  );
+
+  const handleEditorPointerMove = useCallback(
+    (point: WorldPointXZ, pointerId: number) => {
+      if (workspaceMode === "edit" && editor.transient.interaction) {
+        dispatch(editorTransientPointerMoved({ point, pointerId }));
+      }
+    },
+    [dispatch, editor.transient.interaction, workspaceMode]
+  );
+
+  const handleWallEndpointPointerDown = useCallback(
+    (endpoint: WallEndpoint, pointerId: number) => {
+      if (
+        workspaceMode !== "edit" ||
+        editor.activeTool !== "select" ||
+        !editor.activeLevelId ||
+        !selectedEditWall ||
+        !selectedWallEndpointEditingAvailable
+      ) {
+        return;
+      }
+
+      setEditingError(undefined);
+      dispatch(
+        editorEndpointDragStarted({
+          levelId: editor.activeLevelId,
+          wallId: selectedEditWall.id,
+          endpoint,
+          pointerId,
+          point: selectedEditWall[endpoint]
+        })
+      );
+    },
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.activeTool,
+      selectedEditWall,
+      selectedWallEndpointEditingAvailable,
+      workspaceMode
+    ]
+  );
+
+  const handleWallEndpointPointerUp = useCallback(
+    (point: WorldPointXZ, pointerId: number) => {
+      const interaction = editor.transient.interaction;
+      if (
+        workspaceMode !== "edit" ||
+        !editor.draft ||
+        interaction?.kind !== "move-wall-endpoint" ||
+        interaction.pointerId !== pointerId
+      ) {
+        return;
+      }
+
+      if (
+        isWallReferencedByRoom(
+          editor.draft,
+          interaction.levelId,
+          interaction.wallId
+        )
+      ) {
+        dispatch(editorTransientInteractionCleared());
+        return;
+      }
+
+      const result = moveWallEndpoint(editor.draft, {
+        levelId: interaction.levelId,
+        wallId: interaction.wallId,
+        endpoint: interaction.endpoint,
+        position: point
+      });
+      dispatch(editorTransientInteractionCleared());
+
+      if (result.ok) {
+        setEditingError(undefined);
+        dispatch(editingDraftReplaced(result.project));
+      } else {
+        setEditingError(getWallEditingErrorKey(result));
+      }
+    },
+    [dispatch, editor.draft, editor.transient.interaction, workspaceMode]
+  );
+
+  const handleWallEndpointPointerCancel = useCallback(
+    (pointerId: number) => {
+      const interaction = editor.transient.interaction;
+      if (
+        interaction?.kind === "move-wall-endpoint" &&
+        interaction.pointerId === pointerId
+      ) {
+        dispatch(editorTransientInteractionCleared());
+      }
+    },
+    [dispatch, editor.transient.interaction]
+  );
+
+  const handleDeleteSelectedWall = useCallback(() => {
+    if (
+      workspaceMode !== "edit" ||
+      !editor.draft ||
+      !editor.activeLevelId ||
+      !selectedEditWall
+    ) {
+      return;
+    }
+
+    const result = deleteWall(editor.draft, {
+      levelId: editor.activeLevelId,
+      wallId: selectedEditWall.id
+    });
+    if (result.ok) {
+      setEditingError(undefined);
+      dispatch(editorTransientInteractionCleared());
+      dispatch(editorSelectionCleared());
+      dispatch(editingDraftReplaced(result.project));
+    } else {
+      setEditingError(getWallEditingErrorKey(result));
+    }
+  }, [
+    dispatch,
+    editor.activeLevelId,
+    editor.draft,
+    selectedEditWall,
+    workspaceMode
+  ]);
+
+  const handleUpdateSelectedWallProperties = useCallback(
+    (properties: {
+      readonly height?: number;
+      readonly thickness?: number;
+    }): boolean => {
+      if (
+        workspaceMode !== "edit" ||
+        !editor.draft ||
+        !editor.activeLevelId ||
+        !selectedEditWall
+      ) {
+        return false;
+      }
+
+      const result = updateWallProperties(editor.draft, {
+        levelId: editor.activeLevelId,
+        wallId: selectedEditWall.id,
+        ...properties
+      });
+      if (!result.ok) {
+        setEditingError(getWallEditingErrorKey(result));
+        return false;
+      }
+
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+      return true;
+    },
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.draft,
+      selectedEditWall,
+      workspaceMode
+    ]
+  );
+
   useEffect(() => {
     if (!selectedLevel) {
       return;
@@ -312,13 +626,27 @@ export function ProjectViewerPage() {
       if (shortcutsOpen) return;
       const action = getGeometryViewerShortcutAction(event);
       if (!action) return;
+      if (
+        action === "DELETE_SELECTION" &&
+        workspaceMode === "edit" &&
+        selectedEditWall
+      ) {
+        event.preventDefault();
+        handleDeleteSelectedWall();
+        return;
+      }
+      if (action === "DELETE_SELECTION") return;
       event.preventDefault();
       if (action === "CLEAR_SELECTION") {
-        dispatch(
-          workspaceMode === "edit"
-            ? editorSelectionCleared()
-            : geometrySelectionCleared()
-        );
+        if (workspaceMode === "edit" && editor.transient.interaction !== null) {
+          dispatch(editorTransientInteractionCleared());
+        } else {
+          dispatch(
+            workspaceMode === "edit"
+              ? editorSelectionCleared()
+              : geometrySelectionCleared()
+          );
+        }
       } else if (action === "FIT_VIEWPORT") {
         handleFitViewport();
       } else {
@@ -331,8 +659,11 @@ export function ProjectViewerPage() {
   }, [
     dispatch,
     handleFitViewport,
+    handleDeleteSelectedWall,
     handleResetViewport,
+    editor.transient.interaction,
     selectedLevel,
+    selectedEditWall,
     shortcutsOpen,
     workspaceMode
   ]);
@@ -398,6 +729,11 @@ export function ProjectViewerPage() {
             : geometryResponse?.sourceRevision
         }
         mode={workspaceMode}
+        selectedWall={selectedEditWall}
+        endpointEditingAvailable={selectedWallEndpointEditingAvailable}
+        units={projectResponse?.project.units}
+        onDeleteWall={handleDeleteSelectedWall}
+        onUpdateWallProperties={handleUpdateSelectedWallProperties}
       />
     );
   }, [
@@ -406,8 +742,13 @@ export function ProjectViewerPage() {
     geometryResponse,
     presentationResult,
     selectedLevel,
+    selectedEditWall,
+    selectedWallEndpointEditingAvailable,
     selectionState,
-    workspaceMode
+    workspaceMode,
+    projectResponse?.project.units,
+    handleDeleteSelectedWall,
+    handleUpdateSelectedWallProperties
   ]);
 
   const shellContent = useMemo(
@@ -495,6 +836,19 @@ export function ProjectViewerPage() {
           {t("guard.viewBlocked")}
         </Alert>
       ) : null}
+      <Snackbar
+        open={Boolean(editingError)}
+        autoHideDuration={5000}
+        onClose={() => setEditingError(undefined)}
+      >
+        <Alert
+          severity="error"
+          variant="filled"
+          onClose={() => setEditingError(undefined)}
+        >
+          {editingError ? t(editingError) : ""}
+        </Alert>
+      </Snackbar>
 
       <Box className="project-viewer-context">
         <Box className="project-viewer-context__title">
@@ -606,6 +960,12 @@ export function ProjectViewerPage() {
               ? getProjectEditorInteraction(editor.activeTool)
               : undefined
           }
+          editorOverlay={editorOverlay}
+          onEditorCanvasClick={handleEditorCanvasClick}
+          onEditorPointerMove={handleEditorPointerMove}
+          onWallEndpointPointerDown={handleWallEndpointPointerDown}
+          onWallEndpointPointerUp={handleWallEndpointPointerUp}
+          onWallEndpointPointerCancel={handleWallEndpointPointerCancel}
         />
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
@@ -883,6 +1243,14 @@ type ProjectWorkspaceInspectorProps = {
   readonly level: string;
   readonly revision?: number | null;
   readonly mode: ProjectWorkspaceMode;
+  readonly selectedWall?: Wall;
+  readonly endpointEditingAvailable: boolean;
+  readonly units?: Project["units"];
+  readonly onDeleteWall: () => void;
+  readonly onUpdateWallProperties: (properties: {
+    readonly height?: number;
+    readonly thickness?: number;
+  }) => boolean;
 };
 
 /** Provides the durable Layers, Selection, and Properties inspector foundation. */
@@ -893,7 +1261,12 @@ function ProjectWorkspaceInspector({
   onOptionsChange,
   level,
   revision,
-  mode
+  mode,
+  selectedWall,
+  endpointEditingAvailable,
+  units,
+  onDeleteWall,
+  onUpdateWallProperties
 }: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
   const [tab, setTab] = useState<"layers" | "selection" | "properties">(
@@ -919,10 +1292,22 @@ function ProjectWorkspaceInspector({
             onOptionsChange={onOptionsChange}
           />
         ) : tab === "selection" ? (
-          <GeometrySelectionDetails
-            model={model}
-            selectionState={selectionState}
-          />
+          mode === "edit" && units ? (
+            <ProjectSelectionDetails
+              model={model}
+              selectionState={selectionState}
+              wall={selectedWall}
+              units={units}
+              endpointEditingAvailable={endpointEditingAvailable}
+              onDeleteWall={onDeleteWall}
+              onUpdateWallProperties={onUpdateWallProperties}
+            />
+          ) : (
+            <GeometrySelectionDetails
+              model={model}
+              selectionState={selectionState}
+            />
+          )
         ) : (
           <Stack spacing={1.5}>
             <Typography variant="subtitle2">

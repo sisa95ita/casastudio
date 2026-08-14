@@ -3,7 +3,8 @@ import {
   createSlice,
   type PayloadAction
 } from "@reduxjs/toolkit";
-import type { Project } from "@casastudio/schema";
+import type { Project, WallEndpoint } from "@casastudio/schema";
+import type { WorldPointXZ } from "../geometry-playground/viewport-transform-2d";
 
 import type {
   GeometrySelection,
@@ -15,9 +16,27 @@ import type { ProjectEditorTool } from "./project-editor-tools";
 /** Mutually exclusive interaction modes for the 2D Project workspace. */
 export type ProjectWorkspaceMode = "view" | "edit";
 
-/** Reserved editor interaction state that is cleared at stable session boundaries. */
+/** Describes an unfinished Wall segment that has not entered the Project draft. */
+export type DrawWallInteraction = {
+  readonly kind: "draw-wall";
+  readonly startPoint: WorldPointXZ;
+  readonly currentPointerPoint: WorldPointXZ;
+};
+
+/** Describes a Wall endpoint proposal that has not entered the Project draft. */
+export type MoveWallEndpointInteraction = {
+  readonly kind: "move-wall-endpoint";
+  readonly levelId: string;
+  readonly wallId: string;
+  readonly endpoint: WallEndpoint;
+  readonly pointerId: number;
+  readonly currentPointerPoint: WorldPointXZ;
+};
+
+/** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
-  readonly interaction: null;
+  readonly interaction:
+    DrawWallInteraction | MoveWallEndpointInteraction | null;
 };
 
 /** Local editing session derived from one authoritative Project revision. */
@@ -153,9 +172,61 @@ const projectEditorSlice = createSlice({
       state,
       action: PayloadAction<ProjectEditorTool | null>
     ) {
-      if (state.mode === "edit") {
+      if (state.mode === "edit" && state.activeTool !== action.payload) {
         state.activeTool = action.payload;
+        state.selection = [];
         state.hover = undefined;
+        state.transient = { interaction: null };
+      }
+    },
+    editorDrawWallStarted(state, action: PayloadAction<WorldPointXZ>) {
+      if (state.mode === "edit" && state.activeTool === "draw-wall") {
+        state.transient.interaction = {
+          kind: "draw-wall",
+          startPoint: action.payload,
+          currentPointerPoint: action.payload
+        };
+      }
+    },
+    editorEndpointDragStarted(
+      state,
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly wallId: string;
+        readonly endpoint: WallEndpoint;
+        readonly pointerId: number;
+        readonly point: WorldPointXZ;
+      }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-wall-endpoint",
+          levelId: action.payload.levelId,
+          wallId: action.payload.wallId,
+          endpoint: action.payload.endpoint,
+          pointerId: action.payload.pointerId,
+          currentPointerPoint: action.payload.point
+        };
+      }
+    },
+    editorTransientPointerMoved(
+      state,
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly pointerId: number;
+      }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (
+        interaction?.kind === "draw-wall" ||
+        (interaction?.kind === "move-wall-endpoint" &&
+          interaction.pointerId === action.payload.pointerId)
+      ) {
+        interaction.currentPointerPoint = action.payload.point;
+      }
+    },
+    editorTransientInteractionCleared(state) {
+      if (state.mode === "edit") {
         state.transient = { interaction: null };
       }
     },
@@ -217,6 +288,10 @@ export const {
   editingDraftReplaced,
   editorActiveLevelChanged,
   editorActiveToolChanged,
+  editorDrawWallStarted,
+  editorEndpointDragStarted,
+  editorTransientPointerMoved,
+  editorTransientInteractionCleared,
   editorSelectionChanged,
   editorSelectionCleared,
   projectRouteChanged,
