@@ -9,6 +9,7 @@ import {
   editingSessionMarkedDirty,
   editorActiveLevelChanged,
   editorActiveToolChanged,
+  editorDrawWallPointerMoved,
   editorDrawWallStarted,
   editorEndpointDragStarted,
   editorSelectionChanged,
@@ -130,7 +131,7 @@ describe("Project editor state", () => {
     state = projectEditorReducer(state, editorActiveToolChanged("draw-wall"));
     state = projectEditorReducer(
       state,
-      editorDrawWallStarted({ x: 10, z: 20 })
+      editorDrawWallStarted({ point: { x: 10, z: 20 } })
     );
     const draft = state.draft;
 
@@ -166,6 +167,37 @@ describe("Project editor state", () => {
     expect(state.transient.interaction).toMatchObject({
       kind: "move-wall-endpoint",
       currentPointerPoint: { x: 50, z: 60 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+  });
+
+  it("updates Draw Wall snap feedback without replacing or dirtying the draft", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("draw-wall"));
+    const draft = state.draft;
+    state = projectEditorReducer(
+      state,
+      editorDrawWallPointerMoved({
+        point: { x: 400, z: 0 },
+        snapCandidate: {
+          kind: "vertex",
+          geometryId: "vertex:ground-floor:400:0",
+          point: { x: 400, z: 0 },
+          visualDistancePixels: 3
+        }
+      })
+    );
+
+    expect(state.transient.snapCandidate).toMatchObject({
+      kind: "vertex",
+      point: { x: 400, z: 0 }
     });
     expect(state.draft).toBe(draft);
     expect(state.dirty).toBe(false);

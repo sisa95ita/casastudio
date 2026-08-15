@@ -12,6 +12,7 @@ import type {
 } from "../geometry-playground/geometry-selection-state";
 import type { RootState } from "./store";
 import type { ProjectEditorTool } from "./project-editor-tools";
+import type { DrawWallSnapCandidate } from "./project-wall-snapping";
 
 /** Mutually exclusive interaction modes for the 2D Project workspace. */
 export type ProjectWorkspaceMode = "view" | "edit";
@@ -21,6 +22,7 @@ export type DrawWallInteraction = {
   readonly kind: "draw-wall";
   readonly startPoint: WorldPointXZ;
   readonly currentPointerPoint: WorldPointXZ;
+  readonly startConnectionWallId?: string;
 };
 
 /** Describes a Wall endpoint proposal that has not entered the Project draft. */
@@ -37,6 +39,7 @@ export type MoveWallEndpointInteraction = {
 export type ProjectEditorTransientState = {
   readonly interaction:
     DrawWallInteraction | MoveWallEndpointInteraction | null;
+  readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
 /** Local editing session derived from one authoritative Project revision. */
@@ -179,13 +182,24 @@ const projectEditorSlice = createSlice({
         state.transient = { interaction: null };
       }
     },
-    editorDrawWallStarted(state, action: PayloadAction<WorldPointXZ>) {
+    editorDrawWallStarted(
+      state,
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly snapCandidate?: DrawWallSnapCandidate;
+      }>
+    ) {
       if (state.mode === "edit" && state.activeTool === "draw-wall") {
         state.transient.interaction = {
           kind: "draw-wall",
-          startPoint: action.payload,
-          currentPointerPoint: action.payload
+          startPoint: action.payload.point,
+          currentPointerPoint: action.payload.point,
+          startConnectionWallId:
+            action.payload.snapCandidate?.kind === "wall-interior"
+              ? action.payload.snapCandidate.wallId
+              : undefined
         };
+        state.transient.snapCandidate = action.payload.snapCandidate;
       }
     },
     editorEndpointDragStarted(
@@ -223,6 +237,19 @@ const projectEditorSlice = createSlice({
           interaction.pointerId === action.payload.pointerId)
       ) {
         interaction.currentPointerPoint = action.payload.point;
+      }
+    },
+    editorDrawWallPointerMoved(
+      state,
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly snapCandidate?: DrawWallSnapCandidate;
+      }>
+    ) {
+      if (state.mode !== "edit" || state.activeTool !== "draw-wall") return;
+      state.transient.snapCandidate = action.payload.snapCandidate;
+      if (state.transient.interaction?.kind === "draw-wall") {
+        state.transient.interaction.currentPointerPoint = action.payload.point;
       }
     },
     editorTransientInteractionCleared(state) {
@@ -289,6 +316,7 @@ export const {
   editorActiveLevelChanged,
   editorActiveToolChanged,
   editorDrawWallStarted,
+  editorDrawWallPointerMoved,
   editorEndpointDragStarted,
   editorTransientPointerMoved,
   editorTransientInteractionCleared,

@@ -11,18 +11,19 @@ import type { Project, Wall } from "@casastudio/schema";
 import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { useCasaTranslation } from "../i18n";
+import type { WallEndpointEditingAvailability } from "../state/project-wall-editing";
 
 /** Displays canonical Wall details and commits supported scalar property edits. */
 export function ProjectWallSelectionDetails({
   wall,
   units,
-  endpointEditingAvailable,
+  endpointAvailability,
   onDelete,
   onUpdateProperties
 }: {
   readonly wall?: Wall;
   readonly units: Project["units"];
-  readonly endpointEditingAvailable: boolean;
+  readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly onDelete: () => void;
   readonly onUpdateProperties: (properties: {
     readonly height?: number;
@@ -96,9 +97,44 @@ export function ProjectWallSelectionDetails({
         value={wall.height}
         onCommit={(height) => onUpdateProperties({ height })}
       />
-      {!endpointEditingAvailable ? (
+      {endpointAvailability ? (
+        <Stack spacing={0.5}>
+          <Typography variant="caption" color="text.secondary">
+            {t("wall.endpointStatus", {
+              endpoint: t("wall.labels.start"),
+              status: t(
+                endpointAvailability.start.draggable
+                  ? "wall.endpointFree"
+                  : endpointAvailability.start.topology === "shared-junction"
+                    ? "wall.endpointConnected"
+                    : "wall.endpointRoomBoundary"
+              )
+            })}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {t("wall.endpointStatus", {
+              endpoint: t("wall.labels.end"),
+              status: t(
+                endpointAvailability.end.draggable
+                  ? "wall.endpointFree"
+                  : endpointAvailability.end.topology === "shared-junction"
+                    ? "wall.endpointConnected"
+                    : "wall.endpointRoomBoundary"
+              )
+            })}
+          </Typography>
+        </Stack>
+      ) : null}
+      {endpointAvailability?.roomReferenced ? (
         <Alert severity="info" variant="outlined">
-          {t("wall.endpointEditingUnavailable")}
+          {t("wall.roomEndpointEditingUnavailable")}
+        </Alert>
+      ) : null}
+      {!endpointAvailability?.roomReferenced &&
+      (endpointAvailability?.start.topology === "shared-junction" ||
+        endpointAvailability?.end.topology === "shared-junction") ? (
+        <Alert severity="info" variant="outlined">
+          {t("wall.sharedEndpointEditingUnavailable")}
         </Alert>
       ) : null}
       <Button

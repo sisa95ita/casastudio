@@ -5,6 +5,7 @@ import {
   createFitViewportState,
   createViewportTransform2D,
   defaultViewportState,
+  normalizeClientPointToSvgViewport,
   panViewportState,
   resetViewportState,
   ViewportTransform2D,
@@ -153,5 +154,81 @@ describe("ViewportState", () => {
 
   it("resets to the neutral viewport state", () => {
     expect(resetViewportState()).toBe(defaultViewportState);
+  });
+});
+
+describe("SVG pointer normalization", () => {
+  it("maps a 1:1 rendered SVG with a non-zero client origin", () => {
+    expect(
+      normalizeClientPointToSvgViewport({
+        clientX: 410,
+        clientY: 280,
+        bounds: { left: 10, top: 20, width: 800, height: 520 },
+        viewBoxWidth: 800,
+        viewBoxHeight: 520
+      })
+    ).toEqual({
+      point: { x: 400, y: 260 },
+      cssPixelsPerSvgUnit: 1
+    });
+  });
+
+  it("accounts for centered letterboxing when CSS is wider than the viewBox", () => {
+    const normalized = normalizeClientPointToSvgViewport({
+      clientX: 500,
+      clientY: 270,
+      bounds: { left: 0, top: 10, width: 1000, height: 520 },
+      viewBoxWidth: 800,
+      viewBoxHeight: 520
+    });
+
+    expect(normalized.point).toEqual({ x: 400, y: 260 });
+    expect(normalized.cssPixelsPerSvgUnit).toBe(1);
+  });
+
+  it.each([
+    ["left", 110, 30, 0, 0],
+    ["right", 910, 30, 800, 0],
+    ["top", 510, 30, 400, 0],
+    ["bottom", 510, 550, 400, 520]
+  ] as const)(
+    "keeps the %s viewBox edge aligned inside a wider client rectangle",
+    (_edge, clientX, clientY, expectedX, expectedY) => {
+      expect(
+        normalizeClientPointToSvgViewport({
+          clientX,
+          clientY,
+          bounds: { left: 10, top: 30, width: 1000, height: 520 },
+          viewBoxWidth: 800,
+          viewBoxHeight: 520
+        }).point
+      ).toEqual({ x: expectedX, y: expectedY });
+    }
+  );
+
+  it("maps proportionally larger and smaller rendered SVGs", () => {
+    const larger = normalizeClientPointToSvgViewport({
+      clientX: 810,
+      clientY: 540,
+      bounds: { left: 10, top: 20, width: 1600, height: 1040 },
+      viewBoxWidth: 800,
+      viewBoxHeight: 520
+    });
+    const smaller = normalizeClientPointToSvgViewport({
+      clientX: 205,
+      clientY: 135,
+      bounds: { left: 5, top: 5, width: 400, height: 260 },
+      viewBoxWidth: 800,
+      viewBoxHeight: 520
+    });
+
+    expect(larger).toEqual({
+      point: { x: 400, y: 260 },
+      cssPixelsPerSvgUnit: 2
+    });
+    expect(smaller).toEqual({
+      point: { x: 400, y: 260 },
+      cssPixelsPerSvgUnit: 0.5
+    });
   });
 });

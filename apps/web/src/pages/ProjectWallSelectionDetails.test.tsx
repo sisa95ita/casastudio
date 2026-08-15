@@ -20,7 +20,11 @@ describe("ProjectWallSelectionDetails", () => {
           openings: []
         }}
         units={{ length: "cm", angle: "deg" }}
-        endpointEditingAvailable
+        endpointAvailability={{
+          roomReferenced: false,
+          start: { topology: "standalone", draggable: true },
+          end: { topology: "standalone", draggable: true }
+        }}
         onDelete={handleDelete}
         onUpdateProperties={vi.fn(() => true)}
       />
@@ -44,7 +48,11 @@ describe("ProjectWallSelectionDetails", () => {
     render(
       <ProjectWallSelectionDetails
         units={{ length: "cm", angle: "deg" }}
-        endpointEditingAvailable
+        endpointAvailability={{
+          roomReferenced: false,
+          start: { topology: "standalone", draggable: true },
+          end: { topology: "standalone", draggable: true }
+        }}
         onDelete={vi.fn()}
         onUpdateProperties={vi.fn(() => true)}
       />
@@ -70,7 +78,11 @@ describe("ProjectWallSelectionDetails", () => {
           openings: []
         }}
         units={{ length: "cm", angle: "deg" }}
-        endpointEditingAvailable
+        endpointAvailability={{
+          roomReferenced: false,
+          start: { topology: "standalone", draggable: true },
+          end: { topology: "standalone", draggable: true }
+        }}
         onDelete={vi.fn()}
         onUpdateProperties={handleUpdate}
       />
@@ -105,7 +117,11 @@ describe("ProjectWallSelectionDetails", () => {
           openings: []
         }}
         units={{ length: "cm", angle: "deg" }}
-        endpointEditingAvailable={false}
+        endpointAvailability={{
+          roomReferenced: true,
+          start: { topology: "standalone", draggable: false },
+          end: { topology: "standalone", draggable: false }
+        }}
         onDelete={vi.fn()}
         onUpdateProperties={vi.fn(() => true)}
       />

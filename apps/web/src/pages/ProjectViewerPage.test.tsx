@@ -34,6 +34,7 @@ import {
   editingDraftReplaced,
   editingSessionMarkedDirty
 } from "../state/project-editor-slice";
+import { createDraftWall } from "../state/project-wall-editing";
 import { demoProjectFixture } from "../test/demo-project-fixture";
 import { createGeometrySnapshotFixture } from "../test/geometry-snapshot-fixture";
 import { ProjectViewerPage } from "./ProjectViewerPage";
@@ -337,7 +338,7 @@ describe("ProjectViewerPage", () => {
     const drawWall = screen.getByRole("button", { name: "Draw Wall" });
     fireEvent.mouseOver(drawWall);
     expect((await screen.findByRole("tooltip")).textContent).toBe(
-      "Draw walls by choosing a start and end point."
+      "Draw connected walls as a continuous chain."
     );
   });
 
@@ -450,7 +451,11 @@ describe("ProjectViewerPage", () => {
     expect(wall.end.x).toBeCloseTo(200, 1);
     expect(wall.end.z).toBeCloseTo(105.56, 1);
     expect(state.activeTool).toBe("draw-wall");
-    expect(state.transient.interaction).toBeNull();
+    expect(state.transient.interaction).toMatchObject({
+      kind: "draw-wall",
+      startPoint: wall.end,
+      currentPointerPoint: wall.end
+    });
     expect(state.dirty).toBe(true);
     expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
     expect(state.draft).toMatchObject({
@@ -463,6 +468,400 @@ describe("ProjectViewerPage", () => {
     expect(document.querySelectorAll(".geometry-edge-hit-target")).toHaveLength(
       originalWallCount + 1
     );
+  });
+
+  it("continues a Draw Wall chain from the exact committed endpoint until Escape", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const originalWallCount =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls.length;
+
+    fireEvent.click(svg, { clientX: 120, clientY: 360 });
+    fireEvent.click(svg, { clientX: 180, clientY: 320 });
+    fireEvent.click(svg, { clientX: 250, clientY: 285 });
+
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls
+      ).toHaveLength(originalWallCount + 2)
+    );
+    const walls = store
+      .getState()
+      .projectEditor.draft!.building.levels[0]!.walls.slice(-2);
+    expect(walls[0]?.end).toEqual(walls[1]?.start);
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "draw-wall",
+      startPoint: walls[1]?.end
+    });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
+    expect(
+      store.getState().projectEditor.draft!.building.levels[0]!.walls
+    ).toHaveLength(originalWallCount + 2);
+  });
+
+  it("ends a chain after canonical cycle closure while keeping Draw Wall active", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const levelBefore = store.getState().projectEditor.draft!.building.levels[0]!;
+    const wallCount = levelBefore.walls.length;
+    const roomCount = levelBefore.rooms.length;
+    const start = { x: 120, y: 360 };
+
+    fireEvent.click(svg, { clientX: start.x, clientY: start.y });
+    fireEvent.click(svg, { clientX: 180, clientY: 320 });
+    fireEvent.click(svg, { clientX: 250, clientY: 360 });
+    fireEvent.pointerMove(svg, {
+      clientX: start.x,
+      clientY: start.y,
+      pointerId: 1
+    });
+    fireEvent.click(svg, { clientX: start.x, clientY: start.y });
+
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls
+      ).toHaveLength(wallCount + 3)
+    );
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
+    expect(
+      store.getState().projectEditor.draft!.building.levels[0]!.rooms
+    ).toHaveLength(roomCount);
+
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 400, pointerId: 1 });
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    fireEvent.click(svg, { clientX: 300, clientY: 400 });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "draw-wall",
+      startPoint: expect.any(Object)
+    });
+  });
+
+  it("exposes only the standalone handle on a Wall with one shared endpoint", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const wallCount =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls.length;
+
+    fireEvent.click(svg, { clientX: 120, clientY: 360 });
+    fireEvent.click(svg, { clientX: 180, clientY: 320 });
+    fireEvent.click(svg, { clientX: 250, clientY: 285 });
+    const firstNewWall =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls[wallCount]!;
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(
+      document.querySelector(
+        `[data-geometry-id="boundary-edge:${firstNewWall.id}"]`
+      )!
+    );
+
+    expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "End endpoint" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
+    expect(
+      screen.getByText(/connected to other walls and cannot be moved/i)
+    ).toBeTruthy();
+    expect(screen.getByRole("spinbutton", { name: "Height (cm)" })).toBeTruthy();
+  });
+
+  it("defensively cancels a stale endpoint drag after the endpoint becomes shared", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const wallCount =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls.length;
+    fireEvent.click(svg, { clientX: 120, clientY: 360 });
+    fireEvent.click(svg, { clientX: 220, clientY: 300 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    const wall =
+      store.getState().projectEditor.draft!.building.levels[0]!.walls[wallCount]!;
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(
+      document.querySelector(`[data-geometry-id="boundary-edge:${wall.id}"]`)!
+    );
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Start endpoint" }),
+      { pointerId: 19 }
+    );
+
+    const draft = structuredClone(store.getState().projectEditor.draft!);
+    draft.building.levels[0]!.walls.push(
+      createDraftWall(wall.start, { x: wall.start.x - 40, z: wall.start.z }, "stale-connection")
+    );
+    act(() => store.dispatch(editingDraftReplaced(draft)));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull()
+    );
+    const protectedDraft = store.getState().projectEditor.draft;
+    const buildCount = buildSpy.mock.calls.length;
+
+    fireEvent.pointerMove(svg, { clientX: 80, clientY: 360, pointerId: 19 });
+    fireEvent.pointerUp(svg, { clientX: 80, clientY: 360, pointerId: 19 });
+
+    expect(store.getState().projectEditor.draft).toBe(protectedDraft);
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
+  });
+
+  it("keeps equal snap offsets stable across a letterboxed SVG", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 1000,
+      bottom: 520,
+      width: 1000,
+      height: 520,
+      toJSON: () => ({})
+    });
+    const edge = document.querySelector(
+      '[data-geometry-id="boundary-edge:left-room-north-wall"]'
+    ) as SVGLineElement;
+    const start = {
+      x: Number(edge.getAttribute("x1")),
+      y: Number(edge.getAttribute("y1"))
+    };
+    const end = {
+      x: Number(edge.getAttribute("x2")),
+      y: Number(edge.getAttribute("y2"))
+    };
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    const normal = {
+      x: -(end.y - start.y) / length,
+      y: (end.x - start.x) / length
+    };
+    const sample = (parameter: number) => {
+      fireEvent.pointerMove(svg, {
+        clientX:
+          100 + start.x + (end.x - start.x) * parameter + normal.x * 5,
+        clientY: start.y + (end.y - start.y) * parameter + normal.y * 5,
+        pointerId: 1
+      });
+      return store.getState().projectEditor.transient.snapCandidate;
+    };
+
+    const nearStart = sample(0);
+    const midpoint = sample(0.5);
+    const nearEnd = sample(1);
+    expect(nearStart?.kind).toBe("vertex");
+    expect(midpoint?.kind).toBe("wall-interior");
+    expect(nearEnd?.kind).toBe("vertex");
+    for (const candidate of [nearStart, midpoint, nearEnd]) {
+      expect(candidate?.visualDistancePixels).toBeCloseTo(5, 5);
+    }
+    const marker = screen
+      .getByTestId("draw-wall-snap-marker")
+      .querySelector(".geometry-wall-snap-marker")!;
+    expect(Number(marker.getAttribute("cx"))).toBeCloseTo(end.x, 5);
+    expect(Number(marker.getAttribute("cy"))).toBeCloseTo(end.y, 5);
+  });
+
+  it("snaps a new Wall endpoint to exact existing Vertex coordinates", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const vertexElement = screen.getAllByTestId("geometry-vertex")[0]!;
+    const clientX = Number(vertexElement.getAttribute("cx"));
+    const clientY = Number(vertexElement.getAttribute("cy"));
+    const geometryId = vertexElement.getAttribute("data-geometry-id");
+    const before = GeometryEngine.build(store.getState().projectEditor.draft!);
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+    const canonicalVertex = before.model.levels[0]!.vertices.find(
+      (vertex) => vertex.id === geometryId
+    )!;
+
+    fireEvent.pointerMove(svg, { clientX, clientY, pointerId: 1 });
+    expect(store.getState().projectEditor.transient.snapCandidate).toMatchObject({
+      kind: "vertex",
+      geometryId
+    });
+    expect(await screen.findByTestId("draw-wall-snap-marker")).toBeTruthy();
+    fireEvent.click(svg, { clientX, clientY });
+    fireEvent.click(svg, { clientX: clientX + 37, clientY: clientY + 31 });
+
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls.at(-1)
+          ?.start
+      ).toEqual({ x: canonicalVertex.x, z: canonicalVertex.z })
+    );
+    const after = GeometryEngine.build(store.getState().projectEditor.draft!);
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    expect(
+      after.model.levels[0]!.vertices.find(
+        (vertex) => vertex.x === canonicalVertex.x && vertex.z === canonicalVertex.z
+      )?.incidentEdges.length
+    ).toBeGreaterThan(canonicalVertex.incidentEdges.length);
+  });
+
+  it("commits a Wall-interior snap as one atomic split and connected Wall draft", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const edge = document.querySelector(
+      '[data-geometry-id="boundary-edge:left-room-north-wall"]'
+    ) as SVGLineElement;
+    expect(edge).toBeTruthy();
+    const x1 = Number(edge.getAttribute("x1"));
+    const y1 = Number(edge.getAttribute("y1"));
+    const x2 = Number(edge.getAttribute("x2"));
+    const y2 = Number(edge.getAttribute("y2"));
+    const midpoint = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+    const length = Math.hypot(x2 - x1, y2 - y1);
+    const normal = { x: -(y2 - y1) / length, y: (x2 - x1) / length };
+    const snapPointer = {
+      x: midpoint.x + normal.x * 4,
+      y: midpoint.y + normal.y * 4
+    };
+    const freeEnd = {
+      x: midpoint.x + normal.x * 30,
+      y: midpoint.y + normal.y * 30
+    };
+    const beforeDraft = store.getState().projectEditor.draft!;
+    const originalWallCount = beforeDraft.building.levels[0]!.walls.length;
+
+    fireEvent.pointerMove(svg, {
+      clientX: snapPointer.x,
+      clientY: snapPointer.y,
+      pointerId: 1
+    });
+    expect(
+      (await screen.findByTestId("draw-wall-snap-marker")).querySelector(
+        ".geometry-wall-snap-marker--wall-interior"
+      )
+    ).toBeTruthy();
+    fireEvent.click(svg, { clientX: snapPointer.x, clientY: snapPointer.y });
+    expect(store.getState().projectEditor.draft).toBe(beforeDraft);
+    const buildCount = buildSpy.mock.calls.length;
+    fireEvent.click(svg, { clientX: freeEnd.x, clientY: freeEnd.y });
+
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls
+      ).toHaveLength(originalWallCount + 2)
+    );
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    const original = level.walls.find(
+      (wall) => wall.id === "left-room-north-wall"
+    )!;
+    const connected = level.walls.at(-1)!;
+    expect(original.end).toEqual(connected.start);
+    expect(
+      level.walls.some(
+        (wall) =>
+          wall.id !== original.id &&
+          wall.id !== connected.id &&
+          wall.start.x === connected.start.x &&
+          wall.start.z === connected.start.z
+      )
+    ).toBe(true);
+    expect(GeometryEngine.build(store.getState().projectEditor.draft!).ok).toBe(true);
+  });
+
+  it("deleting a branch atomically removes its redundant Room-wall split", async () => {
+    const buildSpy = vi.spyOn(GeometryEngine, "build");
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const beforeLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    const originalWallCount = beforeLevel.walls.length;
+    const originalWall = structuredClone(
+      beforeLevel.walls.find((wall) => wall.id === "left-room-north-wall")!
+    );
+    const edge = document.querySelector(
+      '[data-geometry-id="boundary-edge:left-room-north-wall"]'
+    ) as SVGLineElement;
+    const midpoint = {
+      x: (Number(edge.getAttribute("x1")) + Number(edge.getAttribute("x2"))) / 2,
+      y: (Number(edge.getAttribute("y1")) + Number(edge.getAttribute("y2"))) / 2
+    };
+    const delta = {
+      x: Number(edge.getAttribute("x2")) - Number(edge.getAttribute("x1")),
+      y: Number(edge.getAttribute("y2")) - Number(edge.getAttribute("y1"))
+    };
+    const length = Math.hypot(delta.x, delta.y);
+    const normal = { x: -delta.y / length, y: delta.x / length };
+
+    fireEvent.click(svg, {
+      clientX: midpoint.x + normal.x * 4,
+      clientY: midpoint.y + normal.y * 4
+    });
+    fireEvent.click(svg, {
+      clientX: midpoint.x + normal.x * 45,
+      clientY: midpoint.y + normal.y * 45
+    });
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls
+      ).toHaveLength(originalWallCount + 2)
+    );
+    const splitLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    const branch = splitLevel.walls.at(-1)!;
+    const originalIndex = splitLevel.walls.findIndex(
+      (wall) => wall.id === originalWall.id
+    );
+    const splitChild = splitLevel.walls[originalIndex + 1]!;
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(
+      document.querySelector(`[data-geometry-id="boundary-edge:${branch.id}"]`)!
+    );
+    const buildCount = buildSpy.mock.calls.length;
+    fireEvent.keyDown(window, { key: "Delete" });
+
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.draft!.building.levels[0]!.walls
+      ).toHaveLength(originalWallCount)
+    );
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.walls.find((wall) => wall.id === originalWall.id)).toEqual(
+      originalWall
+    );
+    expect(level.walls.some((wall) => wall.id === splitChild.id)).toBe(false);
+    expect(level.rooms).toHaveLength(beforeLevel.rooms.length);
+    expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
+    const geometry = GeometryEngine.build(store.getState().projectEditor.draft!);
+    expect(geometry.ok).toBe(true);
+    if (!geometry.ok) return;
+    expect(
+      geometry.model.levels[0]?.vertices.some(
+        (vertex) =>
+          vertex.x === branch.start.x && vertex.z === branch.start.z
+      )
+    ).toBe(false);
   });
 
   it("rejects a zero-length Wall without dirtying the draft", async () => {

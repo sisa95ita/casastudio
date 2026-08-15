@@ -138,7 +138,7 @@ describe("GeometrySvgViewer", () => {
             wallId: edge.sourceWallId,
             start: edge.startVertex,
             end: { x: edge.endVertex.x + 10, z: edge.endVertex.z + 10 },
-            endpointEditingAvailable: true,
+            endpointEditingAvailable: { start: true, end: true },
             draggingEndpoint: "end"
           }
         }}
@@ -179,7 +179,7 @@ describe("GeometrySvgViewer", () => {
             wallId: edge.sourceWallId,
             start: edge.startVertex,
             end: edge.endVertex,
-            endpointEditingAvailable: true
+            endpointEditingAvailable: { start: true, end: true }
           }
         }}
       />

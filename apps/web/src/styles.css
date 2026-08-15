@@ -893,6 +893,22 @@ img {
   stroke-width: 2;
 }
 
+.geometry-wall-snap-marker {
+  fill: rgba(255, 253, 249, 0.88);
+  pointer-events: none;
+  stroke: var(--casa-terracotta);
+  stroke-width: 2.5;
+}
+
+.geometry-wall-snap-marker--wall-interior {
+  fill: rgba(199, 85, 50, 0.2);
+}
+
+.geometry-wall-snap-marker__inner {
+  fill: var(--casa-terracotta);
+  pointer-events: none;
+}
+
 .geometry-selected-wall {
   opacity: 0.9;
   stroke-width: 7;

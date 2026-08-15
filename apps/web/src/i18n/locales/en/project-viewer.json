@@ -37,7 +37,7 @@
     "comingSoon": "{{tool}} — coming soon",
     "help": {
       "select": "Select elements in the plan.",
-      "draw-wall": "Draw walls by choosing a start and end point.",
+      "draw-wall": "Draw connected walls as a continuous chain.",
       "pan": "Move around the plan without changing geometry."
     }
   },
@@ -126,6 +126,8 @@
       "notFound": "The selected wall no longer exists.",
       "invalidHeight": "Invalid wall height.",
       "invalidThickness": "Invalid wall thickness.",
+      "splitOpening": "This wall cannot be split here because the point crosses an opening.",
+      "splitInvalid": "This wall cannot be split at that point.",
       "invalid": "The wall could not be changed."
     }
   },
@@ -136,7 +138,12 @@
     "delete": "Delete Wall",
     "startEndpoint": "Start endpoint",
     "endEndpoint": "End endpoint",
-    "endpointEditingUnavailable": "This wall belongs to a room. Its endpoints cannot be moved independently yet.",
+    "roomEndpointEditingUnavailable": "This wall belongs to a room. Its endpoints cannot be moved independently yet.",
+    "sharedEndpointEditingUnavailable": "This endpoint is connected to other walls and cannot be moved independently yet.",
+    "endpointStatus": "{{endpoint}}: {{status}}",
+    "endpointFree": "Free",
+    "endpointConnected": "Connected — movement unavailable",
+    "endpointRoomBoundary": "Room boundary — movement unavailable",
     "labels": {
       "type": "Type",
       "length": "Length",

@@ -5,10 +5,13 @@
  * is level-local XZ data, so callers should obtain these points through the
  * shared viewport transform rather than duplicating projection math.
  */
-export type ScreenPoint = {
+export type SvgViewportPoint = {
   readonly x: number;
   readonly y: number;
 };
+
+/** SVG viewport point retained as a compatibility name for viewport state APIs. */
+export type ScreenPoint = SvgViewportPoint;
 
 /**
  * Level-local runtime point on CasaStudio's XZ blueprint plane.
@@ -72,6 +75,59 @@ export type ZoomViewportOptions = {
   readonly minZoom?: number;
   readonly maxZoom?: number;
 };
+
+/** Client-space and layout values needed to normalize one SVG pointer. */
+export type SvgPointerNormalizationInput = {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly bounds: Pick<DOMRect, "left" | "top" | "width" | "height">;
+  readonly viewBoxWidth: number;
+  readonly viewBoxHeight: number;
+};
+
+/** SVG-local pointer and its uniform rendered CSS scale. */
+export type NormalizedSvgPointer = {
+  readonly point: SvgViewportPoint;
+  readonly cssPixelsPerSvgUnit: number;
+};
+
+/**
+ * Normalizes browser client coordinates into the SVG viewBox coordinate space.
+ *
+ * The calculation mirrors the SVG default `xMidYMid meet` behavior: uniform
+ * scaling preserves geometry proportions and any extra rendered space is
+ * centered as letterboxing. The returned scale converts SVG distances into
+ * visible CSS-pixel distances.
+ */
+export function normalizeClientPointToSvgViewport({
+  clientX,
+  clientY,
+  bounds,
+  viewBoxWidth,
+  viewBoxHeight
+}: SvgPointerNormalizationInput): NormalizedSvgPointer {
+  const safeViewBoxWidth = Math.max(1, viewBoxWidth);
+  const safeViewBoxHeight = Math.max(1, viewBoxHeight);
+  const scale = Math.max(
+    Number.EPSILON,
+    Math.min(
+      bounds.width / safeViewBoxWidth,
+      bounds.height / safeViewBoxHeight
+    )
+  );
+  const renderedWidth = safeViewBoxWidth * scale;
+  const renderedHeight = safeViewBoxHeight * scale;
+  const contentLeft = bounds.left + (bounds.width - renderedWidth) / 2;
+  const contentTop = bounds.top + (bounds.height - renderedHeight) / 2;
+
+  return {
+    point: {
+      x: (clientX - contentLeft) / scale,
+      y: (clientY - contentTop) / scale
+    },
+    cssPixelsPerSvgUnit: scale
+  };
+}
 
 /**
  * Projects immutable level-local XZ geometry into an SVG viewport.

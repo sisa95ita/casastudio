@@ -19,7 +19,8 @@ import type { GeometrySelectionState } from "./geometry-selection-state";
 import {
   type GeometryDisplayOptions,
   type GeometryEditorOverlay,
-  GeometrySvgViewer
+  GeometrySvgViewer,
+  type SvgViewportPointer
 } from "./GeometrySvgViewer";
 import type { ViewportState, WorldPointXZ } from "./viewport-transform-2d";
 import type { ProjectEditorInteraction } from "../state/project-editor-tools";
@@ -43,9 +44,9 @@ export type GeometryViewerPanelProps = {
   readonly statusLabel?: string;
   readonly interaction?: ProjectEditorInteraction;
   readonly editorOverlay?: GeometryEditorOverlay;
-  readonly onEditorCanvasClick?: (point: WorldPointXZ) => void;
+  readonly onEditorCanvasClick?: (pointer: SvgViewportPointer) => void;
   readonly onEditorPointerMove?: (
-    point: WorldPointXZ,
+    pointer: SvgViewportPointer,
     pointerId: number
   ) => void;
   readonly onWallEndpointPointerDown?: (

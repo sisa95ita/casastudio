@@ -5,6 +5,7 @@ import type { GeometryPresentationModel2D } from "../geometry-playground/geometr
 import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
 import type { GeometrySelectionState } from "../geometry-playground/geometry-selection-state";
 import { useCasaTranslation } from "../i18n";
+import type { WallEndpointEditingAvailability } from "../state/project-wall-editing";
 import { ProjectWallSelectionDetails } from "./ProjectWallSelectionDetails";
 
 /** Dispatches Edit-mode selection details by runtime geometry kind. */
@@ -13,7 +14,7 @@ export function ProjectSelectionDetails({
   selectionState,
   wall,
   units,
-  endpointEditingAvailable,
+  endpointAvailability,
   onDeleteWall,
   onUpdateWallProperties
 }: {
@@ -21,7 +22,7 @@ export function ProjectSelectionDetails({
   readonly selectionState: GeometrySelectionState;
   readonly wall?: Wall;
   readonly units: Project["units"];
-  readonly endpointEditingAvailable: boolean;
+  readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly onDeleteWall: () => void;
   readonly onUpdateWallProperties: (properties: {
     readonly height?: number;
@@ -42,7 +43,7 @@ export function ProjectSelectionDetails({
       <ProjectWallSelectionDetails
         wall={wall}
         units={units}
-        endpointEditingAvailable={endpointEditingAvailable}
+        endpointAvailability={endpointAvailability}
         onDelete={onDeleteWall}
         onUpdateProperties={onUpdateWallProperties}
       />

@@ -246,6 +246,146 @@ stable validation error codes. Expected failures do not throw. Success uses
 targeted structural copying: input state and unaffected entity state are not
 mutated.
 
+## Topology-aware Wall authoring
+
+Connected plan topology is persisted through exact Wall endpoint coordinates.
+There is no canonical Vertex or Junction entity. When two or more Wall
+endpoints contain exactly equal `{ x, z }` values on a Level, the Geometry
+Engine derives one runtime Vertex and its incident boundary edges. Editing
+operations mutate canonical Project topology; the Geometry Engine only derives
+runtime topology and never decides which Project entities to create or split.
+
+Draw Wall resolves pointer intent in this deterministic order:
+
+```text
+eligible existing Vertex
+        ↓ otherwise
+eligible Wall interior
+        ↓ otherwise
+free canonical pointer point
+```
+
+Eligibility and nearest-candidate comparison use one centralized visible
+CSS-pixel tolerance. Pointer coordinates begin in browser client space. The SVG
+event boundary removes the element's bounding-rectangle origin and accounts for
+the SVG viewBox's uniform `xMidYMid meet` scale and centered letterboxing. That
+produces one SVG viewBox point, which is compared directly with presentation
+geometry expressed in the same SVG coordinate space. The rendered CSS scale
+converts SVG distance back to visible pixels, so the intended tolerance remains
+stable when the CSS element and viewBox have different sizes.
+
+The editor viewport/display transform is separate from the browser-to-SVG
+normalization. It maps Project/world `{ x, z }` coordinates to SVG viewBox
+coordinates for rendering, zoom, and pan, and inverts the normalized SVG
+pointer into a free canonical Project point when needed. Snapping does not send
+that world point back through the projection merely to recover the SVG pointer.
+A Vertex candidate returns its exact canonical Project coordinates. A
+Wall-interior candidate projects onto the visible segment and retains the
+stable source `levelId` and `wallId`. The snap marker projects the candidate's
+canonical point through the ordinary world-to-SVG transform; it therefore
+lands on the selected geometry while the pointer-to-target separation is the
+actual visible snap distance. Equal-distance candidates use stable runtime
+identity as a secondary key, so array order cannot change the result.
+
+The candidate and preview remain transient editor state: pointer movement does
+not replace the Redux Project draft, mark it dirty, validate the aggregate, or
+rebuild the Geometry Engine.
+
+Draw Wall is a continuous interaction chain, not a persisted polyline. Each
+successful click after the initial point creates one independent Wall, and the
+exact committed endpoint becomes the next segment's continuation point.
+Escape clears the unfinished continuation and ends the chain while leaving the
+Draw Wall tool active. Already committed Walls remain in the draft. After a
+successful commit, the editor excludes the new Wall and checks for an existing
+exact endpoint-to-endpoint path in the canonical Wall graph. Such an alternate
+path means the new Wall closed a cycle, so the current chain ends naturally and
+the next click starts a new chain. A snap to unrelated existing topology does
+not stop the chain when no alternate path exists. Closure is evaluated only
+after commit, never during pointer movement.
+
+`splitWall(project, { levelId, wallId, splitPoint, newWallId })` divides an
+existing canonical Wall. The original ID stays on the original `start` to split
+segment; the caller ID belongs to the split to original `end` segment. Both
+children retain physical Wall properties and reciprocal `roomIds`. Points off
+the segment, at or numerically equivalent to an endpoint, and invalid child
+Walls are rejected without mutating the input.
+
+Room boundaries are ordered and oriented traversals. A forward use of a split
+Wall expands in place as original-forward then new-forward. A reverse use
+expands as new-reverse then original-reverse. Every referencing Room is
+rewritten independently, including both sides of a shared Wall, so traversal
+continuity and reciprocal references remain valid and the represented Room
+area is unchanged.
+
+Openings have an explicit Wall-relative `offsetFromStart` and `width`, so their
+split ownership is deterministic. An Opening ending at or before the split
+stays on the original child. An Opening starting at or after the split moves to
+the new child with:
+
+```text
+new offsetFromStart = old offsetFromStart - split distance
+```
+
+An Opening whose interior crosses the split point cannot belong to either
+child without changing its meaning, so the split returns a typed failure.
+Opening IDs and all other Opening properties remain unchanged.
+
+`createConnectedWall` represents one local topology edit. It applies required
+start/end Wall splits to immutable intermediate values, creates the new Wall,
+and validates the complete canonical result before returning it. The frontend
+dispatches only that final Project. If any split or creation precondition fails,
+the original Redux draft remains the only visible Project state; there is no
+intermediate split-only draft.
+
+Select-mode endpoint movement distinguishes the two endpoint identities of a
+selected Wall. A canonical endpoint is standalone when it is the only Wall
+endpoint on the Level with those exact coordinates. If another Wall endpoint
+uses the same coordinates, runtime geometry derives a shared junction and that
+endpoint's independent drag handle is unavailable. The other endpoint remains
+draggable when it is standalone. Room-referenced Walls retain their existing
+whole-Wall movement restriction. The pointer-down and commit boundaries both
+resolve availability from the current draft, so stale interaction state cannot
+detach a newly shared endpoint. Junction movement is a distinct future editing
+operation; independent endpoint movement never moves or detaches incident
+Walls implicitly.
+
+`collapseWallJunction` reverses a redundant split only at an exact degree-two
+canonical junction. The two incident segments must be opposite collinear
+continuations with matching name, description, height, thickness, and ordered
+Room references. The earlier segment in Level order survives, which restores
+the original ID for segments produced by `splitWall`; unsafe or ambiguous
+junctions are unchanged.
+
+Every Room that uses the segments must contain them as adjacent continuous
+boundary traversals. The pair is replaced in place by the surviving Wall with
+the orientation that preserves the same traversal start and end. Forward,
+reverse, wraparound, and multiple-Room uses follow the same rule. No Room is
+created or deleted. Openings retain their IDs and physical spans; their offsets
+are projected onto the surviving Wall's orientation, so an Opening from the
+second forward segment is shifted by the first segment length. Candidate Walls,
+Room boundaries, Opening placement, cross-references, reference consistency,
+and geometry must all validate before the collapse is accepted.
+
+`deleteWallAndCollapseRedundantTopology` first applies the ordinary referenced-
+Wall deletion restriction, then inspects only the deleted Wall's former
+endpoints. Each endpoint may perform the strict collapse above if deletion made
+it redundant. Optional unsafe collapses are skipped, unrelated Level topology
+is not scanned, and the frontend receives one final validated Project for one
+Redux draft replacement and one Geometry Engine rebuild.
+
+Wall graph topology and Room semantics remain separate:
+
+```text
+closed Wall cycle != automatic Room entity
+```
+
+Splitting an outer Room Wall only expands that Room's existing outer boundary.
+A new Wall that starts on the boundary remains an internal standalone Wall. If
+it connects two opposite boundary splits and visually partitions the polygon,
+the original explicit Room and rewritten outer perimeter remain authoritative;
+no second Room is inferred and the internal Wall is not inserted into the Room
+boundary.
+
 ## Authorization
 
 Create, list, read, save, and geometry reuse the existing JWT principal and

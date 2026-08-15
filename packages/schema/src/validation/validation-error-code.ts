@@ -141,6 +141,21 @@ export enum ValidationErrorCode {
   WALL_ZERO_LENGTH = "WALL_ZERO_LENGTH",
 
   /**
+   * A requested Wall split point does not lie on the target segment.
+   */
+  WALL_SPLIT_POINT_NOT_ON_WALL = "WALL_SPLIT_POINT_NOT_ON_WALL",
+
+  /**
+   * A requested Wall split point is topologically equivalent to an endpoint.
+   */
+  WALL_SPLIT_AT_ENDPOINT = "WALL_SPLIT_AT_ENDPOINT",
+
+  /**
+   * A requested Wall split would divide an Opening between child segments.
+   */
+  WALL_SPLIT_INTERSECTS_OPENING = "WALL_SPLIT_INTERSECTS_OPENING",
+
+  /**
    * A persisted Room boundary traversal does not close back to its starting point.
    */
   OPEN_ROOM_BOUNDARY = "OPEN_ROOM_BOUNDARY",

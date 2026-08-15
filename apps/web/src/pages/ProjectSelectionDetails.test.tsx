@@ -15,7 +15,11 @@ describe("ProjectSelectionDetails", () => {
           selected: [{ kind: "VERTEX", geometryId: "vertex-shared" }]
         }}
         units={{ length: "cm", angle: "deg" }}
-        endpointEditingAvailable={false}
+        endpointAvailability={{
+          roomReferenced: true,
+          start: { topology: "standalone", draggable: false },
+          end: { topology: "standalone", draggable: false }
+        }}
         onDeleteWall={vi.fn()}
         onUpdateWallProperties={vi.fn(() => true)}
       />
@@ -36,7 +40,11 @@ describe("ProjectSelectionDetails", () => {
         model={model}
         selectionState={{ selected: [] }}
         units={{ length: "cm", angle: "deg" }}
-        endpointEditingAvailable={false}
+        endpointAvailability={{
+          roomReferenced: true,
+          start: { topology: "standalone", draggable: false },
+          end: { topology: "standalone", draggable: false }
+        }}
         onDeleteWall={vi.fn()}
         onUpdateWallProperties={vi.fn(() => true)}
       />
