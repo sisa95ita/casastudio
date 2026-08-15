@@ -34,6 +34,7 @@ import {
   useMediaQuery,
   useTheme
 } from "@mui/material";
+import { useQueryClient } from "@tanstack/react-query";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import LinearScaleRoundedIcon from "@mui/icons-material/LinearScaleRounded";
@@ -55,8 +56,10 @@ import { useBlocker, useParams } from "react-router-dom";
 
 import {
   ApiAuthenticationUnavailableError,
-  ApiRequestError
+  ApiRequestError,
+  ProjectReplacementResponseError
 } from "../api/CasaStudioApiClient";
+import { useCasaStudioApi } from "../api/ApiProvider";
 import type { GeometryLevel, GeometrySnapshot } from "../api/api-types";
 import { useAppShellContent } from "../app-shell/AppShellContext";
 import { GeometryLayerControls } from "../geometry-playground/GeometryLayerControls";
@@ -91,12 +94,22 @@ import {
   zoomViewportState
 } from "../geometry-playground/viewport-transform-2d";
 import { useCasaTranslation } from "../i18n";
-import { useProjectGeometryQuery } from "../queries/geometry-queries";
-import { useProjectQuery } from "../queries/project-queries";
+import {
+  geometryKeys,
+  projectGeometryQueryOptions,
+  useProjectGeometryQuery
+} from "../queries/geometry-queries";
+import { useReplaceProjectMutation } from "../queries/project-mutations";
+import {
+  projectKeys,
+  projectQueryOptions,
+  useProjectQuery
+} from "../queries/project-queries";
 import { useAppDispatch, useAppSelector } from "../state/hooks";
 import {
   cleanEditingSessionLeft,
   editingDraftReplaced,
+  editingSessionEnded,
   editingSessionEntered,
   editorActiveLevelChanged,
   editorActiveToolChanged,
@@ -136,6 +149,10 @@ import {
   selectGeometrySelection
 } from "../state/viewer-slice";
 import { ProjectSelectionDetails } from "./ProjectSelectionDetails";
+import {
+  ProjectPersistenceDialogs,
+  type ProjectPersistenceDialog
+} from "./ProjectPersistenceDialogs";
 
 const emptySelectionState = createGeometrySelectionState();
 
@@ -147,6 +164,8 @@ export function ProjectViewerPage() {
   const isPhone = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "lg"));
   const dispatch = useAppDispatch();
+  const api = useCasaStudioApi();
+  const queryClient = useQueryClient();
   const editor = useAppSelector(selectProjectEditor);
   const viewSelection = useAppSelector(selectGeometrySelection);
   const editSelection = useAppSelector(selectEditorGeometrySelection);
@@ -156,6 +175,7 @@ export function ProjectViewerPage() {
   const blocker = useBlocker(shouldProtectNavigation);
   const projectQuery = useProjectQuery(projectId);
   const geometryQuery = useProjectGeometryQuery(projectId);
+  const replaceProjectMutation = useReplaceProjectMutation();
   const [displayOptions, setDisplayOptions] = useState(
     defaultGeometryDisplayOptions
   );
@@ -164,7 +184,14 @@ export function ProjectViewerPage() {
   const [selectionOwnerSnapshot, setSelectionOwnerSnapshot] =
     useState<GeometrySnapshot>();
   const [viewportOwnerKey, setViewportOwnerKey] = useState("");
-  const [dirtyExitBlocked, setDirtyExitBlocked] = useState(false);
+  const [persistenceDialog, setPersistenceDialog] =
+    useState<ProjectPersistenceDialog>("none");
+  const [refreshingAuthoritativeState, setRefreshingAuthoritativeState] =
+    useState(false);
+  const [refreshFailure, setRefreshFailure] = useState<
+    "save" | "reload-latest"
+  >();
+  const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [editingError, setEditingError] = useState<WallEditingErrorKey>();
 
@@ -182,6 +209,8 @@ export function ProjectViewerPage() {
     editor.mode === "edit" && editor.projectId === projectId;
   const workspaceMode: ProjectWorkspaceMode =
     ownsEditingSession && !isPhone ? "edit" : "view";
+  const saveInteractionBlocked =
+    replaceProjectMutation.isPending || refreshingAuthoritativeState;
   const viewLevels = geometryResponse?.geometry.levels ?? [];
   const selectedViewLevel =
     viewLevels.find((level) => level.id === selectedViewLevelId) ??
@@ -425,6 +454,7 @@ export function ProjectViewerPage() {
   const handleEditorCanvasClick = useCallback(
     (pointer: SvgViewportPointer) => {
       if (
+        saveInteractionBlocked ||
         workspaceMode !== "edit" ||
         editor.activeTool !== "draw-wall" ||
         !editor.draft ||
@@ -486,12 +516,18 @@ export function ProjectViewerPage() {
       editor.draft,
       editor.transient.interaction,
       presentationResult,
+      saveInteractionBlocked,
       workspaceMode
     ]
   );
 
   const handleEditorPointerMove = useCallback(
     (pointer: SvgViewportPointer, pointerId: number) => {
+      if (
+        saveInteractionBlocked
+      ) {
+        return;
+      }
       if (
         workspaceMode === "edit" &&
         editor.activeTool === "draw-wall" &&
@@ -522,6 +558,7 @@ export function ProjectViewerPage() {
       editor.activeTool,
       editor.transient.interaction,
       presentationResult,
+      saveInteractionBlocked,
       workspaceMode
     ]
   );
@@ -529,6 +566,7 @@ export function ProjectViewerPage() {
   const handleWallEndpointPointerDown = useCallback(
     (endpoint: WallEndpoint, pointerId: number) => {
       if (
+        saveInteractionBlocked ||
         workspaceMode !== "edit" ||
         editor.activeTool !== "select" ||
         !editor.activeLevelId ||
@@ -555,6 +593,7 @@ export function ProjectViewerPage() {
       editor.activeTool,
       selectedEditWall,
       selectedWallEndpointAvailability,
+      saveInteractionBlocked,
       workspaceMode
     ]
   );
@@ -563,6 +602,7 @@ export function ProjectViewerPage() {
     (point: WorldPointXZ, pointerId: number) => {
       const interaction = editor.transient.interaction;
       if (
+        saveInteractionBlocked ||
         workspaceMode !== "edit" ||
         !editor.draft ||
         interaction?.kind !== "move-wall-endpoint" ||
@@ -596,7 +636,13 @@ export function ProjectViewerPage() {
         setEditingError(getWallEditingErrorKey(result));
       }
     },
-    [dispatch, editor.draft, editor.transient.interaction, workspaceMode]
+    [
+      dispatch,
+      editor.draft,
+      editor.transient.interaction,
+      saveInteractionBlocked,
+      workspaceMode
+    ]
   );
 
   const handleWallEndpointPointerCancel = useCallback(
@@ -614,6 +660,7 @@ export function ProjectViewerPage() {
 
   const handleDeleteSelectedWall = useCallback(() => {
     if (
+      saveInteractionBlocked ||
       workspaceMode !== "edit" ||
       !editor.draft ||
       !editor.activeLevelId ||
@@ -639,6 +686,7 @@ export function ProjectViewerPage() {
     editor.activeLevelId,
     editor.draft,
     selectedEditWall,
+    saveInteractionBlocked,
     workspaceMode
   ]);
 
@@ -648,6 +696,7 @@ export function ProjectViewerPage() {
       readonly thickness?: number;
     }): boolean => {
       if (
+        saveInteractionBlocked ||
         workspaceMode !== "edit" ||
         !editor.draft ||
         !editor.activeLevelId ||
@@ -675,6 +724,7 @@ export function ProjectViewerPage() {
       editor.activeLevelId,
       editor.draft,
       selectedEditWall,
+      saveInteractionBlocked,
       workspaceMode
     ]
   );
@@ -685,7 +735,7 @@ export function ProjectViewerPage() {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (shortcutsOpen) return;
+      if (shortcutsOpen || saveInteractionBlocked) return;
       const action = getGeometryViewerShortcutAction(event);
       if (!action) return;
       if (
@@ -731,6 +781,7 @@ export function ProjectViewerPage() {
     editor.transient.snapCandidate,
     selectedLevel,
     selectedEditWall,
+    saveInteractionBlocked,
     shortcutsOpen,
     workspaceMode
   ]);
@@ -738,6 +789,7 @@ export function ProjectViewerPage() {
   const handleModeChange = useCallback(
     (nextMode: ProjectWorkspaceMode | null) => {
       if (
+        saveInteractionBlocked ||
         !nextMode ||
         nextMode === workspaceMode ||
         !projectResponse ||
@@ -755,28 +807,186 @@ export function ProjectViewerPage() {
           })
         );
         dispatch(geometrySelectionReset());
-        setDirtyExitBlocked(false);
+        setPersistenceDialog("none");
         return;
       }
 
       if (editor.dirty) {
-        setDirtyExitBlocked(true);
+        setPersistenceDialog("leave");
         return;
       }
 
       dispatch(cleanEditingSessionLeft());
       dispatch(geometrySelectionReset());
-      setDirtyExitBlocked(false);
+      setPersistenceDialog("none");
     },
     [
       consistencyFailure,
       dispatch,
       editor.dirty,
       projectResponse,
+      saveInteractionBlocked,
       selectedViewLevel,
       workspaceMode
     ]
   );
+
+  const refreshAuthoritativeState = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.detail(projectId),
+        exact: true,
+        refetchType: "none"
+      }),
+      queryClient.invalidateQueries({
+        queryKey: geometryKeys.detail(projectId),
+        exact: true,
+        refetchType: "none"
+      })
+    ]);
+
+    const refreshResults = await Promise.allSettled([
+      queryClient.fetchQuery(projectQueryOptions(api, projectId)),
+      queryClient.fetchQuery(projectGeometryQueryOptions(api, projectId))
+    ]);
+    const failedRefresh = refreshResults.find(
+      (result) => result.status === "rejected"
+    );
+    if (failedRefresh?.status === "rejected") {
+      throw failedRefresh.reason;
+    }
+    const [projectResult, geometryResult] = refreshResults;
+    if (
+      projectResult?.status !== "fulfilled" ||
+      geometryResult?.status !== "fulfilled"
+    ) {
+      throw new Error("Authoritative refresh completed without both resources.");
+    }
+    const nextProject = projectResult.value;
+    const nextGeometry = geometryResult.value;
+    if (getConsistencyFailure(nextProject, nextGeometry)) {
+      throw new Error(
+        "Authoritative Project and Geometry responses are not coherent."
+      );
+    }
+  }, [api, projectId, queryClient]);
+
+  const finishAuthoritativeTransition = useCallback(
+    async (kind: "save" | "reload-latest", resumeNavigation: boolean) => {
+      dispatch(editingSessionEnded(projectId));
+      dispatch(geometrySelectionReset());
+      setPersistenceDialog("none");
+      setRefreshingAuthoritativeState(true);
+
+      try {
+        await refreshAuthoritativeState();
+        setRefreshFailure(undefined);
+        if (resumeNavigation && blocker.state === "blocked") {
+          blocker.proceed();
+        }
+      } catch {
+        setRefreshFailure(kind);
+      } finally {
+        setRefreshingAuthoritativeState(false);
+      }
+    },
+    [blocker, dispatch, projectId, refreshAuthoritativeState]
+  );
+
+  const handleSave = useCallback(async () => {
+    if (
+      saveInteractionBlocked ||
+      workspaceMode !== "edit" ||
+      !editor.dirty ||
+      !editor.draft ||
+      editor.baseRevision === null
+    ) {
+      return;
+    }
+
+    const input = {
+      projectId,
+      baseRevision: editor.baseRevision,
+      project: structuredClone(editor.draft)
+    };
+    const resumeNavigation = blocker.state === "blocked";
+    setPersistenceDialog("none");
+    setSaveFeedback(undefined);
+
+    try {
+      await replaceProjectMutation.mutateAsync(input);
+    } catch (error) {
+      if (error instanceof ProjectReplacementResponseError) {
+        await finishAuthoritativeTransition("save", resumeNavigation);
+        return;
+      }
+
+      if (resumeNavigation && blocker.state === "blocked") {
+        blocker.reset();
+      }
+      if (isProjectRevisionConflict(error)) {
+        setPersistenceDialog("conflict");
+      } else {
+        setSaveFeedback(classifySaveFeedback(error));
+      }
+      return;
+    }
+
+    await finishAuthoritativeTransition("save", resumeNavigation);
+  }, [
+    blocker,
+    editor.baseRevision,
+    editor.dirty,
+    editor.draft,
+    finishAuthoritativeTransition,
+    projectId,
+    replaceProjectMutation,
+    saveInteractionBlocked,
+    workspaceMode
+  ]);
+
+  const handleKeepEditing = useCallback(() => {
+    if (blocker.state === "blocked") {
+      blocker.reset();
+    }
+    setPersistenceDialog("none");
+  }, [blocker]);
+
+  const handleConfirmDiscard = useCallback(() => {
+    const resumeNavigation = blocker.state === "blocked";
+    dispatch(editingSessionEnded(projectId));
+    dispatch(geometrySelectionReset());
+    setPersistenceDialog("none");
+    if (resumeNavigation) {
+      blocker.proceed();
+    }
+  }, [blocker, dispatch, projectId]);
+
+  const handleConfirmReloadLatest = useCallback(async () => {
+    await finishAuthoritativeTransition("reload-latest", false);
+  }, [finishAuthoritativeTransition]);
+
+  const handleRetryAuthoritativeRefresh = useCallback(async () => {
+    const failedTransition = refreshFailure;
+    if (!failedTransition || refreshingAuthoritativeState) return;
+    setRefreshingAuthoritativeState(true);
+    try {
+      await refreshAuthoritativeState();
+      setRefreshFailure(undefined);
+      if (failedTransition === "save" && blocker.state === "blocked") {
+        blocker.proceed();
+      }
+    } catch {
+      setRefreshFailure(failedTransition);
+    } finally {
+      setRefreshingAuthoritativeState(false);
+    }
+  }, [
+    blocker,
+    refreshAuthoritativeState,
+    refreshFailure,
+    refreshingAuthoritativeState
+  ]);
 
   const inspector = useMemo(() => {
     if (!presentationResult?.ok || !selectedLevel) {
@@ -852,6 +1062,13 @@ export function ProjectViewerPage() {
   );
   useAppShellContent(shellContent);
 
+  const activePersistenceDialog =
+    persistenceDialog !== "none"
+      ? persistenceDialog
+      : blocker.state === "blocked"
+        ? "leave"
+        : "none";
+
   if (projectQuery.isPending || geometryQuery.isPending) {
     return (
       <Stack role="status" spacing={1.5} sx={{ alignItems: "center", py: 8 }}>
@@ -862,13 +1079,24 @@ export function ProjectViewerPage() {
   }
 
   const failure = projectQuery.error ?? geometryQuery.error;
-  if (failure) return <ProjectViewerError error={failure} />;
+  if (refreshFailure) {
+    return (
+      <ProjectAuthoritativeRefreshError
+        kind={refreshFailure}
+        retrying={refreshingAuthoritativeState}
+        onRetry={handleRetryAuthoritativeRefresh}
+      />
+    );
+  }
+  if (failure && !saveInteractionBlocked) {
+    return <ProjectViewerError error={failure} />;
+  }
   if (!projectResponse || !geometryResponse) {
     return (
       <ProjectViewerError error={new Error("Query completed without data.")} />
     );
   }
-  if (consistencyFailure) {
+  if (consistencyFailure && !saveInteractionBlocked) {
     return (
       <ProjectConsistencyError
         kind={consistencyFailure}
@@ -886,23 +1114,16 @@ export function ProjectViewerPage() {
 
   return (
     <Stack className="geometry-page project-workspace" spacing={0}>
-      {blocker.state === "blocked" ? (
-        <Alert
-          severity="warning"
-          action={
-            <Button onClick={() => blocker.reset()}>
-              {t("guard.keepEditing")}
-            </Button>
-          }
-        >
-          {t("guard.navigationBlocked")}
-        </Alert>
-      ) : null}
-      {dirtyExitBlocked ? (
-        <Alert severity="warning" onClose={() => setDirtyExitBlocked(false)}>
-          {t("guard.viewBlocked")}
-        </Alert>
-      ) : null}
+      <ProjectPersistenceDialogs
+        dialog={activePersistenceDialog}
+        saving={saveInteractionBlocked}
+        onKeepEditing={handleKeepEditing}
+        onConfirmDiscard={handleConfirmDiscard}
+        onSave={handleSave}
+        onReloadLatest={() => setPersistenceDialog("reload-conflict")}
+        onCancelReload={() => setPersistenceDialog("conflict")}
+        onConfirmReload={handleConfirmReloadLatest}
+      />
       <Snackbar
         open={Boolean(editingError)}
         autoHideDuration={5000}
@@ -914,6 +1135,21 @@ export function ProjectViewerPage() {
           onClose={() => setEditingError(undefined)}
         >
           {editingError ? t(editingError) : ""}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={Boolean(saveFeedback)}
+        autoHideDuration={7000}
+        onClose={() => setSaveFeedback(undefined)}
+      >
+        <Alert
+          severity="error"
+          variant="filled"
+          onClose={() => setSaveFeedback(undefined)}
+        >
+          {saveFeedback
+            ? t(`persistence.feedback.${saveFeedback}`)
+            : ""}
         </Alert>
       </Snackbar>
 
@@ -932,6 +1168,7 @@ export function ProjectViewerPage() {
         {!isPhone ? (
           <WorkspaceModeControl
             mode={workspaceMode}
+            disabled={saveInteractionBlocked}
             onChange={handleModeChange}
           />
         ) : (
@@ -979,16 +1216,37 @@ export function ProjectViewerPage() {
             variant="outlined"
             label={
               workspaceMode === "edit"
-                ? t(editor.dirty ? "workspace.unsaved" : "workspace.editing")
+                ? t(editor.dirty ? "workspace.unsaved" : "workspace.clean")
                 : t("workspace.saved")
             }
           />
+          {workspaceMode === "edit" ? (
+            <Stack direction="row" spacing={1}>
+              {editor.dirty ? (
+                <Button
+                  color="inherit"
+                  disabled={saveInteractionBlocked}
+                  onClick={() => setPersistenceDialog("discard")}
+                >
+                  {t("persistence.discardAction")}
+                </Button>
+              ) : null}
+              <Button
+                variant="contained"
+                disabled={!editor.dirty || saveInteractionBlocked}
+                onClick={handleSave}
+              >
+                {t("persistence.save")}
+              </Button>
+            </Stack>
+          ) : null}
         </Stack>
       </Box>
 
       {workspaceMode === "edit" ? (
         <ProjectEditorToolbar
           activeTool={editor.activeTool}
+          disabled={saveInteractionBlocked}
           onToolChange={(tool) => dispatch(editorActiveToolChanged(tool))}
         />
       ) : null}
@@ -1069,11 +1327,16 @@ export function ProjectViewerPage() {
 
 type WorkspaceModeControlProps = {
   readonly mode: ProjectWorkspaceMode;
+  readonly disabled: boolean;
   readonly onChange: (mode: ProjectWorkspaceMode | null) => void;
 };
 
 /** Renders the View/Edit control independently from future representation choices. */
-function WorkspaceModeControl({ mode, onChange }: WorkspaceModeControlProps) {
+function WorkspaceModeControl({
+  mode,
+  disabled,
+  onChange
+}: WorkspaceModeControlProps) {
   const { t } = useCasaTranslation("project-viewer");
 
   return (
@@ -1081,6 +1344,7 @@ function WorkspaceModeControl({ mode, onChange }: WorkspaceModeControlProps) {
       exclusive
       size="small"
       value={mode}
+      disabled={disabled}
       onChange={(_event, value: ProjectWorkspaceMode | null) => onChange(value)}
       aria-label={t("workspace.modeLabel")}
       className="project-workspace__mode-control"
@@ -1099,12 +1363,14 @@ function WorkspaceModeControl({ mode, onChange }: WorkspaceModeControlProps) {
 
 type ProjectEditorToolbarProps = {
   readonly activeTool: ProjectEditorTool | null;
+  readonly disabled: boolean;
   readonly onToolChange: (tool: ProjectEditorTool | null) => void;
 };
 
 /** Renders enabled editor tools and explicitly disabled future actions. */
 function ProjectEditorToolbar({
   activeTool,
+  disabled,
   onToolChange
 }: ProjectEditorToolbarProps) {
   const { t } = useCasaTranslation("project-viewer");
@@ -1134,7 +1400,7 @@ function ProjectEditorToolbar({
           const button = (
             <ToggleButton
               value={tool.id}
-              disabled={!tool.enabled}
+              disabled={disabled || !tool.enabled}
               selected={activeTool === tool.id}
               aria-label={
                 tool.enabled ? label : t("tools.comingSoon", { tool: label })
@@ -1396,6 +1662,40 @@ function ProjectWorkspaceInspector({
 }
 
 type ConsistencyFailure = "project-id" | "revision";
+type SaveFeedback = "validation" | "forbidden" | "client" | "failure";
+
+function isProjectRevisionConflict(error: unknown): boolean {
+  return (
+    error instanceof ApiRequestError &&
+    error.status === 409 &&
+    error.problem?.code === "PROJECT_REVISION_CONFLICT"
+  );
+}
+
+function classifySaveFeedback(error: unknown): SaveFeedback {
+  if (
+    error instanceof ApiRequestError &&
+    (error.status === 422 || error.problem?.code === "PROJECT_STATE_INVALID")
+  ) {
+    return "validation";
+  }
+  if (
+    error instanceof ApiAuthenticationUnavailableError ||
+    (error instanceof ApiRequestError &&
+      (error.status === 401 || error.status === 403))
+  ) {
+    return "forbidden";
+  }
+  if (
+    error instanceof ApiRequestError &&
+    error.status !== undefined &&
+    error.status >= 400 &&
+    error.status < 500
+  ) {
+    return "client";
+  }
+  return "failure";
+}
 
 function getConsistencyFailure(
   projectResponse: ReturnType<typeof useProjectQuery>["data"],
@@ -1439,6 +1739,51 @@ function ProjectConsistencyError({
           geometryProjectId,
           geometryRevision
         })}
+      </Typography>
+    </Alert>
+  );
+}
+
+type ProjectAuthoritativeRefreshErrorProps = {
+  readonly kind: "save" | "reload-latest";
+  readonly retrying: boolean;
+  readonly onRetry: () => void;
+};
+
+function ProjectAuthoritativeRefreshError({
+  kind,
+  retrying,
+  onRetry
+}: ProjectAuthoritativeRefreshErrorProps) {
+  const { t } = useCasaTranslation("project-viewer");
+  const saved = kind === "save";
+
+  return (
+    <Alert
+      severity="error"
+      action={
+        <Button disabled={retrying} onClick={onRetry}>
+          {t(
+            retrying
+              ? "persistence.refresh.retrying"
+              : "persistence.refresh.retry"
+          )}
+        </Button>
+      }
+    >
+      <Typography component="h1" variant="h2">
+        {t(
+          saved
+            ? "persistence.refresh.savedTitle"
+            : "persistence.refresh.latestTitle"
+        )}
+      </Typography>
+      <Typography variant="body2">
+        {t(
+          saved
+            ? "persistence.refresh.savedDetail"
+            : "persistence.refresh.latestDetail"
+        )}
       </Typography>
     </Alert>
   );

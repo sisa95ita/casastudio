@@ -23,9 +23,53 @@
     "view": "View",
     "edit": "Edit",
     "editing": "Editing",
+    "clean": "No unsaved changes",
     "saved": "Saved",
     "unsaved": "Unsaved changes",
     "readOnly": "Read-only"
+  },
+  "persistence": {
+    "save": "Save",
+    "discardAction": "Discard",
+    "keepEditing": "Keep editing",
+    "cancel": "Cancel",
+    "saving": {
+      "title": "Saving project…",
+      "detail": "Please wait while your changes are saved.",
+      "progressLabel": "Saving project"
+    },
+    "discard": {
+      "title": "Discard unsaved changes?",
+      "detail": "Your local changes will be lost.",
+      "confirm": "Discard changes"
+    },
+    "leave": {
+      "title": "Unsaved changes",
+      "detail": "Save your changes before leaving?"
+    },
+    "conflict": {
+      "title": "Project changed on the server",
+      "detail": "A newer version of this project exists. Your local changes are still available, but they cannot be saved over the newer version.",
+      "keepLocalDraft": "Keep local draft",
+      "reloadLatest": "Reload latest",
+      "confirmTitle": "Discard local changes and reload?",
+      "confirmDetail": "Reloading the latest server version will permanently discard your unsaved local changes.",
+      "confirmReload": "Discard and reload"
+    },
+    "feedback": {
+      "validation": "The project could not be saved because some geometry is invalid. Your changes are still available.",
+      "forbidden": "You do not have permission to save this project. Your changes are still available locally.",
+      "client": "The project could not be saved. Your changes are still available locally.",
+      "failure": "The project could not be saved. Your changes are still available locally. Please try again."
+    },
+    "refresh": {
+      "savedTitle": "Project saved, but the latest version could not be loaded",
+      "savedDetail": "Your changes were saved successfully. Retry loading the authoritative Project and Geometry data; saving again is not required.",
+      "latestTitle": "The latest project could not be loaded",
+      "latestDetail": "Your local changes were discarded, but the authoritative Project and Geometry data could not be refreshed.",
+      "retry": "Retry loading",
+      "retrying": "Loading latest project…"
+    }
   },
   "tools": {
     "label": "Editing tools",

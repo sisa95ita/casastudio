@@ -4,7 +4,8 @@ import {
   parseProjectResponse,
   type ApiProblem,
   type ProjectGeometryResponse,
-  type ProjectResponse
+  type ProjectResponse,
+  type ReplaceProjectRequest
 } from "./api-types";
 
 /** Function that returns a current in-memory bearer token or reports no session. */
@@ -35,6 +36,17 @@ export class ApiAuthenticationUnavailableError extends Error {
   }
 }
 
+/**
+ * Reports an unusable successful replacement response after persistence was
+ * accepted by the server.
+ */
+export class ProjectReplacementResponseError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "ProjectReplacementResponseError";
+  }
+}
+
 /** Dependencies for constructing the explicit CasaStudio HTTP client. */
 export type CasaStudioApiClientOptions = {
   readonly baseUrl: string;
@@ -43,7 +55,7 @@ export type CasaStudioApiClientOptions = {
 };
 
 /**
- * Authenticated JSON client for the read-only CasaStudio Project and Geometry APIs.
+ * Authenticated JSON client for CasaStudio Project and Geometry APIs.
  */
 export class CasaStudioApiClient {
   private readonly baseUrl: string;
@@ -59,7 +71,10 @@ export class CasaStudioApiClient {
 
   /** Reads and validates an authoritative Project response. */
   async getProject(projectId: string, signal?: AbortSignal): Promise<ProjectResponse> {
-    const body = await this.getJson(`/api/v1/projects/${encodeURIComponent(projectId)}`, signal);
+    const body = await this.requestJson(
+      `/api/v1/projects/${encodeURIComponent(projectId)}`,
+      { method: "GET", signal }
+    );
 
     try {
       return parseProjectResponse(body);
@@ -79,9 +94,9 @@ export class CasaStudioApiClient {
     projectId: string,
     signal?: AbortSignal
   ): Promise<ProjectGeometryResponse> {
-    const body = await this.getJson(
+    const body = await this.requestJson(
       `/api/v1/projects/${encodeURIComponent(projectId)}/geometry`,
-      signal
+      { method: "GET", signal }
     );
 
     try {
@@ -97,7 +112,60 @@ export class CasaStudioApiClient {
     }
   }
 
-  private async getJson(path: string, signal?: AbortSignal): Promise<unknown> {
+  /** Replaces a complete Project and validates the authoritative response. */
+  async replaceProject(
+    projectId: string,
+    request: ReplaceProjectRequest
+  ): Promise<ProjectResponse> {
+    let body: unknown;
+
+    try {
+      body = await this.requestJson(
+        `/api/v1/projects/${encodeURIComponent(projectId)}`,
+        { method: "PUT", body: request }
+      );
+    } catch (error) {
+      if (
+        error instanceof ApiRequestError &&
+        error.kind === "invalid-response" &&
+        error.status !== undefined &&
+        error.status >= 200 &&
+        error.status < 300
+      ) {
+        throw new ProjectReplacementResponseError(
+          "The Project was persisted, but the API returned an unusable response.",
+          { cause: error }
+        );
+      }
+
+      throw error;
+    }
+
+    try {
+      const response = parseProjectResponse(body);
+      if (response.project.id !== projectId) {
+        throw new Error("Replacement response Project ID does not match the route Project ID.");
+      }
+      if (response.sourceRevision !== request.baseRevision + 1) {
+        throw new Error("Replacement response did not advance the Project revision exactly once.");
+      }
+      return response;
+    } catch (error) {
+      throw new ProjectReplacementResponseError(
+        "The Project was persisted, but the API returned an invalid replacement response.",
+        { cause: error }
+      );
+    }
+  }
+
+  private async requestJson(
+    path: string,
+    request: {
+      readonly method: "GET" | "PUT";
+      readonly body?: unknown;
+      readonly signal?: AbortSignal;
+    }
+  ): Promise<unknown> {
     let token: string | null;
 
     try {
@@ -114,12 +182,17 @@ export class CasaStudioApiClient {
 
     try {
       response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-        method: "GET",
+        method: request.method,
         headers: {
           Accept: "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          ...(request.body === undefined
+            ? {}
+            : { "Content-Type": "application/json" })
         },
-        signal
+        body:
+          request.body === undefined ? undefined : JSON.stringify(request.body),
+        signal: request.signal
       });
     } catch (error) {
       if (isAbortError(error)) {

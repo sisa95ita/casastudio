@@ -128,6 +128,11 @@ const projectEditorSlice = createSlice({
         return initialProjectEditorState;
       }
     },
+    editingSessionEnded(state, action: PayloadAction<string>) {
+      if (state.mode === "edit" && state.projectId === action.payload) {
+        return initialProjectEditorState;
+      }
+    },
     editingSessionMarkedDirty(state) {
       if (state.mode === "edit" && state.draft) {
         state.dirty = true;
@@ -311,6 +316,7 @@ export function hasPreservedServerFields(
 export const {
   editingSessionEntered,
   cleanEditingSessionLeft,
+  editingSessionEnded,
   editingSessionMarkedDirty,
   editingDraftReplaced,
   editorActiveLevelChanged,

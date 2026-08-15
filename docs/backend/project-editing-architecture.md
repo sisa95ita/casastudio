@@ -11,7 +11,7 @@ authorization, concurrency, and transaction boundary.
 The frontend editor and backend replacement API share the state boundary
 described here. The backend portions define what any editor, automation, or
 other caller can rely on; the frontend portions define how the current 2D
-workspace preserves that contract before persistence is integrated.
+workspace preserves that contract throughout editing and persistence.
 
 ## Authoritative state and editing drafts
 
@@ -124,8 +124,59 @@ authoritative editing base. These checks prevent clients from assigning
 aggregate identity, revision, or server-managed timestamps. Owner subjects,
 technical row IDs, and database timestamps are absent from the contract.
 
-A successful response contains the complete newly authoritative Project and
-the incremented `sourceRevision`; no follow-up GET is required.
+A successful response uses `200 OK` and contains the complete newly
+authoritative Project and the incremented `sourceRevision`. API consumers may
+use that response directly. The interactive workspace deliberately performs
+fresh Project and Geometry reads before returning to View so both rendered
+authorities are known to describe the committed revision.
+
+## Workspace persistence lifecycle
+
+View renders only the authoritative Project and Geometry Snapshot owned by
+TanStack Query. Edit renders only the isolated Project draft owned by Redux.
+Tool choice, selection, hover, viewport, and pointer previews are local
+interaction state and do not make an otherwise clean Project saveable.
+
+Save captures one complete draft and its `baseRevision`, sends one replacement
+PUT, and blocks workspace interaction while persistence is unresolved. After
+the server accepts the replacement, the editing session is removed and the
+specific Project and Geometry queries are invalidated and fetched again. View
+becomes available only with matching Project revision and Geometry
+`sourceRevision`:
+
+```text
+dirty Redux draft
+        ↓ PUT complete Project + baseRevision
+authoritative replacement
+        ↓ fresh Project GET + Geometry GET
+coherent TanStack View
+```
+
+A failed PUT never destroys or modifies the draft, dirty flag, or base
+revision. Validation, client, network, and server failures return control to
+Edit with local work intact. A successful PUT followed by a failed read is
+reported as an authoritative refresh failure, not as a failed save; retrying
+performs only the reads and never repeats the replacement.
+
+Discard destroys the matching Redux editing session and its transient
+interactions. It does not change or refetch authoritative state in the normal
+case. Dirty explicit discard requires confirmation.
+
+Dirty application navigation is held by the router until the user chooses one
+of three outcomes. Keep editing cancels the transition, Discard removes the
+local session and resumes the exact transition, and Save persists and refreshes
+authoritative state before resuming it. Failed navigation-initiated saves
+cancel the transition. The browser's native `beforeunload` boundary remains
+active only while the current editing session is dirty.
+
+A `409 PROJECT_REVISION_CONFLICT` preserves the exact draft and stale
+`baseRevision`; the client does not merge, rebase, or retry automatically.
+Keeping the local draft lets the user return to it, but does not make that
+stale draft saveable over the newer authoritative revision; another save may
+therefore produce the same conflict. Reloading the latest version requires a
+second destructive confirmation, then removes the local session and fetches
+both authoritative resources before rendering View without automatically
+starting another editing session.
 
 ## Revision and optimistic concurrency
 

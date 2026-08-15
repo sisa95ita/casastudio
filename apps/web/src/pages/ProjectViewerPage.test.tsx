@@ -29,6 +29,8 @@ import {
   type AppShellContent
 } from "../app-shell/AppShellContext";
 import { createAppQueryClient } from "../queries/query-client";
+import { geometryKeys } from "../queries/geometry-queries";
+import { projectKeys } from "../queries/project-queries";
 import { createAppStore } from "../state/store";
 import {
   editingDraftReplaced,
@@ -50,6 +52,15 @@ afterEach(() => {
 const geometryResponse = createGeometrySnapshotFixture(
   demoProjectFixture.id,
   demoProjectFixture.revision
+);
+const savedProjectFixture = {
+  ...demoProjectFixture,
+  revision: demoProjectFixture.revision + 1,
+  updatedAt: "2026-08-15T12:00:00.000Z"
+};
+const savedGeometryResponse = createGeometrySnapshotFixture(
+  demoProjectFixture.id,
+  savedProjectFixture.revision
 );
 
 function setViewportWidth(width: number) {
@@ -105,7 +116,8 @@ function renderConnectedRoute(
       {
         element: <NavigationHarness />,
         children: [
-          { path: "/app/projects/:projectId", element: <ProjectViewerPage /> }
+          { path: "/app/projects/:projectId", element: <ProjectViewerPage /> },
+          { path: "/destination", element: <div>Destination route</div> }
         ]
       }
     ],
@@ -124,7 +136,7 @@ function renderConnectedRoute(
     </Provider>
   );
 
-  return { ...result, store, router };
+  return { ...result, store, router, queryClient };
 }
 
 function NavigationHarness() {
@@ -142,6 +154,7 @@ function NavigationHarness() {
   return (
     <AppShellContentContext.Provider value={controller}>
       <Link to="/app/projects/project-two">Open project two</Link>
+      <Link to="/destination">Open destination</Link>
       <header aria-label="Test header">{content.headerAccessory}</header>
       <aside aria-label="Test inspector">{content.inspector}</aside>
       <Outlet />
@@ -161,6 +174,37 @@ function successFetch(): typeof fetch {
           }
     );
   }) as typeof fetch;
+}
+
+function saveSuccessFetch() {
+  let persisted = false;
+  const fetchImplementation = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PUT") {
+        persisted = true;
+        return Response.json({
+          project: savedProjectFixture,
+          sourceRevision: savedProjectFixture.revision
+        });
+      }
+
+      return Response.json(
+        url.endsWith("/geometry")
+          ? persisted
+            ? savedGeometryResponse
+            : geometryResponse
+          : {
+              project: persisted ? savedProjectFixture : demoProjectFixture,
+              sourceRevision: persisted
+                ? savedProjectFixture.revision
+                : demoProjectFixture.revision
+            }
+      );
+    }
+  ) as unknown as typeof fetch;
+
+  return fetchImplementation;
 }
 
 function prepareSvgPointerCoordinates(svg: SVGSVGElement) {
@@ -511,7 +555,8 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
-    const levelBefore = store.getState().projectEditor.draft!.building.levels[0]!;
+    const levelBefore =
+      store.getState().projectEditor.draft!.building.levels[0]!;
     const wallCount = levelBefore.walls.length;
     const roomCount = levelBefore.rooms.length;
     const start = { x: 120, y: 360 };
@@ -559,7 +604,9 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(svg, { clientX: 180, clientY: 320 });
     fireEvent.click(svg, { clientX: 250, clientY: 285 });
     const firstNewWall =
-      store.getState().projectEditor.draft!.building.levels[0]!.walls[wallCount]!;
+      store.getState().projectEditor.draft!.building.levels[0]!.walls[
+        wallCount
+      ]!;
 
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(
@@ -574,7 +621,9 @@ describe("ProjectViewerPage", () => {
     expect(
       screen.getByText(/connected to other walls and cannot be moved/i)
     ).toBeTruthy();
-    expect(screen.getByRole("spinbutton", { name: "Height (cm)" })).toBeTruthy();
+    expect(
+      screen.getByRole("spinbutton", { name: "Height (cm)" })
+    ).toBeTruthy();
   });
 
   it("defensively cancels a stale endpoint drag after the endpoint becomes shared", async () => {
@@ -590,7 +639,9 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(svg, { clientX: 220, clientY: 300 });
     fireEvent.keyDown(window, { key: "Escape" });
     const wall =
-      store.getState().projectEditor.draft!.building.levels[0]!.walls[wallCount]!;
+      store.getState().projectEditor.draft!.building.levels[0]!.walls[
+        wallCount
+      ]!;
 
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(
@@ -603,11 +654,17 @@ describe("ProjectViewerPage", () => {
 
     const draft = structuredClone(store.getState().projectEditor.draft!);
     draft.building.levels[0]!.walls.push(
-      createDraftWall(wall.start, { x: wall.start.x - 40, z: wall.start.z }, "stale-connection")
+      createDraftWall(
+        wall.start,
+        { x: wall.start.x - 40, z: wall.start.z },
+        "stale-connection"
+      )
     );
     act(() => store.dispatch(editingDraftReplaced(draft)));
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull()
+      expect(
+        screen.queryByRole("button", { name: "Start endpoint" })
+      ).toBeNull()
     );
     const protectedDraft = store.getState().projectEditor.draft;
     const buildCount = buildSpy.mock.calls.length;
@@ -654,8 +711,7 @@ describe("ProjectViewerPage", () => {
     };
     const sample = (parameter: number) => {
       fireEvent.pointerMove(svg, {
-        clientX:
-          100 + start.x + (end.x - start.x) * parameter + normal.x * 5,
+        clientX: 100 + start.x + (end.x - start.x) * parameter + normal.x * 5,
         clientY: start.y + (end.y - start.y) * parameter + normal.y * 5,
         pointerId: 1
       });
@@ -696,7 +752,9 @@ describe("ProjectViewerPage", () => {
     )!;
 
     fireEvent.pointerMove(svg, { clientX, clientY, pointerId: 1 });
-    expect(store.getState().projectEditor.transient.snapCandidate).toMatchObject({
+    expect(
+      store.getState().projectEditor.transient.snapCandidate
+    ).toMatchObject({
       kind: "vertex",
       geometryId
     });
@@ -715,7 +773,8 @@ describe("ProjectViewerPage", () => {
     if (!after.ok) return;
     expect(
       after.model.levels[0]!.vertices.find(
-        (vertex) => vertex.x === canonicalVertex.x && vertex.z === canonicalVertex.z
+        (vertex) =>
+          vertex.x === canonicalVertex.x && vertex.z === canonicalVertex.z
       )?.incidentEdges.length
     ).toBeGreaterThan(canonicalVertex.incidentEdges.length);
   });
@@ -785,7 +844,9 @@ describe("ProjectViewerPage", () => {
           wall.start.z === connected.start.z
       )
     ).toBe(true);
-    expect(GeometryEngine.build(store.getState().projectEditor.draft!).ok).toBe(true);
+    expect(GeometryEngine.build(store.getState().projectEditor.draft!).ok).toBe(
+      true
+    );
   });
 
   it("deleting a branch atomically removes its redundant Room-wall split", async () => {
@@ -795,7 +856,8 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
-    const beforeLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    const beforeLevel =
+      store.getState().projectEditor.draft!.building.levels[0]!;
     const originalWallCount = beforeLevel.walls.length;
     const originalWall = structuredClone(
       beforeLevel.walls.find((wall) => wall.id === "left-room-north-wall")!
@@ -804,7 +866,8 @@ describe("ProjectViewerPage", () => {
       '[data-geometry-id="boundary-edge:left-room-north-wall"]'
     ) as SVGLineElement;
     const midpoint = {
-      x: (Number(edge.getAttribute("x1")) + Number(edge.getAttribute("x2"))) / 2,
+      x:
+        (Number(edge.getAttribute("x1")) + Number(edge.getAttribute("x2"))) / 2,
       y: (Number(edge.getAttribute("y1")) + Number(edge.getAttribute("y2"))) / 2
     };
     const delta = {
@@ -827,7 +890,8 @@ describe("ProjectViewerPage", () => {
         store.getState().projectEditor.draft!.building.levels[0]!.walls
       ).toHaveLength(originalWallCount + 2)
     );
-    const splitLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    const splitLevel =
+      store.getState().projectEditor.draft!.building.levels[0]!;
     const branch = splitLevel.walls.at(-1)!;
     const originalIndex = splitLevel.walls.findIndex(
       (wall) => wall.id === originalWall.id
@@ -853,13 +917,14 @@ describe("ProjectViewerPage", () => {
     expect(level.walls.some((wall) => wall.id === splitChild.id)).toBe(false);
     expect(level.rooms).toHaveLength(beforeLevel.rooms.length);
     expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
-    const geometry = GeometryEngine.build(store.getState().projectEditor.draft!);
+    const geometry = GeometryEngine.build(
+      store.getState().projectEditor.draft!
+    );
     expect(geometry.ok).toBe(true);
     if (!geometry.ok) return;
     expect(
       geometry.model.levels[0]?.vertices.some(
-        (vertex) =>
-          vertex.x === branch.start.x && vertex.z === branch.start.z
+        (vertex) => vertex.x === branch.start.x && vertex.z === branch.start.z
       )
     ).toBe(false);
   });
@@ -1201,38 +1266,645 @@ describe("ProjectViewerPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "View" }));
     expect(screen.queryByRole("toolbar", { name: "Editing tools" })).toBeNull();
+    await waitFor(() => {
+      const unloadEvent = new Event("beforeunload", { cancelable: true });
+      expect(window.dispatchEvent(unloadEvent)).toBe(true);
+    });
+    expect(screen.getByText("Saved")).toBeTruthy();
+    const unloadEvent = new Event("beforeunload", { cancelable: true });
+    expect(window.dispatchEvent(unloadEvent)).toBe(true);
+  });
+
+  it("keeps Save disabled for a clean Edit session without sending PUT", async () => {
+    const fetchImplementation = successFetch();
+    renderConnectedRoute(createApiClient(fetchImplementation));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    expect(screen.getByText("No unsaved changes")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.some(([, init]) => init?.method === "PUT")
+    ).toBe(false);
+  });
+
+  it("saves one stable complete draft, refreshes both authorities, and returns to View", async () => {
+    let resolvePut: ((response: Response) => void) | undefined;
+    let persisted = false;
+    const fetchImplementation = vi.fn(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === "PUT") {
+          return new Promise<Response>((resolve) => {
+            resolvePut = (response) => {
+              persisted = true;
+              resolve(response);
+            };
+          });
+        }
+        return Promise.resolve(
+          Response.json(
+            url.endsWith("/geometry")
+              ? persisted
+                ? savedGeometryResponse
+                : geometryResponse
+              : {
+                  project: persisted ? savedProjectFixture : demoProjectFixture,
+                  sourceRevision: persisted
+                    ? savedProjectFixture.revision
+                    : demoProjectFixture.revision
+                }
+          )
+        );
+      }
+    ) as unknown as typeof fetch;
+    const { store, queryClient } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    const savedDraft = structuredClone(store.getState().projectEditor.draft!);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const savingDialog = await screen.findByRole("dialog", {
+      name: "Saving project…"
+    });
+    expect(within(savingDialog).getByRole("progressbar")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Draw Wall" })).toBeNull();
+    fireEvent.keyDown(savingDialog, { key: "Escape" });
+    expect(
+      screen.getByRole("dialog", { name: "Saving project…" })
+    ).toBeTruthy();
+
+    const putCall = vi
+      .mocked(fetchImplementation)
+      .mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(putCall).toBeTruthy();
+    expect(JSON.parse(String(putCall?.[1]?.body))).toEqual({
+      baseRevision: demoProjectFixture.revision,
+      project: savedDraft
+    });
+
+    await act(async () => {
+      resolvePut?.(
+        Response.json({
+          project: savedProjectFixture,
+          sourceRevision: savedProjectFixture.revision
+        })
+      );
+    });
+
+    await waitFor(() =>
+      expect(store.getState().projectEditor.mode).toBe("view")
+    );
+    expect(
+      queryClient.getQueryData(projectKeys.detail(demoProjectFixture.id))
+    ).toMatchObject({
+      sourceRevision: savedProjectFixture.revision
+    });
+    expect(
+      queryClient.getQueryData(geometryKeys.detail(demoProjectFixture.id))
+    ).toMatchObject({
+      sourceRevision: savedProjectFixture.revision
+    });
+    expect(screen.queryByRole("toolbar", { name: "Editing tools" })).toBeNull();
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.filter(
+          ([input, init]) =>
+            init?.method === "GET" &&
+            String(input).endsWith(`/projects/${demoProjectFixture.id}`)
+        )
+    ).toHaveLength(2);
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.filter(([input]) => String(input).endsWith("/geometry"))
+    ).toHaveLength(2);
+  });
+
+  it("keeps a refreshed Project with stale Geometry behind the blocking modal", async () => {
+    let persisted = false;
+    let geometryReads = 0;
+    let resolveGeometryRefresh: ((response: Response) => void) | undefined;
+    const fetchImplementation = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === "PUT") {
+          persisted = true;
+          return Response.json({
+            project: savedProjectFixture,
+            sourceRevision: savedProjectFixture.revision
+          });
+        }
+        if (url.endsWith("/geometry")) {
+          geometryReads += 1;
+          if (geometryReads > 1) {
+            return new Promise<Response>((resolve) => {
+              resolveGeometryRefresh = resolve;
+            });
+          }
+          return Response.json(geometryResponse);
+        }
+        return Response.json({
+          project: persisted ? savedProjectFixture : demoProjectFixture,
+          sourceRevision: persisted
+            ? savedProjectFixture.revision
+            : demoProjectFixture.revision
+        });
+      }
+    ) as unknown as typeof fetch;
+    const { store } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(geometryReads).toBe(2));
+    expect(
+      screen.getByRole("dialog", { name: "Saving project…" })
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Project geometry is inconsistent"
+      })
+    ).toBeNull();
+
+    await act(async () => {
+      resolveGeometryRefresh?.(Response.json(savedGeometryResponse));
+    });
+    await waitFor(() =>
+      expect(store.getState().projectEditor.mode).toBe("view")
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Saving project…" })
+      ).toBeNull()
+    );
+  });
+
+  it("confirms explicit Discard and never mutates authoritative state", async () => {
+    const fetchImplementation = successFetch();
+    const { store } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    const draft = store.getState().projectEditor.draft;
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      ).getByRole("button", { name: "Keep editing" })
+    );
+    expect(store.getState().projectEditor.draft).toBe(draft);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+      ).toBeNull()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() =>
+      expect(store.getState().projectEditor.mode).toBe("view")
+    );
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.some(([, init]) => init?.method === "PUT")
+    ).toBe(false);
     expect(screen.getByText("Saved")).toBeTruthy();
   });
 
-  it("does not silently discard a dirty session when returning to View", async () => {
+  it("preserves the exact dirty session after authoritative validation failure", async () => {
+    const fetchImplementation = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          return Response.json(
+            {
+              type: "/problems/project-state-invalid",
+              title: "Project state invalid",
+              status: 422,
+              detail: "Internal validation detail",
+              code: "PROJECT_STATE_INVALID"
+            },
+            { status: 422 }
+          );
+        }
+        return Response.json(
+          String(input).endsWith("/geometry")
+            ? geometryResponse
+            : {
+                project: demoProjectFixture,
+                sourceRevision: demoProjectFixture.revision
+              }
+        );
+      }
+    ) as unknown as typeof fetch;
+    const { store } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    const draft = store.getState().projectEditor.draft;
+    const baseRevision = store.getState().projectEditor.baseRevision;
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/some geometry is invalid/i)).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.baseRevision).toBe(baseRevision);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(store.getState().projectEditor.mode).toBe("edit");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Saving project…" })
+      ).toBeNull()
+    );
+  });
+
+  it("preserves generic save failures and leaves Save available for retry", async () => {
+    const fetchImplementation = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          return new Response("gateway failure", { status: 503 });
+        }
+        return Response.json(
+          String(input).endsWith("/geometry")
+            ? geometryResponse
+            : {
+                project: demoProjectFixture,
+                sourceRevision: demoProjectFixture.revision
+              }
+        );
+      }
+    ) as unknown as typeof fetch;
+    const { store } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    const draft = store.getState().projectEditor.draft;
+    const baseRevision = store.getState().projectEditor.baseRevision;
+    const saveFailureCopy =
+      "The project could not be saved. Your changes are still available locally. Please try again.";
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const feedback = await screen.findByText(saveFailureCopy);
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.baseRevision).toBe(baseRevision);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(store.getState().projectEditor.mode).toBe("edit");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Saving project…" })
+      ).toBeNull()
+    );
+    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+      "disabled",
+      false
+    );
+
+    fireEvent.click(
+      within(feedback.closest('[role="alert"]')!).getByRole("button", {
+        name: "Close"
+      })
+    );
+    await waitFor(() => expect(screen.queryByText(saveFailureCopy)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(fetchImplementation)
+          .mock.calls.filter(([, init]) => init?.method === "PUT")
+      ).toHaveLength(2)
+    );
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(store.getState().projectEditor.mode).toBe("edit");
+  });
+
+  it("uses the unified unsaved-changes decision when returning to View", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
     fireEvent.click(screen.getByRole("button", { name: "View" }));
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "draft remains intact"
-    );
+    expect(
+      screen.getByRole("dialog", { name: "Unsaved changes" })
+    ).toBeTruthy();
     expect(store.getState().projectEditor.mode).toBe("edit");
     expect(store.getState().projectEditor.dirty).toBe(true);
   });
 
-  it("blocks in-app navigation while the editing session is dirty", async () => {
+  it("cancels pending navigation when the user keeps editing", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
     fireEvent.click(screen.getByRole("link", { name: "Open project two" }));
 
-    expect(await screen.findByText(/Navigation is blocked/)).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: demoProjectFixture.name })
+      await screen.findByRole("dialog", { name: "Unsaved changes" })
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     await waitFor(() =>
-      expect(screen.queryByText(/Navigation is blocked/)).toBeNull()
+      expect(
+        screen.queryByRole("dialog", { name: "Unsaved changes" })
+      ).toBeNull()
     );
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(
+      screen.getByRole("heading", { name: demoProjectFixture.name })
+    ).toBeTruthy();
+  });
+
+  it("resumes the exact pending route once after Save and authoritative refresh", async () => {
+    const fetchImplementation = saveSuccessFetch();
+    const { store, router } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+
+    fireEvent.click(screen.getByRole("link", { name: "Open destination" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", { name: "Unsaved changes" })
+      ).getByRole("button", { name: "Save" })
+    );
+
+    expect(await screen.findByText("Destination route")).toBeTruthy();
+    expect(router.state.location.pathname).toBe("/destination");
+    expect(store.getState().projectEditor.mode).toBe("view");
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.filter(([, init]) => init?.method === "PUT")
+    ).toHaveLength(1);
+  });
+
+  it("does not resume pending navigation when Save fails", async () => {
+    const fetchImplementation = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          return new Response("gateway failure", { status: 503 });
+        }
+        return Response.json(
+          String(input).endsWith("/geometry")
+            ? geometryResponse
+            : {
+                project: demoProjectFixture,
+                sourceRevision: demoProjectFixture.revision
+              }
+        );
+      }
+    ) as unknown as typeof fetch;
+    const { store, router } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    const draft = store.getState().projectEditor.draft;
+
+    fireEvent.click(screen.getByRole("link", { name: "Open destination" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", { name: "Unsaved changes" })
+      ).getByRole("button", { name: "Save" })
+    );
+
+    expect(
+      await screen.findByText(
+        "The project could not be saved. Your changes are still available locally. Please try again."
+      )
+    ).toBeTruthy();
+    expect(router.state.location.pathname).toBe(
+      `/app/projects/${demoProjectFixture.id}`
+    );
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+  });
+
+  it("resumes pending navigation after Discard without sending PUT", async () => {
+    const fetchImplementation = successFetch();
+    const { store, router } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+
+    fireEvent.click(screen.getByRole("link", { name: "Open destination" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", { name: "Unsaved changes" })
+      ).getByRole("button", { name: "Discard changes" })
+    );
+
+    expect(await screen.findByText("Destination route")).toBeTruthy();
+    expect(router.state.location.pathname).toBe("/destination");
+    expect(store.getState().projectEditor.mode).toBe("view");
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.some(([, init]) => init?.method === "PUT")
+    ).toBe(false);
+  });
+
+  it("preserves conflict work and requires a second confirmation before reload", async () => {
+    let latest = false;
+    const fetchImplementation = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === "PUT") {
+          return Response.json(
+            {
+              type: "/problems/project-revision-conflict",
+              title: "Project revision conflict",
+              status: 409,
+              detail: "The base revision is stale.",
+              code: "PROJECT_REVISION_CONFLICT"
+            },
+            { status: 409 }
+          );
+        }
+        return Response.json(
+          url.endsWith("/geometry")
+            ? latest
+              ? savedGeometryResponse
+              : geometryResponse
+            : {
+                project: latest ? savedProjectFixture : demoProjectFixture,
+                sourceRevision: latest
+                  ? savedProjectFixture.revision
+                  : demoProjectFixture.revision
+              }
+        );
+      }
+    ) as unknown as typeof fetch;
+    const { store, queryClient } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    const draft = store.getState().projectEditor.draft;
+    const baseRevision = store.getState().projectEditor.baseRevision;
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const conflictDialog = await screen.findByRole("dialog", {
+      name: "Project changed on the server"
+    });
+    expect(
+      within(conflictDialog).getByText(
+        "A newer version of this project exists. Your local changes are still available, but they cannot be saved over the newer version."
+      )
+    ).toBeTruthy();
+    expect(
+      within(conflictDialog).getByRole("button", { name: "Keep local draft" })
+    ).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.baseRevision).toBe(baseRevision);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep local draft" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "Project changed on the server"
+        })
+      ).toBeNull()
+    );
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.baseRevision).toBe(baseRevision);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(store.getState().projectEditor.mode).toBe("edit");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Project changed on the server"
+      })
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reload latest" }));
+    expect(
+      screen.getByRole("dialog", {
+        name: "Discard local changes and reload?"
+      })
+    ).toBeTruthy();
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(store.getState().projectEditor.draft).toBe(draft);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "Discard local changes and reload?"
+        })
+      ).toBeNull()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reload latest" }));
+    latest = true;
+    fireEvent.click(screen.getByRole("button", { name: "Discard and reload" }));
+    await waitFor(() =>
+      expect(store.getState().projectEditor.mode).toBe("view")
+    );
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData(projectKeys.detail(demoProjectFixture.id))
+      ).toMatchObject({ sourceRevision: savedProjectFixture.revision })
+    );
+    expect(
+      queryClient.getQueryData(geometryKeys.detail(demoProjectFixture.id))
+    ).toMatchObject({ sourceRevision: savedProjectFixture.revision });
+    expect(store.getState().projectEditor.draft).toBeNull();
+    expect(store.getState().projectEditor.baseRevision).toBeNull();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(screen.queryByRole("toolbar", { name: "Editing tools" })).toBeNull();
+  });
+
+  it("reports post-save refresh failure without resending the successful PUT", async () => {
+    let persisted = false;
+    let refreshAvailable = false;
+    const fetchImplementation = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          persisted = true;
+          return Response.json({
+            project: savedProjectFixture,
+            sourceRevision: savedProjectFixture.revision
+          });
+        }
+        if (persisted && !refreshAvailable) {
+          return new Response("unavailable", { status: 503 });
+        }
+        return Response.json(
+          String(input).endsWith("/geometry")
+            ? persisted
+              ? savedGeometryResponse
+              : geometryResponse
+            : {
+                project: persisted ? savedProjectFixture : demoProjectFixture,
+                sourceRevision: persisted
+                  ? savedProjectFixture.revision
+                  : demoProjectFixture.revision
+              }
+        );
+      }
+    ) as unknown as typeof fetch;
+    const { store, queryClient, router } = renderConnectedRoute(
+      createApiClient(fetchImplementation)
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+    fireEvent.click(screen.getByRole("link", { name: "Open destination" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", { name: "Unsaved changes" })
+      ).getByRole("button", { name: "Save" })
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Project saved, but the latest version could not be loaded"
+      })
+    ).toBeTruthy();
+    expect(store.getState().projectEditor.mode).toBe("view");
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.filter(([, init]) => init?.method === "PUT")
+    ).toHaveLength(1);
+    expect(router.state.location.pathname).toBe(
+      `/app/projects/${demoProjectFixture.id}`
+    );
+
+    refreshAvailable = true;
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading" }));
+    expect(await screen.findByText("Destination route")).toBeTruthy();
+    expect(router.state.location.pathname).toBe("/destination");
+    expect(
+      queryClient.getQueryData(projectKeys.detail(demoProjectFixture.id))
+    ).toMatchObject({ sourceRevision: savedProjectFixture.revision });
+    expect(
+      vi
+        .mocked(fetchImplementation)
+        .mock.calls.filter(([, init]) => init?.method === "PUT")
+    ).toHaveLength(1);
   });
 
   it("protects browser unload only while a matching session is dirty", async () => {

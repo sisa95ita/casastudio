@@ -24,6 +24,12 @@ export type ProjectResponse = {
   readonly sourceRevision: number;
 };
 
+/** Complete Project replacement request based on one authoritative revision. */
+export type ReplaceProjectRequest = {
+  readonly baseRevision: number;
+  readonly project: Project;
+};
+
 /** Two-dimensional coordinate in a geometry snapshot. */
 export type GeometryPoint2D = { readonly x: number; readonly z: number };
 

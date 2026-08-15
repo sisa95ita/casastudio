@@ -126,6 +126,43 @@ describe("CasaStudioApiClient", () => {
     await expect(client.getProject(geometryPlaygroundProject.id)).resolves.toEqual(projectResponse);
   });
 
+  it("replaces a complete Project with baseRevision and validates the next revision", async () => {
+    const savedProject = {
+      ...geometryPlaygroundProject,
+      revision: geometryPlaygroundProject.revision + 1,
+      updatedAt: "2026-08-15T12:00:00.000Z"
+    };
+    const fetchImplementation = vi.fn().mockResolvedValue(
+      Response.json({ project: savedProject, sourceRevision: savedProject.revision })
+    );
+    const client = createClient(fetchImplementation);
+
+    await expect(
+      client.replaceProject(geometryPlaygroundProject.id, {
+        baseRevision: geometryPlaygroundProject.revision,
+        project: geometryPlaygroundProject
+      })
+    ).resolves.toEqual({
+      project: savedProject,
+      sourceRevision: savedProject.revision
+    });
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      `http://localhost:3000/api/v1/projects/${geometryPlaygroundProject.id}`,
+      expect.objectContaining({
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer access-token",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          baseRevision: geometryPlaygroundProject.revision,
+          project: geometryPlaygroundProject
+        })
+      })
+    );
+  });
+
   it("maps the explicit Geometry snapshot envelope", async () => {
     const client = createClient(vi.fn().mockResolvedValue(Response.json(geometryResponse)));
 
