@@ -13,7 +13,12 @@ export class ProjectAggregateIdMismatchError extends ApiProblemError {
       status: HttpStatus.BAD_REQUEST,
       detail: `Route project "${routeProjectId}" does not match body project "${bodyProjectId}".`,
       code: ApiErrorCode.ProjectAggregateIdMismatch,
-      errors: [{ path: "project.id", message: "Project ID must match the route Project ID." }]
+      errors: [
+        {
+          path: "project.id",
+          message: "Project ID must match the route Project ID."
+        }
+      ]
     });
     this.name = "ProjectAggregateIdMismatchError";
   }
@@ -26,7 +31,8 @@ export class ProjectServerFieldsInvalidError extends ApiProblemError {
       type: "/problems/project-server-fields-invalid",
       title: "Project server fields invalid",
       status: HttpStatus.BAD_REQUEST,
-      detail: "Project revision and timestamps must match the authoritative editing base.",
+      detail:
+        "Project revision and timestamps must match the authoritative editing base.",
       code: ApiErrorCode.ProjectServerFieldsInvalid,
       errors
     });
@@ -52,20 +58,46 @@ export class ProjectStateInvalidError extends ApiProblemError {
 
 /** Raised when a save is based on a revision that is no longer authoritative. */
 export class ProjectRevisionConflictError extends ApiProblemError {
-  constructor(projectId: string, baseRevision: number, currentRevision: number) {
+  constructor(
+    projectId: string,
+    baseRevision: number,
+    currentRevision: number
+  ) {
     super({
       type: "/problems/project-revision-conflict",
       title: "Project revision conflict",
       status: HttpStatus.CONFLICT,
       detail: `Project "${projectId}" is at revision ${currentRevision}, not base revision ${baseRevision}.`,
       code: ApiErrorCode.ProjectRevisionConflict,
-      errors: [{ path: "baseRevision", message: `Current authoritative revision is ${currentRevision}.` }]
+      errors: [
+        {
+          path: "baseRevision",
+          message: `Current authoritative revision is ${currentRevision}.`
+        }
+      ]
     });
     this.name = "ProjectRevisionConflictError";
   }
 }
 
-/** Raised when Project creation or replacement fails unexpectedly. */
+/** Raised when an owner already has a Project with the requested normalized name. */
+export class ProjectNameConflictError extends ApiProblemError {
+  constructor() {
+    super({
+      type: "/problems/project-name-conflict",
+      title: "Project name conflict",
+      status: HttpStatus.CONFLICT,
+      detail: "A Project with this name already exists.",
+      code: ApiErrorCode.ProjectNameConflict,
+      errors: [
+        { path: "name", message: "A Project with this name already exists." }
+      ]
+    });
+    this.name = "ProjectNameConflictError";
+  }
+}
+
+/** Raised when a Project lifecycle write fails unexpectedly. */
 export class ProjectWriteFailedError extends ApiProblemError {
   constructor(projectId: string, cause: unknown) {
     super({

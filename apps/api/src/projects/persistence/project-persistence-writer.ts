@@ -1,4 +1,4 @@
-import type { Project } from "@casastudio/schema";
+import { normalizeProjectName, type Project } from "@casastudio/schema";
 import type { Prisma } from "@prisma/client";
 
 import { validateProjectForPersistence } from "./project-aggregate.mapper";
@@ -75,6 +75,7 @@ export class ProjectPersistenceWriter {
       data: {
         domainId: canonicalProject.id,
         name: canonicalProject.name,
+        normalizedName: normalizeProjectName(canonicalProject.name),
         schemaVersion: canonicalProject.schemaVersion,
         revision: canonicalProject.revision,
         domainCreatedAt: canonicalProject.createdAt,
@@ -112,6 +113,7 @@ export class ProjectPersistenceWriter {
       where: { id: persistenceProjectId },
       data: {
         name: canonicalProject.name,
+        normalizedName: normalizeProjectName(canonicalProject.name),
         schemaVersion: canonicalProject.schemaVersion,
         revision: canonicalProject.revision,
         domainUpdatedAt: canonicalProject.updatedAt,
@@ -122,7 +124,11 @@ export class ProjectPersistenceWriter {
     });
 
     await this.deleteSubordinateRecords(tx, persistenceProjectId);
-    await this.createSubordinateRecords(tx, canonicalProject, persistenceProjectId);
+    await this.createSubordinateRecords(
+      tx,
+      canonicalProject,
+      persistenceProjectId
+    );
   }
 
   private async deleteSubordinateRecords(
@@ -146,7 +152,9 @@ export class ProjectPersistenceWriter {
     await tx.wall.deleteMany({ where });
     await tx.room.deleteMany({ where });
     await tx.level.deleteMany({ where });
-    await tx.building.deleteMany({ where: { projectId: persistenceProjectId } });
+    await tx.building.deleteMany({
+      where: { projectId: persistenceProjectId }
+    });
   }
 
   private async createSubordinateRecords(
@@ -228,7 +236,10 @@ export class ProjectPersistenceWriter {
       for (const room of level.rooms) {
         const dbRoom = getRequired(rooms, room.id, "Room");
 
-        for (const [boundaryPosition, boundaryEdge] of room.boundary.entries()) {
+        for (const [
+          boundaryPosition,
+          boundaryEdge
+        ] of room.boundary.entries()) {
           await tx.roomBoundaryEdge.create({
             data: {
               projectId: persistenceProjectId,
@@ -273,7 +284,9 @@ export class ProjectPersistenceWriter {
           });
 
           if (opening.type === "DOOR") {
-            for (const [connectedRoomPosition, roomId] of (opening.connectedRoomIds ?? []).entries()) {
+            for (const [connectedRoomPosition, roomId] of (
+              opening.connectedRoomIds ?? []
+            ).entries()) {
               await tx.openingConnectedRoomReference.create({
                 data: {
                   projectId: persistenceProjectId,
@@ -373,7 +386,11 @@ export class ProjectPersistenceWriter {
       const dbBaseImage = await tx.baseImage.create({
         data: {
           projectId: persistenceProjectId,
-          viewpointId: getRequired(viewpoints, baseImage.viewpointId, "Viewpoint").id,
+          viewpointId: getRequired(
+            viewpoints,
+            baseImage.viewpointId,
+            "Viewpoint"
+          ).id,
           domainId: baseImage.id,
           position: baseImagePosition,
           name: baseImage.name,
@@ -389,7 +406,10 @@ export class ProjectPersistenceWriter {
       baseImages.set(baseImage.id, dbBaseImage);
     }
 
-    for (const [designBriefPosition, designBrief] of project.designBriefs.entries()) {
+    for (const [
+      designBriefPosition,
+      designBrief
+    ] of project.designBriefs.entries()) {
       const dbDesignBrief = await tx.designBrief.create({
         data: {
           projectId: persistenceProjectId,
@@ -427,7 +447,10 @@ export class ProjectPersistenceWriter {
         });
       }
 
-      for (const [position, assetRef] of designBrief.referenceAssetRefs.entries()) {
+      for (const [
+        position,
+        assetRef
+      ] of designBrief.referenceAssetRefs.entries()) {
         await tx.designBriefReferenceAsset.create({
           data: {
             projectId: persistenceProjectId,
@@ -439,13 +462,28 @@ export class ProjectPersistenceWriter {
       }
     }
 
-    for (const [renderRequestPosition, renderRequest] of project.renderRequests.entries()) {
+    for (const [
+      renderRequestPosition,
+      renderRequest
+    ] of project.renderRequests.entries()) {
       const dbRenderRequest = await tx.renderRequest.create({
         data: {
           projectId: persistenceProjectId,
-          viewpointId: getRequired(viewpoints, renderRequest.viewpointId, "Viewpoint").id,
-          baseImageId: getRequired(baseImages, renderRequest.baseImageId, "BaseImage").id,
-          designBriefId: getRequired(designBriefs, renderRequest.designBriefId, "DesignBrief").id,
+          viewpointId: getRequired(
+            viewpoints,
+            renderRequest.viewpointId,
+            "Viewpoint"
+          ).id,
+          baseImageId: getRequired(
+            baseImages,
+            renderRequest.baseImageId,
+            "BaseImage"
+          ).id,
+          designBriefId: getRequired(
+            designBriefs,
+            renderRequest.designBriefId,
+            "DesignBrief"
+          ).id,
           domainId: renderRequest.id,
           position: renderRequestPosition,
           name: renderRequest.name,
@@ -464,11 +502,18 @@ export class ProjectPersistenceWriter {
       renderRequests.set(renderRequest.id, dbRenderRequest);
     }
 
-    for (const [renderResultPosition, renderResult] of project.renderResults.entries()) {
+    for (const [
+      renderResultPosition,
+      renderResult
+    ] of project.renderResults.entries()) {
       await tx.renderResult.create({
         data: {
           projectId: persistenceProjectId,
-          renderRequestId: getRequired(renderRequests, renderResult.renderRequestId, "RenderRequest").id,
+          renderRequestId: getRequired(
+            renderRequests,
+            renderResult.renderRequestId,
+            "RenderRequest"
+          ).id,
           domainId: renderResult.id,
           position: renderResultPosition,
           name: renderResult.name,
@@ -489,11 +534,17 @@ export class ProjectPersistenceWriter {
   }
 }
 
-function getRequired(lookup: DomainLookup, domainId: string, entityName: string): DomainRecord {
+function getRequired(
+  lookup: DomainLookup,
+  domainId: string,
+  entityName: string
+): DomainRecord {
   const record = lookup.get(domainId);
 
   if (!record) {
-    throw new ProjectPersistenceError(`${entityName} "${domainId}" was not created before it was referenced.`);
+    throw new ProjectPersistenceError(
+      `${entityName} "${domainId}" was not created before it was referenced.`
+    );
   }
 
   return record;

@@ -29,7 +29,7 @@ export function configureApiApplication(
   app.enableCors({
     allowedHeaders: ["Authorization", "Content-Type"],
     credentials: false,
-    methods: ["GET", "POST", "PUT", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     origin: configuration.corsAllowedOrigins
   });
   app.setGlobalPrefix("api");

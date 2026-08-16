@@ -1,13 +1,26 @@
-import { GeometryBuildErrorCode, GeometryEngine, type GeometryBuildResult } from "@casastudio/geometry";
+import {
+  GeometryBuildErrorCode,
+  GeometryEngine,
+  type GeometryBuildResult
+} from "@casastudio/geometry";
 import { ProjectSchema, type Project } from "@casastudio/schema";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiErrorCode } from "../../common/problem-details/api-error-code";
 import { AuthorizedProjectLoader } from "../application/authorized-project-loader.service";
 import { ProjectReadAuthorizationPolicy } from "../application/project-read-authorization.policy";
-import { PersistedProjectInvalidError, ProjectPersistenceError } from "../persistence/project-persistence-error";
-import type { LoadedProject, ProjectsRepository } from "../persistence/project.repository";
-import { GeometrySnapshotApiMapper, GeometrySnapshotSerializationInvariantError } from "./geometry-snapshot-api.mapper";
+import {
+  PersistedProjectInvalidError,
+  ProjectPersistenceError
+} from "../persistence/project-persistence-error";
+import type {
+  LoadedProject,
+  ProjectsRepository
+} from "../persistence/project.repository";
+import {
+  GeometrySnapshotApiMapper,
+  GeometrySnapshotSerializationInvariantError
+} from "./geometry-snapshot-api.mapper";
 import { GetProjectGeometryService } from "./get-project-geometry.service";
 import type { ProjectGeometryBuilder } from "./project-geometry-builder";
 
@@ -29,7 +42,9 @@ describe("GetProjectGeometryService", () => {
 
     expect(response.sourceProjectId).toBe(project.id);
     expect(response.sourceRevision).toBe(project.revision);
-    expect(response.geometry.levels[0]?.polygons[0]?.sourceRoomId).toBe("living-room");
+    expect(response.geometry.levels[0]?.polygons[0]?.sourceRoomId).toBe(
+      "living-room"
+    );
     expect(builder.build).toHaveBeenCalledTimes(1);
     expect(builder.build).toHaveBeenCalledWith(project);
   });
@@ -65,7 +80,9 @@ describe("GetProjectGeometryService", () => {
     });
 
     await expect(
-      createService({ loadedProject: createLoadedProject(project) }).getProjectGeometry(project.id, {
+      createService({
+        loadedProject: createLoadedProject(project)
+      }).getProjectGeometry(project.id, {
         subject: "other-subject",
         username: ownerSubject,
         email: "owner@example.test",
@@ -77,7 +94,9 @@ describe("GetProjectGeometryService", () => {
     });
 
     await expect(
-      createService({ error: new PersistedProjectInvalidError("bad rows", []) }).getProjectGeometry(project.id, {
+      createService({
+        error: new PersistedProjectInvalidError("bad rows", [])
+      }).getProjectGeometry(project.id, {
         subject: ownerSubject,
         roles: ["casastudio-user"]
       })
@@ -87,7 +106,9 @@ describe("GetProjectGeometryService", () => {
     });
 
     await expect(
-      createService({ error: new ProjectPersistenceError("database unavailable") }).getProjectGeometry(project.id, {
+      createService({
+        error: new ProjectPersistenceError("database unavailable")
+      }).getProjectGeometry(project.id, {
         subject: ownerSubject,
         roles: ["casastudio-user"]
       })
@@ -156,7 +177,9 @@ describe("GetProjectGeometryService", () => {
     const model = expectModel(GeometryEngine.build(project));
     const cause = new GeometrySnapshotSerializationInvariantError("non-finite");
     const mapper = {
-      toProjectGeometryResponse: vi.fn<GeometrySnapshotApiMapper["toProjectGeometryResponse"]>(() => {
+      toProjectGeometryResponse: vi.fn<
+        GeometrySnapshotApiMapper["toProjectGeometryResponse"]
+      >(() => {
         throw cause;
       })
     } as GeometrySnapshotApiMapper;
@@ -192,11 +215,15 @@ function createService(input: {
     loadedProject: input.loadedProject,
     error: input.error
   });
-  const loader = new AuthorizedProjectLoader(repository, new ProjectReadAuthorizationPolicy());
+  const loader = new AuthorizedProjectLoader(
+    repository,
+    new ProjectReadAuthorizationPolicy()
+  );
 
   return new GetProjectGeometryService(
     loader,
-    input.builder ?? createBuilder(GeometryEngine.build(buildRectangularRoomProject())),
+    input.builder ??
+      createBuilder(GeometryEngine.build(buildRectangularRoomProject())),
     input.mapper ?? new GeometrySnapshotApiMapper()
   );
 }
@@ -207,19 +234,29 @@ function createBuilder(result: GeometryBuildResult): ProjectGeometryBuilder {
   };
 }
 
-function createRepository(input: { readonly loadedProject?: LoadedProject | null; readonly error?: Error }): ProjectsRepository {
+function createRepository(input: {
+  readonly loadedProject?: LoadedProject | null;
+  readonly error?: Error;
+}): ProjectsRepository {
   return {
     findByDomainId: vi.fn<ProjectsRepository["findByDomainId"]>(),
-    listProjectSummaries: vi.fn<ProjectsRepository["listProjectSummaries"]>(async () => []),
+    listProjectSummaries: vi.fn<ProjectsRepository["listProjectSummaries"]>(
+      async () => []
+    ),
+    projectNameExists: vi.fn<ProjectsRepository["projectNameExists"]>(
+      async () => false
+    ),
     createProject: vi.fn<ProjectsRepository["createProject"]>(),
     replaceProject: vi.fn<ProjectsRepository["replaceProject"]>(),
-    findLoadedByDomainId: vi.fn<ProjectsRepository["findLoadedByDomainId"]>(async () => {
-      if (input.error) {
-        throw input.error;
-      }
+    findLoadedByDomainId: vi.fn<ProjectsRepository["findLoadedByDomainId"]>(
+      async () => {
+        if (input.error) {
+          throw input.error;
+        }
 
-      return input.loadedProject ?? null;
-    })
+        return input.loadedProject ?? null;
+      }
+    )
   };
 }
 

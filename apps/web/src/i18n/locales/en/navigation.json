@@ -3,8 +3,7 @@
     "primary": "Primary"
   },
   "items": {
-    "projects": "Projects",
-    "projectViewer": "Project viewer"
+    "projects": "Projects"
   },
   "breadcrumbs": {
     "home": "Projects",

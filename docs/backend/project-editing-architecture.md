@@ -84,6 +84,25 @@ named `Ground Floor` at elevation zero. Rendering workflow collections are
 empty. The aggregate passes structural, reference, persisted-geometry, and
 Geometry Engine validation, so drawing may start immediately.
 
+### Delete a Project
+
+`DELETE /api/v1/projects/:id` returns `204 No Content` after deleting the
+complete persisted Project aggregate. Regular users may delete only Projects
+whose persisted owner subject matches their authenticated Keycloak `sub`;
+administrators retain the established cross-owner override. Missing Projects
+and ownership failures use the same `404` and `403` semantics as authoritative
+Project reads and writes.
+
+The repository locks the Project root, evaluates ownership, and deletes the
+root inside one Prisma transaction. Every aggregate-owned normalized table has
+a direct cascading foreign key to that root: Building and geometry entities,
+reference and boundary rows, staircase structures, viewpoints and base images,
+design-brief rows, and render requests and results. Cross-entity restrictive
+foreign keys continue to protect isolated child deletion while the root
+cascade defines complete aggregate ownership. PostgreSQL therefore commits all
+root and subordinate deletion together or rolls the statement back. Deleting
+the root also releases the owner-scoped normalized-name constraint.
+
 ### Read a Project
 
 `GET /api/v1/projects/:id` retains the authoritative response envelope:
@@ -709,3 +728,22 @@ existing draft-replacement action and use transient state for previews.
 Autosave, granular mutation
 endpoints, HTTP command APIs, collaborative editing, automatic conflict merge,
 and persistence of local edits are not implied by this contract.
+
+# Project discovery, creation, and deletion
+
+The authenticated `GET /api/v1/projects` endpoint is the authoritative discovery boundary. Regular Project users receive only summaries owned by their authenticated subject; administrators retain the established cross-owner visibility. Results are ordered by the persistence update time descending and then by domain ID, which makes ordering deterministic. The web application keeps this server state in TanStack Query under the Project list key and does not copy it into the editor Redux store.
+
+`POST /api/v1/projects` accepts only user-editable creation information, currently `{ name }`. The service trims the name, generates all domain identifiers and the creation time, and delegates the aggregate defaults to `createInitialProject(...)`. Successful creation therefore produces revision one with one empty Ground Floor without trusting the browser to provide IDs, ownership, revision data, or empty geometry structures.
+
+Project-name uniqueness is scoped to the authenticated owner. Comparison trims surrounding whitespace and lowercases with the `en-US` locale while preserving the trimmed display name. A frontend comparison against the loaded list provides immediate feedback, an application-service availability check expresses the semantic rule, and the database compound unique constraint on owner subject plus normalized name provides the final concurrent-write guarantee. Database constraint violations are translated to the `PROJECT_NAME_CONFLICT` Problem Details code with HTTP 409.
+
+After creation, the web application invalidates the Project list and navigates to `/app/projects/:projectId`. The new route begins in View mode and follows the normal authoritative `GET Project` plus `GET Geometry Snapshot` lifecycle; no editor draft is created until the user explicitly enters Edit.
+
+Project deletion originates only from the authenticated Project list. The
+secondary actions menu opens an explicit irreversible-action confirmation and
+submits through a TanStack Query mutation. The list is not optimistically
+filtered: it remains unchanged while the request is pending and after any
+failure. After a successful `204`, the mutation removes only the deleted
+Project detail and Geometry query entries, invalidates the Project list key,
+and waits for the authoritative list refetch. Redux remains limited to the
+local editing session and has no deletion state.

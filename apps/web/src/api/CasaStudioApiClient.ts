@@ -1,8 +1,11 @@
 import {
   isApiProblem,
+  parseProjectListResponse,
   parseProjectGeometryResponse,
   parseProjectResponse,
   type ApiProblem,
+  type CreateProjectRequest,
+  type ProjectListResponse,
   type ProjectGeometryResponse,
   type ProjectResponse,
   type ReplaceProjectRequest
@@ -12,7 +15,8 @@ import {
 export type AccessTokenProvider = () => Promise<string | null>;
 
 /** Failure categories exposed by the frontend API boundary. */
-export type ApiRequestFailureKind = "problem" | "http" | "network" | "invalid-response";
+export type ApiRequestFailureKind =
+  "problem" | "http" | "network" | "invalid-response";
 
 /** Safe typed failure raised for HTTP, network, and response-contract errors. */
 export class ApiRequestError extends Error {
@@ -66,11 +70,15 @@ export class CasaStudioApiClient {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.getAccessToken = options.getAccessToken;
     this.fetchImplementation =
-      options.fetchImplementation ?? ((input, init) => globalThis.fetch(input, init));
+      options.fetchImplementation ??
+      ((input, init) => globalThis.fetch(input, init));
   }
 
   /** Reads and validates an authoritative Project response. */
-  async getProject(projectId: string, signal?: AbortSignal): Promise<ProjectResponse> {
+  async getProject(
+    projectId: string,
+    signal?: AbortSignal
+  ): Promise<ProjectResponse> {
     const body = await this.requestJson(
       `/api/v1/projects/${encodeURIComponent(projectId)}`,
       { method: "GET", signal }
@@ -85,6 +93,60 @@ export class CasaStudioApiClient {
         undefined,
         undefined,
         { cause: error }
+      );
+    }
+  }
+
+  /** Lists and validates Projects visible to the authenticated principal. */
+  async listProjects(signal?: AbortSignal): Promise<ProjectListResponse> {
+    const body = await this.requestJson("/api/v1/projects", {
+      method: "GET",
+      signal
+    });
+    try {
+      return parseProjectListResponse(body);
+    } catch (error) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid Project list.",
+        undefined,
+        undefined,
+        { cause: error }
+      );
+    }
+  }
+
+  /** Creates a canonical Project from user-supplied information. */
+  async createProject(request: CreateProjectRequest): Promise<ProjectResponse> {
+    const body = await this.requestJson("/api/v1/projects", {
+      method: "POST",
+      body: request
+    });
+    try {
+      return parseProjectResponse(body);
+    } catch (error) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid created Project.",
+        undefined,
+        undefined,
+        { cause: error }
+      );
+    }
+  }
+
+  /** Deletes a complete authoritative Project aggregate. */
+  async deleteProject(projectId: string): Promise<void> {
+    const response = await this.request(
+      `/api/v1/projects/${encodeURIComponent(projectId)}`,
+      { method: "DELETE" }
+    );
+
+    if (response.status !== 204) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid Project deletion response.",
+        response.status
       );
     }
   }
@@ -144,10 +206,14 @@ export class CasaStudioApiClient {
     try {
       const response = parseProjectResponse(body);
       if (response.project.id !== projectId) {
-        throw new Error("Replacement response Project ID does not match the route Project ID.");
+        throw new Error(
+          "Replacement response Project ID does not match the route Project ID."
+        );
       }
       if (response.sourceRevision !== request.baseRevision + 1) {
-        throw new Error("Replacement response did not advance the Project revision exactly once.");
+        throw new Error(
+          "Replacement response did not advance the Project revision exactly once."
+        );
       }
       return response;
     } catch (error) {
@@ -161,11 +227,34 @@ export class CasaStudioApiClient {
   private async requestJson(
     path: string,
     request: {
-      readonly method: "GET" | "PUT";
+      readonly method: "GET" | "POST" | "PUT";
       readonly body?: unknown;
       readonly signal?: AbortSignal;
     }
   ): Promise<unknown> {
+    const response = await this.request(path, request);
+
+    try {
+      return await response.json();
+    } catch (error) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned a non-JSON success response.",
+        response.status,
+        undefined,
+        { cause: error }
+      );
+    }
+  }
+
+  private async request(
+    path: string,
+    request: {
+      readonly method: "DELETE" | "GET" | "POST" | "PUT";
+      readonly body?: unknown;
+      readonly signal?: AbortSignal;
+    }
+  ): Promise<Response> {
     let token: string | null;
 
     try {
@@ -212,17 +301,7 @@ export class CasaStudioApiClient {
       throw await this.createHttpError(response);
     }
 
-    try {
-      return await response.json();
-    } catch (error) {
-      throw new ApiRequestError(
-        "invalid-response",
-        "The API returned a non-JSON success response.",
-        response.status,
-        undefined,
-        { cause: error }
-      );
-    }
+    return response;
   }
 
   private async createHttpError(response: Response): Promise<ApiRequestError> {
@@ -240,7 +319,12 @@ export class CasaStudioApiClient {
 
     if (isApiProblem(body)) {
       const problem = { ...body, status: response.status };
-      return new ApiRequestError("problem", problem.detail, response.status, problem);
+      return new ApiRequestError(
+        "problem",
+        problem.detail,
+        response.status,
+        problem
+      );
     }
 
     return new ApiRequestError(

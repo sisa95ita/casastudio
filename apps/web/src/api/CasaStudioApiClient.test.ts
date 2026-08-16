@@ -38,7 +38,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function createClient(fetchImplementation: typeof fetch, token: string | null = "access-token") {
+function createClient(
+  fetchImplementation: typeof fetch,
+  token: string | null = "access-token"
+) {
   return new CasaStudioApiClient({
     baseUrl: "http://localhost:3000/",
     getAccessToken: vi.fn().mockResolvedValue(token),
@@ -49,13 +52,81 @@ function createClient(fetchImplementation: typeof fetch, token: string | null = 
 describe("API configuration", () => {
   it("validates and normalizes the public API base URL", () => {
     expect(
-      readApiConfiguration({ VITE_API_BASE_URL: "http://localhost:3000/" } as unknown as ImportMetaEnv)
+      readApiConfiguration({
+        VITE_API_BASE_URL: "http://localhost:3000/"
+      } as unknown as ImportMetaEnv)
     ).toEqual({ baseUrl: "http://localhost:3000" });
-    expect(() => readApiConfiguration({} as ImportMetaEnv)).toThrow("VITE_API_BASE_URL");
+    expect(() => readApiConfiguration({} as ImportMetaEnv)).toThrow(
+      "VITE_API_BASE_URL"
+    );
   });
 });
 
 describe("CasaStudioApiClient", () => {
+  it("lists Projects and creates one with the minimal request DTO", async () => {
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          projects: [
+            {
+              id: geometryPlaygroundProject.id,
+              name: geometryPlaygroundProject.name,
+              revision: geometryPlaygroundProject.revision,
+              updatedAt: geometryPlaygroundProject.updatedAt,
+              ownedByCurrentUser: true
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(Response.json(projectResponse));
+    const client = createClient(fetchImplementation);
+
+    await expect(client.listProjects()).resolves.toMatchObject({
+      projects: [{ id: geometryPlaygroundProject.id }]
+    });
+    await expect(client.createProject({ name: "Casa" })).resolves.toEqual(
+      projectResponse
+    );
+    expect(fetchImplementation).toHaveBeenLastCalledWith(
+      "http://localhost:3000/api/v1/projects",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "Casa" })
+      })
+    );
+  });
+
+  it("deletes the exact Project with the authenticated no-content contract", async () => {
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const client = createClient(fetchImplementation);
+
+    await expect(client.deleteProject("project/casa")).resolves.toBeUndefined();
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      "http://localhost:3000/api/v1/projects/project%2Fcasa",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer access-token"
+        }
+      })
+    );
+  });
+
+  it("rejects a successful deletion response that is not 204", async () => {
+    const client = createClient(
+      vi.fn().mockResolvedValue(Response.json({}, { status: 200 }))
+    );
+
+    await expect(client.deleteProject("project-one")).rejects.toMatchObject({
+      kind: "invalid-response",
+      status: 200
+    });
+  });
+
   it("invokes the default browser fetch with the global receiver", async () => {
     const fetchSpy = vi
       .fn(function (this: unknown) {
@@ -72,14 +143,16 @@ describe("CasaStudioApiClient", () => {
       getAccessToken: vi.fn().mockResolvedValue("access-token")
     });
 
-    await expect(client.getProject(geometryPlaygroundProject.id)).resolves.toEqual(
-      projectResponse
-    );
+    await expect(
+      client.getProject(geometryPlaygroundProject.id)
+    ).resolves.toEqual(projectResponse);
     expect(fetchSpy).toHaveBeenCalledOnce();
   });
 
   it("injects the bearer token and explicit JSON headers", async () => {
-    const fetchImplementation = vi.fn().mockResolvedValue(Response.json(projectResponse));
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValue(Response.json(projectResponse));
     const client = createClient(fetchImplementation);
 
     await client.getProject(geometryPlaygroundProject.id);
@@ -121,9 +194,13 @@ describe("CasaStudioApiClient", () => {
   });
 
   it("validates and returns the authoritative Project envelope", async () => {
-    const client = createClient(vi.fn().mockResolvedValue(Response.json(projectResponse)));
+    const client = createClient(
+      vi.fn().mockResolvedValue(Response.json(projectResponse))
+    );
 
-    await expect(client.getProject(geometryPlaygroundProject.id)).resolves.toEqual(projectResponse);
+    await expect(
+      client.getProject(geometryPlaygroundProject.id)
+    ).resolves.toEqual(projectResponse);
   });
 
   it("replaces a complete Project with baseRevision and validates the next revision", async () => {
@@ -133,7 +210,10 @@ describe("CasaStudioApiClient", () => {
       updatedAt: "2026-08-15T12:00:00.000Z"
     };
     const fetchImplementation = vi.fn().mockResolvedValue(
-      Response.json({ project: savedProject, sourceRevision: savedProject.revision })
+      Response.json({
+        project: savedProject,
+        sourceRevision: savedProject.revision
+      })
     );
     const client = createClient(fetchImplementation);
 
@@ -164,11 +244,13 @@ describe("CasaStudioApiClient", () => {
   });
 
   it("maps the explicit Geometry snapshot envelope", async () => {
-    const client = createClient(vi.fn().mockResolvedValue(Response.json(geometryResponse)));
-
-    await expect(client.getProjectGeometry(geometryPlaygroundProject.id)).resolves.toEqual(
-      geometryResponse
+    const client = createClient(
+      vi.fn().mockResolvedValue(Response.json(geometryResponse))
     );
+
+    await expect(
+      client.getProjectGeometry(geometryPlaygroundProject.id)
+    ).resolves.toEqual(geometryResponse);
   });
 
   it("rejects malformed nested Geometry snapshot entities", async () => {
@@ -188,7 +270,9 @@ describe("CasaStudioApiClient", () => {
       vi.fn().mockResolvedValue(Response.json(invalidGeometryResponse))
     );
 
-    await expect(client.getProjectGeometry(geometryPlaygroundProject.id)).rejects.toMatchObject({
+    await expect(
+      client.getProjectGeometry(geometryPlaygroundProject.id)
+    ).rejects.toMatchObject({
       kind: "invalid-response"
     });
   });
@@ -215,7 +299,9 @@ describe("CasaStudioApiClient", () => {
 
   it("creates a safe error for non-Problem HTTP failures", async () => {
     const client = createClient(
-      vi.fn().mockResolvedValue(new Response("gateway failure", { status: 502 }))
+      vi
+        .fn()
+        .mockResolvedValue(new Response("gateway failure", { status: 502 }))
     );
 
     await expect(client.getProject("project-one")).rejects.toMatchObject({
@@ -226,9 +312,13 @@ describe("CasaStudioApiClient", () => {
   });
 
   it("distinguishes network failures without exposing request credentials", async () => {
-    const client = createClient(vi.fn().mockRejectedValue(new TypeError("connection refused")));
+    const client = createClient(
+      vi.fn().mockRejectedValue(new TypeError("connection refused"))
+    );
 
-    const error = await client.getProject("project-one").catch((failure: unknown) => failure);
+    const error = await client
+      .getProject("project-one")
+      .catch((failure: unknown) => failure);
 
     expect(error).toBeInstanceOf(ApiRequestError);
     expect(error).toMatchObject({ kind: "network", status: undefined });
@@ -237,7 +327,11 @@ describe("CasaStudioApiClient", () => {
 
   it("rejects a successful response that violates the Project contract", async () => {
     const client = createClient(
-      vi.fn().mockResolvedValue(Response.json({ project: { id: "broken" }, sourceRevision: 1 }))
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ project: { id: "broken" }, sourceRevision: 1 })
+        )
     );
 
     await expect(client.getProject("project-one")).rejects.toMatchObject({

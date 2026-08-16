@@ -13,14 +13,17 @@ import { ProjectReadAuthorizationPolicy } from "./project-read-authorization.pol
 @Injectable()
 export class ListProjectsService {
   constructor(
-    @Inject(PROJECTS_REPOSITORY) private readonly projectsRepository: ProjectsRepository,
+    @Inject(PROJECTS_REPOSITORY)
+    private readonly projectsRepository: ProjectsRepository,
     @Inject(ProjectReadAuthorizationPolicy)
     private readonly authorizationPolicy: ProjectReadAuthorizationPolicy,
     @Inject(ProjectApiMapper) private readonly apiMapper: ProjectApiMapper
   ) {}
 
   /** Returns owner-scoped summaries for users and all summaries for administrators. */
-  async listProjects(principal: AuthenticatedPrincipal): Promise<ProjectListResponseDto> {
+  async listProjects(
+    principal: AuthenticatedPrincipal
+  ): Promise<ProjectListResponseDto> {
     if (!this.authorizationPolicy.canUseProjects(principal)) {
       throw new ForbiddenException("A CasaStudio Project role is required.");
     }
@@ -29,9 +32,10 @@ export class ListProjectsService {
       const ownerSubject = this.authorizationPolicy.isAdministrator(principal)
         ? undefined
         : principal.subject;
-      const summaries = await this.projectsRepository.listProjectSummaries(ownerSubject);
+      const summaries =
+        await this.projectsRepository.listProjectSummaries(ownerSubject);
 
-      return this.apiMapper.toProjectListResponse(summaries);
+      return this.apiMapper.toProjectListResponse(summaries, principal.subject);
     } catch (error) {
       if (error instanceof ProjectPersistenceError) {
         throw new ProjectReadFailedError("project-list", error);

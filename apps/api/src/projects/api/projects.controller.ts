@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Inject, Param, Post, Put, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Post,
+  Put,
+  UseGuards
+} from "@nestjs/common";
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -7,6 +19,7 @@ import {
   ApiExtraModels,
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -21,6 +34,7 @@ import { CurrentPrincipal } from "../../auth/current-principal.decorator";
 import { JwtAuthGuard } from "../../auth/jwt-auth.guard";
 import { ProblemDetailsDto } from "../../common/problem-details/problem-details.dto";
 import { CreateProjectService } from "../application/create-project.service";
+import { DeleteProjectService } from "../application/delete-project.service";
 import { GetProjectService } from "../application/get-project.service";
 import { ListProjectsService } from "../application/list-projects.service";
 import { ReplaceProjectService } from "../application/replace-project.service";
@@ -93,14 +107,22 @@ import { ProjectIdPipe } from "./project-id.pipe";
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {
   constructor(
-    @Inject(GetProjectService) private readonly getProjectService: GetProjectService,
-    @Inject(ListProjectsService) private readonly listProjectsService: ListProjectsService,
-    @Inject(CreateProjectService) private readonly createProjectService: CreateProjectService,
-    @Inject(ReplaceProjectService) private readonly replaceProjectService: ReplaceProjectService
+    @Inject(GetProjectService)
+    private readonly getProjectService: GetProjectService,
+    @Inject(ListProjectsService)
+    private readonly listProjectsService: ListProjectsService,
+    @Inject(CreateProjectService)
+    private readonly createProjectService: CreateProjectService,
+    @Inject(DeleteProjectService)
+    private readonly deleteProjectService: DeleteProjectService,
+    @Inject(ReplaceProjectService)
+    private readonly replaceProjectService: ReplaceProjectService
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "List Projects visible to the authenticated principal." })
+  @ApiOperation({
+    summary: "List Projects visible to the authenticated principal."
+  })
   @ApiOkResponse({ type: ProjectListResponseDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
@@ -112,8 +134,11 @@ export class ProjectsController {
   }
 
   @Post()
-  @ApiOperation({ summary: "Create a canonical editable Project owned by the caller." })
+  @ApiOperation({
+    summary: "Create a canonical editable Project owned by the caller."
+  })
   @ApiCreatedResponse({ type: ProjectResponseDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiBadRequestResponse({ type: ProblemDetailsDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
@@ -127,7 +152,9 @@ export class ProjectsController {
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "Read the current authoritative Project by domain ID." })
+  @ApiOperation({
+    summary: "Read the current authoritative Project by domain ID."
+  })
   @ApiParam({
     name: "id",
     required: true,
@@ -151,8 +178,36 @@ export class ProjectsController {
     return this.getProjectService.getProject(projectId, principal);
   }
 
+  @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Delete a complete authoritative Project." })
+  @ApiParam({
+    name: "id",
+    required: true,
+    description: "CasaStudio Project domain ID. Must be lowercase kebab-case.",
+    schema: {
+      type: "string",
+      pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      example: "demo-project"
+    }
+  })
+  @ApiNoContentResponse({ description: "The Project was deleted." })
+  @ApiBadRequestResponse({ type: ProblemDetailsDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiInternalServerErrorResponse({ type: ProblemDetailsDto })
+  async deleteProject(
+    @Param("id", ProjectIdPipe) projectId: string,
+    @CurrentPrincipal() principal: AuthenticatedPrincipal
+  ): Promise<void> {
+    await this.deleteProjectService.deleteProject(projectId, principal);
+  }
+
   @Put(":id")
-  @ApiOperation({ summary: "Replace the complete authoritative Project state." })
+  @ApiOperation({
+    summary: "Replace the complete authoritative Project state."
+  })
   @ApiParam({
     name: "id",
     required: true,
