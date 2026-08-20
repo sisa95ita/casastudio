@@ -86,15 +86,23 @@ pipeline {
       steps {
         sh '''
           set -eu
+          expected_store_root="${PNPM_HOME}/store"
+          configured_store_root="$(pnpm config get store-dir)"
+          if [ "${configured_store_root}" != "${expected_store_root}" ]; then
+            echo "Unexpected pnpm store-dir: ${configured_store_root}; expected ${expected_store_root}" >&2
+            exit 1
+          fi
+
           store_path="$(pnpm store path)"
           case "${store_path}" in
-            "${PNPM_HOME}"/store/*) ;;
+            "${configured_store_root}"/*) ;;
             *)
-              echo "Unexpected pnpm store path: ${store_path}" >&2
+              echo "Unexpected pnpm store path: ${store_path}; expected a path below ${configured_store_root}" >&2
               exit 1
               ;;
           esac
 
+          echo "pnpm store root: ${configured_store_root}"
           echo "pnpm store path: ${store_path}"
           if [ -d "${store_path}" ]; then
             echo "pnpm store size before install: $(du -sh "${store_path}" | awk '{print $1}')"

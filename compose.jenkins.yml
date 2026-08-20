@@ -31,6 +31,7 @@ services:
       JENKINS_SECRET: ${CASC_JENKINS_AGENT_SECRET:-replace-with-generated-agent-secret}
       JENKINS_WEB_SOCKET: "true"
       JENKINS_AGENT_WORKDIR: /home/jenkins/agent
+      PNPM_CONFIG_STORE_DIR: /home/jenkins/.local/share/pnpm/store
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

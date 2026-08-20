@@ -95,16 +95,26 @@ larger CI infrastructure.
 ## pnpm Package Store
 
 Dependency installation runs as the non-root `jenkins` user on the permanent
-inbound agent. `PNPM_HOME` is `/home/jenkins/.local/share/pnpm`; with the pinned
-pnpm 11 toolchain, `pnpm store path` resolves to
+inbound agent. `PNPM_HOME` is `/home/jenkins/.local/share/pnpm`, and the agent's
+`PNPM_CONFIG_STORE_DIR` environment variable explicitly sets pnpm's
+`store-dir` to `/home/jenkins/.local/share/pnpm/store`. With the pinned pnpm 11
+toolchain, `pnpm store path` therefore resolves to
 `/home/jenkins/.local/share/pnpm/store/v11`.
+
+The explicit `store-dir` is required because the inbound-agent image mounts
+`/home/jenkins/agent` separately from `/home/jenkins`. Without the override,
+pnpm's hard-link capability check crosses those mount boundaries and pnpm falls
+back to `/home/jenkins/agent/.pnpm-store`. That fallback is outside the build
+workspace but is not owned by the durable named agent-home volume. The explicit
+configuration prevents that fallback and makes the persistence boundary
+unambiguous.
 
 The existing `jenkins_agent_home` named volume mounts `/home/jenkins`, so the
 content-addressable package store survives normal pipeline cleanup, container
-restart, and agent recreation. Jenkins still deletes each source workspace and
-its `node_modules` after a build. Persisting only pnpm's shared package content
-avoids stale workspace state while allowing unchanged packages to be linked
-from the store instead of downloaded again.
+restart, and fresh agent-container creation. Jenkins still deletes each source
+workspace and its `node_modules` after a build. Persisting only pnpm's shared
+package content avoids stale workspace state while allowing unchanged packages
+to be imported from the store instead of downloaded again.
 
 The install stage logs the effective store path, its size before and after the
 install, pnpm's normal reused/downloaded progress, and total install duration.
@@ -116,6 +126,7 @@ conditions vary.
 Inspect the cache without listing its contents:
 
 ```bash
+docker compose -f compose.jenkins.yml exec --user jenkins agent pnpm config get store-dir
 docker compose -f compose.jenkins.yml exec --user jenkins agent pnpm store path
 docker compose -f compose.jenkins.yml exec --user jenkins agent sh -lc 'du -sh "$(pnpm store path)"'
 ```
