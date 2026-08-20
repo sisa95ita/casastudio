@@ -14,15 +14,34 @@ import {
 const declaredSnapshot = "0.1.0-SNAPSHOT";
 const fixedTimestamp = "20260820.151245";
 const timestampedSnapshot = `${declaredSnapshot}-${fixedTimestamp}`;
+const buildVersionEnvironmentKey = "CASASTUDIO_BUILD_VERSION";
+
+function withoutBuildVersionOverride(assertion) {
+  const hadOverride = Object.hasOwn(process.env, buildVersionEnvironmentKey);
+  const previousOverride = process.env[buildVersionEnvironmentKey];
+
+  try {
+    delete process.env[buildVersionEnvironmentKey];
+    return assertion();
+  } finally {
+    if (hadOverride) {
+      process.env[buildVersionEnvironmentKey] = previousOverride;
+    } else {
+      delete process.env[buildVersionEnvironmentKey];
+    }
+  }
+}
 
 test("reads the repository snapshot version", () => {
   assert.equal(readDeclaredVersion(), declaredSnapshot);
 });
 
 test("uses the declared snapshot when no build override exists", () => {
-  assert.equal(
-    resolveBuildVersion({ declaredVersion: declaredSnapshot, override: undefined }),
-    declaredSnapshot
+  withoutBuildVersionOverride(() =>
+    assert.equal(
+      resolveBuildVersion({ declaredVersion: declaredSnapshot }),
+      declaredSnapshot
+    )
   );
 });
 

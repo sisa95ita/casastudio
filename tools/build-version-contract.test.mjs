@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 import { createApplicationMetadataDefine } from "../apps/web/build-metadata.mjs";
 
+const buildVersionEnvironmentKey = "CASASTUDIO_BUILD_VERSION";
 const jenkinsfile = readFileSync(new URL("../Jenkinsfile", import.meta.url), "utf8");
 const webDockerfile = readFileSync(
   new URL("../apps/web/Dockerfile", import.meta.url),
@@ -13,6 +14,22 @@ const viteConfig = readFileSync(
   new URL("../apps/web/vite.config.ts", import.meta.url),
   "utf8"
 );
+
+function withoutBuildVersionOverride(assertion) {
+  const hadOverride = Object.hasOwn(process.env, buildVersionEnvironmentKey);
+  const previousOverride = process.env[buildVersionEnvironmentKey];
+
+  try {
+    delete process.env[buildVersionEnvironmentKey];
+    return assertion();
+  } finally {
+    if (hadOverride) {
+      process.env[buildVersionEnvironmentKey] = previousOverride;
+    } else {
+      delete process.env[buildVersionEnvironmentKey];
+    }
+  }
+}
 
 test("Jenkins uses one resolved build version for images and cleanup", () => {
   assert.match(
@@ -44,9 +61,11 @@ test("the Docker frontend build receives the same resolved version as Vite", () 
 });
 
 test("frontend build metadata uses the declared snapshot by default", () => {
-  assert.deepEqual(createApplicationMetadataDefine(), {
-    __CASASTUDIO_APPLICATION_VERSION__: JSON.stringify("0.1.0-SNAPSHOT")
-  });
+  withoutBuildVersionOverride(() =>
+    assert.deepEqual(createApplicationMetadataDefine(), {
+      __CASASTUDIO_APPLICATION_VERSION__: JSON.stringify("0.1.0-SNAPSHOT")
+    })
+  );
 });
 
 test("frontend build metadata preserves an explicit build override", () => {
