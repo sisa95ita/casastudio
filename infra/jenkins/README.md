@@ -106,9 +106,19 @@ GitHub repository
         ↓
 Multibranch Pipeline
         ↓
-branch and pull-request discovery
+pull-request discovery
         ↓
 Jenkinsfile from the checked-out revision
         ↓
 Jenkins status check on the pull request
 ```
+
+Configure pull-request discovery without ordinary branch discovery. In
+particular, do not enable a duplicate `main` build: this local Mac installation
+uses the Multibranch job only for validation of pull requests. A future DEV
+deployment path will be a separate manual job.
+
+Each validation run resolves one timestamped snapshot identity, uses it for
+frontend metadata and both local Docker image tags, and deletes those exact
+images afterward. The pipeline does not push images, deploy environments,
+create releases, or advance the declared repository version.

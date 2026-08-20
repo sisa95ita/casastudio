@@ -39,6 +39,31 @@ pipeline {
           git rev-parse --short=12 HEAD
           git status --short
         '''
+        script {
+          def requestedBuildVersion = env.CASASTUDIO_BUILD_VERSION?.trim()
+
+          env.CASASTUDIO_DECLARED_VERSION = sh(
+            returnStdout: true,
+            script: 'node tools/build-version.mjs declared'
+          ).trim()
+          sh 'node tools/build-version.mjs assert-snapshot'
+
+          if (requestedBuildVersion) {
+            env.CASASTUDIO_BUILD_VERSION = requestedBuildVersion
+            env.CASASTUDIO_BUILD_VERSION = sh(
+              returnStdout: true,
+              script: 'node tools/build-version.mjs resolve'
+            ).trim()
+          } else {
+            env.CASASTUDIO_BUILD_VERSION = sh(
+              returnStdout: true,
+              script: 'node tools/build-version.mjs snapshot'
+            ).trim()
+          }
+
+          echo "CasaStudio declared version: ${env.CASASTUDIO_DECLARED_VERSION}"
+          echo "CasaStudio build version: ${env.CASASTUDIO_BUILD_VERSION}"
+        }
       }
     }
 
@@ -227,9 +252,12 @@ pipeline {
       steps {
         sh '''
           set -eu
-          image_tag="ci-${BUILD_NUMBER:-local}"
-          docker build --target runtime -f apps/web/Dockerfile -t "casastudio-web:${image_tag}" .
-          docker build --target runtime -f apps/api/Dockerfile -t "casastudio-api:${image_tag}" .
+          : "${CASASTUDIO_BUILD_VERSION:?CasaStudio build version was not resolved}"
+          docker build --target runtime -f apps/web/Dockerfile \
+            --build-arg CASASTUDIO_BUILD_VERSION="${CASASTUDIO_BUILD_VERSION}" \
+            -t "casastudio-web:${CASASTUDIO_BUILD_VERSION}" .
+          docker build --target runtime -f apps/api/Dockerfile \
+            -t "casastudio-api:${CASASTUDIO_BUILD_VERSION}" .
         '''
       }
     }
@@ -240,15 +268,17 @@ pipeline {
       sh '''
         set +u
         project_name="casastudio-ci-${BUILD_NUMBER:-0}"
-        image_tag="ci-${BUILD_NUMBER:-local}"
+        image_tag="${CASASTUDIO_BUILD_VERSION:-}"
         cleanup_status=0
 
         docker compose -p "${project_name}" -f compose.yml -f compose.test.yml down --volumes --remove-orphans || cleanup_status=$?
-        for image in "casastudio-web:${image_tag}" "casastudio-api:${image_tag}"; do
-          if docker image inspect "${image}" >/dev/null 2>&1; then
-            docker image rm -f "${image}" || cleanup_status=$?
-          fi
-        done
+        if [ -n "${image_tag}" ]; then
+          for image in "casastudio-web:${image_tag}" "casastudio-api:${image_tag}"; do
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              docker image rm -f "${image}" || cleanup_status=$?
+            fi
+          done
+        fi
 
         if [ "${cleanup_status}" -ne 0 ]; then
           echo "Post-build cleanup reported failures. Review Docker access and any partial CI resources above."

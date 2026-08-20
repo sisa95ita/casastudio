@@ -479,15 +479,28 @@ img {
   background: var(--casa-paper);
   border-top: 1px solid var(--casa-border);
   display: flex;
-  gap: 8px;
   min-height: 36px;
   overflow: hidden;
   padding: 0 18px;
 }
 
+.workspace-status__context {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
 .workspace-status__icon {
   color: #3f7868;
+  flex: 0 0 auto;
   font-size: 15px !important;
+}
+
+.workspace-status__version {
+  flex: 0 0 auto;
+  margin-left: auto !important;
+  padding-left: 16px;
 }
 
 /* Projects home */
