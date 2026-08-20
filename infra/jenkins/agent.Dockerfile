@@ -20,7 +20,7 @@ RUN apt-get update \
   && ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
   && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
   && ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
-  && install -d -o jenkins -g jenkins "${PNPM_HOME}" /home/jenkins/.cache /home/jenkins/.pnpm-store \
+  && install -d -o jenkins -g jenkins "${PNPM_HOME}" /home/jenkins/.cache \
   && chmod 0755 /usr/local/bin/casastudio-jenkins-agent-entrypoint \
   && corepack enable \
   && rm -rf /var/lib/apt/lists/*

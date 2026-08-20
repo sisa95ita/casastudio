@@ -92,6 +92,48 @@ tasks validate the same packages with serialized task execution. This does not
 limit normal developer monorepo commands outside Jenkins and can be revisited on
 larger CI infrastructure.
 
+## pnpm Package Store
+
+Dependency installation runs as the non-root `jenkins` user on the permanent
+inbound agent. `PNPM_HOME` is `/home/jenkins/.local/share/pnpm`; with the pinned
+pnpm 11 toolchain, `pnpm store path` resolves to
+`/home/jenkins/.local/share/pnpm/store/v11`.
+
+The existing `jenkins_agent_home` named volume mounts `/home/jenkins`, so the
+content-addressable package store survives normal pipeline cleanup, container
+restart, and agent recreation. Jenkins still deletes each source workspace and
+its `node_modules` after a build. Persisting only pnpm's shared package content
+avoids stale workspace state while allowing unchanged packages to be linked
+from the store instead of downloaded again.
+
+The install stage logs the effective store path, its size before and after the
+install, pnpm's normal reused/downloaded progress, and total install duration.
+A first population is expected to download packages. A later build with the
+same lockfile should report substantial reuse and substantially fewer
+downloads; no absolute duration is guaranteed because filesystem and network
+conditions vary.
+
+Inspect the cache without listing its contents:
+
+```bash
+docker compose -f compose.jenkins.yml exec --user jenkins agent pnpm store path
+docker compose -f compose.jenkins.yml exec --user jenkins agent sh -lc 'du -sh "$(pnpm store path)"'
+```
+
+Clearing this cache is exceptional maintenance, not a routine build step. The
+following command is destructive only to the validated pnpm store path; it does
+not remove Jenkins home, source workspaces, databases, or unrelated volumes:
+
+```bash
+docker compose -f compose.jenkins.yml exec --user jenkins agent sh -lc '
+  store_path="$(pnpm store path)"
+  case "$store_path" in
+    /home/jenkins/.local/share/pnpm/store/*) rm -rf -- "$store_path" ;;
+    *) echo "Refusing to remove unexpected store path: $store_path" >&2; exit 1 ;;
+  esac
+'
+```
+
 ## Multibranch Pipeline
 
 Create a Jenkins Multibranch Pipeline that points at the GitHub repository and

@@ -16,8 +16,8 @@ pipeline {
     COREPACK_ENABLE_PROJECT_SPEC = '1'
     DOCKER_BUILDKIT = '1'
     COMPOSE_DOCKER_CLI_BUILD = '1'
-    PNPM_HOME = "${WORKSPACE}/.pnpm-home"
-    PATH = "${WORKSPACE}/.pnpm-home:${PATH}"
+    PNPM_HOME = '/home/jenkins/.local/share/pnpm'
+    PATH = "/home/jenkins/.local/share/pnpm:${PATH}"
     TURBO_TELEMETRY_DISABLED = '1'
     TURBO_CONCURRENCY = '1'
     CASASTUDIO_POSTGRES_PASSWORD = 'ci-compose-placeholder-not-secret'
@@ -86,7 +86,36 @@ pipeline {
       steps {
         sh '''
           set -eu
-          pnpm install --frozen-lockfile
+          store_path="$(pnpm store path)"
+          case "${store_path}" in
+            "${PNPM_HOME}"/store/*) ;;
+            *)
+              echo "Unexpected pnpm store path: ${store_path}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "pnpm store path: ${store_path}"
+          if [ -d "${store_path}" ]; then
+            echo "pnpm store size before install: $(du -sh "${store_path}" | awk '{print $1}')"
+          else
+            echo "pnpm store size before install: 0 (cold store)"
+          fi
+
+          install_started_at="$(date +%s)"
+          if pnpm install --frozen-lockfile; then
+            install_status=0
+          else
+            install_status=$?
+          fi
+          install_finished_at="$(date +%s)"
+          echo "pnpm install duration: $((install_finished_at - install_started_at))s"
+
+          if [ "${install_status}" -ne 0 ]; then
+            exit "${install_status}"
+          fi
+
+          echo "pnpm store size after install: $(du -sh "${store_path}" | awk '{print $1}')"
           git diff --exit-code -- pnpm-lock.yaml
         '''
       }
