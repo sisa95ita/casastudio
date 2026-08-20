@@ -1,7 +1,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import rootPackage from "../../../../package.json";
+import { applicationMetadata } from "../application-metadata";
 import { StatusBar } from "./StatusBar";
 
 afterEach(cleanup);
@@ -17,7 +17,9 @@ describe("StatusBar", () => {
     expect(context).not.toBeNull();
     expect(version).not.toBeNull();
     expect(within(context as HTMLElement).getByText(/Saved/)).toBeTruthy();
-    expect(within(version as HTMLElement).getByText(`v${rootPackage.version}`)).toBeTruthy();
+    expect(
+      within(version as HTMLElement).getByText(`v${applicationMetadata.version}`)
+    ).toBeTruthy();
     expect(context?.nextElementSibling).toBe(version);
   });
 });
