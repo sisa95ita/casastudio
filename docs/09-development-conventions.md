@@ -36,6 +36,36 @@ Recommended names: `docs/initial-documentation`, `chore/monorepo-setup`, `feat/2
 
 Pull requests should include summary, scope, screenshots for UI changes, testing notes, linked issue when available, and documentation updates when needed.
 
+## Application versioning
+
+The root `package.json` version is the single source of truth for the current
+CasaStudio release line. Active development uses an `x.y.z-SNAPSHOT` version.
+Before 1.0, MINOR identifies a meaningful product capability or milestone,
+while PATCH identifies fixes and refinements that do not add a major
+capability. Starting a new release line is an intentional source change; CI
+never chooses the next semantic version or rewrites `package.json`.
+
+Without an override, local tools resolve the build version to the declared
+snapshot. Validation builds derive one immutable UTC-timestamped version using
+`yyyyMMdd.HHmmss`, for example
+`0.1.0-SNAPSHOT-20260820.151245`. An explicit validated
+`CASASTUDIO_BUILD_VERSION` may supply the resolved identity for future build or
+promotion jobs. The same resolved value identifies frontend diagnostic
+metadata plus the web and API Docker images.
+
+The current Jenkins Multibranch pull-request pipeline is validation-only. It
+validates and builds local snapshot artifacts, then deletes the exact local
+image tags it created. It does not publish, deploy, create tags, advance
+version state, or discover and build `main`; the local Mac remains protected
+from duplicate branch builds.
+
+A future manual DEV job can source `main`, resolve a snapshot identity, and
+publish or deploy that immutable artifact. A future manual Release job can
+select a validated snapshot, derive `x.y.z` by removing `-SNAPSHOT`, and promote
+the same artifact rather than rebuilding semantically different content.
+Registry publication, deployment, Git tagging, and release-state management
+remain separate future concerns.
+
 ## Documentation rule
 
 Any architectural or stack decision must be documented. Use ADRs for important decisions.

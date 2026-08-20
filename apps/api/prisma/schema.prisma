@@ -52,6 +52,7 @@ model Project {
   id               String   @id @default(uuid()) @db.Uuid
   domainId         String   @unique
   name             String
+  normalizedName   String
   schemaVersion    String
   revision         Int
   domainCreatedAt  String
@@ -85,6 +86,7 @@ model Project {
   designBriefPaletteEntries DesignBriefPaletteEntry[]
   designBriefAssetRefs      DesignBriefReferenceAsset[]
 
+  @@unique([ownerSubject, normalizedName])
   @@index([ownerSubject])
 }
 

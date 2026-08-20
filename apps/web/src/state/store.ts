@@ -1,11 +1,13 @@
 import { configureStore } from "@reduxjs/toolkit";
 
+import { projectEditorReducer } from "./project-editor-slice";
 import { viewerReducer } from "./viewer-slice";
 
 /** Creates the typed CasaStudio Redux store for local application state. */
 export function createAppStore() {
   return configureStore({
     reducer: {
+      projectEditor: projectEditorReducer,
       viewer: viewerReducer
     }
   });

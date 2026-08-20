@@ -1,6 +1,6 @@
 {
   "name": "casastudio",
-  "version": "0.0.0",
+  "version": "0.1.0-SNAPSHOT",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.10.0",
@@ -30,14 +30,17 @@
     "docker:dev:down": "docker compose -f compose.yml -f compose.dev.yml down",
     "docker:test:up": "docker compose -f compose.yml -f compose.test.yml up --build --abort-on-container-exit --exit-code-from api-test api-test",
     "docker:test:down": "docker compose -f compose.yml -f compose.test.yml down --volumes",
-    "docker:build": "docker compose build web api",
+    "docker:build": "node tools/build-local-images.mjs",
     "jenkins:up": "docker compose -f compose.jenkins.yml up -d --build",
     "jenkins:down": "docker compose -f compose.jenkins.yml down",
     "jenkins:logs": "docker compose -f compose.jenkins.yml logs -f",
     "jenkins:config": "docker compose -f compose.jenkins.yml config",
+    "version:declared": "node tools/build-version.mjs declared",
+    "version:build": "node tools/build-version.mjs resolve",
+    "version:test": "node --test tools/*.test.mjs",
     "build": "turbo build",
     "lint": "turbo lint",
-    "test": "turbo test"
+    "test": "pnpm version:test && turbo test"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",

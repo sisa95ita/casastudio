@@ -53,10 +53,16 @@ export class ProjectUnitsDto {
  * Ordered and oriented wall reference in a Room boundary.
  */
 export class RoomBoundaryEdgeDto {
-  @ApiProperty({ type: String, description: "CasaStudio domain ID of the referenced Wall." })
+  @ApiProperty({
+    type: String,
+    description: "CasaStudio domain ID of the referenced Wall."
+  })
   readonly wallId!: string;
 
-  @ApiProperty({ enum: roomBoundaryDirectionValues, enumName: "RoomBoundaryDirection" })
+  @ApiProperty({
+    enum: roomBoundaryDirectionValues,
+    enumName: "RoomBoundaryDirection"
+  })
   readonly direction!: (typeof roomBoundaryDirectionValues)[number];
 }
 
@@ -480,7 +486,10 @@ export class ProjectDto {
   @ApiProperty({ type: String })
   readonly name!: string;
 
-  @ApiProperty({ enum: SUPPORTED_PROJECT_SCHEMA_VERSIONS, enumName: "ProjectSchemaVersion" })
+  @ApiProperty({
+    enum: SUPPORTED_PROJECT_SCHEMA_VERSIONS,
+    enumName: "ProjectSchemaVersion"
+  })
   readonly schemaVersion!: (typeof SUPPORTED_PROJECT_SCHEMA_VERSIONS)[number];
 
   @ApiProperty({ type: Number })
@@ -521,7 +530,11 @@ export class ProjectResponseDto {
   @ApiProperty({ type: () => ProjectDto })
   readonly project!: ProjectDto;
 
-  @ApiProperty({ type: Number, description: "Authoritative persisted Project revision used as the response source." })
+  @ApiProperty({
+    type: Number,
+    description:
+      "Authoritative persisted Project revision used as the response source."
+  })
   readonly sourceRevision!: number;
 }
 
@@ -538,6 +551,9 @@ export class ProjectSummaryDto {
 
   @ApiProperty({ type: String, format: "date-time" })
   readonly updatedAt!: string;
+
+  @ApiProperty({ type: Boolean })
+  readonly ownedByCurrentUser!: boolean;
 }
 
 /** Authenticated Project discovery response. */

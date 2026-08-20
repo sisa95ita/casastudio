@@ -30,6 +30,8 @@
   "shortcuts": {
     "title": "Shortcuts",
     "clearSelection": "Clear selection",
+    "cancelInteraction": "Cancel interaction / clear selection",
+    "deleteWall": "Delete selected wall",
     "fitViewport": "Fit viewport",
     "resetViewport": "Reset viewport"
   },

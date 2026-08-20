@@ -53,9 +53,15 @@ import type { ProjectListResponseDto } from "./project.dto";
 @Injectable()
 export class ProjectApiMapper {
   /** Builds the discovery response without reconstructing full aggregates. */
-  toProjectListResponse(summaries: readonly ProjectSummary[]): ProjectListResponseDto {
+  toProjectListResponse(
+    summaries: readonly ProjectSummary[],
+    currentSubject: string
+  ): ProjectListResponseDto {
     return {
-      projects: summaries.map((summary) => ({ ...summary }))
+      projects: summaries.map(({ ownerSubject, ...summary }) => ({
+        ...summary,
+        ownedByCurrentUser: ownerSubject === currentSubject
+      }))
     };
   }
 
@@ -79,11 +85,21 @@ export class ProjectApiMapper {
       updatedAt: project.updatedAt,
       units: this.toUnitsDto(project.units),
       building: this.toBuildingDto(project.building),
-      viewpoints: project.viewpoints.map((viewpoint) => this.toViewpointDto(viewpoint)),
-      baseImages: project.baseImages.map((baseImage) => this.toBaseImageDto(baseImage)),
-      designBriefs: project.designBriefs.map((designBrief) => this.toDesignBriefDto(designBrief)),
-      renderRequests: project.renderRequests.map((renderRequest) => this.toRenderRequestDto(renderRequest)),
-      renderResults: project.renderResults.map((renderResult) => this.toRenderResultDto(renderResult))
+      viewpoints: project.viewpoints.map((viewpoint) =>
+        this.toViewpointDto(viewpoint)
+      ),
+      baseImages: project.baseImages.map((baseImage) =>
+        this.toBaseImageDto(baseImage)
+      ),
+      designBriefs: project.designBriefs.map((designBrief) =>
+        this.toDesignBriefDto(designBrief)
+      ),
+      renderRequests: project.renderRequests.map((renderRequest) =>
+        this.toRenderRequestDto(renderRequest)
+      ),
+      renderResults: project.renderResults.map((renderResult) =>
+        this.toRenderResultDto(renderResult)
+      )
     };
   }
 
@@ -110,7 +126,9 @@ export class ProjectApiMapper {
       elevation: level.elevation,
       rooms: level.rooms.map((room) => this.toRoomDto(room)),
       walls: level.walls.map((wall) => this.toWallDto(wall)),
-      staircases: level.staircases.map((staircase) => this.toStaircaseDto(staircase))
+      staircases: level.staircases.map((staircase) =>
+        this.toStaircaseDto(staircase)
+      )
     };
   }
 
@@ -161,7 +179,9 @@ export class ProjectApiMapper {
     if (opening.type === "DOOR") {
       return {
         ...commonOpening,
-        connectedRoomIds: opening.connectedRoomIds ? [...opening.connectedRoomIds] : undefined
+        connectedRoomIds: opening.connectedRoomIds
+          ? [...opening.connectedRoomIds]
+          : undefined
       };
     }
 
@@ -179,7 +199,9 @@ export class ProjectApiMapper {
       toRoomId: staircase.toRoomId,
       width: staircase.width,
       flights: staircase.flights.map((flight) => this.toStairFlightDto(flight)),
-      landings: staircase.landings.map((landing) => this.toStairLandingDto(landing))
+      landings: staircase.landings.map((landing) =>
+        this.toStairLandingDto(landing)
+      )
     };
   }
 

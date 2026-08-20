@@ -31,7 +31,7 @@ export class ListProjectsService {
         : principal.subject;
       const summaries = await this.projectsRepository.listProjectSummaries(ownerSubject);
 
-      return this.apiMapper.toProjectListResponse(summaries);
+      return this.apiMapper.toProjectListResponse(summaries, principal.subject);
     } catch (error) {
       if (error instanceof ProjectPersistenceError) {
         throw new ProjectReadFailedError("project-list", error);

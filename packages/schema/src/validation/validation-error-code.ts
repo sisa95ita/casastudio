@@ -36,6 +36,16 @@ export enum ValidationErrorCode {
   INVALID_WALL_ENDPOINT = "INVALID_WALL_ENDPOINT",
 
   /**
+   * A domain editing operation received an invalid Wall height.
+   */
+  INVALID_WALL_HEIGHT = "INVALID_WALL_HEIGHT",
+
+  /**
+   * A domain editing operation received an invalid Wall thickness.
+   */
+  INVALID_WALL_THICKNESS = "INVALID_WALL_THICKNESS",
+
+  /**
    * Removing a Wall would leave one or more canonical Room references dangling.
    */
   WALL_IS_REFERENCED = "WALL_IS_REFERENCED",
@@ -129,6 +139,21 @@ export enum ValidationErrorCode {
    * A Wall has identical start and end coordinates.
    */
   WALL_ZERO_LENGTH = "WALL_ZERO_LENGTH",
+
+  /**
+   * A requested Wall split point does not lie on the target segment.
+   */
+  WALL_SPLIT_POINT_NOT_ON_WALL = "WALL_SPLIT_POINT_NOT_ON_WALL",
+
+  /**
+   * A requested Wall split point is topologically equivalent to an endpoint.
+   */
+  WALL_SPLIT_AT_ENDPOINT = "WALL_SPLIT_AT_ENDPOINT",
+
+  /**
+   * A requested Wall split would divide an Opening between child segments.
+   */
+  WALL_SPLIT_INTERSECTS_OPENING = "WALL_SPLIT_INTERSECTS_OPENING",
 
   /**
    * A persisted Room boundary traversal does not close back to its starting point.

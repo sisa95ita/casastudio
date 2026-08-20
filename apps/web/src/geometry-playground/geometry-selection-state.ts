@@ -84,8 +84,9 @@ export const clearGeometryHover = (
 /**
  * Replaces the selected set with a single geometry reference.
  */
-export const replaceGeometrySelection = (selection: GeometrySelection): GeometrySelectionState =>
-  createGeometrySelectionState([selection]);
+export const replaceGeometrySelection = (
+  selection: GeometrySelection
+): GeometrySelectionState => createGeometrySelectionState([selection]);
 
 /**
  * Sets the hover reference while leaving the selected set unchanged.
@@ -93,7 +94,8 @@ export const replaceGeometrySelection = (selection: GeometrySelection): Geometry
 export const setGeometryHover = (
   state: GeometrySelectionState,
   hovered: GeometryHoverState
-): GeometrySelectionState => createGeometrySelectionState(state.selected, hovered);
+): GeometrySelectionState =>
+  createGeometrySelectionState(state.selected, hovered);
 
 /**
  * Adds or removes a geometry reference from the selected set.
@@ -102,30 +104,41 @@ export const toggleGeometrySelection = (
   state: GeometrySelectionState,
   selection: GeometrySelection
 ): GeometrySelectionState => {
-  const isSelected = isGeometrySelectionMatch(state.selected, selection.kind, selection.geometryId);
+  const isSelected = isGeometrySelectionMatch(
+    state.selected,
+    selection.kind,
+    selection.geometryId
+  );
 
   if (isSelected) {
     return createGeometrySelectionState(
-      state.selected.filter((item) => !isSameGeometrySelection(item, selection)),
+      state.selected.filter(
+        (item) => !isSameGeometrySelection(item, selection)
+      ),
       state.hovered
     );
   }
 
-  return createGeometrySelectionState([...state.selected, selection], state.hovered);
+  return createGeometrySelectionState(
+    [...state.selected, selection],
+    state.hovered
+  );
 };
 
 /**
  * Applies viewer click selection semantics.
  *
- * Plain clicks replace the current selected set. Additive clicks toggle one
- * entity, which currently maps to Shift-click in the SVG viewer.
+ * Plain clicks replace the current selected set, except that clicking an
+ * already-selected entity removes it. Additive clicks toggle one entity,
+ * which currently maps to Shift-click in the SVG viewer.
  */
 export const applyGeometrySelectionClick = (
   state: GeometrySelectionState,
   selection: GeometrySelection,
   additive: boolean
 ): GeometrySelectionState =>
-  additive
+  additive ||
+  isGeometrySelectionMatch(state.selected, selection.kind, selection.geometryId)
     ? toggleGeometrySelection(state, selection)
     : createGeometrySelectionState([selection], state.hovered);
 
@@ -140,10 +153,13 @@ export const isGeometrySelectionMatch = (
   selection
     ? "kind" in selection
       ? selection.kind === kind && selection.geometryId === geometryId
-      : selection.some((item) => isGeometrySelectionMatch(item, kind, geometryId))
+      : selection.some((item) =>
+          isGeometrySelectionMatch(item, kind, geometryId)
+        )
     : false;
 
 const isSameGeometrySelection = (
   first: GeometrySelection,
   second: GeometrySelection
-): boolean => first.kind === second.kind && first.geometryId === second.geometryId;
+): boolean =>
+  first.kind === second.kind && first.geometryId === second.geometryId;

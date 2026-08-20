@@ -6,7 +6,10 @@ import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaService } from "../../persistence/prisma.service";
-import { ProjectAggregateMapper, validateProjectForPersistence } from "./project-aggregate.mapper";
+import {
+  ProjectAggregateMapper,
+  validateProjectForPersistence
+} from "./project-aggregate.mapper";
 import {
   createDemoProject,
   DEMO_PROJECT_ID,
@@ -15,12 +18,20 @@ import {
   seedDemoProject
 } from "./demo-project-seed";
 import { projectPersistenceInclude } from "./project-persistence-aggregate";
-import { PersistedProjectInvalidError, ProjectReconstructionError } from "./project-persistence-error";
+import {
+  PersistedProjectInvalidError,
+  ProjectReconstructionError
+} from "./project-persistence-error";
 import { ProjectPersistenceWriter } from "./project-persistence-writer";
 import { PrismaProjectRepository } from "./prisma-project.repository";
 
-const canonicalProjectUrl = new URL("../../../../../packages/schema/examples/project.json", import.meta.url);
-const canonicalProject = ProjectSchema.parse(JSON.parse(readFileSync(canonicalProjectUrl, "utf8")));
+const canonicalProjectUrl = new URL(
+  "../../../../../packages/schema/examples/project.json",
+  import.meta.url
+);
+const canonicalProject = ProjectSchema.parse(
+  JSON.parse(readFileSync(canonicalProjectUrl, "utf8"))
+);
 const demoProject = createDemoProject(canonicalProject);
 const testOwnerSubject = "8d62f7e2-0c2a-4f2a-a9cf-7f62c2f4e8f7";
 const testProjectId = "phase-1b-round-trip-project";
@@ -40,12 +51,18 @@ describe("ProjectAggregateMapper", () => {
       id: DEMO_PROJECT_ID,
       name: DEMO_PROJECT_NAME
     });
-    expect(JSON.stringify(demoProject)).not.toContain("casa-studio-canonical-project");
-    expect(JSON.stringify(demoProject)).not.toContain("CasaStudio Canonical Project");
+    expect(JSON.stringify(demoProject)).not.toContain(
+      "casa-studio-canonical-project"
+    );
+    expect(JSON.stringify(demoProject)).not.toContain(
+      "CasaStudio Canonical Project"
+    );
   });
 });
 
-const describeWithDatabase = process.env.DATABASE_URL ? describe : describe.skip;
+const describeWithDatabase = process.env.DATABASE_URL
+  ? describe
+  : describe.skip;
 
 describeWithDatabase("relational Project persistence", () => {
   let prisma: PrismaClient;
@@ -59,7 +76,9 @@ describeWithDatabase("relational Project persistence", () => {
       })
     });
     writer = new ProjectPersistenceWriter();
-    repository = new PrismaProjectRepository(prisma as unknown as PrismaService);
+    repository = new PrismaProjectRepository(
+      prisma as unknown as PrismaService
+    );
   });
 
   beforeEach(async () => {
@@ -80,7 +99,9 @@ describeWithDatabase("relational Project persistence", () => {
   });
 
   it("returns null for a missing project domain ID", async () => {
-    await expect(repository.findByDomainId("missing-project")).resolves.toBeNull();
+    await expect(
+      repository.findByDomainId("missing-project")
+    ).resolves.toBeNull();
   });
 
   it("persists and reloads the canonical Project without leaking technical IDs", async () => {
@@ -138,25 +159,31 @@ describeWithDatabase("relational Project persistence", () => {
     });
     expect(loadedProject?.metadata.createdAt).toBeInstanceOf(Date);
     expect(loadedProject?.metadata.updatedAt).toBeInstanceOf(Date);
-    expect(JSON.stringify(loadedProject?.project)).not.toContain("ownerSubject");
+    expect(JSON.stringify(loadedProject?.project)).not.toContain(
+      "ownerSubject"
+    );
   });
 
   it("lists lightweight owner-scoped summaries in deterministic update order", async () => {
     const project = createTestProject();
     await repository.createProject(project, testOwnerSubject);
 
-    const ownerSummaries = await repository.listProjectSummaries(testOwnerSubject);
-    const otherSummaries = await repository.listProjectSummaries("other-subject");
+    const ownerSummaries =
+      await repository.listProjectSummaries(testOwnerSubject);
+    const otherSummaries =
+      await repository.listProjectSummaries("other-subject");
 
     expect(ownerSummaries).toContainEqual({
       id: project.id,
       name: project.name,
       revision: project.revision,
-      updatedAt: project.updatedAt
+      updatedAt: project.updatedAt,
+      ownerSubject: testOwnerSubject
     });
-    expect(otherSummaries).not.toContainEqual(expect.objectContaining({ id: project.id }));
+    expect(otherSummaries).not.toContainEqual(
+      expect.objectContaining({ id: project.id })
+    );
     expect(JSON.stringify(ownerSummaries)).not.toContain("building");
-    expect(JSON.stringify(ownerSummaries)).not.toContain("ownerSubject");
   });
 
   it("creates a complete normalized aggregate through the runtime repository", async () => {
@@ -169,11 +196,95 @@ describeWithDatabase("relational Project persistence", () => {
     expect(rowCounts.projects).toBe(1);
     expect(rowCounts.levels).toBe(project.building.levels.length);
     expect(rowCounts.walls).toBe(
-      project.building.levels.reduce((count, level) => count + level.walls.length, 0)
+      project.building.levels.reduce(
+        (count, level) => count + level.walls.length,
+        0
+      )
     );
     expect(rowCounts.rooms).toBe(
-      project.building.levels.reduce((count, level) => count + level.rooms.length, 0)
+      project.building.levels.reduce(
+        (count, level) => count + level.rooms.length,
+        0
+      )
     );
+  });
+
+  it("deletes every normalized aggregate row and releases normalized-name uniqueness", async () => {
+    const baseProject = createTestProject();
+    const renderRequest = baseProject.renderRequests[0];
+    if (!renderRequest) {
+      throw new Error("Canonical fixture requires a Render Request.");
+    }
+    const project = ProjectSchema.parse({
+      ...baseProject,
+      name: "Casa",
+      renderResults: [
+        {
+          id: "deletion-test-render-result",
+          renderRequestId: renderRequest.id,
+          status: "SUCCEEDED",
+          createdAt: "2026-08-16T12:00:00.000Z",
+          assetRef: "assets/renders/deletion-test-render-result.webp"
+        }
+      ]
+    });
+    await repository.createProject(project, testOwnerSubject);
+    const before = await countAggregateRows(project.id);
+
+    expect(before).toEqual(
+      expect.objectContaining({
+        projects: 1,
+        buildings: 1
+      })
+    );
+    expect(before.levels).toBeGreaterThan(0);
+    expect(before.rooms).toBeGreaterThan(0);
+    expect(before.walls).toBeGreaterThan(0);
+    expect(before.roomBoundaryEdges).toBeGreaterThan(0);
+    expect(before.wallRoomReferences).toBeGreaterThan(0);
+    expect(before.openings).toBeGreaterThan(0);
+    expect(before.openingConnectedRoomReferences).toBeGreaterThan(0);
+    expect(before.staircases).toBeGreaterThan(0);
+    expect(before.stairFlights).toBeGreaterThan(0);
+    expect(before.stairLandings).toBeGreaterThan(0);
+    expect(before.viewpoints).toBeGreaterThan(0);
+    expect(before.baseImages).toBeGreaterThan(0);
+    expect(before.designBriefs).toBeGreaterThan(0);
+    expect(before.designBriefConstraints).toBeGreaterThan(0);
+    expect(before.designBriefPaletteEntries).toBeGreaterThan(0);
+    expect(before.designBriefReferenceAssets).toBeGreaterThan(0);
+    expect(before.renderRequests).toBeGreaterThan(0);
+    expect(before.renderResults).toBeGreaterThan(0);
+
+    await expect(
+      repository.deleteProject({
+        projectId: project.id,
+        requiredOwnerSubject: "another-owner"
+      })
+    ).resolves.toEqual({ status: "forbidden" });
+    expect(await countAggregateRows(project.id)).toEqual(before);
+
+    await expect(
+      repository.deleteProject({
+        projectId: project.id,
+        requiredOwnerSubject: testOwnerSubject
+      })
+    ).resolves.toEqual({ status: "deleted" });
+    expect(await countAggregateRows(project.id)).toEqual(
+      Object.fromEntries(Object.keys(before).map((key) => [key, 0]))
+    );
+    await expect(repository.findByDomainId(project.id)).resolves.toBeNull();
+    await expect(
+      repository.deleteProject({
+        projectId: project.id,
+        requiredOwnerSubject: testOwnerSubject
+      })
+    ).resolves.toEqual({ status: "not-found" });
+
+    const recreated = ProjectSchema.parse({ ...project, name: "casa" });
+    await expect(
+      repository.createProject(recreated, testOwnerSubject)
+    ).resolves.toMatchObject({ project: { name: "casa" } });
   });
 
   it("replaces nested normalized state while preserving root identity, ownership, and domain IDs", async () => {
@@ -211,7 +322,9 @@ describeWithDatabase("relational Project persistence", () => {
     });
 
     expect(result.loadedProject.project.revision).toBe(project.revision + 1);
-    expect(result.loadedProject.project.building.levels[0]?.walls.at(-1)?.id).toBe("writer-a-wall");
+    expect(
+      result.loadedProject.project.building.levels[0]?.walls.at(-1)?.id
+    ).toBe("writer-a-wall");
     expect(rootAfter).toMatchObject({
       id: rootBefore.id,
       ownerSubject: rootBefore.ownerSubject,
@@ -244,11 +357,17 @@ describeWithDatabase("relational Project persistence", () => {
     ]);
     const outcomes = [first, second];
     const successful = outcomes.find((outcome) => outcome.status === "updated");
-    const conflicted = outcomes.find((outcome) => outcome.status === "revision-conflict");
+    const conflicted = outcomes.find(
+      (outcome) => outcome.status === "revision-conflict"
+    );
     const finalProject = await repository.findByDomainId(project.id);
 
-    expect(outcomes.filter((outcome) => outcome.status === "updated")).toHaveLength(1);
-    expect(outcomes.filter((outcome) => outcome.status === "revision-conflict")).toHaveLength(1);
+    expect(
+      outcomes.filter((outcome) => outcome.status === "updated")
+    ).toHaveLength(1);
+    expect(
+      outcomes.filter((outcome) => outcome.status === "revision-conflict")
+    ).toHaveLength(1);
     expect(conflicted).toMatchObject({
       status: "revision-conflict",
       currentRevision: project.revision + 1
@@ -275,7 +394,12 @@ describeWithDatabase("relational Project persistence", () => {
 
     await expect(
       prisma.$transaction(async (tx) => {
-        await writer.replaceProjectStateInTransaction(tx, root.id, proposed, "rollback-writer");
+        await writer.replaceProjectStateInTransaction(
+          tx,
+          root.id,
+          proposed,
+          "rollback-writer"
+        );
         throw new Error("induced transaction failure");
       })
     ).rejects.toThrow("induced transaction failure");
@@ -283,7 +407,9 @@ describeWithDatabase("relational Project persistence", () => {
     expect(await repository.findByDomainId(project.id)).toEqual(project);
     expect(await countAggregateRows(project.id)).toEqual(beforeCounts);
     await expect(
-      prisma.wall.findFirst({ where: { project: { domainId: project.id }, domainId: "rollback-wall" } })
+      prisma.wall.findFirst({
+        where: { project: { domainId: project.id }, domainId: "rollback-wall" }
+      })
     ).resolves.toBeNull();
   });
 
@@ -382,7 +508,9 @@ describeWithDatabase("relational Project persistence", () => {
       }
     });
 
-    await expect(repository.findByDomainId(project.id)).rejects.toThrow(ProjectReconstructionError);
+    await expect(repository.findByDomainId(project.id)).rejects.toThrow(
+      ProjectReconstructionError
+    );
   });
 
   it("rejects semantically inconsistent persisted references", async () => {
@@ -400,7 +528,9 @@ describeWithDatabase("relational Project persistence", () => {
       }
     });
 
-    await expect(repository.findByDomainId(project.id)).rejects.toThrow(PersistedProjectInvalidError);
+    await expect(repository.findByDomainId(project.id)).rejects.toThrow(
+      PersistedProjectInvalidError
+    );
   });
 
   it("seeds the neutral demo Project repeatably without duplicates", async () => {
@@ -453,16 +583,72 @@ describeWithDatabase("relational Project persistence", () => {
 
   async function countAggregateRows(projectId: string) {
     const where = { project: { domainId: projectId } };
-    const [projects, levels, rooms, walls, openings, staircases] = await Promise.all([
+    const [
+      projects,
+      buildings,
+      levels,
+      rooms,
+      walls,
+      wallRoomReferences,
+      roomBoundaryEdges,
+      openings,
+      openingConnectedRoomReferences,
+      staircases,
+      stairFlights,
+      stairLandings,
+      viewpoints,
+      baseImages,
+      designBriefs,
+      designBriefConstraints,
+      designBriefPaletteEntries,
+      designBriefReferenceAssets,
+      renderRequests,
+      renderResults
+    ] = await Promise.all([
       prisma.project.count({ where: { domainId: projectId } }),
+      prisma.building.count({ where }),
       prisma.level.count({ where }),
       prisma.room.count({ where }),
       prisma.wall.count({ where }),
+      prisma.wallRoomReference.count({ where }),
+      prisma.roomBoundaryEdge.count({ where }),
       prisma.opening.count({ where }),
-      prisma.staircase.count({ where })
+      prisma.openingConnectedRoomReference.count({ where }),
+      prisma.staircase.count({ where }),
+      prisma.stairFlight.count({ where }),
+      prisma.stairLanding.count({ where }),
+      prisma.viewpoint.count({ where }),
+      prisma.baseImage.count({ where }),
+      prisma.designBrief.count({ where }),
+      prisma.designBriefConstraint.count({ where }),
+      prisma.designBriefPaletteEntry.count({ where }),
+      prisma.designBriefReferenceAsset.count({ where }),
+      prisma.renderRequest.count({ where }),
+      prisma.renderResult.count({ where })
     ]);
 
-    return { projects, levels, rooms, walls, openings, staircases };
+    return {
+      projects,
+      buildings,
+      levels,
+      rooms,
+      walls,
+      wallRoomReferences,
+      roomBoundaryEdges,
+      openings,
+      openingConnectedRoomReferences,
+      staircases,
+      stairFlights,
+      stairLandings,
+      viewpoints,
+      baseImages,
+      designBriefs,
+      designBriefConstraints,
+      designBriefPaletteEntries,
+      designBriefReferenceAssets,
+      renderRequests,
+      renderResults
+    };
   }
 });
 

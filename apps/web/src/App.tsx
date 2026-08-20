@@ -1,8 +1,16 @@
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { Provider as ReduxProvider } from "react-redux";
-import { lazy, Suspense } from "react";
-import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useMemo } from "react";
+import {
+  createBrowserRouter,
+  createMemoryRouter,
+  createRoutesFromElements,
+  Navigate,
+  Route,
+  RouterProvider,
+  Routes
+} from "react-router-dom";
 
 import { AppShell } from "./app-shell/AppShell";
 import { ApiProvider } from "./api/ApiProvider";
@@ -57,14 +65,14 @@ let defaultAuthClient: AuthClient | undefined;
 /**
  * Renders the themed React Router application.
  *
- * BrowserRouter is used in production, while tests can pass `initialEntries`
- * to exercise the same nested route tree with MemoryRouter.
+ * A browser data router is used in production, while tests can pass
+ * `initialEntries` to exercise the same route tree with a memory data router.
  */
 export function App({ initialEntries, authClient, apiClient, queryClient, store }: AppProps) {
-  const routes = <AppRoutes />;
   const activeAuthClient = authClient ?? getDefaultAuthClient();
   const activeQueryClient = queryClient ?? (initialEntries ? createAppQueryClient() : appQueryClient);
   const activeStore = store ?? (initialEntries ? createAppStore() : appStore);
+  const router = useMemo(() => createAppRouter(initialEntries), [initialEntries]);
 
   return (
     <ThemeProvider theme={casaStudioTheme}>
@@ -73,11 +81,9 @@ export function App({ initialEntries, authClient, apiClient, queryClient, store 
         <QueryClientProvider client={activeQueryClient}>
           <AuthProvider client={activeAuthClient}>
             <ApiProvider client={apiClient}>
-              {initialEntries ? (
-                <MemoryRouter initialEntries={[...initialEntries]}>{routes}</MemoryRouter>
-              ) : (
-                <BrowserRouter>{routes}</BrowserRouter>
-              )}
+              <Suspense fallback={<RouteLoadingStatus />}>
+                <RouterProvider router={router} />
+              </Suspense>
             </ApiProvider>
           </AuthProvider>
         </QueryClientProvider>
@@ -101,20 +107,35 @@ export function getDefaultAuthClient(): AuthClient {
  */
 export function AppRoutes() {
   return (
-    <Suspense fallback={<RouteLoadingStatus />}>
-      <Routes>
-        <Route path="/" element={<PublicLandingPage />} />
-        <Route element={<RequireAuth />}>
-          <Route path="/app" element={<AppShell />}>
-            <Route index element={<HomePage />} />
-            <Route path="geometry-playground" element={<GeometryPlaygroundPage />} />
-            <Route path="projects/:projectId" element={<ProjectViewerPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
+    <Routes>
+      {createAppRouteElements()}
+    </Routes>
+  );
+}
+
+/** Creates a data router so Project editing can use supported navigation blockers. */
+export function createAppRouter(initialEntries?: readonly string[]) {
+  const routes = createRoutesFromElements(createAppRouteElements());
+
+  return initialEntries
+    ? createMemoryRouter(routes, { initialEntries: [...initialEntries] })
+    : createBrowserRouter(routes);
+}
+
+function createAppRouteElements() {
+  return (
+    <>
+      <Route path="/" element={<PublicLandingPage />} />
+      <Route element={<RequireAuth />}>
+        <Route path="/app" element={<AppShell />}>
+          <Route index element={<HomePage />} />
+          <Route path="geometry-playground" element={<GeometryPlaygroundPage />} />
+          <Route path="projects/:projectId" element={<ProjectViewerPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </>
   );
 }
 

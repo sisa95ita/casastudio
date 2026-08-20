@@ -4,14 +4,25 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiErrorCode } from "../../common/problem-details/api-error-code";
 import { ProjectApiMapper } from "../api/project-api.mapper";
-import { PersistedProjectInvalidError, ProjectPersistenceError } from "../persistence/project-persistence-error";
-import type { LoadedProject, ProjectsRepository } from "../persistence/project.repository";
+import {
+  PersistedProjectInvalidError,
+  ProjectPersistenceError
+} from "../persistence/project-persistence-error";
+import type {
+  LoadedProject,
+  ProjectsRepository
+} from "../persistence/project.repository";
 import { AuthorizedProjectLoader } from "./authorized-project-loader.service";
 import { GetProjectService } from "./get-project.service";
 import { ProjectReadAuthorizationPolicy } from "./project-read-authorization.policy";
 
-const canonicalProjectUrl = new URL("../../../../../packages/schema/examples/project.json", import.meta.url);
-const canonicalProject = ProjectSchema.parse(JSON.parse(readFileSync(canonicalProjectUrl, "utf8")));
+const canonicalProjectUrl = new URL(
+  "../../../../../packages/schema/examples/project.json",
+  import.meta.url
+);
+const canonicalProject = ProjectSchema.parse(
+  JSON.parse(readFileSync(canonicalProjectUrl, "utf8"))
+);
 const ownerSubject = "owner-subject";
 
 describe("ProjectReadAuthorizationPolicy", () => {
@@ -66,7 +77,9 @@ describe("ProjectReadAuthorizationPolicy", () => {
 
 describe("GetProjectService", () => {
   it("returns a Project response for the owner and preserves the revision invariant", async () => {
-    const service = createService(createRepository({ loadedProject: createLoadedProject(canonicalProject) }));
+    const service = createService(
+      createRepository({ loadedProject: createLoadedProject(canonicalProject) })
+    );
 
     const response = await service.getProject(canonicalProject.id, {
       subject: ownerSubject,
@@ -93,7 +106,9 @@ describe("GetProjectService", () => {
   });
 
   it("returns PROJECT_ACCESS_FORBIDDEN for authenticated non-owners", async () => {
-    const service = createService(createRepository({ loadedProject: createLoadedProject(canonicalProject) }));
+    const service = createService(
+      createRepository({ loadedProject: createLoadedProject(canonicalProject) })
+    );
 
     await expect(
       service.getProject(canonicalProject.id, {
@@ -141,7 +156,10 @@ describe("GetProjectService", () => {
 
 function createService(repository: ProjectsRepository): GetProjectService {
   return new GetProjectService(
-    new AuthorizedProjectLoader(repository, new ProjectReadAuthorizationPolicy()),
+    new AuthorizedProjectLoader(
+      repository,
+      new ProjectReadAuthorizationPolicy()
+    ),
     new ProjectApiMapper()
   );
 }
@@ -153,6 +171,7 @@ function createRepository(input: {
   return {
     findByDomainId: vi.fn<ProjectsRepository["findByDomainId"]>(),
     listProjectSummaries: vi.fn<ProjectsRepository["listProjectSummaries"]>(async () => []),
+    projectNameExists: vi.fn<ProjectsRepository["projectNameExists"]>(async () => false),
     createProject: vi.fn<ProjectsRepository["createProject"]>(),
     replaceProject: vi.fn<ProjectsRepository["replaceProject"]>(),
     findLoadedByDomainId: vi.fn<ProjectsRepository["findLoadedByDomainId"]>(async () => {

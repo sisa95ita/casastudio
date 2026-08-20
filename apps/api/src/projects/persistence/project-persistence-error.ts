@@ -14,6 +14,17 @@ export class ProjectPersistenceError extends Error {
   }
 }
 
+/** Indicates that an owner already has a Project with the requested normalized name. */
+export class ProjectNameConflictPersistenceError extends ProjectPersistenceError {
+  constructor(options?: ErrorOptions) {
+    super(
+      "The owner already has a Project with this normalized name.",
+      options
+    );
+    this.name = "ProjectNameConflictPersistenceError";
+  }
+}
+
 /**
  * Internal failure raised when normalized records cannot reconstruct a Project.
  *

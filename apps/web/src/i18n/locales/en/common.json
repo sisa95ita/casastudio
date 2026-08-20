@@ -11,8 +11,7 @@
     "goToProjects": "Go to Projects",
     "mode": {
       "label": "Workspace mode",
-      "twoD": "2D",
-      "readOnly": "Read-only"
+      "twoD": "2D"
     },
     "inspector": {
       "label": "Inspector",
@@ -33,8 +32,15 @@
       "title": "Projects",
       "eyebrow": "Project workspace",
       "heading": "Projects",
-      "description": "Projects bring a space's structure, levels, and geometry into one focused workspace. Open the available project to inspect its current plan.",
-      "status": "1 project available",
+      "description": "Create and open the spaces you are shaping, from first plan to final detail.",
+      "status": "{{count}} projects available",
+      "newProject": "New Project",
+      "loading": "Loading projects…",
+      "listError": "Projects could not be loaded.",
+      "retry": "Retry",
+      "emptyTitle": "No projects yet",
+      "emptyDescription": "Create your first project to start building your plan.",
+      "updated": "Updated {{value}}",
       "availableProjects": "Available projects",
       "projectCount": "{{count}} project",
       "projectType": "Interior space project",
@@ -42,7 +48,28 @@
       "readOnly": "Read-only viewer",
       "authoritativeGeometry": "Authoritative geometry",
       "openProject": "Open project",
-      "futureListNote": "This project source is ready to be replaced by the product project list when that service becomes available."
+      "projectActions": "Actions for {{name}}",
+      "deleteProject": "Delete project",
+      "futureListNote": "",
+      "create": {
+        "title": "New Project",
+        "nameLabel": "Project name",
+        "required": "Enter a project name.",
+        "tooLong": "Project name must be 120 characters or fewer.",
+        "duplicate": "A project with this name already exists.",
+        "failed": "The project could not be created. Try again.",
+        "cancel": "Cancel",
+        "submit": "Create",
+        "pending": "Creating project…"
+      },
+      "delete": {
+        "title": "Delete project?",
+        "description": "\"{{name}}\" and all of its project data will be permanently deleted. This action cannot be undone.",
+        "cancel": "Cancel",
+        "confirm": "Delete project",
+        "pending": "Deleting project…",
+        "failed": "The project could not be deleted. Please try again."
+      }
     },
     "notFound": {
       "title": "Not found",

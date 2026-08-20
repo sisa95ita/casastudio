@@ -24,6 +24,29 @@ export type ProjectResponse = {
   readonly sourceRevision: number;
 };
 
+/** Lightweight authoritative Project metadata used by the workspace list. */
+export type ProjectSummary = {
+  readonly id: string;
+  readonly name: string;
+  readonly revision: number;
+  readonly updatedAt: string;
+  readonly ownedByCurrentUser: boolean;
+};
+
+/** Authenticated Project list response. */
+export type ProjectListResponse = {
+  readonly projects: readonly ProjectSummary[];
+};
+
+/** User-supplied information accepted when creating a Project. */
+export type CreateProjectRequest = { readonly name: string };
+
+/** Complete Project replacement request based on one authoritative revision. */
+export type ReplaceProjectRequest = {
+  readonly baseRevision: number;
+  readonly project: Project;
+};
+
 /** Two-dimensional coordinate in a geometry snapshot. */
 export type GeometryPoint2D = { readonly x: number; readonly z: number };
 
@@ -126,49 +149,105 @@ export type ProjectGeometryResponse = {
 export function parseProjectResponse(value: unknown): ProjectResponse {
   const record = requireRecord(value, "Project response");
   const project = ProjectSchema.parse(record.project);
-  const sourceRevision = requireNumber(record.sourceRevision, "Project sourceRevision");
+  const sourceRevision = requireNumber(
+    record.sourceRevision,
+    "Project sourceRevision"
+  );
 
   if (sourceRevision !== project.revision) {
-    throw new Error("Project response sourceRevision does not match project.revision.");
+    throw new Error(
+      "Project response sourceRevision does not match project.revision."
+    );
   }
 
   return { project, sourceRevision };
 }
 
+/** Defensively validates the authenticated Project list response. */
+export function parseProjectListResponse(value: unknown): ProjectListResponse {
+  const response = requireRecord(value, "Project list response");
+  const projects = requireArray(response.projects, "Projects").map(
+    (value, index) => {
+      const project = requireRecord(value, `Project summary ${index}`);
+      return {
+        id: requireString(project.id, `Project summary ${index} id`),
+        name: requireString(project.name, `Project summary ${index} name`),
+        revision: requireNumber(
+          project.revision,
+          `Project summary ${index} revision`
+        ),
+        updatedAt: requireString(
+          project.updatedAt,
+          `Project summary ${index} updatedAt`
+        ),
+        ownedByCurrentUser: requireBoolean(
+          project.ownedByCurrentUser,
+          `Project summary ${index} ownedByCurrentUser`
+        )
+      };
+    }
+  );
+  return { projects };
+}
+
 /** Defensively validates the geometry response envelope used by the Project viewer. */
-export function parseProjectGeometryResponse(value: unknown): ProjectGeometryResponse {
+export function parseProjectGeometryResponse(
+  value: unknown
+): ProjectGeometryResponse {
   const response = requireRecord(value, "Geometry response");
   const geometry = requireRecord(response.geometry, "Geometry snapshot");
   const units = requireRecord(geometry.units, "Geometry units");
-  const levels = requireArray(geometry.levels, "Geometry levels").map((level, index) => {
-    const item = requireRecord(level, `Geometry level ${index}`);
-    const label = `Geometry level ${index}`;
+  const levels = requireArray(geometry.levels, "Geometry levels").map(
+    (level, index) => {
+      const item = requireRecord(level, `Geometry level ${index}`);
+      const label = `Geometry level ${index}`;
 
-    return {
-      id: requireString(item.id, `${label} id`),
-      sourceLevelId: requireString(item.sourceLevelId, `${label} sourceLevelId`),
-      elevation: requireNumber(item.elevation, `${label} elevation`),
-      vertices: requireArray(item.vertices, `${label} vertices`).map((vertex, itemIndex) =>
-        parseGeometryVertex(vertex, `${label} vertex ${itemIndex}`)
-      ),
-      boundaryEdges: requireArray(item.boundaryEdges, `${label} boundaryEdges`).map(
-        (edge, itemIndex) => parseGeometryBoundaryEdge(edge, `${label} boundary edge ${itemIndex}`)
-      ),
-      boundaryEdgeUses: requireArray(item.boundaryEdgeUses, `${label} boundaryEdgeUses`).map(
-        (edgeUse, itemIndex) =>
-          parseGeometryBoundaryEdgeUse(edgeUse, `${label} boundary edge use ${itemIndex}`)
-      ),
-      loops: requireArray(item.loops, `${label} loops`).map((loop, itemIndex) =>
-        parseGeometryLoop(loop, `${label} loop ${itemIndex}`)
-      ),
-      polygons: requireArray(item.polygons, `${label} polygons`).map((polygon, itemIndex) =>
-        parseGeometryPolygon(polygon, `${label} polygon ${itemIndex}`)
-      )
-    } satisfies GeometryLevel;
-  });
+      return {
+        id: requireString(item.id, `${label} id`),
+        sourceLevelId: requireString(
+          item.sourceLevelId,
+          `${label} sourceLevelId`
+        ),
+        elevation: requireNumber(item.elevation, `${label} elevation`),
+        vertices: requireArray(item.vertices, `${label} vertices`).map(
+          (vertex, itemIndex) =>
+            parseGeometryVertex(vertex, `${label} vertex ${itemIndex}`)
+        ),
+        boundaryEdges: requireArray(
+          item.boundaryEdges,
+          `${label} boundaryEdges`
+        ).map((edge, itemIndex) =>
+          parseGeometryBoundaryEdge(edge, `${label} boundary edge ${itemIndex}`)
+        ),
+        boundaryEdgeUses: requireArray(
+          item.boundaryEdgeUses,
+          `${label} boundaryEdgeUses`
+        ).map((edgeUse, itemIndex) =>
+          parseGeometryBoundaryEdgeUse(
+            edgeUse,
+            `${label} boundary edge use ${itemIndex}`
+          )
+        ),
+        loops: requireArray(item.loops, `${label} loops`).map(
+          (loop, itemIndex) =>
+            parseGeometryLoop(loop, `${label} loop ${itemIndex}`)
+        ),
+        polygons: requireArray(item.polygons, `${label} polygons`).map(
+          (polygon, itemIndex) =>
+            parseGeometryPolygon(polygon, `${label} polygon ${itemIndex}`)
+        )
+      } satisfies GeometryLevel;
+    }
+  );
 
-  const sourceProjectId = requireString(response.sourceProjectId, "Geometry sourceProjectId");
-  const sourceRevision = requireNumber(response.sourceRevision, "Geometry sourceRevision");
+  const sourceProjectId = requireString(
+    response.sourceProjectId,
+    "Geometry sourceProjectId"
+  );
+  const sourceRevision = requireNumber(
+    response.sourceRevision,
+    "Geometry sourceRevision"
+  );
 
   return {
     sourceProjectId,
@@ -198,7 +277,10 @@ function parseGeometryVertex(value: unknown, label: string): GeometryVertex {
   };
 }
 
-function parseGeometryBoundaryEdge(value: unknown, label: string): GeometryBoundaryEdge {
+function parseGeometryBoundaryEdge(
+  value: unknown,
+  label: string
+): GeometryBoundaryEdge {
   const item = requireRecord(value, label);
 
   return {
@@ -221,9 +303,16 @@ function parseGeometryBoundaryEdgeUse(
 
   return {
     id: requireString(item.id, `${label} id`),
-    boundaryEdgeId: requireString(item.boundaryEdgeId, `${label} boundaryEdgeId`),
+    boundaryEdgeId: requireString(
+      item.boundaryEdgeId,
+      `${label} boundaryEdgeId`
+    ),
     sourceWallId: requireString(item.sourceWallId, `${label} sourceWallId`),
-    direction: requireOneOf(item.direction, ["FORWARD", "REVERSE"] as const, `${label} direction`),
+    direction: requireOneOf(
+      item.direction,
+      ["FORWARD", "REVERSE"] as const,
+      `${label} direction`
+    ),
     index: requireNumber(item.index, `${label} index`),
     loopId: requireString(item.loopId, `${label} loopId`),
     startVertexId: requireString(item.startVertexId, `${label} startVertexId`),
@@ -240,8 +329,14 @@ function parseGeometryLoop(value: unknown, label: string): GeometryLoop {
     id: requireString(item.id, `${label} id`),
     kind: requireOneOf(item.kind, ["OUTER", "INNER"] as const, `${label} kind`),
     polygonId: requireString(item.polygonId, `${label} polygonId`),
-    boundaryEdgeUseIds: requireStringArray(item.boundaryEdgeUseIds, `${label} boundaryEdgeUseIds`),
-    boundaryEdgeIds: requireStringArray(item.boundaryEdgeIds, `${label} boundaryEdgeIds`),
+    boundaryEdgeUseIds: requireStringArray(
+      item.boundaryEdgeUseIds,
+      `${label} boundaryEdgeUseIds`
+    ),
+    boundaryEdgeIds: requireStringArray(
+      item.boundaryEdgeIds,
+      `${label} boundaryEdgeIds`
+    ),
     vertexIds: requireStringArray(item.vertexIds, `${label} vertexIds`)
   };
 }
@@ -254,10 +349,19 @@ function parseGeometryPolygon(value: unknown, label: string): GeometryPolygon {
     id: requireString(item.id, `${label} id`),
     sourceRoomId: requireString(item.sourceRoomId, `${label} sourceRoomId`),
     outerLoopId: requireString(item.outerLoopId, `${label} outerLoopId`),
-    innerLoopIds: requireStringArray(item.innerLoopIds, `${label} innerLoopIds`),
+    innerLoopIds: requireStringArray(
+      item.innerLoopIds,
+      `${label} innerLoopIds`
+    ),
     loopIds: requireStringArray(item.loopIds, `${label} loopIds`),
-    boundaryEdgeUseIds: requireStringArray(item.boundaryEdgeUseIds, `${label} boundaryEdgeUseIds`),
-    boundaryEdgeIds: requireStringArray(item.boundaryEdgeIds, `${label} boundaryEdgeIds`),
+    boundaryEdgeUseIds: requireStringArray(
+      item.boundaryEdgeUseIds,
+      `${label} boundaryEdgeUseIds`
+    ),
+    boundaryEdgeIds: requireStringArray(
+      item.boundaryEdgeIds,
+      `${label} boundaryEdgeIds`
+    ),
     vertexIds: requireStringArray(item.vertexIds, `${label} vertexIds`),
     metrics: {
       signedArea: requireNumber(metrics.signedArea, `${label} signedArea`),
@@ -329,7 +433,9 @@ function requireArray(value: unknown, label: string): readonly unknown[] {
 }
 
 function requireStringArray(value: unknown, label: string): readonly string[] {
-  return requireArray(value, label).map((item, index) => requireString(item, `${label} ${index}`));
+  return requireArray(value, label).map((item, index) =>
+    requireString(item, `${label} ${index}`)
+  );
 }
 
 function requireString(value: unknown, label: string): string {
@@ -345,6 +451,12 @@ function requireNumber(value: unknown, label: string): number {
     throw new Error(`${label} must be a finite number.`);
   }
 
+  return value;
+}
+
+function requireBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean")
+    throw new Error(`${label} must be a boolean.`);
   return value;
 }
 

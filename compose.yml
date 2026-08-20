@@ -89,6 +89,7 @@ services:
       dockerfile: apps/web/Dockerfile
       target: runtime
       args:
+        CASASTUDIO_BUILD_VERSION: ${CASASTUDIO_BUILD_VERSION:-}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
         VITE_KEYCLOAK_BASE_URL: ${VITE_KEYCLOAK_BASE_URL:-http://localhost:8080}
         VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-casastudio}

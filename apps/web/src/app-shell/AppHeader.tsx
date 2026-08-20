@@ -42,9 +42,6 @@ export function AppHeader({
 
       <Box className="workspace-mode" aria-label={t("shell.mode.label")}>
         <Chip label={t("shell.mode.twoD")} color="primary" />
-        <Typography variant="caption" color="text.secondary">
-          {t("shell.mode.readOnly")}
-        </Typography>
       </Box>
 
       <Box className="workspace-header__spacer" />

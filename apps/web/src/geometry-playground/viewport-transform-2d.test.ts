@@ -5,6 +5,7 @@ import {
   createFitViewportState,
   createViewportTransform2D,
   defaultViewportState,
+  normalizeClientPointToSvgViewport,
   panViewportState,
   resetViewportState,
   ViewportTransform2D,
@@ -13,16 +14,50 @@ import {
 
 describe("ViewportTransform2D", () => {
   it("maps world X to screen X", () => {
-    const transform = new ViewportTransform2D({ scale: 2, offsetX: 10, offsetY: 90 });
+    const transform = new ViewportTransform2D({
+      scale: 2,
+      offsetX: 10,
+      offsetY: 90
+    });
 
     expect(transform.worldToScreen({ x: 5, z: 0 }).x).toBe(20);
   });
 
   it("maps increasing world Z upward through SVG Y-axis inversion", () => {
-    const transform = new ViewportTransform2D({ scale: 2, offsetX: 0, offsetY: 100 });
+    const transform = new ViewportTransform2D({
+      scale: 2,
+      offsetX: 0,
+      offsetY: 100
+    });
 
     expect(transform.worldToScreen({ x: 0, z: 40 }).y).toBeLessThan(
       transform.worldToScreen({ x: 0, z: 10 }).y
+    );
+  });
+
+  it("inverts a known SVG point into canonical Project XZ coordinates", () => {
+    const transform = new ViewportTransform2D({
+      scale: 2,
+      offsetX: 10,
+      offsetY: 100
+    });
+
+    expect(transform.screenToWorld({ x: 30, y: 60 })).toEqual({
+      x: 10,
+      z: 20
+    });
+  });
+
+  it("round-trips domain points after a non-identity zoom and pan", () => {
+    const transform = createViewportTransform2D({
+      zoom: 3.25,
+      offsetX: -42,
+      offsetY: 317
+    });
+    const point = { x: 127.5, z: -36.25 };
+
+    expect(transform.screenToWorld(transform.worldToScreen(point))).toEqual(
+      point
     );
   });
 
@@ -37,7 +72,9 @@ describe("ViewportTransform2D", () => {
     expect(transform.scaleLength(1)).toBeCloseTo(700 / 600);
     expect(transform.worldToScreen({ x: 0, z: 0 }).x).toBeCloseTo(50);
     expect(transform.worldToScreen({ x: 600, z: 300 }).x).toBeCloseTo(750);
-    expect(transform.worldToScreen({ x: 0, z: 300 }).y).toBeGreaterThanOrEqual(50);
+    expect(transform.worldToScreen({ x: 0, z: 300 }).y).toBeGreaterThanOrEqual(
+      50
+    );
     expect(transform.worldToScreen({ x: 0, z: 0 }).y).toBeLessThanOrEqual(450);
   });
 
@@ -71,7 +108,9 @@ describe("ViewportTransform2D", () => {
       padding: 32
     };
 
-    expect(createFitToViewTransform(input)).toEqual(createFitToViewTransform(input));
+    expect(createFitToViewTransform(input)).toEqual(
+      createFitToViewTransform(input)
+    );
   });
 });
 
@@ -104,7 +143,9 @@ describe("ViewportState", () => {
   });
 
   it("applies screen-space pan deltas", () => {
-    expect(panViewportState({ zoom: 3, offsetX: 10, offsetY: 20 }, { x: -5, y: 8 })).toEqual({
+    expect(
+      panViewportState({ zoom: 3, offsetX: 10, offsetY: 20 }, { x: -5, y: 8 })
+    ).toEqual({
       zoom: 3,
       offsetX: 5,
       offsetY: 28
@@ -113,5 +154,81 @@ describe("ViewportState", () => {
 
   it("resets to the neutral viewport state", () => {
     expect(resetViewportState()).toBe(defaultViewportState);
+  });
+});
+
+describe("SVG pointer normalization", () => {
+  it("maps a 1:1 rendered SVG with a non-zero client origin", () => {
+    expect(
+      normalizeClientPointToSvgViewport({
+        clientX: 410,
+        clientY: 280,
+        bounds: { left: 10, top: 20, width: 800, height: 520 },
+        viewBoxWidth: 800,
+        viewBoxHeight: 520
+      })
+    ).toEqual({
+      point: { x: 400, y: 260 },
+      cssPixelsPerSvgUnit: 1
+    });
+  });
+
+  it("accounts for centered letterboxing when CSS is wider than the viewBox", () => {
+    const normalized = normalizeClientPointToSvgViewport({
+      clientX: 500,
+      clientY: 270,
+      bounds: { left: 0, top: 10, width: 1000, height: 520 },
+      viewBoxWidth: 800,
+      viewBoxHeight: 520
+    });
+
+    expect(normalized.point).toEqual({ x: 400, y: 260 });
+    expect(normalized.cssPixelsPerSvgUnit).toBe(1);
+  });
+
+  it.each([
+    ["left", 110, 30, 0, 0],
+    ["right", 910, 30, 800, 0],
+    ["top", 510, 30, 400, 0],
+    ["bottom", 510, 550, 400, 520]
+  ] as const)(
+    "keeps the %s viewBox edge aligned inside a wider client rectangle",
+    (_edge, clientX, clientY, expectedX, expectedY) => {
+      expect(
+        normalizeClientPointToSvgViewport({
+          clientX,
+          clientY,
+          bounds: { left: 10, top: 30, width: 1000, height: 520 },
+          viewBoxWidth: 800,
+          viewBoxHeight: 520
+        }).point
+      ).toEqual({ x: expectedX, y: expectedY });
+    }
+  );
+
+  it("maps proportionally larger and smaller rendered SVGs", () => {
+    const larger = normalizeClientPointToSvgViewport({
+      clientX: 810,
+      clientY: 540,
+      bounds: { left: 10, top: 20, width: 1600, height: 1040 },
+      viewBoxWidth: 800,
+      viewBoxHeight: 520
+    });
+    const smaller = normalizeClientPointToSvgViewport({
+      clientX: 205,
+      clientY: 135,
+      bounds: { left: 5, top: 5, width: 400, height: 260 },
+      viewBoxWidth: 800,
+      viewBoxHeight: 520
+    });
+
+    expect(larger).toEqual({
+      point: { x: 400, y: 260 },
+      cssPixelsPerSvgUnit: 2
+    });
+    expect(smaller).toEqual({
+      point: { x: 400, y: 260 },
+      cssPixelsPerSvgUnit: 0.5
+    });
   });
 });

@@ -93,6 +93,14 @@ endpoints are:
 | API | `http://localhost:3000` |
 | Keycloak | `http://localhost:8080` |
 
+After pulling changes that add Prisma migrations, run
+`pnpm db:migrate:status` and then `pnpm db:migrate:deploy` before starting a
+host-run API. Prisma Client generation does not modify PostgreSQL, and
+`pnpm api:dev` intentionally does not apply migrations. The full Compose
+workflow applies committed migrations through its dedicated `migrate` service.
+Use `pnpm db:migrate:dev` only while authoring and validating a development
+migration; do not use `prisma db push` as a substitute for migration history.
+
 The development realm import creates the public `casastudio-web` browser client
 and the `demo` user. Its password comes from
 `CASASTUDIO_KEYCLOAK_DEMO_PASSWORD`; it must not be copied into frontend source
@@ -190,12 +198,12 @@ first Redux-backed state is the Geometry Playground entity selection and hover
 references; Project responses, Geometry responses, authentication, and backend
 errors are not copied into Redux.
 
-After signing in with the seeded demo user, `/app` presents a temporary entry
-for the seeded `Demo Project`. Its authoritative viewer route is:
-
-```text
-http://localhost:5173/app/projects/demo-project
-```
+After signing in, `/app` lists the Projects owned by the current user. Project
+creation and reads require the database schema to match the checked-in Prisma
+migration history. Project names are persisted with a trimmed, lowercase
+`normalizedName`; PostgreSQL enforces uniqueness for each
+`ownerSubject + normalizedName` pair. The seeded `Demo Project` follows the
+same persistence and routing rules as every other Project.
 
 The Geometry Playground remains available at `/app/geometry-playground` as a
 development and diagnostic harness. It is intentionally absent from the

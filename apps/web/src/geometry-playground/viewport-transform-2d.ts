@@ -5,10 +5,13 @@
  * is level-local XZ data, so callers should obtain these points through the
  * shared viewport transform rather than duplicating projection math.
  */
-export type ScreenPoint = {
+export type SvgViewportPoint = {
   readonly x: number;
   readonly y: number;
 };
+
+/** SVG viewport point retained as a compatibility name for viewport state APIs. */
+export type ScreenPoint = SvgViewportPoint;
 
 /**
  * Level-local runtime point on CasaStudio's XZ blueprint plane.
@@ -73,6 +76,59 @@ export type ZoomViewportOptions = {
   readonly maxZoom?: number;
 };
 
+/** Client-space and layout values needed to normalize one SVG pointer. */
+export type SvgPointerNormalizationInput = {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly bounds: Pick<DOMRect, "left" | "top" | "width" | "height">;
+  readonly viewBoxWidth: number;
+  readonly viewBoxHeight: number;
+};
+
+/** SVG-local pointer and its uniform rendered CSS scale. */
+export type NormalizedSvgPointer = {
+  readonly point: SvgViewportPoint;
+  readonly cssPixelsPerSvgUnit: number;
+};
+
+/**
+ * Normalizes browser client coordinates into the SVG viewBox coordinate space.
+ *
+ * The calculation mirrors the SVG default `xMidYMid meet` behavior: uniform
+ * scaling preserves geometry proportions and any extra rendered space is
+ * centered as letterboxing. The returned scale converts SVG distances into
+ * visible CSS-pixel distances.
+ */
+export function normalizeClientPointToSvgViewport({
+  clientX,
+  clientY,
+  bounds,
+  viewBoxWidth,
+  viewBoxHeight
+}: SvgPointerNormalizationInput): NormalizedSvgPointer {
+  const safeViewBoxWidth = Math.max(1, viewBoxWidth);
+  const safeViewBoxHeight = Math.max(1, viewBoxHeight);
+  const scale = Math.max(
+    Number.EPSILON,
+    Math.min(
+      bounds.width / safeViewBoxWidth,
+      bounds.height / safeViewBoxHeight
+    )
+  );
+  const renderedWidth = safeViewBoxWidth * scale;
+  const renderedHeight = safeViewBoxHeight * scale;
+  const contentLeft = bounds.left + (bounds.width - renderedWidth) / 2;
+  const contentTop = bounds.top + (bounds.height - renderedHeight) / 2;
+
+  return {
+    point: {
+      x: (clientX - contentLeft) / scale,
+      y: (clientY - contentTop) / scale
+    },
+    cssPixelsPerSvgUnit: scale
+  };
+}
+
 /**
  * Projects immutable level-local XZ geometry into an SVG viewport.
  *
@@ -117,6 +173,16 @@ export class ViewportTransform2D {
   }
 
   /**
+   * Inverts the SVG projection into canonical level-local Project coordinates.
+   */
+  screenToWorld(point: ScreenPoint): WorldPointXZ {
+    return {
+      x: (point.x - this.offsetX) / this.scale,
+      z: -(point.y - this.offsetY) / this.scale
+    };
+  }
+
+  /**
    * Scales a world-space length with the same uniform factor used for points.
    */
   scaleLength(length: number): number {
@@ -137,7 +203,9 @@ export const defaultViewportState: ViewportState = Object.freeze({
  * Converts a `ViewportState` into the immutable projection object consumed by
  * presentation adapters and SVG helpers.
  */
-export const createViewportTransform2D = (viewport: ViewportState): ViewportTransform2D =>
+export const createViewportTransform2D = (
+  viewport: ViewportState
+): ViewportTransform2D =>
   new ViewportTransform2D({
     scale: viewport.zoom,
     offsetX: viewport.offsetX,
@@ -189,7 +257,10 @@ export const createFitViewportState = ({
   const fitHeight = Math.max(1, rawHeight);
   const availableWidth = Math.max(1, safeViewportWidth - safePadding * 2);
   const availableHeight = Math.max(1, safeViewportHeight - safePadding * 2);
-  const scale = Math.min(availableWidth / fitWidth, availableHeight / fitHeight);
+  const scale = Math.min(
+    availableWidth / fitWidth,
+    availableHeight / fitHeight
+  );
   const contentWidth = rawWidth * scale;
   const contentHeight = rawHeight * scale;
   const left = (safeViewportWidth - contentWidth) / 2;
@@ -231,7 +302,10 @@ export const zoomViewportState = ({
   minZoom = 0.05,
   maxZoom = 20
 }: ZoomViewportOptions): ViewportState => {
-  const nextZoom = Math.min(maxZoom, Math.max(minZoom, viewport.zoom * zoomFactor));
+  const nextZoom = Math.min(
+    maxZoom,
+    Math.max(minZoom, viewport.zoom * zoomFactor)
+  );
   const appliedFactor = nextZoom / viewport.zoom;
 
   return Object.freeze({
