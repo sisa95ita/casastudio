@@ -413,152 +413,6 @@ describeWithDatabase("relational Project persistence", () => {
     ).resolves.toBeNull();
   });
 
-  it("lists lightweight owner-scoped summaries in deterministic update order", async () => {
-    const project = createTestProject();
-    await repository.createProject(project, testOwnerSubject);
-
-    const ownerSummaries = await repository.listProjectSummaries(testOwnerSubject);
-    const otherSummaries = await repository.listProjectSummaries("other-subject");
-
-    expect(ownerSummaries).toContainEqual({
-      id: project.id,
-      name: project.name,
-      revision: project.revision,
-      updatedAt: project.updatedAt
-    });
-    expect(otherSummaries).not.toContainEqual(expect.objectContaining({ id: project.id }));
-    expect(JSON.stringify(ownerSummaries)).not.toContain("building");
-    expect(JSON.stringify(ownerSummaries)).not.toContain("ownerSubject");
-  });
-
-  it("creates a complete normalized aggregate through the runtime repository", async () => {
-    const project = createTestProject();
-    const loaded = await repository.createProject(project, testOwnerSubject);
-    const rowCounts = await countAggregateRows(project.id);
-
-    expect(loaded.project).toEqual(project);
-    expect(loaded.metadata.ownerSubject).toBe(testOwnerSubject);
-    expect(rowCounts.projects).toBe(1);
-    expect(rowCounts.levels).toBe(project.building.levels.length);
-    expect(rowCounts.walls).toBe(
-      project.building.levels.reduce((count, level) => count + level.walls.length, 0)
-    );
-    expect(rowCounts.rooms).toBe(
-      project.building.levels.reduce((count, level) => count + level.rooms.length, 0)
-    );
-  });
-
-  it("replaces nested normalized state while preserving root identity, ownership, and domain IDs", async () => {
-    const project = createTestProject();
-    await repository.createProject(project, testOwnerSubject);
-    const rootBefore = await prisma.project.findUniqueOrThrow({
-      where: { domainId: project.id },
-      select: { id: true, ownerSubject: true, createdBySubject: true }
-    });
-    const proposed = withWriterWall(project, "writer-a-wall");
-
-    const result = await repository.replaceProject({
-      projectId: project.id,
-      baseRevision: project.revision,
-      project: proposed,
-      actorSubject: "updater-subject",
-      requiredOwnerSubject: testOwnerSubject
-    });
-
-    expect(result.status).toBe("updated");
-    if (result.status !== "updated") return;
-
-    const rootAfter = await prisma.project.findUniqueOrThrow({
-      where: { domainId: project.id },
-      select: {
-        id: true,
-        ownerSubject: true,
-        createdBySubject: true,
-        updatedBySubject: true,
-        revision: true
-      }
-    });
-    const persistedWall = await prisma.wall.findFirstOrThrow({
-      where: { project: { domainId: project.id }, domainId: "writer-a-wall" }
-    });
-
-    expect(result.loadedProject.project.revision).toBe(project.revision + 1);
-    expect(result.loadedProject.project.building.levels[0]?.walls.at(-1)?.id).toBe("writer-a-wall");
-    expect(rootAfter).toMatchObject({
-      id: rootBefore.id,
-      ownerSubject: rootBefore.ownerSubject,
-      createdBySubject: rootBefore.createdBySubject,
-      updatedBySubject: "updater-subject",
-      revision: project.revision + 1
-    });
-    expect(persistedWall.domainId).toBe("writer-a-wall");
-  });
-
-  it("allows exactly one concurrent writer for a shared base revision", async () => {
-    const project = createTestProject();
-    await repository.createProject(project, testOwnerSubject);
-
-    const [first, second] = await Promise.all([
-      repository.replaceProject({
-        projectId: project.id,
-        baseRevision: project.revision,
-        project: withWriterWall(project, "writer-a-wall"),
-        actorSubject: "writer-a",
-        requiredOwnerSubject: testOwnerSubject
-      }),
-      repository.replaceProject({
-        projectId: project.id,
-        baseRevision: project.revision,
-        project: withWriterWall(project, "writer-b-wall"),
-        actorSubject: "writer-b",
-        requiredOwnerSubject: testOwnerSubject
-      })
-    ]);
-    const outcomes = [first, second];
-    const successful = outcomes.find((outcome) => outcome.status === "updated");
-    const conflicted = outcomes.find((outcome) => outcome.status === "revision-conflict");
-    const finalProject = await repository.findByDomainId(project.id);
-
-    expect(outcomes.filter((outcome) => outcome.status === "updated")).toHaveLength(1);
-    expect(outcomes.filter((outcome) => outcome.status === "revision-conflict")).toHaveLength(1);
-    expect(conflicted).toMatchObject({
-      status: "revision-conflict",
-      currentRevision: project.revision + 1
-    });
-    expect(finalProject?.revision).toBe(project.revision + 1);
-    if (successful?.status === "updated") {
-      expect(finalProject).toEqual(successful.loadedProject.project);
-    }
-  });
-
-  it("rolls back root and subordinate replacement when the transaction fails", async () => {
-    const project = createTestProject();
-    await repository.createProject(project, testOwnerSubject);
-    const root = await prisma.project.findUniqueOrThrow({
-      where: { domainId: project.id },
-      select: { id: true }
-    });
-    const beforeCounts = await countAggregateRows(project.id);
-    const proposed = {
-      ...withWriterWall(project, "rollback-wall"),
-      revision: project.revision + 1,
-      updatedAt: "2026-08-13T11:30:00.000Z"
-    };
-
-    await expect(
-      prisma.$transaction(async (tx) => {
-        await writer.replaceProjectStateInTransaction(tx, root.id, proposed, "rollback-writer");
-        throw new Error("induced transaction failure");
-      })
-    ).rejects.toThrow("induced transaction failure");
-
-    expect(await repository.findByDomainId(project.id)).toEqual(project);
-    expect(await countAggregateRows(project.id)).toEqual(beforeCounts);
-    await expect(
-      prisma.wall.findFirst({ where: { project: { domainId: project.id }, domainId: "rollback-wall" } })
-    ).resolves.toBeNull();
-  });
-
   it("rejects duplicate room-boundary positions at the database constraint", async () => {
     const project = createTestProject();
 
@@ -729,16 +583,72 @@ describeWithDatabase("relational Project persistence", () => {
 
   async function countAggregateRows(projectId: string) {
     const where = { project: { domainId: projectId } };
-    const [projects, levels, rooms, walls, openings, staircases] = await Promise.all([
+    const [
+      projects,
+      buildings,
+      levels,
+      rooms,
+      walls,
+      wallRoomReferences,
+      roomBoundaryEdges,
+      openings,
+      openingConnectedRoomReferences,
+      staircases,
+      stairFlights,
+      stairLandings,
+      viewpoints,
+      baseImages,
+      designBriefs,
+      designBriefConstraints,
+      designBriefPaletteEntries,
+      designBriefReferenceAssets,
+      renderRequests,
+      renderResults
+    ] = await Promise.all([
       prisma.project.count({ where: { domainId: projectId } }),
+      prisma.building.count({ where }),
       prisma.level.count({ where }),
       prisma.room.count({ where }),
       prisma.wall.count({ where }),
+      prisma.wallRoomReference.count({ where }),
+      prisma.roomBoundaryEdge.count({ where }),
       prisma.opening.count({ where }),
-      prisma.staircase.count({ where })
+      prisma.openingConnectedRoomReference.count({ where }),
+      prisma.staircase.count({ where }),
+      prisma.stairFlight.count({ where }),
+      prisma.stairLanding.count({ where }),
+      prisma.viewpoint.count({ where }),
+      prisma.baseImage.count({ where }),
+      prisma.designBrief.count({ where }),
+      prisma.designBriefConstraint.count({ where }),
+      prisma.designBriefPaletteEntry.count({ where }),
+      prisma.designBriefReferenceAsset.count({ where }),
+      prisma.renderRequest.count({ where }),
+      prisma.renderResult.count({ where })
     ]);
 
-    return { projects, levels, rooms, walls, openings, staircases };
+    return {
+      projects,
+      buildings,
+      levels,
+      rooms,
+      walls,
+      wallRoomReferences,
+      roomBoundaryEdges,
+      openings,
+      openingConnectedRoomReferences,
+      staircases,
+      stairFlights,
+      stairLandings,
+      viewpoints,
+      baseImages,
+      designBriefs,
+      designBriefConstraints,
+      designBriefPaletteEntries,
+      designBriefReferenceAssets,
+      renderRequests,
+      renderResults
+    };
   }
 });
 

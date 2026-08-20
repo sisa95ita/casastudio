@@ -103,7 +103,8 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       id: projectId,
       name: "Integration apartment",
       revision: 1,
-      updatedAt: created.body.project.updatedAt
+      updatedAt: created.body.project.updatedAt,
+      ownedByCurrentUser: true
     });
     expect(JSON.stringify(listed.body)).not.toContain("building");
 
