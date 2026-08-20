@@ -6,6 +6,7 @@ import { ProjectIdPipe } from "./api/project-id.pipe";
 import { ProjectsController } from "./api/projects.controller";
 import { AuthorizedProjectLoader } from "./application/authorized-project-loader.service";
 import { CreateProjectService } from "./application/create-project.service";
+import { DeleteProjectService } from "./application/delete-project.service";
 import { GetProjectService } from "./application/get-project.service";
 import { ListProjectsService } from "./application/list-projects.service";
 import { ProjectAuthoritativeValidator } from "./application/project-authoritative-validator.service";
@@ -34,6 +35,7 @@ import { PROJECTS_REPOSITORY } from "./persistence/projects-repository.token";
   providers: [
     AuthorizedProjectLoader,
     CreateProjectService,
+    DeleteProjectService,
     GetProjectService,
     ListProjectsService,
     ProjectAuthoritativeValidator,

@@ -551,6 +551,9 @@ export class ProjectSummaryDto {
 
   @ApiProperty({ type: String, format: "date-time" })
   readonly updatedAt!: string;
+
+  @ApiProperty({ type: Boolean })
+  readonly ownedByCurrentUser!: boolean;
 }
 
 /** Authenticated Project discovery response. */

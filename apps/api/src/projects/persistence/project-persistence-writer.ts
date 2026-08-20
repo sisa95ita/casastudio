@@ -75,6 +75,7 @@ export class ProjectPersistenceWriter {
       data: {
         domainId: canonicalProject.id,
         name: canonicalProject.name,
+        normalizedName: normalizeProjectName(canonicalProject.name),
         schemaVersion: canonicalProject.schemaVersion,
         revision: canonicalProject.revision,
         domainCreatedAt: canonicalProject.createdAt,
@@ -112,6 +113,7 @@ export class ProjectPersistenceWriter {
       where: { id: persistenceProjectId },
       data: {
         name: canonicalProject.name,
+        normalizedName: normalizeProjectName(canonicalProject.name),
         schemaVersion: canonicalProject.schemaVersion,
         revision: canonicalProject.revision,
         domainUpdatedAt: canonicalProject.updatedAt,

@@ -65,7 +65,24 @@ export class ProjectRevisionConflictError extends ApiProblemError {
   }
 }
 
-/** Raised when Project creation or replacement fails unexpectedly. */
+/** Raised when an owner already has a Project with the requested normalized name. */
+export class ProjectNameConflictError extends ApiProblemError {
+  constructor() {
+    super({
+      type: "/problems/project-name-conflict",
+      title: "Project name conflict",
+      status: HttpStatus.CONFLICT,
+      detail: "A Project with this name already exists.",
+      code: ApiErrorCode.ProjectNameConflict,
+      errors: [
+        { path: "name", message: "A Project with this name already exists." }
+      ]
+    });
+    this.name = "ProjectNameConflictError";
+  }
+}
+
+/** Raised when a Project lifecycle write fails unexpectedly. */
 export class ProjectWriteFailedError extends ApiProblemError {
   constructor(projectId: string, cause: unknown) {
     super({

@@ -4,9 +4,15 @@ import type { Project } from "@casastudio/schema";
 import { PrismaService } from "../../persistence/prisma.service";
 import { ProjectAggregateMapper } from "./project-aggregate.mapper";
 import { projectPersistenceInclude } from "./project-persistence-aggregate";
-import { ProjectPersistenceError, ProjectReconstructionError } from "./project-persistence-error";
+import {
+  ProjectNameConflictPersistenceError,
+  ProjectPersistenceError,
+  ProjectReconstructionError
+} from "./project-persistence-error";
 import { ProjectPersistenceWriter } from "./project-persistence-writer";
 import type {
+  DeleteProjectInput,
+  DeleteProjectResult,
   LoadedProject,
   ProjectSummary,
   ReplaceProjectInput,
@@ -107,30 +113,22 @@ export class PrismaProjectRepository implements ProjectsRepository {
     }
   }
 
-  /**
-   * Lists lightweight Project summaries, optionally restricted to one owner.
-   */
-  async listProjectSummaries(ownerSubject?: string): Promise<readonly ProjectSummary[]> {
+  /** Reports whether an owner already has the supplied normalized Project name. */
+  async projectNameExists(
+    ownerSubject: string,
+    normalizedName: string
+  ): Promise<boolean> {
     try {
-      const projects = await this.prismaService.project.findMany({
-        where: ownerSubject ? { ownerSubject } : undefined,
-        select: {
-          domainId: true,
-          name: true,
-          revision: true,
-          domainUpdatedAt: true
-        },
-        orderBy: [{ updatedAt: "desc" }, { domainId: "asc" }]
-      });
-
-      return projects.map((project) => ({
-        id: project.domainId,
-        name: project.name,
-        revision: project.revision,
-        updatedAt: project.domainUpdatedAt
-      }));
+      return (
+        (await this.prismaService.project.count({
+          where: { ownerSubject, normalizedName }
+        })) > 0
+      );
     } catch (error) {
-      throw new ProjectPersistenceError("Failed to list Projects.", { cause: error });
+      throw new ProjectPersistenceError(
+        "Failed to check Project name availability.",
+        { cause: error }
+      );
     }
   }
 
@@ -155,6 +153,10 @@ export class PrismaProjectRepository implements ProjectsRepository {
     } catch (error) {
       if (error instanceof ProjectPersistenceError || error instanceof ProjectReconstructionError) {
         throw error;
+      }
+
+      if (isProjectNameUniqueConstraintError(error)) {
+        throw new ProjectNameConflictPersistenceError({ cause: error });
       }
 
       throw new ProjectPersistenceError(`Failed to create project "${project.id}".`, { cause: error });
@@ -227,6 +229,50 @@ export class PrismaProjectRepository implements ProjectsRepository {
     }
   }
 
+  /**
+   * Deletes one complete Project aggregate after an atomic ownership check.
+   *
+   * The root delete activates the database-owned aggregate cascades. Locking,
+   * authorization, and deletion share one transaction so ownership cannot
+   * change between the authorization decision and the destructive write.
+   */
+  async deleteProject(input: DeleteProjectInput): Promise<DeleteProjectResult> {
+    try {
+      return await this.prismaService.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<readonly LockedProjectRow[]>`
+          SELECT "id", "revision", "ownerSubject", "domainCreatedAt"
+          FROM "Project"
+          WHERE "domainId" = ${input.projectId}
+          FOR UPDATE
+        `;
+        const current = rows[0];
+
+        if (!current) {
+          return { status: "not-found" };
+        }
+
+        if (
+          input.requiredOwnerSubject &&
+          current.ownerSubject !== input.requiredOwnerSubject
+        ) {
+          return { status: "forbidden" };
+        }
+
+        await tx.project.delete({ where: { id: current.id } });
+        return { status: "deleted" };
+      });
+    } catch (error) {
+      if (error instanceof ProjectPersistenceError) {
+        throw error;
+      }
+
+      throw new ProjectPersistenceError(
+        `Failed to delete project "${input.projectId}".`,
+        { cause: error }
+      );
+    }
+  }
+
   private toLoadedProject(
     aggregate: Parameters<ProjectAggregateMapper["toProject"]>[0]
   ): LoadedProject {
@@ -241,4 +287,13 @@ export class PrismaProjectRepository implements ProjectsRepository {
       }
     };
   }
+}
+
+function isProjectNameUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002"
+  );
 }
