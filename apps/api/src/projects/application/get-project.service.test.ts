@@ -170,21 +170,12 @@ function createRepository(input: {
 }): ProjectsRepository {
   return {
     findByDomainId: vi.fn<ProjectsRepository["findByDomainId"]>(),
-    listProjectSummaries: vi.fn<ProjectsRepository["listProjectSummaries"]>(
-      async () => []
-    ),
-    projectNameExists: vi.fn<ProjectsRepository["projectNameExists"]>(
-      async () => false
-    ),
+    listProjectSummaries: vi.fn<ProjectsRepository["listProjectSummaries"]>(async () => []),
     createProject: vi.fn<ProjectsRepository["createProject"]>(),
     replaceProject: vi.fn<ProjectsRepository["replaceProject"]>(),
-    findLoadedByDomainId: vi.fn<ProjectsRepository["findLoadedByDomainId"]>(
-      async () => {
-        if (input.error) {
-          throw input.error;
-        }
-
-        return input.loadedProject ?? null;
+    findLoadedByDomainId: vi.fn<ProjectsRepository["findLoadedByDomainId"]>(async () => {
+      if (input.error) {
+        throw input.error;
       }
     )
   };

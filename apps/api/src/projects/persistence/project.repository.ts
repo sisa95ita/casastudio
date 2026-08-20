@@ -31,7 +31,6 @@ export type ProjectSummary = {
   readonly name: string;
   readonly revision: number;
   readonly updatedAt: string;
-  readonly ownerSubject: string;
 };
 
 /** Parameters for an atomic complete-aggregate Project replacement. */
@@ -55,18 +54,6 @@ export type ReplaceProjectResult =
   | { readonly status: "forbidden" }
   | { readonly status: "revision-conflict"; readonly currentRevision: number };
 
-/** Parameters for an authorization-aware complete-aggregate Project deletion. */
-export type DeleteProjectInput = {
-  readonly projectId: string;
-  readonly requiredOwnerSubject?: string;
-};
-
-/** Stable outcome of an authorization-aware Project deletion request. */
-export type DeleteProjectResult =
-  | { readonly status: "deleted" }
-  | { readonly status: "not-found" }
-  | { readonly status: "forbidden" };
-
 /**
  * Repository boundary for loading canonical CasaStudio Projects by domain ID.
  *
@@ -78,14 +65,7 @@ export type DeleteProjectResult =
 export interface ProjectsRepository {
   findByDomainId(projectId: string): Promise<Project | null>;
   findLoadedByDomainId(projectId: string): Promise<LoadedProject | null>;
-  listProjectSummaries(
-    ownerSubject?: string
-  ): Promise<readonly ProjectSummary[]>;
-  projectNameExists(
-    ownerSubject: string,
-    normalizedName: string
-  ): Promise<boolean>;
+  listProjectSummaries(ownerSubject?: string): Promise<readonly ProjectSummary[]>;
   createProject(project: Project, ownerSubject: string): Promise<LoadedProject>;
   replaceProject(input: ReplaceProjectInput): Promise<ReplaceProjectResult>;
-  deleteProject(input: DeleteProjectInput): Promise<DeleteProjectResult>;
 }

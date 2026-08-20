@@ -19,7 +19,6 @@ export enum ApiErrorCode {
   ProjectServerFieldsInvalid = "PROJECT_SERVER_FIELDS_INVALID",
   ProjectStateInvalid = "PROJECT_STATE_INVALID",
   ProjectRevisionConflict = "PROJECT_REVISION_CONFLICT",
-  ProjectNameConflict = "PROJECT_NAME_CONFLICT",
   ProjectWriteFailed = "PROJECT_WRITE_FAILED",
   ProjectGeometryBuildFailed = "PROJECT_GEOMETRY_BUILD_FAILED",
   ProjectGeometryInvalid = "PROJECT_GEOMETRY_INVALID",

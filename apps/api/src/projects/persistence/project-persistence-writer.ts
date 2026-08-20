@@ -75,7 +75,6 @@ export class ProjectPersistenceWriter {
       data: {
         domainId: canonicalProject.id,
         name: canonicalProject.name,
-        normalizedName: normalizeProjectName(canonicalProject.name),
         schemaVersion: canonicalProject.schemaVersion,
         revision: canonicalProject.revision,
         domainCreatedAt: canonicalProject.createdAt,
@@ -113,7 +112,6 @@ export class ProjectPersistenceWriter {
       where: { id: persistenceProjectId },
       data: {
         name: canonicalProject.name,
-        normalizedName: normalizeProjectName(canonicalProject.name),
         schemaVersion: canonicalProject.schemaVersion,
         revision: canonicalProject.revision,
         domainUpdatedAt: canonicalProject.updatedAt,
@@ -124,11 +122,7 @@ export class ProjectPersistenceWriter {
     });
 
     await this.deleteSubordinateRecords(tx, persistenceProjectId);
-    await this.createSubordinateRecords(
-      tx,
-      canonicalProject,
-      persistenceProjectId
-    );
+    await this.createSubordinateRecords(tx, canonicalProject, persistenceProjectId);
   }
 
   private async deleteSubordinateRecords(
@@ -152,9 +146,7 @@ export class ProjectPersistenceWriter {
     await tx.wall.deleteMany({ where });
     await tx.room.deleteMany({ where });
     await tx.level.deleteMany({ where });
-    await tx.building.deleteMany({
-      where: { projectId: persistenceProjectId }
-    });
+    await tx.building.deleteMany({ where: { projectId: persistenceProjectId } });
   }
 
   private async createSubordinateRecords(
@@ -386,11 +378,7 @@ export class ProjectPersistenceWriter {
       const dbBaseImage = await tx.baseImage.create({
         data: {
           projectId: persistenceProjectId,
-          viewpointId: getRequired(
-            viewpoints,
-            baseImage.viewpointId,
-            "Viewpoint"
-          ).id,
+          viewpointId: getRequired(viewpoints, baseImage.viewpointId, "Viewpoint").id,
           domainId: baseImage.id,
           position: baseImagePosition,
           name: baseImage.name,
@@ -469,21 +457,9 @@ export class ProjectPersistenceWriter {
       const dbRenderRequest = await tx.renderRequest.create({
         data: {
           projectId: persistenceProjectId,
-          viewpointId: getRequired(
-            viewpoints,
-            renderRequest.viewpointId,
-            "Viewpoint"
-          ).id,
-          baseImageId: getRequired(
-            baseImages,
-            renderRequest.baseImageId,
-            "BaseImage"
-          ).id,
-          designBriefId: getRequired(
-            designBriefs,
-            renderRequest.designBriefId,
-            "DesignBrief"
-          ).id,
+          viewpointId: getRequired(viewpoints, renderRequest.viewpointId, "Viewpoint").id,
+          baseImageId: getRequired(baseImages, renderRequest.baseImageId, "BaseImage").id,
+          designBriefId: getRequired(designBriefs, renderRequest.designBriefId, "DesignBrief").id,
           domainId: renderRequest.id,
           position: renderRequestPosition,
           name: renderRequest.name,
@@ -509,11 +485,7 @@ export class ProjectPersistenceWriter {
       await tx.renderResult.create({
         data: {
           projectId: persistenceProjectId,
-          renderRequestId: getRequired(
-            renderRequests,
-            renderResult.renderRequestId,
-            "RenderRequest"
-          ).id,
+          renderRequestId: getRequired(renderRequests, renderResult.renderRequestId, "RenderRequest").id,
           domainId: renderResult.id,
           position: renderResultPosition,
           name: renderResult.name,

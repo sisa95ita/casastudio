@@ -123,7 +123,7 @@ describe("CORS", () => {
     await context.app.close();
   });
 
-  it("allows authenticated Project write methods", async () => {
+  it("allows authenticated Project creation and replacement methods", async () => {
     const context = await createTestApp();
 
     const response = await request(context.app.getHttpServer())
@@ -135,7 +135,6 @@ describe("CORS", () => {
 
     expect(response.headers["access-control-allow-methods"]).toContain("POST");
     expect(response.headers["access-control-allow-methods"]).toContain("PUT");
-    expect(response.headers["access-control-allow-methods"]).toContain("DELETE");
     expect(response.headers["access-control-allow-headers"]).toContain("Authorization");
     expect(response.headers["access-control-allow-headers"]).toContain("Content-Type");
 

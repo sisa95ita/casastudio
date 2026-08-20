@@ -53,15 +53,9 @@ import type { ProjectListResponseDto } from "./project.dto";
 @Injectable()
 export class ProjectApiMapper {
   /** Builds the discovery response without reconstructing full aggregates. */
-  toProjectListResponse(
-    summaries: readonly ProjectSummary[],
-    currentSubject: string
-  ): ProjectListResponseDto {
+  toProjectListResponse(summaries: readonly ProjectSummary[]): ProjectListResponseDto {
     return {
-      projects: summaries.map(({ ownerSubject, ...summary }) => ({
-        ...summary,
-        ownedByCurrentUser: ownerSubject === currentSubject
-      }))
+      projects: summaries.map((summary) => ({ ...summary }))
     };
   }
 
