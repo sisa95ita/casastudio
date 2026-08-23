@@ -261,6 +261,33 @@ describe("createConnectedWall", () => {
     });
     expect(project).toEqual(before);
   });
+
+  it("connects at a proper intersection by splitting every intersecting Wall atomically", () => {
+    const project = createProject([
+      createWall("horizontal", 0, 0, 100, 0),
+      createWall("vertical", 50, -50, 50, 50)
+    ]);
+    const result = createConnectedWall(project, {
+      levelId: "ground-floor",
+      wall: createWall("connected", 50, 0, 100, 100),
+      startConnections: [
+        { wallId: "horizontal", newWallId: "horizontal-second" },
+        { wallId: "vertical", newWallId: "vertical-second" }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.building.levels[0]?.walls).toHaveLength(5);
+    expect(
+      result.project.building.levels[0]?.walls.filter(
+        (wall) =>
+          (wall.start.x === 50 && wall.start.z === 0) ||
+          (wall.end.x === 50 && wall.end.z === 0)
+      )
+    ).toHaveLength(5);
+    expectCanonicalValidity(result.project);
+  });
 });
 
 describe("collapseWallJunction", () => {

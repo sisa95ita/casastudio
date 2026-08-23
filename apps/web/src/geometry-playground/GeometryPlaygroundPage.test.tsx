@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Project } from "@casastudio/schema";
 import { Provider } from "react-redux";
 
@@ -24,11 +24,32 @@ describe("GeometryPlaygroundPage", () => {
     );
 
     expect(markup).toContain("Show polygons");
+    expect(markup).toContain("Show room contours");
     expect(markup).toContain("Show boundary edges");
     expect(markup).toContain("Show vertices");
     expect(markup).toContain("Show centroids");
-    expect(markup).toContain("Show bounds");
+    expect(markup).toContain("Show bounding boxes");
     expect(markup).toContain("Show geometry labels");
+  });
+
+  it("keeps technical polygon bounds available through the Playground controls", () => {
+    const onOptionsChange = vi.fn();
+    render(
+      <GeometryLayerControls
+        options={defaultGeometryDisplayOptions}
+        onOptionsChange={onOptionsChange}
+      />
+    );
+    const boundsSwitch = screen.getByRole("switch", {
+      name: "Show bounding boxes"
+    }) as HTMLInputElement;
+
+    expect(boundsSwitch.checked).toBe(false);
+    fireEvent.click(boundsSwitch);
+    expect(onOptionsChange).toHaveBeenCalledWith({
+      ...defaultGeometryDisplayOptions,
+      bounds: true
+    });
   });
 
   it("renders technical geometry build errors without throwing", () => {

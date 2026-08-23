@@ -12,7 +12,8 @@ import {
 import { createRuntimeGeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import {
   defaultGeometryDisplayOptions,
-  GeometrySvgViewer
+  GeometrySvgViewer,
+  projectGeometryDisplayOptions
 } from "./GeometrySvgViewer";
 import {
   createGeometrySelectionState,
@@ -96,6 +97,7 @@ describe("GeometrySvgViewer", () => {
     );
 
     expect(markup.match(/data-testid="geometry-polygon"/g)).toHaveLength(2);
+    expect(markup.match(/data-testid="room-contour"/g)).toHaveLength(2);
     expect(markup).toContain(`points="${expectedFirstPolygonPoints}"`);
   });
 
@@ -225,6 +227,102 @@ describe("GeometrySvgViewer", () => {
     expect(hiddenMarkup).not.toContain('data-testid="polygon-bounds"');
   });
 
+  it("renders one exact irregular Room contour independently of rectangular bounds", () => {
+    const level = getPlaygroundLevel();
+    const viewerProps = createViewerProps(level);
+    const polygon = viewerProps.presentationModel.polygons[0]!;
+    const screenPoints = [
+      { x: 120, y: 80 },
+      { x: 360, y: 80 },
+      { x: 330, y: 140 },
+      { x: 240, y: 165 },
+      { x: 180, y: 220 },
+      { x: 120, y: 260 }
+    ];
+    const presentationPoints = screenPoints.map((screen) => ({
+      world: { x: screen.x, z: screen.y },
+      screen
+    }));
+    const irregularPoints = screenPoints.map((point) => `${point.x},${point.y}`).join(" ");
+    const presentationModel = {
+      ...viewerProps.presentationModel,
+      polygons: [{
+        ...polygon,
+        points: presentationPoints,
+        svgPoints: irregularPoints,
+        screenBounds: { x: 120, y: 80, width: 240, height: 180 }
+      }],
+      boundaryEdges: screenPoints.map((start, index) => {
+        const edge = viewerProps.presentationModel.boundaryEdges[index]!;
+        const end = screenPoints[(index + 1) % screenPoints.length]!;
+        return {
+          ...edge,
+          start: presentationPoints[index]!,
+          end: presentationPoints[(index + 1) % presentationPoints.length]!,
+          midpoint: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+        };
+      })
+    };
+    const { container } = render(
+      <GeometrySvgViewer
+        {...viewerProps}
+        presentationModel={presentationModel}
+        options={{ ...defaultGeometryDisplayOptions, bounds: true }}
+      />
+    );
+
+    const roomPolygon = screen.getByTestId("geometry-polygon");
+    const roomContour = screen.getByTestId("room-contour");
+    const bounds = screen.getByTestId("polygon-bounds");
+    const layers = [...container.querySelectorAll("g[data-layer]")];
+    const boundsLayer = container.querySelector('[data-layer="polygon-bounds"]');
+
+    expect(roomPolygon.getAttribute("points")).toBe(irregularPoints);
+    expect(roomContour.getAttribute("points")).toBe(irregularPoints);
+    expect(roomContour.getAttribute("points")).toBe(roomPolygon.getAttribute("points"));
+    expect(roomContour.getAttribute("points")?.split(" ")).toHaveLength(6);
+    expect(roomContour.getAttribute("points")).toContain("330,140 240,165 180,220");
+    expect(roomContour.tagName.toLowerCase()).toBe("polygon");
+    expect(bounds.tagName.toLowerCase()).toBe("rect");
+    expect(bounds.getAttribute("x")).toBe("120");
+    expect(bounds.getAttribute("y")).toBe("80");
+    expect(bounds.getAttribute("width")).toBe("240");
+    expect(bounds.getAttribute("height")).toBe("180");
+    expect(bounds.hasAttribute("points")).toBe(false);
+    expect(boundsLayer?.getAttribute("data-diagnostic")).toBe("true");
+    expect(boundsLayer?.getAttribute("aria-hidden")).toBe("true");
+    expect(boundsLayer?.getAttribute("class")).toContain("geometry-diagnostic-layer");
+    expect(layers.indexOf(boundsLayer!)).toBeLessThan(
+      layers.indexOf(container.querySelector('[data-layer="polygons"]')!)
+    );
+    expect(layers.indexOf(container.querySelector('[data-layer="polygons"]')!)).toBeLessThan(
+      layers.indexOf(container.querySelector('[data-layer="room-contours"]')!)
+    );
+    expect(layers.indexOf(container.querySelector('[data-layer="room-contours"]')!)).toBeLessThan(
+      layers.indexOf(container.querySelector('[data-layer="boundary-edges"]')!)
+    );
+    expect(screen.getAllByTestId("boundary-edge").map((edge) => [
+      `${edge.getAttribute("x1")},${edge.getAttribute("y1")}`,
+      `${edge.getAttribute("x2")},${edge.getAttribute("y2")}`
+    ])).toEqual(screenPoints.map((point, index) => {
+      const end = screenPoints[(index + 1) % screenPoints.length]!;
+      return [`${point.x},${point.y}`, `${end.x},${end.y}`];
+    }));
+  });
+
+  it("uses architectural Project defaults without removing diagnostics", () => {
+    expect(projectGeometryDisplayOptions).toMatchObject({
+      polygons: true,
+      roomContours: true,
+      boundaryEdges: true,
+      vertices: true,
+      centroids: true,
+      bounds: false,
+      entityLabels: false
+    });
+    expect(defaultGeometryDisplayOptions).not.toBe(projectGeometryDisplayOptions);
+  });
+
   it("renders a stable empty state for levels with no runtime geometry", () => {
     const project = ProjectSchema.parse({
       ...geometryPlaygroundProject,
@@ -263,6 +361,22 @@ describe("GeometrySvgViewer", () => {
     );
 
     expect(markup).toContain("No runtime geometry to display for this level.");
+
+    const editableMarkup = renderToStaticMarkup(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        options={defaultGeometryDisplayOptions}
+        interaction={{
+          selectionEnabled: false,
+          panEnabled: false,
+          drawWallEnabled: true,
+          wallEndpointEditingEnabled: false
+        }}
+        editorOverlay={{ grid: { visible: true, spacing: 100 } }}
+      />
+    );
+    expect(editableMarkup).toContain("<svg");
+    expect(editableMarkup).toContain('data-layer="editor-grid"');
   });
 
   it("selects polygons, boundary edges, and vertices from SVG clicks", () => {
@@ -537,5 +651,42 @@ describe("GeometrySvgViewer", () => {
       offsetX: 30,
       offsetY: 20
     });
+  });
+
+  it("renders selectable transient Room faces without changing geometry selection", () => {
+    const level = getPlaygroundLevel();
+    const handleFaceClick = vi.fn();
+    const handleSelectionStateChange = vi.fn();
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        options={defaultGeometryDisplayOptions}
+        onSelectionStateChange={handleSelectionStateChange}
+        onRoomFaceCandidateClick={handleFaceClick}
+        editorOverlay={{
+          roomFaceCandidates: [{
+            key: "face-a",
+            vertices: [
+              { x: 0, z: 0 },
+              { x: 100, z: 0 },
+              { x: 100, z: 100 },
+              { x: 0, z: 100 }
+            ],
+            selected: true
+          }]
+        }}
+      />
+    );
+
+    const candidate = screen.getByTestId("room-face-candidate");
+    expect(candidate.getAttribute("class")).toContain("geometry-room-face-candidate--selected");
+    expect(candidate.getAttribute("class")).toContain("geometry-room-face-candidate--focusable");
+    expect(candidate.getAttribute("tabindex")).toBe("0");
+    fireEvent.click(candidate);
+    expect(handleFaceClick).toHaveBeenCalledWith("face-a");
+    expect(handleSelectionStateChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(candidate, { key: "Enter" });
+    fireEvent.keyDown(candidate, { key: " " });
+    expect(handleFaceClick).toHaveBeenCalledTimes(3);
   });
 });

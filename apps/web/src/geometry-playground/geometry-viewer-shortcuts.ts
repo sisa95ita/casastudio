@@ -43,6 +43,25 @@ export const geometryViewerShortcuts: readonly GeometryViewerShortcutDefinition[
     })
   ]);
 
+/** Keyboard commands available while a local Project editing session is active. */
+export const geometryEditorShortcuts = Object.freeze([
+  Object.freeze({
+    action: "UNDO",
+    key: "Ctrl/Cmd + Z",
+    translationKey: "shortcuts.undo"
+  }),
+  Object.freeze({
+    action: "REDO_SHIFT_Z",
+    key: "Ctrl/Cmd + Shift + Z",
+    translationKey: "shortcuts.redo"
+  }),
+  Object.freeze({
+    action: "REDO_Y",
+    key: "Ctrl/Cmd + Y",
+    translationKey: "shortcuts.redo"
+  })
+]);
+
 /**
  * Resolves a keyboard event into a viewer shortcut action.
  */

@@ -78,12 +78,18 @@
     "pan": "Pan",
     "undo": "Undo",
     "redo": "Redo",
+    "createRoom": "Create Room",
     "comingSoon": "{{tool}} — coming soon",
     "help": {
       "select": "Select elements in the plan.",
       "draw-wall": "Draw connected walls as a continuous chain.",
       "pan": "Move around the plan without changing geometry."
     }
+  },
+  "precision": {
+    "grid": "Grid",
+    "snapGrid": "Snap to grid",
+    "spacing": "Spacing"
   },
   "shortcuts": {
     "title": "Shortcuts",
@@ -173,6 +179,17 @@
       "splitOpening": "This wall cannot be split here because the point crosses an opening.",
       "splitInvalid": "This wall cannot be split at that point.",
       "invalid": "The wall could not be changed."
+    },
+    "room": {
+      "none": "Select a bounded region in the plan before creating a room.",
+      "assigned": "The selected region already belongs to a room.",
+      "subdivision": "The selected room cannot be safely subdivided from the current walls.",
+      "doorReference": "A door on the selected room cannot be assigned safely after subdivision.",
+      "viewpointReference": "A saved viewpoint lies on or outside the resulting room boundaries.",
+      "staircaseReference": "A staircase endpoint cannot be assigned safely after subdivision.",
+      "stale": "The room topology changed. Select the region again and retry.",
+      "geometry": "The resulting room geometry is invalid.",
+      "invalid": "The room could not be created from the available boundary."
     }
   },
   "wall": {
@@ -182,12 +199,12 @@
     "delete": "Delete Wall",
     "startEndpoint": "Start endpoint",
     "endEndpoint": "End endpoint",
-    "roomEndpointEditingUnavailable": "This wall belongs to a room. Its endpoints cannot be moved independently yet.",
-    "sharedEndpointEditingUnavailable": "This endpoint is connected to other walls and cannot be moved independently yet.",
+    "roomEndpointEditingUnavailable": "Room boundary junctions move all connected walls together.",
+    "sharedEndpointEditingUnavailable": "This endpoint is connected to other walls and moves as one junction.",
     "endpointStatus": "{{endpoint}}: {{status}}",
     "endpointFree": "Free",
-    "endpointConnected": "Connected — movement unavailable",
-    "endpointRoomBoundary": "Room boundary — movement unavailable",
+    "endpointConnected": "Connected junction",
+    "endpointRoomBoundary": "Room boundary junction",
     "labels": {
       "type": "Type",
       "length": "Length",
@@ -201,6 +218,8 @@
     "title": "Selection",
     "empty": "Select geometry in the plan to inspect its details.",
     "vertex": "Vertex",
+    "moveJunction": "Move junction",
+    "selectRoomRegion": "Select room region",
     "labels": {
       "type": "Type",
       "position": "Position",

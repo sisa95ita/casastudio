@@ -22,7 +22,7 @@ export type DrawWallInteraction = {
   readonly kind: "draw-wall";
   readonly startPoint: WorldPointXZ;
   readonly currentPointerPoint: WorldPointXZ;
-  readonly startConnectionWallId?: string;
+  readonly startConnectionWallIds: readonly string[];
 };
 
 /** Describes a Wall endpoint proposal that has not entered the Project draft. */
@@ -35,11 +35,34 @@ export type MoveWallEndpointInteraction = {
   readonly currentPointerPoint: WorldPointXZ;
 };
 
+/** Describes a shared junction proposal that has not entered the Project draft. */
+export type MoveJunctionInteraction = {
+  readonly kind: "move-junction";
+  readonly levelId: string;
+  readonly position: WorldPointXZ;
+  readonly incidentWallIds: readonly string[];
+  readonly pointerId: number;
+  readonly currentPointerPoint: WorldPointXZ;
+};
+
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
-    DrawWallInteraction | MoveWallEndpointInteraction | null;
+    DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
+};
+
+/** Session-local precision assistance preferences expressed in Project units. */
+export type ProjectEditorPrecisionState = {
+  readonly gridVisible: boolean;
+  readonly snapToGrid: boolean;
+  readonly gridSpacing: number;
+};
+
+/** Bounded history of meaningful complete-Project draft commits. */
+export type ProjectEditorHistoryState = {
+  readonly past: readonly Project[];
+  readonly future: readonly Project[];
 };
 
 /** Local editing session derived from one authoritative Project revision. */
@@ -54,7 +77,19 @@ export type ProjectEditorState = {
   readonly selection: readonly GeometrySelection[];
   readonly hover?: GeometrySelection;
   readonly transient: ProjectEditorTransientState;
+  readonly precision: ProjectEditorPrecisionState;
+  readonly history: ProjectEditorHistoryState;
 };
+
+/** Maximum number of complete draft snapshots retained in one edit session. */
+export const projectEditorHistoryLimit = 50;
+
+/** Default precision assistance for a newly entered edit session. */
+export const defaultProjectEditorPrecision: ProjectEditorPrecisionState = Object.freeze({
+  gridVisible: false,
+  snapToGrid: false,
+  gridSpacing: 100
+});
 
 /** Initial editor state before an explicit local editing session begins. */
 export const initialProjectEditorState: ProjectEditorState = {
@@ -67,7 +102,9 @@ export const initialProjectEditorState: ProjectEditorState = {
   activeTool: null,
   selection: [],
   hover: undefined,
-  transient: { interaction: null }
+  transient: { interaction: null },
+  precision: defaultProjectEditorPrecision,
+  history: { past: [], future: [] }
 };
 
 type EnterEditingPayload = {
@@ -85,7 +122,7 @@ const projectEditorSlice = createSlice({
         return {
           payload: {
             projectId: payload.project.id,
-            draft: structuredClone(payload.project),
+            draft: cloneProject(payload.project),
             baseRevision: payload.baseRevision,
             preferredLevelId: payload.preferredLevelId
           }
@@ -121,6 +158,8 @@ const projectEditorSlice = createSlice({
         state.selection = [];
         state.hover = undefined;
         state.transient = { interaction: null };
+        state.precision = { ...defaultProjectEditorPrecision };
+        state.history = { past: [], future: [] };
       }
     },
     cleanEditingSessionLeft(state) {
@@ -149,8 +188,16 @@ const projectEditorSlice = createSlice({
       ) {
         return;
       }
+      if (JSON.stringify(state.draft) === JSON.stringify(nextDraft)) {
+        return;
+      }
 
-      state.draft = structuredClone(nextDraft);
+      state.history.past = [
+        ...state.history.past,
+        cloneProject(state.draft)
+      ].slice(-projectEditorHistoryLimit);
+      state.history.future = [];
+      state.draft = cloneProject(nextDraft);
       state.dirty = true;
       if (
         !nextDraft.building.levels.some(
@@ -161,6 +208,43 @@ const projectEditorSlice = createSlice({
         state.selection = [];
         state.hover = undefined;
         state.transient = { interaction: null };
+      }
+    },
+    editorUndoRequested(state) {
+      if (state.mode !== "edit" || !state.draft || state.history.past.length === 0) return;
+      const previous = state.history.past.at(-1);
+      if (!previous) return;
+      state.history.future = [cloneProject(state.draft), ...state.history.future]
+        .slice(0, projectEditorHistoryLimit);
+      state.history.past = state.history.past.slice(0, -1);
+      state.draft = cloneProject(previous);
+      state.dirty = state.history.past.length > 0;
+      state.selection = [];
+      state.hover = undefined;
+      state.transient = { interaction: null };
+    },
+    editorRedoRequested(state) {
+      if (state.mode !== "edit" || !state.draft || state.history.future.length === 0) return;
+      const next = state.history.future[0];
+      if (!next) return;
+      state.history.past = [...state.history.past, cloneProject(state.draft)]
+        .slice(-projectEditorHistoryLimit);
+      state.history.future = state.history.future.slice(1);
+      state.draft = cloneProject(next);
+      state.dirty = true;
+      state.selection = [];
+      state.hover = undefined;
+      state.transient = { interaction: null };
+    },
+    editorGridVisibilityChanged(state, action: PayloadAction<boolean>) {
+      if (state.mode === "edit") state.precision.gridVisible = action.payload;
+    },
+    editorGridSnappingChanged(state, action: PayloadAction<boolean>) {
+      if (state.mode === "edit") state.precision.snapToGrid = action.payload;
+    },
+    editorGridSpacingChanged(state, action: PayloadAction<number>) {
+      if (state.mode === "edit" && Number.isFinite(action.payload) && action.payload > 0) {
+        state.precision.gridSpacing = action.payload;
       }
     },
     editorActiveLevelChanged(state, action: PayloadAction<string>) {
@@ -199,10 +283,13 @@ const projectEditorSlice = createSlice({
           kind: "draw-wall",
           startPoint: action.payload.point,
           currentPointerPoint: action.payload.point,
-          startConnectionWallId:
-            action.payload.snapCandidate?.kind === "wall-interior"
-              ? action.payload.snapCandidate.wallId
-              : undefined
+          startConnectionWallIds:
+            action.payload.snapCandidate?.kind === "wall-interior" ||
+            action.payload.snapCandidate?.kind === "wall-midpoint"
+              ? [action.payload.snapCandidate.wallId]
+              : action.payload.snapCandidate?.kind === "wall-intersection"
+                ? [...action.payload.snapCandidate.wallIds]
+                : []
         };
         state.transient.snapCandidate = action.payload.snapCandidate;
       }
@@ -228,6 +315,26 @@ const projectEditorSlice = createSlice({
         };
       }
     },
+    editorJunctionDragStarted(
+      state,
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly position: WorldPointXZ;
+        readonly incidentWallIds: readonly string[];
+        readonly pointerId: number;
+      }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-junction",
+          levelId: action.payload.levelId,
+          position: action.payload.position,
+          incidentWallIds: [...action.payload.incidentWallIds],
+          pointerId: action.payload.pointerId,
+          currentPointerPoint: action.payload.position
+        };
+      }
+    },
     editorTransientPointerMoved(
       state,
       action: PayloadAction<{
@@ -238,7 +345,7 @@ const projectEditorSlice = createSlice({
       const interaction = state.transient.interaction;
       if (
         interaction?.kind === "draw-wall" ||
-        (interaction?.kind === "move-wall-endpoint" &&
+        ((interaction?.kind === "move-wall-endpoint" || interaction?.kind === "move-junction") &&
           interaction.pointerId === action.payload.pointerId)
       ) {
         interaction.currentPointerPoint = action.payload.point;
@@ -312,6 +419,11 @@ export function hasPreservedServerFields(
   );
 }
 
+/** Copies a JSON-compatible canonical Project without retaining Immer proxies. */
+function cloneProject(project: Project): Project {
+  return JSON.parse(JSON.stringify(project)) as Project;
+}
+
 /** Focused actions for the local Project editing session. */
 export const {
   editingSessionEntered,
@@ -319,11 +431,17 @@ export const {
   editingSessionEnded,
   editingSessionMarkedDirty,
   editingDraftReplaced,
+  editorUndoRequested,
+  editorRedoRequested,
+  editorGridVisibilityChanged,
+  editorGridSnappingChanged,
+  editorGridSpacingChanged,
   editorActiveLevelChanged,
   editorActiveToolChanged,
   editorDrawWallStarted,
   editorDrawWallPointerMoved,
   editorEndpointDragStarted,
+  editorJunctionDragStarted,
   editorTransientPointerMoved,
   editorTransientInteractionCleared,
   editorSelectionChanged,
@@ -338,6 +456,14 @@ export const projectEditorReducer = projectEditorSlice.reducer;
 /** Selects the complete local Project editing session. */
 export const selectProjectEditor = (state: RootState): ProjectEditorState =>
   state.projectEditor;
+
+/** Whether the active edit session has a stable draft commit to undo. */
+export const selectCanUndoProjectEdit = (state: RootState): boolean =>
+  state.projectEditor.mode === "edit" && state.projectEditor.history.past.length > 0;
+
+/** Whether the active edit session has an undone draft commit to restore. */
+export const selectCanRedoProjectEdit = (state: RootState): boolean =>
+  state.projectEditor.mode === "edit" && state.projectEditor.history.future.length > 0;
 
 /** Selects edit-mode geometry interaction state without copying the draft. */
 export const selectEditorGeometrySelection = createSelector(

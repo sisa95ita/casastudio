@@ -1,7 +1,10 @@
 import { Stack, Typography } from "@mui/material";
 
 import { useCasaTranslation } from "../i18n";
-import { geometryViewerShortcuts } from "./geometry-viewer-shortcuts";
+import {
+  geometryEditorShortcuts,
+  geometryViewerShortcuts
+} from "./geometry-viewer-shortcuts";
 
 /**
  * Displays the active technical viewer shortcuts.
@@ -10,11 +13,16 @@ import { geometryViewerShortcuts } from "./geometry-viewer-shortcuts";
  * it does not imply editor commands, persistence, or domain mutation support.
  */
 export function GeometryShortcutGuide({
-  showTitle = true
+  showTitle = true,
+  includeEditingShortcuts = false
 }: {
   readonly showTitle?: boolean;
+  readonly includeEditingShortcuts?: boolean;
 }) {
   const { t } = useCasaTranslation("geometry-playground");
+  const shortcuts = includeEditingShortcuts
+    ? [...geometryViewerShortcuts, ...geometryEditorShortcuts]
+    : geometryViewerShortcuts;
 
   return (
     <Stack
@@ -33,7 +41,7 @@ export function GeometryShortcutGuide({
         </Typography>
       ) : null}
       <Stack component="dl" spacing={0.75} sx={{ m: 0 }}>
-        {geometryViewerShortcuts.map((shortcut) => (
+        {shortcuts.map((shortcut) => (
           <Stack
             className="geometry-summary-item"
             direction="row"

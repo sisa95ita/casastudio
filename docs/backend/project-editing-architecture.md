@@ -239,6 +239,77 @@ stable validation error codes. Expected failures do not throw. Success uses
 targeted structural copying: input state and unaffected entity state are not
 mutated.
 
+### Explicit Room authoring
+
+Walls form the physical planar topology. `deriveBoundedFaces` walks the exact
+Level Wall endpoint graph and returns deterministic ephemeral faces with a
+stable key, canonical counter-clockwise boundary, vertices, area, and centroid.
+These faces are query results only: they are never persisted and never create
+architectural meaning when Walls are drawn.
+
+`classifyLevelRoomTopology` compares those current faces with explicit Rooms.
+It distinguishes exact Room matches, unassigned faces, one Room covered by
+multiple subdividing faces, and topology whose ownership cannot be reconciled
+safely. A Room exists only after an explicit authoring operation succeeds.
+
+Room creation accepts a caller-generated stable Room ID, canonicalizes the
+selected ordered Wall cycle, rejects invalid or duplicate boundaries, and
+updates reciprocal `Wall.roomIds` in the same immutable Project result. Shared
+Walls remain single physical entities and may be referenced by two Rooms.
+
+`reconcileRoomSubdivision` applies the separate semantic decision that current
+bounded faces subdivide one explicit Room. The separator may contain one or
+many connected Walls, and the result may contain two or more Rooms. Exactly one
+face retains the original Room identity and metadata: the face strictly
+containing the former polygon centroid, or—when containment is not unique—the
+largest face, then the nearest face centroid, then stable face key. Other faces
+receive caller-generated Room IDs. The operation rebuilds reciprocal Wall
+references atomically. Each additional Room is explicitly assigned to a face
+key, producing a complete face-to-Room identity map before other references are
+rewritten. Door connectivity follows exact membership of the Door's owning
+Wall in the resulting Room boundaries. A Room-scoped Viewpoint follows the
+unique resulting polygon containing its Level-local camera XZ point.
+Staircase Room endpoints remain conservatively rejected because the persisted
+schema does not explicitly bind those semantic endpoints to one spatial anchor
+across Level coordinate frames. Unaffected Rooms and unrelated references
+remain unchanged, and shared Walls remain single physical entities.
+
+Reference rewriting, Room boundaries, Door connectivity, Viewpoints, and
+reciprocal Wall references are one immutable result. A stale face assignment
+or genuinely ambiguous reference rejects the entire reconciliation.
+
+Centroids are recalculated geometric measurements used for display, spatial
+selection, and continuity heuristics. Ordered and oriented canonical Wall uses
+remain the Room definition. Face classification and Wall drawing never invoke
+Room creation or reconciliation automatically.
+
+### Derived junction editing
+
+A junction is the derived set of Wall endpoints with exactly equal XZ
+coordinates on one Level; it is not persisted as a separate entity.
+`moveJunction` receives the original coordinate, destination, and expected
+incident Wall IDs. It updates every incident endpoint as one immutable edit and
+rejects stale incidence, zero-length Walls, invalid Opening placement, or any
+invalid resulting Room geometry.
+
+### Local history and precision assistance
+
+Redux retains a bounded history of complete Project draft snapshots for the
+current Edit session. Only successful semantic Project replacements enter
+history. Selection, hover, tools, viewport state, pointer previews, and grid
+preferences do not. Undo restores the authoritative editing base after the
+oldest local commit; a new commit after Undo clears the redo branch. Entering or
+leaving Edit, Discard, successful Save, authoritative conflict reload, and
+Project route changes clear incompatible history with the session state.
+
+Grid visibility, grid snapping, and physical-unit spacing are editor-local
+assistance. The SVG grid is derived through the active viewport transform, and
+snapping tolerance remains measured in visible CSS pixels. Precision candidate
+priority is deterministic: runtime Vertex, Wall endpoint, Wall midpoint,
+proper Wall intersection, Wall interior, orthogonal alignment, grid point, then
+the unsnapped free point. None of these presentation aids redefine Project
+coordinates.
+
 ## Authorization
 
 Create, list, read, save, and geometry reuse the existing JWT principal and

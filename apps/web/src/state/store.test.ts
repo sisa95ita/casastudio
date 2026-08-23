@@ -23,7 +23,9 @@ describe("Redux application state", () => {
         activeTool: null,
         selection: [],
         hover: undefined,
-        transient: { interaction: null }
+        transient: { interaction: null },
+        precision: { gridVisible: false, snapToGrid: false, gridSpacing: 100 },
+        history: { past: [], future: [] }
       },
       viewer: { geometrySelection: { selected: [], hovered: undefined } }
     });

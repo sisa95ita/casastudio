@@ -8,6 +8,7 @@ import {
   within
 } from "@testing-library/react";
 import { GeometryEngine } from "@casastudio/geometry";
+import type { Project, Room, Wall } from "@casastudio/schema";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Provider } from "react-redux";
 import { useMemo, useState } from "react";
@@ -176,6 +177,71 @@ function successFetch(): typeof fetch {
   }) as typeof fetch;
 }
 
+function createMultiWallSubdivisionProject(): Project {
+  const project = structuredClone(demoProjectFixture);
+  const room: Room = {
+    id: "whole-room",
+    name: "Whole Room",
+    type: "OTHER",
+    boundary: [
+      "bottom", "right-lower", "right-upper", "top", "left-upper", "left-lower"
+    ].map((wallId) => ({ wallId, direction: "FORWARD" as const }))
+  };
+  const wall = (
+    id: string,
+    startX: number,
+    startZ: number,
+    endX: number,
+    endZ: number,
+    assigned = true
+  ): Wall => ({
+    id,
+    start: { x: startX, z: startZ },
+    end: { x: endX, z: endZ },
+    height: 280,
+    thickness: 18,
+    roomIds: assigned ? [room.id] : [],
+    openings: []
+  });
+  project.building.levels = [{
+    ...project.building.levels[0]!,
+    id: "ground-floor",
+    rooms: [room],
+    walls: [
+      wall("bottom", 0, 0, 100, 0),
+      wall("right-lower", 100, 0, 100, 70),
+      wall("right-upper", 100, 70, 100, 100),
+      wall("top", 100, 100, 0, 100),
+      wall("left-upper", 0, 100, 0, 50),
+      wall("left-lower", 0, 50, 0, 0),
+      wall("path-one", 0, 50, 40, 50, false),
+      wall("path-two", 40, 50, 40, 70, false),
+      wall("path-three", 40, 70, 100, 70, false)
+    ],
+    staircases: []
+  }];
+  project.building.levels[0]!.walls.find((candidate) => candidate.id === "top")!.openings = [{
+    id: "outer-door",
+    type: "DOOR",
+    offsetFromStart: 10,
+    width: 20,
+    height: 200,
+    elevation: 0,
+    connectedRoomIds: [room.id]
+  }];
+  project.viewpoints = [{
+    id: "upper-room-view",
+    levelId: "ground-floor",
+    roomId: room.id,
+    cameraPosition: { x: 80, y: 160, z: 90 },
+    cameraTarget: { x: 60, y: 100, z: 80 },
+    fieldOfView: 60,
+    projection: "PERSPECTIVE"
+  }];
+  project.baseImages = [];
+  return project;
+}
+
 function saveSuccessFetch() {
   let persisted = false;
   const fetchImplementation = vi.fn(
@@ -266,6 +332,11 @@ describe("ProjectViewerPage", () => {
       screen.getByRole("img", { name: /interactive 2d geometry viewer/i })
     ).toBeTruthy();
     expect(screen.getAllByTestId("geometry-polygon")).toHaveLength(1);
+    expect((screen.getByRole("switch", { name: "Show room contours" }) as HTMLInputElement).checked)
+      .toBe(true);
+    expect(screen.queryByRole("switch", { name: "Show bounding boxes" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Show geometry labels" })).toBeNull();
+    expect(screen.queryByTestId("polygon-bounds")).toBeNull();
     expect(
       screen.getByRole("button", { name: "View" }).getAttribute("aria-pressed")
     ).toBe("true");
@@ -461,6 +532,128 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.draft).toBe(draft);
   });
 
+  it("creates an explicit Room, supports undo and redo, and keeps grid controls transient", async () => {
+    const unassignedProject = structuredClone(demoProjectFixture);
+    unassignedProject.viewpoints = [];
+    for (const level of unassignedProject.building.levels) {
+      level.rooms = [];
+      level.staircases = [];
+      level.walls = level.walls.map((wall) => ({
+        ...wall,
+        roomIds: [],
+        openings: []
+      }));
+    }
+    const fetchImplementation = vi.fn(async (input: RequestInfo | URL) =>
+      Response.json(
+        String(input).endsWith("/geometry")
+          ? geometryResponse
+          : { project: unassignedProject, sourceRevision: unassignedProject.revision }
+      )
+    ) as typeof fetch;
+    const { store } = renderConnectedRoute(createApiClient(fetchImplementation));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const undo = screen.getByRole("button", { name: "Undo" });
+    const redo = screen.getByRole("button", { name: "Redo" });
+    expect(undo.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("switch", { name: "Grid" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Snap to grid" }));
+    expect(document.querySelector('[data-layer="editor-grid"]')).toBeTruthy();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+
+    const createRoomButton = screen.getByRole("button", { name: "Create Room" });
+    expect(createRoomButton.hasAttribute("disabled")).toBe(true);
+    fireEvent.click((await screen.findAllByTestId("room-face-candidate"))[0]!);
+    expect(createRoomButton.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(createRoomButton);
+    await waitFor(() =>
+      expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms.length).toBe(1)
+    );
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(undo.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(undo);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toEqual([]);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(redo.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(redo);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(1);
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toEqual([]);
+    fireEvent.keyDown(window, { key: "y", ctrlKey: true });
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(1);
+  });
+
+  it("selects and reconciles a multi-Wall Room subdivision as one history commit", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingDraftReplaced(createMultiWallSubdivisionProject())));
+
+    const createRoomButton = screen.getByRole("button", { name: "Create Room" });
+    const candidates = await screen.findAllByTestId("room-face-candidate");
+    expect(candidates).toHaveLength(2);
+    const candidatePointSequences = candidates.map((candidate) => candidate.getAttribute("points"))
+      .sort();
+    expect(createRoomButton.hasAttribute("disabled")).toBe(true);
+    const historyBefore = store.getState().projectEditor.history.past.length;
+
+    fireEvent.click(candidates[1]!);
+    expect(candidates[1]!.getAttribute("class")).toContain(
+      "geometry-room-face-candidate--selected"
+    );
+    fireEvent.click(createRoomButton);
+    await waitFor(() =>
+      expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(2)
+    );
+    const reconciledLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    const additionalRoomId = reconciledLevel.rooms.find((room) => room.id !== "whole-room")!.id;
+    expect(reconciledLevel.walls.find((wall) => wall.id === "top")?.openings[0])
+      .toMatchObject({ connectedRoomIds: [additionalRoomId] });
+    expect(store.getState().projectEditor.draft!.viewpoints[0]?.roomId).toBe(additionalRoomId);
+    expect(store.getState().projectEditor.history.past).toHaveLength(historyBefore + 1);
+    expect(screen.getAllByTestId("geometry-polygon")).toHaveLength(2);
+    const polygonPointSequences = screen.getAllByTestId("geometry-polygon")
+      .map((polygon) => polygon.getAttribute("points"))
+      .sort();
+    const contourPointSequences = screen.getAllByTestId("room-contour")
+      .map((contour) => contour.getAttribute("points"))
+      .sort();
+    expect(polygonPointSequences).toEqual(candidatePointSequences);
+    expect(contourPointSequences).toEqual(polygonPointSequences);
+    expect(polygonPointSequences.every((points) => points?.split(" ").length === 6)).toBe(true);
+    expect(screen.queryByTestId("polygon-bounds")).toBeNull();
+    expect(screen.getAllByTestId("polygon-centroid")).toHaveLength(2);
+    expect(screen.queryByTestId("room-face-candidate")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(2);
+  });
+
+  it("preserves the draft when a referenced Viewpoint lies on the subdivision boundary", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const project = createMultiWallSubdivisionProject();
+    project.viewpoints[0] = {
+      ...project.viewpoints[0]!,
+      cameraPosition: { x: 40, y: 160, z: 60 }
+    };
+    act(() => store.dispatch(editingDraftReplaced(project)));
+    const candidate = (await screen.findAllByTestId("room-face-candidate"))[0]!;
+    fireEvent.click(candidate);
+    const before = store.getState().projectEditor.draft;
+    const historyBefore = store.getState().projectEditor.history.past.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Room" }));
+
+    expect(store.getState().projectEditor.draft).toBe(before);
+    expect(store.getState().projectEditor.history.past).toHaveLength(historyBefore);
+    expect(await screen.findByText(
+      "A saved viewpoint lies on or outside the resulting room boundaries."
+    )).toBeTruthy();
+  });
+
   it("commits a new stable Wall once and leaves Draw Wall active", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const authoritative = structuredClone(demoProjectFixture);
@@ -591,7 +784,7 @@ describe("ProjectViewerPage", () => {
     });
   });
 
-  it("exposes only the standalone handle on a Wall with one shared endpoint", async () => {
+  it("exposes standalone and shared-junction handles on a connected Wall", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
@@ -616,10 +809,10 @@ describe("ProjectViewerPage", () => {
     );
 
     expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "End endpoint" })).toBeNull();
+    expect(screen.getByRole("button", { name: "End endpoint" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
     expect(
-      screen.getByText(/connected to other walls and cannot be moved/i)
+      screen.getByText(/connected to other walls and moves as one junction/i)
     ).toBeTruthy();
     expect(
       screen.getByRole("spinbutton", { name: "Height (cm)" })
@@ -662,9 +855,7 @@ describe("ProjectViewerPage", () => {
     );
     act(() => store.dispatch(editingDraftReplaced(draft)));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Start endpoint" })
-      ).toBeNull()
+      expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy()
     );
     const protectedDraft = store.getState().projectEditor.draft;
     const buildCount = buildSpy.mock.calls.length;
@@ -722,7 +913,7 @@ describe("ProjectViewerPage", () => {
     const midpoint = sample(0.5);
     const nearEnd = sample(1);
     expect(nearStart?.kind).toBe("vertex");
-    expect(midpoint?.kind).toBe("wall-interior");
+    expect(midpoint?.kind).toBe("wall-midpoint");
     expect(nearEnd?.kind).toBe("vertex");
     for (const candidate of [nearStart, midpoint, nearEnd]) {
       expect(candidate?.visualDistancePixels).toBeCloseTo(5, 5);
@@ -815,7 +1006,7 @@ describe("ProjectViewerPage", () => {
     });
     expect(
       (await screen.findByTestId("draw-wall-snap-marker")).querySelector(
-        ".geometry-wall-snap-marker--wall-interior"
+        ".geometry-wall-snap-marker--wall-midpoint"
       )
     ).toBeTruthy();
     fireEvent.click(svg, { clientX: snapPointer.x, clientY: snapPointer.y });
@@ -1087,9 +1278,9 @@ describe("ProjectViewerPage", () => {
     const referencedDraft = store.getState().projectEditor.draft;
     const buildCount = buildSpy.mock.calls.length;
     fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
-    expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
     expect(
-      screen.getByText(/endpoints cannot be moved independently yet/i)
+      screen.getByText(/move all connected walls together/i)
     ).toBeTruthy();
     expect(store.getState().projectEditor.draft).toBe(referencedDraft);
     expect(buildSpy).toHaveBeenCalledTimes(buildCount);
@@ -1128,7 +1319,34 @@ describe("ProjectViewerPage", () => {
     expect(
       screen.queryByText("Select a wall in the plan to inspect it.")
     ).toBeNull();
-    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByRole("spinbutton", { name: "Height (cm)" })).toBeNull();
+    expect(screen.queryByRole("spinbutton", { name: "Thickness (cm)" })).toBeNull();
+  });
+
+  it("previews a selected shared Vertex and commits one junction move on pointer-up", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const vertex = screen.getAllByTestId("geometry-vertex")[0]!;
+    const originalDraft = store.getState().projectEditor.draft;
+    const originalHistoryLength = store.getState().projectEditor.history.past.length;
+    fireEvent.click(vertex);
+    const handle = screen.getByRole("button", { name: "Move junction" });
+    const clientX = Number(handle.getAttribute("cx"));
+    const clientY = Number(handle.getAttribute("cy"));
+    fireEvent.pointerDown(handle, { pointerId: 31, clientX, clientY });
+    fireEvent.pointerMove(svg, { pointerId: 31, clientX: clientX + 12, clientY: clientY + 8 });
+    expect(store.getState().projectEditor.draft).toBe(originalDraft);
+    expect(screen.getByTestId("selected-junction-overlay")).toBeTruthy();
+    fireEvent.pointerUp(svg, { pointerId: 31, clientX: clientX + 12, clientY: clientY + 8 });
+
+    await waitFor(() =>
+      expect(store.getState().projectEditor.history.past).toHaveLength(originalHistoryLength + 1)
+    );
+    expect(store.getState().projectEditor.draft).not.toBe(originalDraft);
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
   });
 
   it("clears selected geometry when entering Draw Wall or Pan", async () => {
@@ -1254,12 +1472,12 @@ describe("ProjectViewerPage", () => {
     ).toBe(false);
     expect(
       screen
-        .getByRole("button", { name: "Undo — coming soon" })
+        .getByRole("button", { name: "Undo" })
         .hasAttribute("disabled")
     ).toBe(true);
     expect(
       screen
-        .getByRole("button", { name: "Redo — coming soon" })
+        .getByRole("button", { name: "Redo" })
         .hasAttribute("disabled")
     ).toBe(true);
     expect(screen.queryByText(/AI Assistant/i)).toBeNull();
@@ -2054,6 +2272,11 @@ describe("ProjectViewerPage", () => {
     expect(within(dialog).getByText("R")).toBeTruthy();
     expect(within(dialog).getByText("Delete selected wall")).toBeTruthy();
     expect(within(dialog).getByText("Delete / Backspace")).toBeTruthy();
+    expect(within(dialog).getByText("Undo")).toBeTruthy();
+    expect(within(dialog).getByText("Ctrl/Cmd + Z")).toBeTruthy();
+    expect(within(dialog).getAllByText("Redo")).toHaveLength(2);
+    expect(within(dialog).getByText("Ctrl/Cmd + Shift + Z")).toBeTruthy();
+    expect(within(dialog).getByText("Ctrl/Cmd + Y")).toBeTruthy();
     expect(within(dialog).queryByText(/Draw Wall|Zoom/i)).toBeNull();
 
     fireEvent.keyDown(dialog, { key: "Escape" });

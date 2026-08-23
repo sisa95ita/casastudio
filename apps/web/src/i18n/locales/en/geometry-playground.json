@@ -33,7 +33,9 @@
     "cancelInteraction": "Cancel interaction / clear selection",
     "deleteWall": "Delete selected wall",
     "fitViewport": "Fit viewport",
-    "resetViewport": "Reset viewport"
+    "resetViewport": "Reset viewport",
+    "undo": "Undo",
+    "redo": "Redo"
   },
   "status": {
     "engineBuildFailed": "Engine: build failed",

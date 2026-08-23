@@ -58,6 +58,8 @@ export type GeometryViewerPanelProps = {
     pointerId: number
   ) => void;
   readonly onWallEndpointPointerCancel?: (pointerId: number) => void;
+  readonly onJunctionPointerDown?: (pointerId: number) => void;
+  readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
 };
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
@@ -80,7 +82,9 @@ export function GeometryViewerPanel({
   onEditorPointerMove,
   onWallEndpointPointerDown,
   onWallEndpointPointerUp,
-  onWallEndpointPointerCancel
+  onWallEndpointPointerCancel,
+  onJunctionPointerDown,
+  onRoomFaceCandidateClick
 }: GeometryViewerPanelProps) {
   const { t } = useCasaTranslation("geometry-playground");
 
@@ -147,6 +151,8 @@ export function GeometryViewerPanel({
           onWallEndpointPointerDown={onWallEndpointPointerDown}
           onWallEndpointPointerUp={onWallEndpointPointerUp}
           onWallEndpointPointerCancel={onWallEndpointPointerCancel}
+          onJunctionPointerDown={onJunctionPointerDown}
+          onRoomFaceCandidateClick={onRoomFaceCandidateClick}
         />
         <Box className="geometry-canvas-hint">
           <Typography variant="caption">{t("viewer.canvasHint")}</Typography>

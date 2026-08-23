@@ -12,10 +12,16 @@ import {
   editorDrawWallPointerMoved,
   editorDrawWallStarted,
   editorEndpointDragStarted,
+  editorGridSnappingChanged,
+  editorGridSpacingChanged,
+  editorGridVisibilityChanged,
+  editorRedoRequested,
   editorSelectionChanged,
   editorTransientInteractionCleared,
   editorTransientPointerMoved,
+  editorUndoRequested,
   initialProjectEditorState,
+  projectEditorHistoryLimit,
   projectEditorReducer,
   projectRouteChanged
 } from "./project-editor-slice";
@@ -314,6 +320,91 @@ describe("Project editor state", () => {
     expect(nextState.draft?.revision).toBe(demoProjectFixture.revision);
     expect(nextState.draft?.createdAt).toBe(demoProjectFixture.createdAt);
     expect(nextState.draft?.updatedAt).toBe(demoProjectFixture.updatedAt);
+    expect(nextState.history.past).toHaveLength(1);
+    expect(nextState.history.future).toEqual([]);
+  });
+
+  it("undoes and redoes meaningful commits and clears redo after a new edit", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editingDraftReplaced({ ...demoProjectFixture, name: "First" })
+    );
+    state = projectEditorReducer(
+      state,
+      editingDraftReplaced({ ...demoProjectFixture, name: "Second" })
+    );
+    expect(state.history.past).toHaveLength(2);
+
+    state = projectEditorReducer(state, editorUndoRequested());
+    expect(state.draft?.name).toBe("First");
+    expect(state.dirty).toBe(true);
+    state = projectEditorReducer(state, editorUndoRequested());
+    expect(state.draft?.name).toBe(demoProjectFixture.name);
+    expect(state.dirty).toBe(false);
+    state = projectEditorReducer(state, editorRedoRequested());
+    expect(state.draft?.name).toBe("First");
+
+    state = projectEditorReducer(
+      state,
+      editingDraftReplaced({ ...demoProjectFixture, name: "Branched" })
+    );
+    expect(state.history.future).toEqual([]);
+    expect(projectEditorReducer(state, editorRedoRequested())).toEqual(state);
+  });
+
+  it("keeps precision assistance and pointer previews out of Project history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorGridVisibilityChanged(true));
+    state = projectEditorReducer(state, editorGridSnappingChanged(true));
+    state = projectEditorReducer(state, editorGridSpacingChanged(25));
+    state = projectEditorReducer(state, editorActiveToolChanged("draw-wall"));
+    state = projectEditorReducer(
+      state,
+      editorDrawWallStarted({ point: { x: 10, z: 10 } })
+    );
+    state = projectEditorReducer(
+      state,
+      editorTransientPointerMoved({ point: { x: 20, z: 20 }, pointerId: 1 })
+    );
+
+    expect(state.precision).toEqual({
+      gridVisible: true,
+      snapToGrid: true,
+      gridSpacing: 25
+    });
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("bounds complete-Project history to the session limit", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    for (let index = 0; index < projectEditorHistoryLimit + 5; index += 1) {
+      state = projectEditorReducer(
+        state,
+        editingDraftReplaced({ ...demoProjectFixture, name: `Edit ${index}` })
+      );
+    }
+    expect(state.history.past).toHaveLength(projectEditorHistoryLimit);
+    expect(state.history.past[0]?.name).toBe("Edit 4");
   });
 
   it("rejects a draft replacement that changes a server-owned field", () => {
@@ -332,6 +423,23 @@ describe("Project editor state", () => {
     expect(
       projectEditorReducer(editingState, editingDraftReplaced(invalidDraft))
     ).toEqual(editingState);
+  });
+
+  it("does not record a semantically unchanged draft replacement", () => {
+    const editingState = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    const nextState = projectEditorReducer(
+      editingState,
+      editingDraftReplaced(structuredClone(demoProjectFixture))
+    );
+    expect(nextState).toEqual(editingState);
+    expect(nextState.history).toEqual({ past: [], future: [] });
+    expect(nextState.dirty).toBe(false);
   });
 
   it("clears a clean stale route session but keeps dirty work available to the guard", () => {

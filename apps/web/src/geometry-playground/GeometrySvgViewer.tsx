@@ -1,5 +1,6 @@
 import {
   useRef,
+  type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
   type WheelEvent
@@ -43,13 +44,15 @@ export const geometrySvgViewport = Object.freeze({
 });
 
 /**
- * Read-only diagnostic SVG layer visibility flags.
+ * SVG layer visibility flags for architectural geometry and diagnostics.
  *
- * These options are local presentation state. Diagnostic overlays such as
- * bounds and labels are not domain or server state.
+ * These options are local presentation state and are not domain or server
+ * state. Room contours use the same ordered polygon points as Room fills.
  */
 export type GeometryDisplayOptions = {
   readonly polygons: boolean;
+  /** Whether ordered architectural Room polygon contours are visible. */
+  readonly roomContours: boolean;
   readonly boundaryEdges: boolean;
   readonly vertices: boolean;
   readonly centroids: boolean;
@@ -63,6 +66,24 @@ export type GeometryDisplayOptions = {
 export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
   Object.freeze({
     polygons: true,
+    roomContours: true,
+    boundaryEdges: true,
+    vertices: true,
+    centroids: true,
+    bounds: false,
+    entityLabels: false
+  });
+
+/**
+ * Default layer visibility for the Project architectural workspace.
+ *
+ * Architectural geometry is visible while bounding boxes and runtime labels
+ * remain disabled for the authoring workspace.
+ */
+export const projectGeometryDisplayOptions: GeometryDisplayOptions =
+  Object.freeze({
+    polygons: true,
+    roomContours: true,
     boundaryEdges: true,
     vertices: true,
     centroids: true,
@@ -98,6 +119,8 @@ export type GeometrySvgViewerProps = {
     pointerId: number
   ) => void;
   readonly onWallEndpointPointerCancel?: (pointerId: number) => void;
+  readonly onJunctionPointerDown?: (pointerId: number) => void;
+  readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
 };
 
 /** Pointer normalized into both SVG viewBox and canonical world coordinates. */
@@ -109,6 +132,11 @@ export type SvgViewportPointer = {
 
 /** Editor-only geometry rendered above the stable presentation model. */
 export type GeometryEditorOverlay = {
+  readonly roomFaceCandidates?: readonly {
+    readonly key: string;
+    readonly vertices: readonly WorldPointXZ[];
+    readonly selected: boolean;
+  }[];
   readonly drawWall?: {
     readonly start: WorldPointXZ;
     readonly end: WorldPointXZ;
@@ -124,6 +152,14 @@ export type GeometryEditorOverlay = {
     readonly draggingEndpoint?: WallEndpoint;
   };
   readonly snapCandidate?: DrawWallSnapCandidate;
+  readonly selectedJunction?: {
+    readonly position: WorldPointXZ;
+    readonly previewPosition: WorldPointXZ;
+  };
+  readonly grid?: {
+    readonly visible: boolean;
+    readonly spacing: number;
+  };
 };
 
 const defaultViewerInteraction: ProjectEditorInteraction = Object.freeze({
@@ -154,7 +190,9 @@ export function GeometrySvgViewer({
   onEditorPointerMove,
   onWallEndpointPointerDown,
   onWallEndpointPointerUp,
-  onWallEndpointPointerCancel
+  onWallEndpointPointerCancel,
+  onJunctionPointerDown,
+  onRoomFaceCandidateClick
 }: GeometrySvgViewerProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const bounds = presentationModel.bounds;
@@ -170,7 +208,7 @@ export function GeometrySvgViewer({
   const vertexRadius = Math.max(3, Math.min(6, viewport.zoom * 5));
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
-  if (!bounds) {
+  if (!bounds && !interaction.drawWallEnabled) {
     return (
       <div className="geometry-empty-state" role="status">
         {t("viewer.empty")}
@@ -310,6 +348,17 @@ export function GeometrySvgViewer({
     onWallEndpointPointerDown?.(endpoint, event.pointerId);
   };
 
+  const handleJunctionPointerDown = (event: PointerEvent<SVGCircleElement>) => {
+    if (!interaction.wallEndpointEditingEnabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    endpointPointerIdRef.current = event.pointerId;
+    svg.setPointerCapture(event.pointerId);
+    onJunctionPointerDown?.(event.pointerId);
+  };
+
   const handleBackgroundClick = (event: MouseEvent<SVGRectElement>) => {
     if (!interaction.selectionEnabled) {
       return;
@@ -384,6 +433,35 @@ export function GeometrySvgViewer({
         onClick={handleBackgroundClick}
       />
 
+      {editorOverlay?.grid?.visible && editorOverlay.grid.spacing > 0 ? (
+        <GeometryGridLayer spacing={editorOverlay.grid.spacing} transform={transform} />
+      ) : null}
+
+      {options.bounds ? (
+        <g
+          data-layer="polygon-bounds"
+          data-diagnostic="true"
+          className="geometry-diagnostic-layer"
+          aria-hidden="true"
+        >
+          {presentationModel.polygons.map((polygon) => {
+            const rect = polygon.screenBounds;
+
+            return (
+              <rect
+                key={polygon.geometryId}
+                data-testid="polygon-bounds"
+                className="geometry-polygon-bounds"
+                x={formatSvgNumber(rect.x)}
+                y={formatSvgNumber(rect.y)}
+                width={formatSvgNumber(rect.width)}
+                height={formatSvgNumber(rect.height)}
+              />
+            );
+          })}
+        </g>
+      ) : null}
+
       {options.polygons ? (
         <g data-layer="polygons">
           {presentationModel.polygons.map((polygon) => {
@@ -421,23 +499,17 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
-      {options.bounds ? (
-        <g data-layer="polygon-bounds">
-          {presentationModel.polygons.map((polygon) => {
-            const rect = polygon.screenBounds;
-
-            return (
-              <rect
-                key={polygon.geometryId}
-                data-testid="polygon-bounds"
-                className="geometry-polygon-bounds"
-                x={formatSvgNumber(rect.x)}
-                y={formatSvgNumber(rect.y)}
-                width={formatSvgNumber(rect.width)}
-                height={formatSvgNumber(rect.height)}
-              />
-            );
-          })}
+      {options.roomContours ? (
+        <g data-layer="room-contours">
+          {presentationModel.polygons.map((polygon) => (
+            <polygon
+              key={polygon.geometryId}
+              data-testid="room-contour"
+              data-source-room-id={polygon.sourceRoomId}
+              className={getEntityClassName("geometry-room-contour", polygon)}
+              points={polygon.svgPoints}
+            />
+          ))}
         </g>
       ) : null}
 
@@ -573,6 +645,8 @@ export function GeometrySvgViewer({
         transform={transform}
         endpointEditingEnabled={interaction.wallEndpointEditingEnabled}
         onEndpointPointerDown={handleEndpointPointerDown}
+        onJunctionPointerDown={handleJunctionPointerDown}
+        onRoomFaceCandidateClick={onRoomFaceCandidateClick}
       />
     </svg>
   );
@@ -582,7 +656,9 @@ function GeometryEditorOverlayLayer({
   overlay,
   transform,
   endpointEditingEnabled,
-  onEndpointPointerDown
+  onEndpointPointerDown,
+  onJunctionPointerDown,
+  onRoomFaceCandidateClick
 }: {
   readonly overlay?: GeometryEditorOverlay;
   readonly transform: ReturnType<typeof createViewportTransform2D>;
@@ -591,6 +667,8 @@ function GeometryEditorOverlayLayer({
     event: PointerEvent<SVGCircleElement>,
     endpoint: WallEndpoint
   ) => void;
+  readonly onJunctionPointerDown: (event: PointerEvent<SVGCircleElement>) => void;
+  readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const drawStart = overlay?.drawWall
@@ -608,9 +686,43 @@ function GeometryEditorOverlayLayer({
   const snapPoint = overlay?.snapCandidate
     ? transform.worldToScreen(overlay.snapCandidate.point)
     : undefined;
+  const junctionPoint = overlay?.selectedJunction
+    ? transform.worldToScreen(overlay.selectedJunction.previewPosition)
+    : undefined;
 
   return (
     <g data-layer="editor-overlay">
+      {overlay?.roomFaceCandidates?.length ? (
+        <g data-layer="room-face-candidates">
+          {overlay.roomFaceCandidates.map((face) => (
+            <polygon
+              key={face.key}
+              data-testid="room-face-candidate"
+              data-face-key={face.key}
+              className={`geometry-room-face-candidate geometry-room-face-candidate--focusable${
+                face.selected ? " geometry-room-face-candidate--selected" : ""
+              }`}
+              points={face.vertices.map((vertex) => {
+                const point = transform.worldToScreen(vertex);
+                return `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`;
+              }).join(" ")}
+              role="button"
+              aria-label={t("selection.selectRoomRegion")}
+              tabIndex={0}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRoomFaceCandidateClick?.(face.key);
+              }}
+              onKeyDown={(event: KeyboardEvent<SVGPolygonElement>) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                onRoomFaceCandidateClick?.(face.key);
+              }}
+            />
+          ))}
+        </g>
+      ) : null}
       {drawStart && drawEnd ? (
         <g aria-hidden="true" data-testid="draw-wall-preview">
           <line
@@ -634,7 +746,7 @@ function GeometryEditorOverlayLayer({
           />
         </g>
       ) : null}
-      {snapPoint && overlay?.snapCandidate ? (
+      {snapPoint && overlay?.snapCandidate && overlay.snapCandidate.kind !== "free" ? (
         <g aria-hidden="true" data-testid="draw-wall-snap-marker">
           <circle
             className={`geometry-wall-snap-marker geometry-wall-snap-marker--${overlay.snapCandidate.kind}`}
@@ -650,6 +762,27 @@ function GeometryEditorOverlayLayer({
               r="3"
             />
           ) : null}
+        </g>
+      ) : null}
+      {junctionPoint && overlay?.selectedJunction && endpointEditingEnabled ? (
+        <g data-testid="selected-junction-overlay">
+          <circle
+            className="geometry-wall-endpoint-hit-target"
+            role="button"
+            aria-label={t("selection.moveJunction")}
+            tabIndex={0}
+            cx={formatSvgNumber(junctionPoint.x)}
+            cy={formatSvgNumber(junctionPoint.y)}
+            r="12"
+            onPointerDown={onJunctionPointerDown}
+          />
+          <circle
+            className="geometry-wall-endpoint"
+            aria-hidden="true"
+            cx={formatSvgNumber(junctionPoint.x)}
+            cy={formatSvgNumber(junctionPoint.y)}
+            r="6"
+          />
         </g>
       ) : null}
       {selectedStart && selectedEnd && overlay?.selectedWall ? (
@@ -718,6 +851,37 @@ function GeometryEditorOverlayLayer({
           ) : null}
         </g>
       ) : null}
+    </g>
+  );
+}
+
+function GeometryGridLayer({
+  spacing,
+  transform
+}: {
+  readonly spacing: number;
+  readonly transform: ReturnType<typeof createViewportTransform2D>;
+}) {
+  const screenSpacing = Math.abs(transform.scaleLength(spacing));
+  if (!Number.isFinite(screenSpacing) || screenSpacing < 2) return null;
+  return (
+    <g data-layer="editor-grid" aria-hidden="true">
+      <defs>
+        <pattern
+          id="project-editor-grid-pattern"
+          width={formatSvgNumber(screenSpacing)}
+          height={formatSvgNumber(screenSpacing)}
+          patternUnits="userSpaceOnUse"
+          x={formatSvgNumber(transform.offsetX % screenSpacing)}
+          y={formatSvgNumber(transform.offsetY % screenSpacing)}
+        >
+          <path
+            className="geometry-editor-grid-line"
+            d={`M ${formatSvgNumber(screenSpacing)} 0 L 0 0 0 ${formatSvgNumber(screenSpacing)}`}
+          />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#project-editor-grid-pattern)" />
     </g>
   );
 }

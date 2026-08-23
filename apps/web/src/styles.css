@@ -677,6 +677,13 @@ img {
   justify-content: space-between;
   min-height: 52px;
   padding: 6px 10px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.project-editor-toolbar__precision {
+  align-items: center;
+  margin-left: auto;
 }
 
 .project-editor-toolbar .MuiToggleButton-root {
@@ -825,6 +832,16 @@ img {
     stroke 130ms ease;
 }
 
+.geometry-room-contour {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(138, 111, 158, 0.72);
+  stroke-dasharray: 6 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
 .geometry-edge {
   pointer-events: none;
   stroke: #27322e;
@@ -870,10 +887,12 @@ img {
 }
 .geometry-polygon-bounds {
   fill: none;
+  opacity: 0.3;
   pointer-events: none;
   stroke: #8a6f9e;
-  stroke-dasharray: 7 5;
-  stroke-width: 1.7;
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+  stroke-width: 1;
 }
 .geometry-entity-hovered {
   filter: drop-shadow(0 0 4px rgba(199, 85, 50, 0.38));
@@ -890,6 +909,38 @@ img {
   stroke: var(--casa-terracotta);
   stroke-linecap: round;
   stroke-width: 5;
+}
+
+.geometry-editor-grid-line {
+  fill: none;
+  stroke: rgba(83, 103, 86, 0.2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-room-face-candidate {
+  cursor: pointer;
+  fill: rgba(198, 113, 87, 0.1);
+  outline: none;
+  stroke: rgba(166, 85, 62, 0.72);
+  stroke-dasharray: 7 5;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-room-face-candidate--focusable:focus-visible {
+  fill: rgba(72, 102, 90, 0.22);
+  outline: none;
+  stroke: var(--casa-sage-dark);
+  stroke-dasharray: none;
+  stroke-width: 3;
+}
+
+.geometry-room-face-candidate:hover,
+.geometry-room-face-candidate--selected {
+  fill: rgba(198, 113, 87, 0.24);
+  stroke: #a6553e;
+  stroke-width: 2.5;
 }
 
 .geometry-wall-preview {
@@ -913,7 +964,11 @@ img {
   stroke-width: 2.5;
 }
 
-.geometry-wall-snap-marker--wall-interior {
+.geometry-wall-snap-marker--wall-interior,
+.geometry-wall-snap-marker--wall-midpoint,
+.geometry-wall-snap-marker--wall-intersection,
+.geometry-wall-snap-marker--grid,
+.geometry-wall-snap-marker--orthogonal {
   fill: rgba(199, 85, 50, 0.2);
 }
 

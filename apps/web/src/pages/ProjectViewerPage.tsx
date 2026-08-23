@@ -1,9 +1,14 @@
 import { GeometryEngine, LevelGeometry } from "@casastudio/geometry";
 import {
   createConnectedWall,
+  createRoom,
+  classifyLevelRoomTopology,
   deleteWallAndCollapseRedundantTopology,
+  moveJunction,
   moveWallEndpoint,
+  reconcileRoomSubdivision,
   updateWallProperties,
+  ValidationErrorCode,
   type Project,
   type Wall,
   type WallEndpoint
@@ -18,11 +23,14 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputLabel,
   MenuItem,
   Paper,
   Select,
+  Switch,
+  TextField,
   Snackbar,
   Stack,
   Tab,
@@ -43,6 +51,7 @@ import KeyboardRoundedIcon from "@mui/icons-material/KeyboardRounded";
 import NearMeRoundedIcon from "@mui/icons-material/NearMeRounded";
 import PanToolAltRoundedIcon from "@mui/icons-material/PanToolAltRounded";
 import RedoRoundedIcon from "@mui/icons-material/RedoRounded";
+import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
 import UndoRoundedIcon from "@mui/icons-material/UndoRounded";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import {
@@ -79,8 +88,8 @@ import {
 import { collectLevelBounds } from "../geometry-playground/geometry-svg-helpers";
 import { getGeometryViewerShortcutAction } from "../geometry-playground/geometry-viewer-shortcuts";
 import {
-  defaultGeometryDisplayOptions,
   geometrySvgViewport,
+  projectGeometryDisplayOptions,
   type GeometryDisplayOptions,
   type GeometryEditorOverlay,
   type SvgViewportPointer
@@ -116,10 +125,16 @@ import {
   editorDrawWallPointerMoved,
   editorDrawWallStarted,
   editorEndpointDragStarted,
+  editorGridSnappingChanged,
+  editorGridSpacingChanged,
+  editorGridVisibilityChanged,
+  editorJunctionDragStarted,
+  editorRedoRequested,
   editorSelectionChanged,
   editorSelectionCleared,
   editorTransientInteractionCleared,
   editorTransientPointerMoved,
+  editorUndoRequested,
   projectRouteChanged,
   projectRouteExited,
   selectEditorGeometrySelection,
@@ -134,10 +149,12 @@ import {
 } from "../state/project-editor-tools";
 import {
   createDraftWall,
+  createRoomIdentifier,
   createWallIdentifier,
   doesWallCloseCycle,
   findProjectWall,
   getWallEndpointEditingAvailability,
+  getIncidentWallIds,
   getWallEditingErrorKey,
   type WallEditingErrorKey
 } from "../state/project-wall-editing";
@@ -155,6 +172,18 @@ import {
 } from "./ProjectPersistenceDialogs";
 
 const emptySelectionState = createGeometrySelectionState();
+/** Localized feedback categories for explicit Room authoring actions. */
+type RoomEditingErrorKey =
+  | "errors.room.none"
+  | "errors.room.assigned"
+  | "errors.room.subdivision"
+  | "errors.room.doorReference"
+  | "errors.room.viewpointReference"
+  | "errors.room.staircaseReference"
+  | "errors.room.stale"
+  | "errors.room.geometry"
+  | "errors.room.invalid";
+type EditingErrorKey = WallEditingErrorKey | RoomEditingErrorKey;
 
 /** Renders the authoritative View and local-draft Edit workspace for one Project. */
 export function ProjectViewerPage() {
@@ -177,7 +206,7 @@ export function ProjectViewerPage() {
   const geometryQuery = useProjectGeometryQuery(projectId);
   const replaceProjectMutation = useReplaceProjectMutation();
   const [displayOptions, setDisplayOptions] = useState(
-    defaultGeometryDisplayOptions
+    projectGeometryDisplayOptions
   );
   const [selectedViewLevelId, setSelectedViewLevelId] = useState("");
   const [viewport, setViewport] = useState<ViewportState>(resetViewportState);
@@ -193,7 +222,8 @@ export function ProjectViewerPage() {
   >();
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [editingError, setEditingError] = useState<WallEditingErrorKey>();
+  const [editingError, setEditingError] = useState<EditingErrorKey>();
+  const [selectedRoomFaceKey, setSelectedRoomFaceKey] = useState<string>();
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
@@ -313,6 +343,56 @@ export function ProjectViewerPage() {
       editor.activeLevelId,
       selectedEditWall?.id
     );
+  const selectedEditVertex = useMemo(() => {
+    if (
+      workspaceMode !== "edit" ||
+      !presentationResult?.ok ||
+      selectionState.selected.length !== 1 ||
+      selectionState.selected[0]?.kind !== "VERTEX"
+    ) return undefined;
+    return presentationResult.model.vertices.find(
+      (vertex) => vertex.geometryId === selectionState.selected[0]?.geometryId
+    );
+  }, [presentationResult, selectionState.selected, workspaceMode]);
+  const selectedJunctionWallIds = useMemo(
+    () =>
+      editor.draft && editor.activeLevelId && selectedEditVertex
+        ? getIncidentWallIds(
+            editor.draft,
+            editor.activeLevelId,
+            selectedEditVertex.coordinates
+          )
+        : [],
+    [editor.activeLevelId, editor.draft, selectedEditVertex]
+  );
+  const roomTopology = useMemo(
+    () =>
+      editor.draft && editor.activeLevelId
+        ? classifyLevelRoomTopology(editor.draft, editor.activeLevelId)
+        : undefined,
+    [editor.activeLevelId, editor.draft]
+  );
+  const actionableRoomFaces = useMemo(() => {
+    if (!roomTopology) return [];
+    const faces = new Map(roomTopology.unassigned.map((face) => [face.key, face]));
+    for (const subdivision of roomTopology.subdivisions) {
+      for (const face of subdivision.faces) faces.set(face.key, face);
+    }
+    return [...faces.values()].sort((first, second) => first.key.localeCompare(second.key));
+  }, [roomTopology]);
+
+  useEffect(() => {
+    if (
+      selectedRoomFaceKey &&
+      !actionableRoomFaces.some((face) => face.key === selectedRoomFaceKey)
+    ) {
+      setSelectedRoomFaceKey(undefined);
+    }
+  }, [actionableRoomFaces, selectedRoomFaceKey]);
+
+  useEffect(() => {
+    setSelectedRoomFaceKey(undefined);
+  }, [editor.activeLevelId, projectId, workspaceMode]);
 
   const editorOverlay = useMemo<GeometryEditorOverlay | undefined>(() => {
     if (workspaceMode !== "edit") return undefined;
@@ -329,12 +409,20 @@ export function ProjectViewerPage() {
             transient.wallId === selectedEditWall.id &&
             transient.endpoint === "start"
               ? transient.currentPointerPoint
+              : transient?.kind === "move-junction" &&
+                  selectedEditWall.start.x === transient.position.x &&
+                  selectedEditWall.start.z === transient.position.z
+                ? transient.currentPointerPoint
               : selectedEditWall.start,
           end:
             transient?.kind === "move-wall-endpoint" &&
             transient.wallId === selectedEditWall.id &&
             transient.endpoint === "end"
               ? transient.currentPointerPoint
+              : transient?.kind === "move-junction" &&
+                  selectedEditWall.end.x === transient.position.x &&
+                  selectedEditWall.end.z === transient.position.z
+                ? transient.currentPointerPoint
               : selectedEditWall.end,
           draggingEndpoint:
             transient?.kind === "move-wall-endpoint" &&
@@ -345,6 +433,14 @@ export function ProjectViewerPage() {
       : undefined;
 
     return {
+      roomFaceCandidates:
+        editor.activeTool === null || editor.activeTool === "select"
+          ? actionableRoomFaces.map((face) => ({
+              key: face.key,
+              vertices: face.vertices,
+              selected: face.key === selectedRoomFaceKey
+            }))
+          : undefined,
       drawWall:
         transient?.kind === "draw-wall"
           ? {
@@ -353,13 +449,33 @@ export function ProjectViewerPage() {
             }
           : undefined,
       snapCandidate: editor.transient.snapCandidate,
-      selectedWall
+      selectedWall,
+      selectedJunction:
+        selectedEditVertex && selectedJunctionWallIds.length > 1
+          ? {
+              position: selectedEditVertex.coordinates,
+              previewPosition:
+                transient?.kind === "move-junction"
+                  ? transient.currentPointerPoint
+                  : selectedEditVertex.coordinates
+            }
+          : undefined,
+      grid: {
+        visible: editor.precision.gridVisible,
+        spacing: editor.precision.gridSpacing
+      }
     };
   }, [
     editor.transient.interaction,
     editor.transient.snapCandidate,
     selectedEditWall,
+    selectedEditVertex,
+    selectedJunctionWallIds,
     selectedWallEndpointAvailability,
+    editor.precision,
+    editor.activeTool,
+    actionableRoomFaces,
+    selectedRoomFaceKey,
     workspaceMode
   ]);
 
@@ -468,7 +584,24 @@ export function ProjectViewerPage() {
           ? resolveDrawWallSnapCandidate(
               pointer.svgPoint,
               presentationResult.model,
-              pointer.cssPixelsPerSvgUnit
+              {
+                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                worldPoint: pointer.worldPoint,
+                drawStart:
+                  editor.transient.interaction?.kind === "draw-wall"
+                    ? {
+                        worldPoint: editor.transient.interaction.startPoint,
+                        svgPoint: createViewportTransform2D(activeViewport).worldToScreen(
+                          editor.transient.interaction.startPoint
+                        )
+                      }
+                    : undefined,
+                grid: {
+                  enabled: editor.precision.snapToGrid,
+                  spacing: editor.precision.gridSpacing,
+                  worldToSvgScale: activeViewport.zoom
+                }
+              }
             )
           : undefined;
       const resolvedPoint = snapCandidate?.point ?? pointer.worldPoint;
@@ -483,19 +616,19 @@ export function ProjectViewerPage() {
       const result = createConnectedWall(editor.draft, {
         levelId: editor.activeLevelId,
         wall,
-        startConnection: interaction.startConnectionWallId
-          ? {
-              wallId: interaction.startConnectionWallId,
+        startConnections: interaction.startConnectionWallIds.map((wallId) => ({
+              wallId,
               newWallId: createWallIdentifier()
-            }
-          : undefined,
-        endConnection:
-          snapCandidate?.kind === "wall-interior"
-            ? {
-                wallId: snapCandidate.wallId,
-                newWallId: createWallIdentifier()
-              }
-            : undefined
+            })),
+        endConnections:
+          snapCandidate?.kind === "wall-interior" || snapCandidate?.kind === "wall-midpoint"
+            ? [{ wallId: snapCandidate.wallId, newWallId: createWallIdentifier() }]
+            : snapCandidate?.kind === "wall-intersection"
+              ? snapCandidate.wallIds.map((wallId) => ({
+                  wallId,
+                  newWallId: createWallIdentifier()
+                }))
+              : []
       });
       dispatch(editorTransientInteractionCleared());
 
@@ -514,7 +647,9 @@ export function ProjectViewerPage() {
       editor.activeLevelId,
       editor.activeTool,
       editor.draft,
+      editor.precision,
       editor.transient.interaction,
+      activeViewport,
       presentationResult,
       saveInteractionBlocked,
       workspaceMode
@@ -536,7 +671,24 @@ export function ProjectViewerPage() {
         const snapCandidate = resolveDrawWallSnapCandidate(
           pointer.svgPoint,
           presentationResult.model,
-          pointer.cssPixelsPerSvgUnit
+          {
+            cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            worldPoint: pointer.worldPoint,
+            drawStart:
+              editor.transient.interaction?.kind === "draw-wall"
+                ? {
+                    worldPoint: editor.transient.interaction.startPoint,
+                    svgPoint: createViewportTransform2D(activeViewport).worldToScreen(
+                      editor.transient.interaction.startPoint
+                    )
+                  }
+                : undefined,
+            grid: {
+              enabled: editor.precision.snapToGrid,
+              spacing: editor.precision.gridSpacing,
+              worldToSvgScale: activeViewport.zoom
+            }
+          }
         );
         dispatch(
           editorDrawWallPointerMoved({
@@ -556,7 +708,9 @@ export function ProjectViewerPage() {
     [
       dispatch,
       editor.activeTool,
+      editor.precision,
       editor.transient.interaction,
+      activeViewport,
       presentationResult,
       saveInteractionBlocked,
       workspaceMode
@@ -577,13 +731,58 @@ export function ProjectViewerPage() {
       }
 
       setEditingError(undefined);
+      const point = selectedEditWall[endpoint];
+      const endpointState = selectedWallEndpointAvailability[endpoint];
+      if (endpointState.topology === "shared-junction" && editor.draft) {
+        dispatch(
+          editorJunctionDragStarted({
+            levelId: editor.activeLevelId,
+            position: point,
+            incidentWallIds: getIncidentWallIds(editor.draft, editor.activeLevelId, point),
+            pointerId
+          })
+        );
+      } else {
+        dispatch(
+          editorEndpointDragStarted({
+            levelId: editor.activeLevelId,
+            wallId: selectedEditWall.id,
+            endpoint,
+            pointerId,
+            point
+          })
+        );
+      }
+    },
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.activeTool,
+      editor.draft,
+      selectedEditWall,
+      selectedWallEndpointAvailability,
+      saveInteractionBlocked,
+      workspaceMode
+    ]
+  );
+
+  const handleJunctionPointerDown = useCallback(
+    (pointerId: number) => {
+      if (
+        saveInteractionBlocked ||
+        workspaceMode !== "edit" ||
+        editor.activeTool !== "select" ||
+        !editor.activeLevelId ||
+        !selectedEditVertex ||
+        selectedJunctionWallIds.length < 2
+      ) return;
+      setEditingError(undefined);
       dispatch(
-        editorEndpointDragStarted({
+        editorJunctionDragStarted({
           levelId: editor.activeLevelId,
-          wallId: selectedEditWall.id,
-          endpoint,
-          pointerId,
-          point: selectedEditWall[endpoint]
+          position: selectedEditVertex.coordinates,
+          incidentWallIds: selectedJunctionWallIds,
+          pointerId
         })
       );
     },
@@ -591,9 +790,9 @@ export function ProjectViewerPage() {
       dispatch,
       editor.activeLevelId,
       editor.activeTool,
-      selectedEditWall,
-      selectedWallEndpointAvailability,
       saveInteractionBlocked,
+      selectedEditVertex,
+      selectedJunctionWallIds,
       workspaceMode
     ]
   );
@@ -605,30 +804,37 @@ export function ProjectViewerPage() {
         saveInteractionBlocked ||
         workspaceMode !== "edit" ||
         !editor.draft ||
-        interaction?.kind !== "move-wall-endpoint" ||
+        (interaction?.kind !== "move-wall-endpoint" && interaction?.kind !== "move-junction") ||
         interaction.pointerId !== pointerId
       ) {
         return;
       }
 
-      const availability = getWallEndpointEditingAvailability(
-        editor.draft,
-        interaction.levelId,
-        interaction.wallId
-      );
-      if (!availability?.[interaction.endpoint].draggable) {
-        dispatch(editorTransientInteractionCleared());
-        return;
-      }
-
-      const result = moveWallEndpoint(editor.draft, {
-        levelId: interaction.levelId,
-        wallId: interaction.wallId,
-        endpoint: interaction.endpoint,
-        position: point
-      });
+      const result = interaction.kind === "move-junction"
+        ? moveJunction(editor.draft, {
+            levelId: interaction.levelId,
+            position: interaction.position,
+            destination: point,
+            incidentWallIds: interaction.incidentWallIds
+          })
+        : (() => {
+            const availability = getWallEndpointEditingAvailability(
+              editor.draft,
+              interaction.levelId,
+              interaction.wallId
+            );
+            if (!availability?.[interaction.endpoint].draggable ||
+                availability[interaction.endpoint].topology !== "standalone") return undefined;
+            return moveWallEndpoint(editor.draft, {
+              levelId: interaction.levelId,
+              wallId: interaction.wallId,
+              endpoint: interaction.endpoint,
+              position: point
+            });
+          })();
       dispatch(editorTransientInteractionCleared());
 
+      if (!result) return;
       if (result.ok) {
         setEditingError(undefined);
         dispatch(editingDraftReplaced(result.project));
@@ -649,7 +855,7 @@ export function ProjectViewerPage() {
     (pointerId: number) => {
       const interaction = editor.transient.interaction;
       if (
-        interaction?.kind === "move-wall-endpoint" &&
+        (interaction?.kind === "move-wall-endpoint" || interaction?.kind === "move-junction") &&
         interaction.pointerId === pointerId
       ) {
         dispatch(editorTransientInteractionCleared());
@@ -729,6 +935,75 @@ export function ProjectViewerPage() {
     ]
   );
 
+  const handleCreateRoom = useCallback(() => {
+    if (
+      saveInteractionBlocked ||
+      workspaceMode !== "edit" ||
+      !editor.draft ||
+      !editor.activeLevelId
+    ) return;
+    const selectedFace = actionableRoomFaces.find(
+      (face) => face.key === selectedRoomFaceKey
+    );
+    if (!selectedFace || !roomTopology) {
+      setEditingError("errors.room.none");
+      return;
+    }
+    const level = editor.draft.building.levels
+      .find((candidate) => candidate.id === editor.activeLevelId)!;
+    const subdivision = roomTopology.subdivisions.find((candidate) =>
+      candidate.faces.some((face) => face.key === selectedFace.key)
+    );
+    const result = subdivision
+      ? reconcileRoomSubdivision(editor.draft, {
+          levelId: editor.activeLevelId,
+          roomId: subdivision.roomId,
+          expectedFaceKeys: subdivision.faces.map((face) => face.key),
+          newRoomAssignments: subdivision.faces
+            .filter((face) => face.key !== subdivision.preservedFaceKey)
+            .map((face, index) => ({
+              faceKey: face.key,
+              room: {
+                id: createRoomIdentifier(),
+                name: `Room ${level.rooms.length + index + 1}`,
+                type: "OTHER" as const
+              }
+            }))
+        })
+      : roomTopology.unassigned.some((face) => face.key === selectedFace.key)
+        ? createRoom(editor.draft, {
+            levelId: editor.activeLevelId,
+            room: {
+              id: createRoomIdentifier(),
+              name: `Room ${level.rooms.length + 1}`,
+              type: "OTHER",
+              boundary: [...selectedFace.boundary]
+            }
+          })
+        : undefined;
+    if (!result) {
+      setEditingError("errors.room.assigned");
+      return;
+    }
+    if (result.ok) {
+      setEditingError(undefined);
+      setSelectedRoomFaceKey(undefined);
+      dispatch(editorSelectionCleared());
+      dispatch(editingDraftReplaced(result.project));
+    } else {
+      setEditingError(getRoomEditingErrorKey(result.errors[0]?.code));
+    }
+  }, [
+    actionableRoomFaces,
+    dispatch,
+    editor.activeLevelId,
+    editor.draft,
+    roomTopology,
+    saveInteractionBlocked,
+    selectedRoomFaceKey,
+    workspaceMode
+  ]);
+
   useEffect(() => {
     if (!selectedLevel) {
       return;
@@ -736,6 +1011,23 @@ export function ProjectViewerPage() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (shortcutsOpen || saveInteractionBlocked) return;
+      const target = event.target as HTMLElement | null;
+      const isTextInput = target?.isContentEditable ||
+        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      const modifier = event.metaKey || event.ctrlKey;
+      if (workspaceMode === "edit" && modifier && !isTextInput) {
+        const key = event.key.toLowerCase();
+        if (key === "z") {
+          event.preventDefault();
+          dispatch(event.shiftKey ? editorRedoRequested() : editorUndoRequested());
+          return;
+        }
+        if (key === "y") {
+          event.preventDefault();
+          dispatch(editorRedoRequested());
+          return;
+        }
+      }
       const action = getGeometryViewerShortcutAction(event);
       if (!action) return;
       if (
@@ -756,6 +1048,8 @@ export function ProjectViewerPage() {
             editor.transient.snapCandidate !== undefined)
         ) {
           dispatch(editorTransientInteractionCleared());
+        } else if (workspaceMode === "edit" && selectedRoomFaceKey) {
+          setSelectedRoomFaceKey(undefined);
         } else {
           dispatch(
             workspaceMode === "edit"
@@ -781,6 +1075,7 @@ export function ProjectViewerPage() {
     editor.transient.snapCandidate,
     selectedLevel,
     selectedEditWall,
+    selectedRoomFaceKey,
     saveInteractionBlocked,
     shortcutsOpen,
     workspaceMode
@@ -1248,6 +1543,19 @@ export function ProjectViewerPage() {
           activeTool={editor.activeTool}
           disabled={saveInteractionBlocked}
           onToolChange={(tool) => dispatch(editorActiveToolChanged(tool))}
+          canUndo={editor.history.past.length > 0}
+          canRedo={editor.history.future.length > 0}
+          onUndo={() => dispatch(editorUndoRequested())}
+          onRedo={() => dispatch(editorRedoRequested())}
+          roomCandidateCount={actionableRoomFaces.length}
+          roomCandidateSelected={Boolean(selectedRoomFaceKey)}
+          onCreateRoom={handleCreateRoom}
+          gridVisible={editor.precision.gridVisible}
+          snapToGrid={editor.precision.snapToGrid}
+          gridSpacing={editor.precision.gridSpacing}
+          onGridVisibleChange={(visible) => dispatch(editorGridVisibilityChanged(visible))}
+          onSnapToGridChange={(enabled) => dispatch(editorGridSnappingChanged(enabled))}
+          onGridSpacingChange={(spacing) => dispatch(editorGridSpacingChanged(spacing))}
         />
       ) : null}
 
@@ -1291,6 +1599,11 @@ export function ProjectViewerPage() {
           onWallEndpointPointerDown={handleWallEndpointPointerDown}
           onWallEndpointPointerUp={handleWallEndpointPointerUp}
           onWallEndpointPointerCancel={handleWallEndpointPointerCancel}
+          onJunctionPointerDown={handleJunctionPointerDown}
+          onRoomFaceCandidateClick={(faceKey) => {
+            setSelectedRoomFaceKey(faceKey);
+            dispatch(editorSelectionCleared());
+          }}
         />
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
@@ -1365,13 +1678,39 @@ type ProjectEditorToolbarProps = {
   readonly activeTool: ProjectEditorTool | null;
   readonly disabled: boolean;
   readonly onToolChange: (tool: ProjectEditorTool | null) => void;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  readonly onUndo: () => void;
+  readonly onRedo: () => void;
+  readonly roomCandidateCount: number;
+  readonly roomCandidateSelected: boolean;
+  readonly onCreateRoom: () => void;
+  readonly gridVisible: boolean;
+  readonly snapToGrid: boolean;
+  readonly gridSpacing: number;
+  readonly onGridVisibleChange: (visible: boolean) => void;
+  readonly onSnapToGridChange: (enabled: boolean) => void;
+  readonly onGridSpacingChange: (spacing: number) => void;
 };
 
 /** Renders enabled editor tools and explicitly disabled future actions. */
 function ProjectEditorToolbar({
   activeTool,
   disabled,
-  onToolChange
+  onToolChange,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  roomCandidateCount,
+  roomCandidateSelected,
+  onCreateRoom,
+  gridVisible,
+  snapToGrid,
+  gridSpacing,
+  onGridVisibleChange,
+  onSnapToGridChange,
+  onGridSpacingChange
 }: ProjectEditorToolbarProps) {
   const { t } = useCasaTranslation("project-viewer");
   const icons = {
@@ -1424,8 +1763,51 @@ function ProjectEditorToolbar({
       </ToggleButtonGroup>
 
       <Stack direction="row" spacing={0.5}>
-        <FutureToolButton label={t("tools.undo")} icon={<UndoRoundedIcon />} />
-        <FutureToolButton label={t("tools.redo")} icon={<RedoRoundedIcon />} />
+        <Button
+          disabled={disabled || !canUndo}
+          startIcon={<UndoRoundedIcon />}
+          onClick={onUndo}
+          size="small"
+        >
+          {t("tools.undo")}
+        </Button>
+        <Button
+          disabled={disabled || !canRedo}
+          startIcon={<RedoRoundedIcon />}
+          onClick={onRedo}
+          size="small"
+        >
+          {t("tools.redo")}
+        </Button>
+        <Button
+          disabled={disabled || !roomCandidateSelected}
+          aria-label={t("tools.createRoom")}
+          startIcon={<MeetingRoomRoundedIcon />}
+          onClick={onCreateRoom}
+          size="small"
+        >
+          {t("tools.createRoom")}
+          {roomCandidateCount > 0 ? ` (${roomCandidateCount})` : ""}
+        </Button>
+      </Stack>
+      <Stack direction="row" spacing={1} className="project-editor-toolbar__precision">
+        <FormControlLabel
+          control={<Switch size="small" checked={gridVisible} onChange={(_event, checked) => onGridVisibleChange(checked)} />}
+          label={t("precision.grid")}
+        />
+        <FormControlLabel
+          control={<Switch size="small" checked={snapToGrid} onChange={(_event, checked) => onSnapToGridChange(checked)} />}
+          label={t("precision.snapGrid")}
+        />
+        <TextField
+          size="small"
+          type="number"
+          label={t("precision.spacing")}
+          value={gridSpacing}
+          slotProps={{ htmlInput: { min: 1, step: 1 } }}
+          onChange={(event) => onGridSpacingChange(Number(event.target.value))}
+          sx={{ width: 110 }}
+        />
       </Stack>
     </Box>
   );
@@ -1470,37 +1852,11 @@ function ShortcutsHelpControl({
             <Typography variant="body2" color="text.secondary">
               {t("shortcuts.description")}
             </Typography>
-            <GeometryShortcutGuide showTitle={false} />
+            <GeometryShortcutGuide showTitle={false} includeEditingShortcuts />
           </Stack>
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function FutureToolButton({
-  label,
-  icon
-}: {
-  readonly label: string;
-  readonly icon: ReactNode;
-}) {
-  const { t } = useCasaTranslation("project-viewer");
-  const accessibleLabel = t("tools.comingSoon", { tool: label });
-
-  return (
-    <Tooltip title={accessibleLabel}>
-      <span>
-        <Button
-          disabled
-          startIcon={icon}
-          aria-label={accessibleLabel}
-          size="small"
-        >
-          {label}
-        </Button>
-      </span>
-    </Tooltip>
   );
 }
 
@@ -1625,6 +1981,7 @@ function ProjectWorkspaceInspector({
           <GeometryLayerControls
             options={options}
             onOptionsChange={onOptionsChange}
+            showDiagnostics={false}
           />
         ) : tab === "selection" ? (
           mode === "edit" && units ? (
@@ -1812,6 +2169,35 @@ type ErrorTranslator = (
   key: string,
   options?: Record<string, unknown>
 ) => string;
+
+/** Maps Room-authoring validation codes to localized presentation messages. */
+function getRoomEditingErrorKey(
+  code: ValidationErrorCode | undefined
+): RoomEditingErrorKey {
+  switch (code) {
+    case ValidationErrorCode.DUPLICATE_ROOM_BOUNDARY:
+      return "errors.room.assigned";
+    case ValidationErrorCode.ROOM_SUBDIVISION_NOT_FOUND:
+    case ValidationErrorCode.INVALID_ROOM_SUBDIVISION_INPUT:
+      return "errors.room.subdivision";
+    case ValidationErrorCode.ROOM_PARTITION_OPENING_AMBIGUOUS:
+      return "errors.room.doorReference";
+    case ValidationErrorCode.ROOM_SUBDIVISION_DOOR_REFERENCE_AMBIGUOUS:
+      return "errors.room.doorReference";
+    case ValidationErrorCode.ROOM_SUBDIVISION_VIEWPOINT_REFERENCE_AMBIGUOUS:
+      return "errors.room.viewpointReference";
+    case ValidationErrorCode.ROOM_SUBDIVISION_STAIRCASE_REFERENCE_AMBIGUOUS:
+      return "errors.room.staircaseReference";
+    case ValidationErrorCode.STALE_ROOM_TOPOLOGY:
+      return "errors.room.stale";
+    case ValidationErrorCode.INVALID_ROOM_BOUNDARY:
+    case ValidationErrorCode.PROJECT_SCHEMA_VALIDATION_FAILED:
+    case ValidationErrorCode.SELF_INTERSECTING_ROOM_BOUNDARY:
+      return "errors.room.geometry";
+    default:
+      return "errors.room.invalid";
+  }
+}
 
 function describeError(error: unknown, t: ErrorTranslator) {
   if (error instanceof ApiAuthenticationUnavailableError) {

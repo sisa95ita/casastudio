@@ -84,6 +84,8 @@ export type WallInteriorConnection = {
 export type CreateConnectedWallInput = CreateWallInput & {
   readonly startConnection?: WallInteriorConnection;
   readonly endConnection?: WallInteriorConnection;
+  readonly startConnections?: readonly WallInteriorConnection[];
+  readonly endConnections?: readonly WallInteriorConnection[];
 };
 
 /**
@@ -451,31 +453,28 @@ export function createConnectedWall(
   project: Project,
   input: CreateConnectedWallInput
 ): ProjectEditingResult {
-  if (
-    input.startConnection?.wallId === input.endConnection?.wallId &&
-    input.startConnection !== undefined
-  ) {
+  const startConnections = [
+    ...(input.startConnection ? [input.startConnection] : []),
+    ...(input.startConnections ?? [])
+  ];
+  const endConnections = [
+    ...(input.endConnection ? [input.endConnection] : []),
+    ...(input.endConnections ?? [])
+  ];
+  const allConnections = [...startConnections, ...endConnections];
+  if (new Set(allConnections.map((connection) => connection.wallId)).size !== allConnections.length) {
     return failure({
       code: ValidationErrorCode.WALL_SPLIT_POINT_NOT_ON_WALL,
       path: "wall",
-      message: "A connected Wall cannot split the same source Wall at both endpoints."
+      message: "A connected Wall cannot split the same source Wall more than once."
     });
   }
 
   let candidate = project;
   const connections = [
-    input.startConnection
-      ? { connection: input.startConnection, point: input.wall.start }
-      : undefined,
-    input.endConnection
-      ? { connection: input.endConnection, point: input.wall.end }
-      : undefined
-  ].filter(
-    (entry): entry is {
-      readonly connection: WallInteriorConnection;
-      readonly point: Point2D;
-    } => entry !== undefined
-  );
+    ...startConnections.map((connection) => ({ connection, point: input.wall.start })),
+    ...endConnections.map((connection) => ({ connection, point: input.wall.end }))
+  ];
 
   for (const { connection, point } of connections) {
     const splitResult = splitWall(candidate, {

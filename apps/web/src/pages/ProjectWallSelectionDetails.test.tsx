@@ -128,7 +128,7 @@ describe("ProjectWallSelectionDetails", () => {
     );
 
     expect(
-      screen.getByText(/endpoints cannot be moved independently yet/i)
+      screen.getByText(/move all connected walls together/i)
     ).toBeTruthy();
     expect(
       screen.getByRole("spinbutton", { name: "Height (cm)" })
