@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 
 import { useCasaTranslation } from "../i18n";
 import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
+import type { ArchitecturalPresentationModel2D } from "./architectural-presentation-model-2d";
 import type { GeometrySelectionState } from "./geometry-selection-state";
 import {
   type GeometryDisplayOptions,
@@ -31,6 +32,7 @@ export type GeometryViewerPanelProps = {
   readonly title: string;
   readonly headingId: string;
   readonly presentationModel: GeometryPresentationModel2D;
+  readonly architecturalModel?: ArchitecturalPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
   readonly selectionState: GeometrySelectionState;
@@ -59,6 +61,10 @@ export type GeometryViewerPanelProps = {
   ) => void;
   readonly onWallEndpointPointerCancel?: (pointerId: number) => void;
   readonly onJunctionPointerDown?: (pointerId: number) => void;
+  readonly onOpeningPointerDown?: (openingId: string, wallId: string, pointerId: number) => void;
+  readonly onOpeningDragThresholdCrossed?: (pointerId: number) => void;
+  readonly onOpeningPointerUp?: (pointerId: number, dragged: boolean) => void;
+  readonly onOpeningPointerCancel?: (pointerId: number) => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
 };
 
@@ -67,6 +73,7 @@ export function GeometryViewerPanel({
   title,
   headingId,
   presentationModel,
+  architecturalModel,
   options,
   viewport,
   selectionState,
@@ -84,6 +91,10 @@ export function GeometryViewerPanel({
   onWallEndpointPointerUp,
   onWallEndpointPointerCancel,
   onJunctionPointerDown,
+  onOpeningPointerDown,
+  onOpeningDragThresholdCrossed,
+  onOpeningPointerUp,
+  onOpeningPointerCancel,
   onRoomFaceCandidateClick
 }: GeometryViewerPanelProps) {
   const { t } = useCasaTranslation("geometry-playground");
@@ -139,6 +150,7 @@ export function GeometryViewerPanel({
       <Box className="geometry-viewer-panel__canvas">
         <GeometrySvgViewer
           presentationModel={presentationModel}
+          architecturalModel={architecturalModel}
           options={options}
           viewport={viewport}
           selectionState={selectionState}
@@ -152,6 +164,10 @@ export function GeometryViewerPanel({
           onWallEndpointPointerUp={onWallEndpointPointerUp}
           onWallEndpointPointerCancel={onWallEndpointPointerCancel}
           onJunctionPointerDown={onJunctionPointerDown}
+          onOpeningPointerDown={onOpeningPointerDown}
+          onOpeningDragThresholdCrossed={onOpeningDragThresholdCrossed}
+          onOpeningPointerUp={onOpeningPointerUp}
+          onOpeningPointerCancel={onOpeningPointerCancel}
           onRoomFaceCandidateClick={onRoomFaceCandidateClick}
         />
         <Box className="geometry-canvas-hint">

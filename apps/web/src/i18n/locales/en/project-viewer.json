@@ -75,6 +75,8 @@
     "label": "Editing tools",
     "select": "Select",
     "draw-wall": "Draw Wall",
+    "door": "Door",
+    "window": "Window",
     "pan": "Pan",
     "undo": "Undo",
     "redo": "Redo",
@@ -83,6 +85,8 @@
     "help": {
       "select": "Select elements in the plan.",
       "draw-wall": "Draw connected walls as a continuous chain.",
+      "door": "Place a door on a wall.",
+      "window": "Place a window on a wall.",
       "pan": "Move around the plan without changing geometry."
     }
   },
@@ -190,6 +194,9 @@
       "stale": "The room topology changed. Select the region again and retry.",
       "geometry": "The resulting room geometry is invalid.",
       "invalid": "The room could not be created from the available boundary."
+    },
+    "opening": {
+      "invalid": "The opening cannot be placed or changed because it would violate wall clearance, collision, or dimension constraints."
     }
   },
   "wall": {
@@ -225,6 +232,22 @@
       "position": "Position",
       "connectedWalls": "Connected walls",
       "connectedWallIds": "Connected wall IDs"
+    }
+  },
+  "opening": {
+    "selectionTitle": "Opening",
+    "door": "Door",
+    "window": "Window",
+    "flipHinge": "Flip hinge",
+    "flipSwing": "Flip swing",
+    "delete": "Delete Opening",
+    "labels": {
+      "type": "Type",
+      "wall": "Owning wall",
+      "width": "Width",
+      "height": "Height",
+      "sillHeight": "Sill height",
+      "offset": "Position from wall start"
     }
   }
 }

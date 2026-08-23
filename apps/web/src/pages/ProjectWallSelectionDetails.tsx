@@ -12,6 +12,7 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { useCasaTranslation } from "../i18n";
 import type { WallEndpointEditingAvailability } from "../state/project-wall-editing";
+import { formatEditorMeasurement, normalizeEditorMeasurement } from "./editor-measurement";
 
 /** Displays canonical Wall details and commits supported scalar property edits. */
 export function ProjectWallSelectionDetails({
@@ -161,21 +162,25 @@ function WallMeasurementField({
   readonly value: number;
   readonly onCommit: (value: number) => boolean;
 }) {
-  const [draftValue, setDraftValue] = useState(String(value));
+  const [draftValue, setDraftValue] = useState(formatEditorMeasurement(value));
 
-  useEffect(() => setDraftValue(String(value)), [value]);
+  useEffect(() => setDraftValue(formatEditorMeasurement(value)), [value]);
 
   const commit = () => {
-    const parsed = Number(draftValue);
-    if (parsed === value) return;
-    if (!onCommit(parsed)) setDraftValue(String(value));
+    const normalized = normalizeEditorMeasurement(Number(draftValue));
+    if (normalized === normalizeEditorMeasurement(value)) {
+      setDraftValue(formatEditorMeasurement(value));
+      return;
+    }
+    if (!onCommit(normalized)) setDraftValue(formatEditorMeasurement(value));
+    else setDraftValue(formatEditorMeasurement(normalized));
   };
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       commit();
       event.currentTarget.blur();
     } else if (event.key === "Escape") {
-      setDraftValue(String(value));
+      setDraftValue(formatEditorMeasurement(value));
       event.currentTarget.blur();
     }
   };
@@ -200,7 +205,7 @@ function WallMeasurementField({
 }
 
 const formatMeasurement = (value: number, unit: string): string =>
-  `${Number(value.toFixed(2))} ${unit}`;
+  `${formatEditorMeasurement(value)} ${unit}`;
 
 const formatPoint = (point: Wall["start"], unit: string): string =>
-  `${Number(point.x.toFixed(2))}, ${Number(point.z.toFixed(2))} ${unit}`;
+  `${formatEditorMeasurement(point.x)}, ${formatEditorMeasurement(point.z)} ${unit}`;

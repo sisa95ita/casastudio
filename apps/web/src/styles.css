@@ -842,6 +842,126 @@ img {
   stroke-width: 1.5;
 }
 
+.architectural-wall-body {
+  fill: #263238;
+  stroke: #1c272c;
+  stroke-width: 0.75;
+  pointer-events: none;
+}
+
+.architectural-wall-body.geometry-entity-hovered,
+.architectural-wall-body.geometry-entity-selected {
+  fill: #344b55;
+}
+
+.architectural-wall-hit-target,
+.architectural-opening-hit-target {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+}
+
+.architectural-opening-hit-target {
+  stroke-width: 14;
+}
+
+.architectural-opening {
+  color: #15252c;
+}
+
+.architectural-opening--draggable {
+  cursor: grab;
+}
+
+.architectural-opening--dragging,
+.geometry-svg--opening-drag,
+.geometry-svg--opening-drag * {
+  cursor: grabbing !important;
+}
+
+.architectural-opening line,
+.architectural-opening path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-opening .architectural-opening-hit-target {
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: 14;
+}
+
+.architectural-opening.geometry-entity-hovered,
+.architectural-opening.geometry-entity-selected {
+  color: #e66a2c;
+}
+
+.architectural-opening-drag-handle {
+  color: var(--casa-terracotta);
+}
+
+.architectural-opening-drag-handle__surface {
+  fill: var(--casa-paper);
+  stroke: currentColor !important;
+  stroke-width: 1.5 !important;
+}
+
+.architectural-opening-drag-handle__icon {
+  fill: currentColor !important;
+  pointer-events: none;
+}
+
+.architectural-opening .architectural-opening-drag-handle__icon path {
+  fill: currentColor;
+  stroke: none;
+}
+
+.architectural-door-arc {
+  stroke-dasharray: 3 2;
+  opacity: 0.78;
+}
+
+.architectural-door-hinge {
+  fill: currentColor;
+}
+
+.architectural-window-line {
+  stroke-width: 1.25 !important;
+}
+
+.architectural-opening-preview {
+  color: #2e7d32;
+  pointer-events: none;
+}
+
+.architectural-opening-preview line,
+.architectural-opening-preview path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-opening-preview--invalid {
+  color: #d32f2f;
+  opacity: 0.78;
+}
+
+.project-workspace .geometry-edge {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+}
+
+.project-workspace .geometry-edge-shared {
+  stroke: rgba(255, 255, 255, 0.2);
+}
+
+.project-workspace .geometry-vertex {
+  opacity: 0.45;
+}
+
 .geometry-edge {
   pointer-events: none;
   stroke: #27322e;

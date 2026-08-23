@@ -1,5 +1,5 @@
 import { Divider, Stack, Typography } from "@mui/material";
-import type { Project, Wall } from "@casastudio/schema";
+import type { Opening, Project, UpdateOpeningProperties, Wall } from "@casastudio/schema";
 
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
@@ -7,6 +7,7 @@ import type { GeometrySelectionState } from "../geometry-playground/geometry-sel
 import { useCasaTranslation } from "../i18n";
 import type { WallEndpointEditingAvailability } from "../state/project-wall-editing";
 import { ProjectWallSelectionDetails } from "./ProjectWallSelectionDetails";
+import { ProjectOpeningSelectionDetails } from "./ProjectOpeningSelectionDetails";
 
 /** Dispatches Edit-mode selection details by runtime geometry kind. */
 export function ProjectSelectionDetails({
@@ -16,7 +17,12 @@ export function ProjectSelectionDetails({
   units,
   endpointAvailability,
   onDeleteWall,
-  onUpdateWallProperties
+  onUpdateWallProperties,
+  opening,
+  openingWall,
+  openingDisplayOffsetFromStart,
+  onDeleteOpening,
+  onUpdateOpening
 }: {
   readonly model: GeometryPresentationModel2D;
   readonly selectionState: GeometrySelectionState;
@@ -28,6 +34,12 @@ export function ProjectSelectionDetails({
     readonly height?: number;
     readonly thickness?: number;
   }) => boolean;
+  readonly opening?: Opening;
+  readonly openingWall?: Wall;
+  /** Transient Wall-local Opening offset used only for Inspector display. */
+  readonly openingDisplayOffsetFromStart?: number;
+  readonly onDeleteOpening?: () => void;
+  readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
 }) {
   const selection = selectionState.selected;
 
@@ -36,7 +48,14 @@ export function ProjectSelectionDetails({
   }
   if (
     selection.length === 1 &&
-    selection[0]?.kind === "BOUNDARY_EDGE" &&
+    (selection[0]?.kind === "DOOR" || selection[0]?.kind === "WINDOW") &&
+    opening && openingWall
+  ) {
+    return <ProjectOpeningSelectionDetails wall={openingWall} opening={opening} displayOffsetFromStart={openingDisplayOffsetFromStart} units={units} onDelete={onDeleteOpening ?? (() => undefined)} onUpdate={onUpdateOpening ?? (() => false)} />;
+  }
+  if (
+    selection.length === 1 &&
+    (selection[0]?.kind === "BOUNDARY_EDGE" || selection[0]?.kind === "WALL") &&
     wall
   ) {
     return (

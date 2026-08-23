@@ -1,5 +1,5 @@
 /** Tools available to the manual 2D Project editor. */
-export type ProjectEditorTool = "select" | "draw-wall" | "pan";
+export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "pan";
 
 /** Interaction capabilities consumed by the shared geometry viewer. */
 export type ProjectEditorInteraction = {
@@ -7,6 +7,8 @@ export type ProjectEditorInteraction = {
   readonly panEnabled: boolean;
   readonly drawWallEnabled: boolean;
   readonly wallEndpointEditingEnabled: boolean;
+  readonly openingPlacement?: "DOOR" | "WINDOW";
+  readonly openingEditingEnabled?: boolean;
 };
 
 /** Durable UI and interaction contract for one editor tool. */
@@ -26,7 +28,8 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         selectionEnabled: true,
         panEnabled: true,
         drawWallEnabled: false,
-        wallEndpointEditingEnabled: true
+        wallEndpointEditingEnabled: true,
+        openingEditingEnabled: true
       }
     },
     {
@@ -36,7 +39,32 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         selectionEnabled: false,
         panEnabled: false,
         drawWallEnabled: true,
-        wallEndpointEditingEnabled: false
+        wallEndpointEditingEnabled: false,
+        openingEditingEnabled: false
+      }
+    },
+    {
+      id: "door",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: false,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false,
+        openingPlacement: "DOOR",
+        openingEditingEnabled: false
+      }
+    },
+    {
+      id: "window",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: false,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false,
+        openingPlacement: "WINDOW",
+        openingEditingEnabled: false
       }
     },
     {
@@ -46,7 +74,8 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         selectionEnabled: false,
         panEnabled: true,
         drawWallEnabled: false,
-        wallEndpointEditingEnabled: false
+        wallEndpointEditingEnabled: false,
+        openingEditingEnabled: false
       }
     }
   ]);
@@ -61,7 +90,8 @@ export function getProjectEditorInteraction(
       selectionEnabled: false,
       panEnabled: false,
       drawWallEnabled: false,
-      wallEndpointEditingEnabled: false
+      wallEndpointEditingEnabled: false,
+      openingEditingEnabled: false
     }
   );
 }

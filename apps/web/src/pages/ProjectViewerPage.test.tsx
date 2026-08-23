@@ -292,6 +292,15 @@ function prepareSvgPointerCoordinates(svg: SVGSVGElement) {
   });
 }
 
+function findOpening(project: Project, openingId: string) {
+  const opening = project.building.levels
+    .flatMap((level) => level.walls)
+    .flatMap((wall) => wall.openings)
+    .find((candidate) => candidate.id === openingId);
+  if (!opening) throw new Error(`Opening ${openingId} was not found.`);
+  return opening;
+}
+
 function problemFetch(status: number): typeof fetch {
   const title = status === 403 ? "Forbidden" : "Not found";
   return vi.fn().mockResolvedValue(
@@ -530,6 +539,175 @@ describe("ProjectViewerPage", () => {
     expect(screen.queryByTestId("draw-wall-preview")).toBeNull();
     expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
     expect(store.getState().projectEditor.draft).toBe(draft);
+  });
+
+  it("places, selects, edits, and deletes architectural Openings with semantic history", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const initialDraft = store.getState().projectEditor.draft;
+
+    fireEvent.click(screen.getByRole("button", { name: "Door" }));
+    fireEvent.pointerMove(svg, { clientX: 220, clientY: 395, pointerId: 31 });
+    expect(screen.getByTestId("opening-placement-preview").getAttribute("data-valid")).toBe("true");
+    expect(store.getState().projectEditor.draft).toBe(initialDraft);
+    const previewInteraction = store.getState().projectEditor.transient.interaction;
+    expect(previewInteraction?.kind).toBe("place-opening");
+    const previewCandidate = previewInteraction?.kind === "place-opening"
+      ? previewInteraction.candidate
+      : undefined;
+    expect(previewCandidate?.valid).toBe(true);
+    fireEvent.click(svg, { clientX: 580, clientY: 395 });
+
+    await waitFor(() => expect(screen.getAllByTestId("architectural-door")).toHaveLength(1));
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    const owningWall = store.getState().projectEditor.draft!.building.levels[0]!.walls
+      .find((wall) => wall.openings.some((opening) => opening.type === "DOOR"))!;
+    const door = owningWall.openings.find((opening) => opening.type === "DOOR")!;
+    expect(owningWall.id).toBe(previewCandidate?.wallId);
+    expect(door.offsetFromStart).toBe(previewCandidate?.opening.offsetFromStart);
+    expect(door).toMatchObject({ width: 90, height: 210, elevation: 0, hingeSide: "START", swingSide: "LEFT" });
+    expect(store.getState().projectEditor.selection).toEqual([{ kind: "DOOR", geometryId: door.id }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const doorElement = screen.getByTestId("architectural-door");
+    fireEvent.pointerDown(doorElement, { clientX: 220, clientY: 395, pointerId: 30 });
+    fireEvent.pointerUp(svg, { clientX: 220, clientY: 395, pointerId: 30 });
+    fireEvent.click(doorElement);
+    expect(store.getState().projectEditor.selection).toEqual([{ kind: "DOOR", geometryId: door.id }]);
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(findOpening(store.getState().projectEditor.draft!, door.id).offsetFromStart).toBe(door.offsetFromStart);
+    fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
+    expect(screen.getAllByText("Door")).toHaveLength(2);
+
+    const positionField = screen.getByLabelText("Position from wall start (cm)");
+    fireEvent.change(positionField, { target: { value: "80" } });
+    fireEvent.blur(positionField);
+    expect(findOpening(store.getState().projectEditor.draft!, door.id).offsetFromStart).toBe(80);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    const draftBeforeDrag = store.getState().projectEditor.draft;
+    const selectedDoor = screen.getByTestId("architectural-door");
+    const span = selectedDoor.querySelector(".architectural-opening-hit-target")!;
+    const spanStart = {
+      x: Number(span.getAttribute("x1")),
+      y: Number(span.getAttribute("y1"))
+    };
+    const spanEnd = {
+      x: Number(span.getAttribute("x2")),
+      y: Number(span.getAttribute("y2"))
+    };
+    const spanLength = Math.hypot(spanEnd.x - spanStart.x, spanEnd.y - spanStart.y);
+    const tangent = {
+      x: (spanEnd.x - spanStart.x) / spanLength,
+      y: (spanEnd.y - spanStart.y) / spanLength
+    };
+    const center = {
+      x: (spanStart.x + spanEnd.x) / 2,
+      y: (spanStart.y + spanEnd.y) / 2
+    };
+    const screenUnitsPerProjectUnit = spanLength / door.width;
+    const targetOffset = 91.237;
+    const target = {
+      x: center.x + tangent.x * (targetOffset - 80) * screenUnitsPerProjectUnit,
+      y: center.y + tangent.y * (targetOffset - 80) * screenUnitsPerProjectUnit
+    };
+    fireEvent.pointerDown(screen.getByTestId("selected-opening-drag-handle"), {
+      clientX: center.x,
+      clientY: center.y,
+      pointerId: 33
+    });
+    fireEvent.pointerMove(svg, {
+      clientX: center.x + tangent.x * 3,
+      clientY: center.y + tangent.y * 3,
+      pointerId: 33
+    });
+    expect((screen.getByLabelText("Position from wall start (cm)") as HTMLInputElement).value).toBe("80");
+    fireEvent.pointerMove(svg, { clientX: target.x, clientY: target.y, pointerId: 33 });
+    expect(store.getState().projectEditor.draft).toBe(draftBeforeDrag);
+    expect(findOpening(store.getState().projectEditor.draft!, door.id).offsetFromStart).toBe(80);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "move-opening",
+      currentOffsetFromStart: 91.24,
+      dragging: true,
+      valid: true
+    });
+    expect((screen.getByLabelText("Position from wall start (cm)") as HTMLInputElement).value).toBe("91.24");
+    expect(screen.getByTestId("opening-placement-preview").getAttribute("data-offset-from-start")).toBe("91.24");
+    expect(svg.classList).toContain("geometry-svg--opening-drag");
+    expect(screen.getByTestId("architectural-door").getAttribute("data-dragging")).toBe("true");
+    fireEvent.pointerUp(svg, { clientX: target.x, clientY: target.y, pointerId: 33 });
+    fireEvent.click(screen.getByTestId("architectural-door"));
+    expect(svg.classList).not.toContain("geometry-svg--opening-drag");
+    expect(store.getState().projectEditor.history.past).toHaveLength(3);
+    expect(findOpening(store.getState().projectEditor.draft!, door.id).offsetFromStart).toBe(91.24);
+    expect((screen.getByLabelText("Position from wall start (cm)") as HTMLInputElement).value).toBe("91.24");
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(findOpening(store.getState().projectEditor.draft!, door.id).offsetFromStart).toBe(80);
+    expect(store.getState().projectEditor.selection).toEqual([]);
+    fireEvent.click(screen.getByTestId("architectural-door"));
+    expect((screen.getByLabelText("Position from wall start (cm)") as HTMLInputElement).value).toBe("80");
+
+    fireEvent.pointerDown(screen.getByTestId("selected-opening-drag-handle"), {
+      clientX: center.x,
+      clientY: center.y,
+      pointerId: 35
+    });
+    fireEvent.pointerMove(svg, { clientX: target.x, clientY: target.y, pointerId: 35 });
+    expect(svg.classList).toContain("geometry-svg--opening-drag");
+    fireEvent.pointerCancel(svg, { pointerId: 35 });
+    expect(svg.classList).not.toContain("geometry-svg--opening-drag");
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    expect(findOpening(store.getState().projectEditor.draft!, door.id).offsetFromStart).toBe(80);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    const widthField = screen.getByLabelText("Width (cm)");
+    fireEvent.change(widthField, { target: { value: "100" } });
+    fireEvent.blur(widthField);
+    expect(store.getState().projectEditor.history.past).toHaveLength(3);
+    const heightField = screen.getByLabelText("Height (cm)");
+    fireEvent.change(heightField, { target: { value: "220" } });
+    fireEvent.blur(heightField);
+    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: "Flip hinge" }));
+    expect(store.getState().projectEditor.history.past).toHaveLength(5);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls
+      .flatMap((wall) => wall.openings)
+      .find((opening) => opening.id === door.id)).toMatchObject({ hingeSide: "END" });
+    fireEvent.click(screen.getByRole("button", { name: "Flip swing" }));
+    expect(store.getState().projectEditor.history.past).toHaveLength(6);
+
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(store.getState().projectEditor.history.past).toHaveLength(7);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.flatMap((wall) => wall.openings)).toEqual([]);
+
+    fireEvent.keyDown(window, { key: "n" });
+    expect(store.getState().projectEditor.activeTool).toBe("window");
+    fireEvent.pointerMove(svg, { clientX: 580, clientY: 395, pointerId: 32 });
+    fireEvent.click(svg, { clientX: 580, clientY: 395 });
+    await waitFor(() => expect(screen.getAllByTestId("architectural-window")).toHaveLength(1));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.flatMap((wall) => wall.openings)[0])
+      .toMatchObject({ type: "WINDOW", width: 120, height: 120, elevation: 90 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(8);
+    const windowOpening = store.getState().projectEditor.draft!.building.levels[0]!.walls
+      .flatMap((wall) => wall.openings)[0]!;
+    expect(store.getState().projectEditor.selection).toEqual([{ kind: "WINDOW", geometryId: windowOpening.id }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const windowElement = screen.getByTestId("architectural-window");
+    fireEvent.pointerDown(windowElement, { clientX: 580, clientY: 395, pointerId: 34 });
+    fireEvent.pointerUp(svg, { clientX: 580, clientY: 395, pointerId: 34 });
+    fireEvent.click(windowElement);
+    expect(store.getState().projectEditor.selection).toEqual([{ kind: "WINDOW", geometryId: windowOpening.id }]);
+    expect(store.getState().projectEditor.history.past).toHaveLength(8);
+
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.flatMap((wall) => wall.openings)).toEqual([]);
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.flatMap((wall) => wall.openings)[0])
+      .toMatchObject({ type: "WINDOW" });
   });
 
   it("creates an explicit Room, supports undo and redo, and keeps grid controls transient", async () => {
@@ -2270,14 +2448,14 @@ describe("ProjectViewerPage", () => {
     expect(within(dialog).getByText("F")).toBeTruthy();
     expect(within(dialog).getByText("Reset viewport")).toBeTruthy();
     expect(within(dialog).getByText("R")).toBeTruthy();
-    expect(within(dialog).getByText("Delete selected wall")).toBeTruthy();
+    expect(within(dialog).getByText("Delete selected wall or opening")).toBeTruthy();
     expect(within(dialog).getByText("Delete / Backspace")).toBeTruthy();
     expect(within(dialog).getByText("Undo")).toBeTruthy();
     expect(within(dialog).getByText("Ctrl/Cmd + Z")).toBeTruthy();
     expect(within(dialog).getAllByText("Redo")).toHaveLength(2);
     expect(within(dialog).getByText("Ctrl/Cmd + Shift + Z")).toBeTruthy();
     expect(within(dialog).getByText("Ctrl/Cmd + Y")).toBeTruthy();
-    expect(within(dialog).queryByText(/Draw Wall|Zoom/i)).toBeNull();
+    expect(within(dialog).queryByText(/Zoom/i)).toBeNull();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() =>

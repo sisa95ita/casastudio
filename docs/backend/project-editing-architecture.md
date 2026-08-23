@@ -232,7 +232,12 @@ The first operations are:
   explicit `start` or `end`, preserves Wall identity, and rejects missing
   entities, non-finite points, and a zero-length result.
 - `deleteWall(project, { levelId, wallId })`: removes an unreferenced Wall and
-  rejects deletion when a Room boundary or reciprocal `roomIds` would dangle.
+  its owned Openings, and rejects deletion when a Room boundary or reciprocal
+  `roomIds` would dangle.
+- `createDoor` / `createWindow`: mount caller-identified Openings on one Wall
+  after horizontal interval, vertical extent, and collision validation.
+- `updateOpening` / `moveOpening` / `deleteOpening`: apply one immutable,
+  validated semantic mutation to one Wall-owned Opening.
 
 Each operation returns a discriminated `{ ok, project | errors }` result using
 stable validation error codes. Expected failures do not throw. Success uses
@@ -291,6 +296,20 @@ coordinates on one Level; it is not persisted as a separate entity.
 incident Wall IDs. It updates every incident endpoint as one immutable edit and
 rejects stale incidence, zero-length Walls, invalid Opening placement, or any
 invalid resulting Room geometry.
+
+### Architectural plan presentation
+
+The Project editor derives physical Wall strips from canonical start, end, and
+thickness values in Project units. Wall bodies are segmented around Opening
+intervals, so Doors and Windows create real cutouts at their physical width.
+Door leaves and swing arcs and Window linework use the same Wall-local basis on
+angled and orthogonal Walls. Room fills continue to use exact ordered Room
+polygons beneath these architectural layers.
+
+The Geometry Playground remains the diagnostic presentation for centerlines,
+edge uses, vertices, bounds, and runtime labels. The Project editor uses those
+runtime entities for stable hit testing and junction interaction, but gives
+visual priority to Room fills, physical Wall bodies, and Opening symbols.
 
 ### Local history and precision assistance
 

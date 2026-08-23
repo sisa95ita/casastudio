@@ -103,10 +103,18 @@ const validateCanonicalPostState = (project: Project): ReverseWallDirectionResul
   };
 };
 
-const transformOpeningForWallReversal = (opening: Opening, wallLength: number): Opening => ({
-  ...opening,
-  offsetFromStart: wallLength - opening.offsetFromStart - opening.width
-});
+const transformOpeningForWallReversal = (opening: Opening, wallLength: number): Opening =>
+  opening.type === "DOOR"
+    ? {
+        ...opening,
+        offsetFromStart: wallLength - opening.offsetFromStart - opening.width,
+        hingeSide: (opening.hingeSide ?? "START") === "START" ? "END" : "START",
+        swingSide: (opening.swingSide ?? "LEFT") === "LEFT" ? "RIGHT" : "LEFT"
+      }
+    : {
+        ...opening,
+        offsetFromStart: wallLength - opening.offsetFromStart - opening.width
+      };
 
 const transformWallRelativeDataForReversal = (wall: Wall): Wall => {
   const wallLength = getWallLength(wall);

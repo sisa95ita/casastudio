@@ -1,6 +1,11 @@
 import type { Point2D } from "../primitives/index.js";
 import type { Level, RoomBoundaryEdge, Wall } from "../physical-building/index.js";
 import type { Project } from "../project/index.js";
+import {
+  getOpeningInterval,
+  openingAdjacentClearance,
+  openingEndpointClearance
+} from "../physical-building/opening.js";
 import { ValidationErrorCode } from "./validation-error-code.js";
 import type { ValidationError, ValidationResult } from "./validation-result.js";
 
@@ -341,7 +346,11 @@ export const validateProjectGeometry = (project: Project): ValidationResult => {
           return;
         }
 
-        if (opening.offsetFromStart < 0 || opening.offsetFromStart + opening.width > wallLength) {
+        const interval = getOpeningInterval(opening);
+        if (
+          interval.start < openingEndpointClearance ||
+          interval.end > wallLength - openingEndpointClearance
+        ) {
           pushError(
             errors,
             ValidationErrorCode.OPENING_OUTSIDE_WALL,
@@ -349,7 +358,32 @@ export const validateProjectGeometry = (project: Project): ValidationResult => {
             `Opening "${opening.id}" must fit completely inside wall "${wall.id}".`
           );
         }
+
+        if (opening.elevation < 0 || opening.elevation + opening.height > wall.height) {
+          pushError(
+            errors,
+            ValidationErrorCode.OPENING_OUTSIDE_WALL_HEIGHT,
+            `${wallPath}.openings[${openingIndex}]`,
+            `Opening "${opening.id}" must fit within the vertical extent of wall "${wall.id}".`
+          );
+        }
       });
+
+      const orderedOpenings = wall.openings
+        .map((opening, openingIndex) => ({ opening, openingIndex, interval: getOpeningInterval(opening) }))
+        .sort((first, second) => first.interval.start - second.interval.start || first.opening.id.localeCompare(second.opening.id));
+      for (let openingIndex = 1; openingIndex < orderedOpenings.length; openingIndex += 1) {
+        const previous = orderedOpenings[openingIndex - 1];
+        const current = orderedOpenings[openingIndex];
+        if (previous && current && current.interval.start < previous.interval.end + openingAdjacentClearance) {
+          pushError(
+            errors,
+            ValidationErrorCode.OPENING_COLLISION,
+            `${wallPath}.openings[${current.openingIndex}]`,
+            `Opening "${current.opening.id}" overlaps Opening "${previous.opening.id}" on wall "${wall.id}".`
+          );
+        }
+      }
 
       const geometryKey = getUndirectedWallGeometryKey(wall);
       const duplicateWallIndex = wallGeometryToIndex.get(geometryKey);

@@ -1,17 +1,22 @@
-import { GeometryEngine, LevelGeometry } from "@casastudio/geometry";
+import { GeometryEngine, LevelGeometry, projectPointOntoWall } from "@casastudio/geometry";
 import {
   createConnectedWall,
   createRoom,
   classifyLevelRoomTopology,
   deleteWallAndCollapseRedundantTopology,
+  deleteOpening,
+  moveOpening,
   moveJunction,
   moveWallEndpoint,
   reconcileRoomSubdivision,
   updateWallProperties,
+  updateOpening,
   ValidationErrorCode,
   type Project,
   type Wall,
-  type WallEndpoint
+  type WallEndpoint,
+  type Opening,
+  type UpdateOpeningProperties
 } from "@casastudio/schema";
 import {
   Alert,
@@ -52,6 +57,8 @@ import NearMeRoundedIcon from "@mui/icons-material/NearMeRounded";
 import PanToolAltRoundedIcon from "@mui/icons-material/PanToolAltRounded";
 import RedoRoundedIcon from "@mui/icons-material/RedoRounded";
 import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
+import DoorFrontRoundedIcon from "@mui/icons-material/DoorFrontRounded";
+import WindowRoundedIcon from "@mui/icons-material/WindowRounded";
 import UndoRoundedIcon from "@mui/icons-material/UndoRounded";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import {
@@ -72,6 +79,7 @@ import { useCasaStudioApi } from "../api/ApiProvider";
 import type { GeometryLevel, GeometrySnapshot } from "../api/api-types";
 import { useAppShellContent } from "../app-shell/AppShellContext";
 import { GeometryLayerControls } from "../geometry-playground/GeometryLayerControls";
+import { createArchitecturalPresentationModel2D } from "../geometry-playground/architectural-presentation-model-2d";
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { createRuntimeGeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
@@ -83,6 +91,8 @@ import {
 } from "../geometry-playground/geometry-snapshot-presentation-adapter";
 import {
   createGeometrySelectionState,
+  selectDoor,
+  selectWindow,
   type GeometrySelectionState
 } from "../geometry-playground/geometry-selection-state";
 import { collectLevelBounds } from "../geometry-playground/geometry-svg-helpers";
@@ -129,6 +139,10 @@ import {
   editorGridSpacingChanged,
   editorGridVisibilityChanged,
   editorJunctionDragStarted,
+  editorOpeningDragThresholdCrossed,
+  editorOpeningDragPreviewChanged,
+  editorOpeningDragStarted,
+  editorOpeningPlacementChanged,
   editorRedoRequested,
   editorSelectionChanged,
   editorSelectionCleared,
@@ -160,6 +174,12 @@ import {
 } from "../state/project-wall-editing";
 import { resolveDrawWallSnapCandidate } from "../state/project-wall-snapping";
 import {
+  commitOpeningPlacementCandidate,
+  createOpeningIdentifier,
+  findProjectOpening,
+  resolveOpeningPlacementCandidate
+} from "../state/project-opening-editing";
+import {
   geometrySelectionChanged,
   geometrySelectionCleared,
   geometrySelectionReset,
@@ -170,6 +190,7 @@ import {
   ProjectPersistenceDialogs,
   type ProjectPersistenceDialog
 } from "./ProjectPersistenceDialogs";
+import { normalizeEditorMeasurement } from "./editor-measurement";
 
 const emptySelectionState = createGeometrySelectionState();
 /** Localized feedback categories for explicit Room authoring actions. */
@@ -183,7 +204,7 @@ type RoomEditingErrorKey =
   | "errors.room.stale"
   | "errors.room.geometry"
   | "errors.room.invalid";
-type EditingErrorKey = WallEditingErrorKey | RoomEditingErrorKey;
+type EditingErrorKey = WallEditingErrorKey | RoomEditingErrorKey | "errors.opening.invalid";
 
 /** Renders the authoritative View and local-draft Edit workspace for one Project. */
 export function ProjectViewerPage() {
@@ -287,6 +308,8 @@ export function ProjectViewerPage() {
 
     try {
       const transform = createViewportTransform2D(activeViewport);
+      const projectLevel = (workspaceMode === "edit" ? editor.draft : projectResponse?.project)
+        ?.building.levels.find((level) => level.id === selectedLevel.sourceLevelId);
       const model =
         workspaceMode === "edit"
           ? createRuntimeGeometryPresentationModel2D({
@@ -300,7 +323,10 @@ export function ProjectViewerPage() {
               selectionState
             });
 
-      return { ok: true as const, model };
+      const architecturalModel = projectLevel
+        ? createArchitecturalPresentationModel2D(projectLevel, transform, selectionState)
+        : undefined;
+      return { ok: true as const, model, architecturalModel };
     } catch (error) {
       return { ok: false as const, error };
     }
@@ -309,7 +335,9 @@ export function ProjectViewerPage() {
     consistencyFailure,
     selectedLevel,
     selectionState,
-    workspaceMode
+    workspaceMode,
+    editor.draft,
+    projectResponse?.project
   ]);
 
   const selectedEditWall = useMemo(() => {
@@ -317,18 +345,20 @@ export function ProjectViewerPage() {
       workspaceMode !== "edit" ||
       !presentationResult?.ok ||
       selectionState.selected.length !== 1 ||
-      selectionState.selected[0]?.kind !== "BOUNDARY_EDGE"
+      (selectionState.selected[0]?.kind !== "BOUNDARY_EDGE" &&
+        selectionState.selected[0]?.kind !== "WALL")
     ) {
       return undefined;
     }
 
-    const selectedEdge = presentationResult.model.boundaryEdges.find(
-      (edge) => edge.geometryId === selectionState.selected[0]?.geometryId
-    );
+    const selected = selectionState.selected[0];
+    const selectedEdge = selected?.kind === "BOUNDARY_EDGE"
+      ? presentationResult.model.boundaryEdges.find((edge) => edge.geometryId === selected.geometryId)
+      : undefined;
     return findProjectWall(
       editor.draft,
       editor.activeLevelId,
-      selectedEdge?.sourceWallId
+      selected?.kind === "WALL" ? selected.geometryId : selectedEdge?.sourceWallId
     );
   }, [
     editor.activeLevelId,
@@ -343,6 +373,14 @@ export function ProjectViewerPage() {
       editor.activeLevelId,
       selectedEditWall?.id
     );
+  const selectedEditOpening = useMemo(() => {
+    const selected = selectionState.selected.length === 1
+      ? selectionState.selected[0]
+      : undefined;
+    return selected && (selected.kind === "DOOR" || selected.kind === "WINDOW")
+      ? findProjectOpening(editor.draft, editor.activeLevelId, selected.geometryId)
+      : undefined;
+  }, [editor.activeLevelId, editor.draft, selectionState.selected]);
   const selectedEditVertex = useMemo(() => {
     if (
       workspaceMode !== "edit" ||
@@ -431,6 +469,15 @@ export function ProjectViewerPage() {
               : undefined
         }
       : undefined;
+    const placementCandidate = transient?.kind === "place-opening"
+      ? transient.candidate
+      : undefined;
+    const placementWall = placementCandidate
+      ? findProjectWall(editor.draft, editor.activeLevelId, placementCandidate.wallId)
+      : undefined;
+    const draggedOpening = transient?.kind === "move-opening" && transient.dragging && selectedEditOpening
+      ? { ...selectedEditOpening.opening, offsetFromStart: transient.currentOffsetFromStart } as Opening
+      : undefined;
 
     return {
       roomFaceCandidates:
@@ -460,6 +507,15 @@ export function ProjectViewerPage() {
                   : selectedEditVertex.coordinates
             }
           : undefined,
+      openingPreview: placementCandidate && placementWall
+        ? { wall: placementWall, opening: placementCandidate.opening, valid: placementCandidate.valid }
+        : draggedOpening && selectedEditOpening
+          ? { wall: selectedEditOpening.wall, opening: draggedOpening, valid: transient?.kind === "move-opening" ? transient.valid : false }
+          : undefined,
+      activeOpeningDragId:
+        transient?.kind === "move-opening" && transient.dragging
+          ? transient.openingId
+          : undefined,
       grid: {
         visible: editor.precision.gridVisible,
         spacing: editor.precision.gridSpacing
@@ -470,6 +526,7 @@ export function ProjectViewerPage() {
     editor.transient.snapCandidate,
     selectedEditWall,
     selectedEditVertex,
+    selectedEditOpening,
     selectedJunctionWallIds,
     selectedWallEndpointAvailability,
     editor.precision,
@@ -572,12 +629,43 @@ export function ProjectViewerPage() {
       if (
         saveInteractionBlocked ||
         workspaceMode !== "edit" ||
-        editor.activeTool !== "draw-wall" ||
         !editor.draft ||
         !editor.activeLevelId
       ) {
         return;
       }
+
+      if (editor.activeTool === "door" || editor.activeTool === "window") {
+        const openingType = editor.activeTool === "door" ? "DOOR" : "WINDOW";
+        const placement = editor.transient.interaction;
+        const candidate = placement?.kind === "place-opening" &&
+            placement.openingType === openingType
+          ? placement.candidate
+          : undefined;
+        if (!candidate?.valid) {
+          setEditingError("errors.opening.invalid");
+          return;
+        }
+        const openingId = createOpeningIdentifier();
+        const result = commitOpeningPlacementCandidate(
+          editor.draft,
+          editor.activeLevelId,
+          candidate,
+          openingId
+        );
+        if (result?.ok) {
+          setEditingError(undefined);
+          dispatch(editingDraftReplaced(result.project));
+          dispatch(editorSelectionChanged(createGeometrySelectionState([
+            openingType === "DOOR" ? selectDoor(openingId) : selectWindow(openingId)
+          ])));
+          dispatch(editorOpeningPlacementChanged({ openingType, candidate: undefined }));
+        } else {
+          setEditingError("errors.opening.invalid");
+        }
+        return;
+      }
+      if (editor.activeTool !== "draw-wall") return;
 
       const snapCandidate =
         presentationResult?.ok
@@ -665,6 +753,52 @@ export function ProjectViewerPage() {
       }
       if (
         workspaceMode === "edit" &&
+        editor.draft &&
+        editor.transient.interaction?.kind === "move-opening" &&
+        editor.transient.interaction.pointerId === pointerId &&
+        selectedEditOpening
+      ) {
+        const projection = projectPointOntoWall(pointer.worldPoint, selectedEditOpening.wall);
+        const wallLength = Math.hypot(
+          selectedEditOpening.wall.end.x - selectedEditOpening.wall.start.x,
+          selectedEditOpening.wall.end.z - selectedEditOpening.wall.start.z
+        );
+        const offsetFromStart = normalizeEditorMeasurement(
+          Math.max(
+            0,
+            Math.min(
+              wallLength - selectedEditOpening.opening.width,
+              projection.distanceAlongWall - selectedEditOpening.opening.width / 2
+            )
+          )
+        );
+        const validation = moveOpening(editor.draft, {
+          levelId: editor.transient.interaction.levelId,
+          wallId: editor.transient.interaction.wallId,
+          openingId: editor.transient.interaction.openingId,
+          offsetFromStart
+        });
+        dispatch(editorOpeningDragPreviewChanged({ pointerId, offsetFromStart, valid: validation.ok }));
+      } else if (
+        workspaceMode === "edit" &&
+        editor.draft &&
+        editor.activeLevelId &&
+        (editor.activeTool === "door" || editor.activeTool === "window")
+      ) {
+        const openingType = editor.activeTool === "door" ? "DOOR" : "WINDOW";
+        dispatch(editorOpeningPlacementChanged({
+          openingType,
+          candidate: resolveOpeningPlacementCandidate(
+            editor.draft,
+            editor.activeLevelId,
+            pointer.worldPoint,
+            openingType,
+            18 / Math.max(Number.EPSILON, activeViewport.zoom * pointer.cssPixelsPerSvgUnit)
+          )
+        }));
+      } else
+      if (
+        workspaceMode === "edit" &&
         editor.activeTool === "draw-wall" &&
         presentationResult?.ok
       ) {
@@ -710,8 +844,11 @@ export function ProjectViewerPage() {
       editor.activeTool,
       editor.precision,
       editor.transient.interaction,
+      editor.activeLevelId,
+      editor.draft,
       activeViewport,
       presentationResult,
+      selectedEditOpening,
       saveInteractionBlocked,
       workspaceMode
     ]
@@ -864,6 +1001,74 @@ export function ProjectViewerPage() {
     [dispatch, editor.transient.interaction]
   );
 
+  const handleOpeningPointerDown = useCallback(
+    (openingId: string, wallId: string, pointerId: number) => {
+      if (
+        saveInteractionBlocked ||
+        workspaceMode !== "edit" ||
+        editor.activeTool !== "select" ||
+        !editor.activeLevelId ||
+        !editor.draft
+      ) return;
+      const target = findProjectOpening(editor.draft, editor.activeLevelId, openingId);
+      if (!target || target.wall.id !== wallId) return;
+      dispatch(editorOpeningDragStarted({
+        levelId: editor.activeLevelId,
+        wallId,
+        openingId,
+        pointerId,
+        offsetFromStart: target.opening.offsetFromStart
+      }));
+    },
+    [dispatch, editor.activeLevelId, editor.activeTool, editor.draft, saveInteractionBlocked, workspaceMode]
+  );
+
+  const handleOpeningDragThresholdCrossed = useCallback(
+    (pointerId: number) => dispatch(editorOpeningDragThresholdCrossed({ pointerId })),
+    [dispatch]
+  );
+
+  const handleOpeningPointerUp = useCallback(
+    (pointerId: number, dragged: boolean) => {
+      const interaction = editor.transient.interaction;
+      if (
+        interaction?.kind !== "move-opening" ||
+        interaction.pointerId !== pointerId ||
+        !editor.draft
+      ) return;
+      if (!dragged) {
+        dispatch(editorTransientInteractionCleared());
+        return;
+      }
+      const result = interaction.valid
+        ? moveOpening(editor.draft, {
+            levelId: interaction.levelId,
+            wallId: interaction.wallId,
+            openingId: interaction.openingId,
+            offsetFromStart: normalizeEditorMeasurement(interaction.currentOffsetFromStart)
+          })
+        : undefined;
+      dispatch(editorTransientInteractionCleared());
+      if (result?.ok) {
+        setEditingError(undefined);
+        dispatch(editingDraftReplaced(result.project));
+      } else {
+        setEditingError("errors.opening.invalid");
+      }
+    },
+    [dispatch, editor.draft, editor.transient.interaction]
+  );
+
+  const handleOpeningPointerCancel = useCallback(
+    (pointerId: number) => {
+      const interaction = editor.transient.interaction;
+      if (interaction?.kind === "move-opening" && interaction.pointerId === pointerId) {
+        dispatch(editorTransientInteractionCleared());
+      }
+    },
+    [dispatch, editor.transient.interaction]
+  );
+
   const handleDeleteSelectedWall = useCallback(() => {
     if (
       saveInteractionBlocked ||
@@ -933,6 +1138,42 @@ export function ProjectViewerPage() {
       saveInteractionBlocked,
       workspaceMode
     ]
+  );
+
+  const handleDeleteSelectedOpening = useCallback(() => {
+    if (!editor.draft || !editor.activeLevelId || !selectedEditOpening || saveInteractionBlocked) return;
+    const result = deleteOpening(editor.draft, {
+      levelId: editor.activeLevelId,
+      wallId: selectedEditOpening.wall.id,
+      openingId: selectedEditOpening.opening.id
+    });
+    if (result.ok) {
+      setEditingError(undefined);
+      dispatch(editorSelectionCleared());
+      dispatch(editingDraftReplaced(result.project));
+    } else {
+      setEditingError("errors.opening.invalid");
+    }
+  }, [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedEditOpening]);
+
+  const handleUpdateSelectedOpening = useCallback(
+    (properties: UpdateOpeningProperties): boolean => {
+      if (!editor.draft || !editor.activeLevelId || !selectedEditOpening || saveInteractionBlocked) return false;
+      const result = updateOpening(editor.draft, {
+        levelId: editor.activeLevelId,
+        wallId: selectedEditOpening.wall.id,
+        openingId: selectedEditOpening.opening.id,
+        ...properties
+      });
+      if (!result.ok) {
+        setEditingError("errors.opening.invalid");
+        return false;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+      return true;
+    },
+    [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedEditOpening]
   );
 
   const handleCreateRoom = useCallback(() => {
@@ -1028,8 +1269,33 @@ export function ProjectViewerPage() {
           return;
         }
       }
+      if (workspaceMode === "edit" && !modifier && !isTextInput) {
+        const tool = event.key.toLowerCase() === "d"
+          ? "door"
+          : event.key.toLowerCase() === "n"
+            ? "window"
+            : event.key.toLowerCase() === "w"
+              ? "draw-wall"
+              : event.key.toLowerCase() === "v"
+                ? "select"
+                : undefined;
+        if (tool) {
+          event.preventDefault();
+          dispatch(editorActiveToolChanged(tool));
+          return;
+        }
+      }
       const action = getGeometryViewerShortcutAction(event);
       if (!action) return;
+      if (
+        action === "DELETE_SELECTION" &&
+        workspaceMode === "edit" &&
+        selectedEditOpening
+      ) {
+        event.preventDefault();
+        handleDeleteSelectedOpening();
+        return;
+      }
       if (
         action === "DELETE_SELECTION" &&
         workspaceMode === "edit" &&
@@ -1070,11 +1336,13 @@ export function ProjectViewerPage() {
     dispatch,
     handleFitViewport,
     handleDeleteSelectedWall,
+    handleDeleteSelectedOpening,
     handleResetViewport,
     editor.transient.interaction,
     editor.transient.snapCandidate,
     selectedLevel,
     selectedEditWall,
+    selectedEditOpening,
     selectedRoomFaceKey,
     saveInteractionBlocked,
     shortcutsOpen,
@@ -1287,6 +1555,12 @@ export function ProjectViewerPage() {
     if (!presentationResult?.ok || !selectedLevel) {
       return undefined;
     }
+    const transientOpeningOffset =
+      editor.transient.interaction?.kind === "move-opening" &&
+      editor.transient.interaction.dragging &&
+      editor.transient.interaction.openingId === selectedEditOpening?.opening.id
+        ? editor.transient.interaction.currentOffsetFromStart
+        : undefined;
 
     return (
       <ProjectWorkspaceInspector
@@ -1302,10 +1576,14 @@ export function ProjectViewerPage() {
         }
         mode={workspaceMode}
         selectedWall={selectedEditWall}
+        selectedOpening={selectedEditOpening}
+        selectedOpeningDisplayOffset={transientOpeningOffset}
         endpointAvailability={selectedWallEndpointAvailability}
         units={projectResponse?.project.units}
         onDeleteWall={handleDeleteSelectedWall}
         onUpdateWallProperties={handleUpdateSelectedWallProperties}
+        onDeleteOpening={handleDeleteSelectedOpening}
+        onUpdateOpening={handleUpdateSelectedOpening}
       />
     );
   }, [
@@ -1315,12 +1593,16 @@ export function ProjectViewerPage() {
     presentationResult,
     selectedLevel,
     selectedEditWall,
+    selectedEditOpening,
+    editor.transient.interaction,
     selectedWallEndpointAvailability,
     selectionState,
     workspaceMode,
     projectResponse?.project.units,
     handleDeleteSelectedWall,
-    handleUpdateSelectedWallProperties
+    handleUpdateSelectedWallProperties,
+    handleDeleteSelectedOpening,
+    handleUpdateSelectedOpening
   ]);
 
   const shellContent = useMemo(
@@ -1575,6 +1857,7 @@ export function ProjectViewerPage() {
           title={t("viewer.title")}
           headingId="project-geometry-viewer-heading"
           presentationModel={presentationResult.model}
+          architecturalModel={presentationResult.architecturalModel}
           options={displayOptions}
           viewport={activeViewport}
           selectionState={selectionState}
@@ -1600,6 +1883,10 @@ export function ProjectViewerPage() {
           onWallEndpointPointerUp={handleWallEndpointPointerUp}
           onWallEndpointPointerCancel={handleWallEndpointPointerCancel}
           onJunctionPointerDown={handleJunctionPointerDown}
+          onOpeningPointerDown={handleOpeningPointerDown}
+          onOpeningDragThresholdCrossed={handleOpeningDragThresholdCrossed}
+          onOpeningPointerUp={handleOpeningPointerUp}
+          onOpeningPointerCancel={handleOpeningPointerCancel}
           onRoomFaceCandidateClick={(faceKey) => {
             setSelectedRoomFaceKey(faceKey);
             dispatch(editorSelectionCleared());
@@ -1716,6 +2003,8 @@ function ProjectEditorToolbar({
   const icons = {
     select: <NearMeRoundedIcon fontSize="small" />,
     "draw-wall": <LinearScaleRoundedIcon fontSize="small" />,
+    door: <DoorFrontRoundedIcon fontSize="small" />,
+    window: <WindowRoundedIcon fontSize="small" />,
     pan: <PanToolAltRoundedIcon fontSize="small" />
   } satisfies Record<ProjectEditorTool, ReactNode>;
 
@@ -1933,6 +2222,9 @@ type ProjectWorkspaceInspectorProps = {
   readonly revision?: number | null;
   readonly mode: ProjectWorkspaceMode;
   readonly selectedWall?: Wall;
+  readonly selectedOpening?: { readonly wall: Wall; readonly opening: Opening };
+  /** Transient Wall-local Opening offset used only for Inspector display. */
+  readonly selectedOpeningDisplayOffset?: number;
   readonly endpointAvailability?: ReturnType<
     typeof getWallEndpointEditingAvailability
   >;
@@ -1942,6 +2234,8 @@ type ProjectWorkspaceInspectorProps = {
     readonly height?: number;
     readonly thickness?: number;
   }) => boolean;
+  readonly onDeleteOpening: () => void;
+  readonly onUpdateOpening: (properties: UpdateOpeningProperties) => boolean;
 };
 
 /** Provides the durable Layers, Selection, and Properties inspector foundation. */
@@ -1954,10 +2248,14 @@ function ProjectWorkspaceInspector({
   revision,
   mode,
   selectedWall,
+  selectedOpening,
+  selectedOpeningDisplayOffset,
   endpointAvailability,
   units,
   onDeleteWall,
-  onUpdateWallProperties
+  onUpdateWallProperties,
+  onDeleteOpening,
+  onUpdateOpening
 }: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
   const [tab, setTab] = useState<"layers" | "selection" | "properties">(
@@ -1989,10 +2287,15 @@ function ProjectWorkspaceInspector({
               model={model}
               selectionState={selectionState}
               wall={selectedWall}
+              opening={selectedOpening?.opening}
+              openingWall={selectedOpening?.wall}
+              openingDisplayOffsetFromStart={selectedOpeningDisplayOffset}
               units={units}
               endpointAvailability={endpointAvailability}
               onDeleteWall={onDeleteWall}
               onUpdateWallProperties={onUpdateWallProperties}
+              onDeleteOpening={onDeleteOpening}
+              onUpdateOpening={onUpdateOpening}
             />
           ) : (
             <GeometrySelectionDetails

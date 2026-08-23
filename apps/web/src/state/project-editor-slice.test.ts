@@ -15,6 +15,9 @@ import {
   editorGridSnappingChanged,
   editorGridSpacingChanged,
   editorGridVisibilityChanged,
+  editorOpeningDragPreviewChanged,
+  editorOpeningDragStarted,
+  editorOpeningDragThresholdCrossed,
   editorRedoRequested,
   editorSelectionChanged,
   editorTransientInteractionCleared,
@@ -207,6 +210,44 @@ describe("Project editor state", () => {
     });
     expect(state.draft).toBe(draft);
     expect(state.dirty).toBe(false);
+  });
+
+  it("keeps valid and invalid Opening drag proposals outside draft history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("select"));
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorOpeningDragStarted({
+      levelId: state.activeLevelId!,
+      wallId: "wall",
+      openingId: "door",
+      pointerId: 21,
+      offsetFromStart: 80
+    }));
+    state = projectEditorReducer(state, editorOpeningDragThresholdCrossed({ pointerId: 21 }));
+    state = projectEditorReducer(state, editorOpeningDragPreviewChanged({
+      pointerId: 21,
+      offsetFromStart: 91.24,
+      valid: false
+    }));
+
+    expect(state.transient.interaction).toMatchObject({
+      kind: "move-opening",
+      currentOffsetFromStart: 91.24,
+      dragging: true,
+      valid: false
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
+    state = projectEditorReducer(state, editorTransientInteractionCleared());
+    expect(state.transient.interaction).toBeNull();
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
   });
 
   it("clears selection and transient state when the active Level changes", () => {

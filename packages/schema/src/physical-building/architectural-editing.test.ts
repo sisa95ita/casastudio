@@ -571,6 +571,31 @@ describe("junction movement", () => {
     }
   });
 
+  it("validates Door and Window spans atomically across incident Walls", () => {
+    const first = wall("door-wall", 0, 0, 200, 0);
+    first.openings = [{ id: "door", type: "DOOR", offsetFromStart: 100, width: 80, height: 210, elevation: 0, hingeSide: "START", swingSide: "LEFT" }];
+    const second = wall("window-wall", 0, 0, 0, 200);
+    second.openings = [{ id: "window", type: "WINDOW", offsetFromStart: 100, width: 80, height: 100, elevation: 80 }];
+    const project = createProject([first, second]);
+    const valid = moveJunction(project, {
+      levelId: "ground-level",
+      position: { x: 0, z: 0 },
+      destination: { x: 10, z: 10 },
+      incidentWallIds: ["door-wall", "window-wall"]
+    });
+    expect(valid.ok).toBe(true);
+
+    const before = structuredClone(project);
+    const invalid = moveJunction(project, {
+      levelId: "ground-level",
+      position: { x: 0, z: 0 },
+      destination: { x: 150, z: 0 },
+      incidentWallIds: ["door-wall", "window-wall"]
+    });
+    expect(invalid).toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.OPENING_OUTSIDE_WALL }] });
+    expect(project).toEqual(before);
+  });
+
   it("rejects stale topology, zero-length Walls, and invalid Room polygons", () => {
     const project = createPartitionProject();
     expect(moveJunction(project, {

@@ -17,8 +17,11 @@ import {
 } from "./GeometrySvgViewer";
 import {
   createGeometrySelectionState,
-  selectPolygon
+  selectDoor,
+  selectPolygon,
+  selectWindow
 } from "./geometry-selection-state";
+import type { ArchitecturalPresentationModel2D } from "./architectural-presentation-model-2d";
 import {
   createFitViewportState,
   createViewportTransform2D,
@@ -69,6 +72,61 @@ const createViewerProps = (
     selectionState,
     viewport
   };
+};
+
+const architecturalPresentationModel: ArchitecturalPresentationModel2D = {
+  walls: [{
+    kind: "WALL",
+    geometryId: "wall",
+    bodySvgPoints: ["80,90 80,110 300,110 300,90"],
+    start: { x: 80, y: 100 },
+    end: { x: 300, y: 100 },
+    hitWidth: 20,
+    selected: false,
+    hovered: false
+  }],
+  doors: [{
+    kind: "DOOR",
+    geometryId: "door",
+    wallId: "wall",
+    spanStart: { x: 100, y: 100 },
+    spanEnd: { x: 190, y: 100 },
+    hinge: { x: 100, y: 100 },
+    leafEnd: { x: 100, y: 190 },
+    arcPath: "M 190,100 A 90 90 0 0 1 100,190",
+    jambs: [
+      [{ x: 100, y: 90 }, { x: 100, y: 110 }],
+      [{ x: 190, y: 90 }, { x: 190, y: 110 }]
+    ],
+    selected: false,
+    hovered: false
+  }],
+  windows: [{
+    kind: "WINDOW",
+    geometryId: "window",
+    wallId: "wall",
+    spanStart: { x: 210, y: 100 },
+    spanEnd: { x: 280, y: 100 },
+    glazingLines: [
+      [{ x: 210, y: 96 }, { x: 280, y: 96 }],
+      [{ x: 210, y: 104 }, { x: 280, y: 104 }]
+    ],
+    jambs: [
+      [{ x: 210, y: 90 }, { x: 210, y: 110 }],
+      [{ x: 280, y: 90 }, { x: 280, y: 110 }]
+    ],
+    selected: false,
+    hovered: false
+  }],
+  joins: []
+};
+
+const selectedDoorArchitecturalPresentationModel: ArchitecturalPresentationModel2D = {
+  ...architecturalPresentationModel,
+  doors: architecturalPresentationModel.doors.map((door) => ({
+    ...door,
+    selected: door.geometryId === "door"
+  }))
 };
 
 afterEach(() => {
@@ -310,7 +368,7 @@ describe("GeometrySvgViewer", () => {
     }));
   });
 
-  it("uses architectural Project defaults without removing diagnostics", () => {
+  it("uses architectural Project defaults without removing editor hit geometry", () => {
     expect(projectGeometryDisplayOptions).toMatchObject({
       polygons: true,
       roomContours: true,
@@ -429,6 +487,174 @@ describe("GeometrySvgViewer", () => {
       ],
       hovered: undefined
     });
+  });
+
+  it("prioritizes a first Opening click and reserves movement semantics for a real drag", () => {
+    const level = getPlaygroundLevel();
+    const handleSelectionStateChange = vi.fn();
+    const handleOpeningPointerDown = vi.fn();
+    const handleOpeningDragThresholdCrossed = vi.fn();
+    const handleOpeningPointerUp = vi.fn();
+    const handleEditorPointerMove = vi.fn();
+    const { container } = render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        architecturalModel={architecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={{
+          selectionEnabled: true,
+          panEnabled: true,
+          drawWallEnabled: false,
+          wallEndpointEditingEnabled: false,
+          openingEditingEnabled: true
+        }}
+        onSelectionStateChange={handleSelectionStateChange}
+        onOpeningPointerDown={handleOpeningPointerDown}
+        onOpeningDragThresholdCrossed={handleOpeningDragThresholdCrossed}
+        onOpeningPointerUp={handleOpeningPointerUp}
+        onEditorPointerMove={handleEditorPointerMove}
+      />
+    );
+    const svg = container.querySelector("svg")!;
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      bottom: 520, height: 520, left: 0, right: 800, top: 0, width: 800,
+      x: 0, y: 0, toJSON: () => undefined
+    });
+    svg.setPointerCapture = vi.fn();
+    svg.releasePointerCapture = vi.fn();
+    svg.hasPointerCapture = vi.fn(() => true);
+
+    const door = screen.getByTestId("architectural-door");
+    fireEvent.pointerDown(door, { clientX: 120, clientY: 100, pointerId: 41 });
+    fireEvent.pointerMove(svg, { clientX: 123, clientY: 100, pointerId: 41 });
+    fireEvent.pointerUp(svg, { clientX: 123, clientY: 100, pointerId: 41 });
+    fireEvent.click(door);
+
+    expect(handleSelectionStateChange).toHaveBeenLastCalledWith({
+      selected: [selectDoor("door")],
+      hovered: undefined
+    });
+    expect(handleOpeningPointerDown).toHaveBeenCalledWith("door", "wall", 41);
+    expect(handleOpeningDragThresholdCrossed).not.toHaveBeenCalled();
+    expect(handleOpeningPointerUp).toHaveBeenCalledWith(41, false);
+    expect(handleEditorPointerMove).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(door, { clientX: 145, clientY: 100, pointerId: 42 });
+    fireEvent.pointerMove(svg, { clientX: 130, clientY: 100, pointerId: 42 });
+    fireEvent.pointerMove(svg, { clientX: 145, clientY: 100, pointerId: 42 });
+    fireEvent.pointerUp(svg, { clientX: 145, clientY: 100, pointerId: 42 });
+    fireEvent.click(door);
+
+    expect(handleOpeningDragThresholdCrossed).toHaveBeenCalledTimes(1);
+    expect(handleOpeningPointerUp).toHaveBeenLastCalledWith(42, true);
+    expect(handleEditorPointerMove).toHaveBeenCalledTimes(2);
+    expect(handleSelectionStateChange.mock.calls.at(-1)?.[0]).toEqual({
+      selected: [selectDoor("door")],
+      hovered: undefined
+    });
+    const layers = [...container.querySelectorAll("g[data-layer]")];
+    expect(layers.indexOf(container.querySelector('[data-layer="boundary-edges"]')!))
+      .toBeLessThan(layers.indexOf(container.querySelector('[data-layer="architectural-openings"]')!));
+  });
+
+  it("selects a Window as the canonical Opening entity", () => {
+    const level = getPlaygroundLevel();
+    const handleSelectionStateChange = vi.fn();
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        architecturalModel={architecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={{
+          selectionEnabled: true,
+          panEnabled: true,
+          drawWallEnabled: false,
+          wallEndpointEditingEnabled: false,
+          openingEditingEnabled: true
+        }}
+        onSelectionStateChange={handleSelectionStateChange}
+      />
+    );
+    fireEvent.click(screen.getByTestId("architectural-window"));
+    expect(handleSelectionStateChange).toHaveBeenCalledWith({
+      selected: [{ kind: "WINDOW", geometryId: "window" }],
+      hovered: undefined
+    });
+  });
+
+  it("shows one selected Opening grip and exposes grab and grabbing lifecycle classes", () => {
+    const level = getPlaygroundLevel();
+    const viewerProps = createViewerProps(level);
+    const selectedViewerProps = createViewerProps(
+      level,
+      createGeometrySelectionState([selectDoor("door")])
+    );
+    const interaction = {
+      selectionEnabled: true,
+      panEnabled: true,
+      drawWallEnabled: false,
+      wallEndpointEditingEnabled: false,
+      openingEditingEnabled: true
+    };
+    const { container, rerender } = render(
+      <GeometrySvgViewer
+        {...viewerProps}
+        architecturalModel={architecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={interaction}
+      />
+    );
+
+    expect(screen.queryByTestId("selected-opening-drag-handle")).toBeNull();
+    expect(screen.getByTestId("architectural-door").classList)
+      .toContain("architectural-opening--draggable");
+
+    rerender(
+      <GeometrySvgViewer
+        {...createViewerProps(level, createGeometrySelectionState([
+          selectDoor("door"),
+          selectWindow("window")
+        ]))}
+        architecturalModel={selectedDoorArchitecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={interaction}
+      />
+    );
+    expect(screen.queryByTestId("selected-opening-drag-handle")).toBeNull();
+
+    rerender(
+      <GeometrySvgViewer
+        {...selectedViewerProps}
+        architecturalModel={selectedDoorArchitecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={interaction}
+      />
+    );
+    expect(screen.getByTestId("selected-opening-drag-handle")).toBeTruthy();
+
+    rerender(
+      <GeometrySvgViewer
+        {...selectedViewerProps}
+        architecturalModel={selectedDoorArchitecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={interaction}
+        editorOverlay={{ activeOpeningDragId: "door" }}
+      />
+    );
+    expect(container.querySelector("svg")?.classList).toContain("geometry-svg--opening-drag");
+    expect(screen.getByTestId("architectural-door").getAttribute("data-dragging")).toBe("true");
+
+    rerender(
+      <GeometrySvgViewer
+        {...selectedViewerProps}
+        architecturalModel={selectedDoorArchitecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={interaction}
+      />
+    );
+    expect(container.querySelector("svg")?.classList).not.toContain("geometry-svg--opening-drag");
+    expect(screen.getByTestId("architectural-door").classList)
+      .toContain("architectural-opening--draggable");
   });
 
   it("emits hover state separately from the selected set", () => {

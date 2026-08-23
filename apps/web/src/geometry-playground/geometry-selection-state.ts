@@ -1,7 +1,13 @@
 /**
  * Geometry entity kinds supported by the interactive viewer.
  */
-export type GeometrySelectionKind = "POLYGON" | "BOUNDARY_EDGE" | "VERTEX";
+export type GeometrySelectionKind =
+  | "POLYGON"
+  | "BOUNDARY_EDGE"
+  | "VERTEX"
+  | "WALL"
+  | "DOOR"
+  | "WINDOW";
 
 /**
  * UI-only selection reference for immutable presented geometry.
@@ -52,6 +58,24 @@ export const selectBoundaryEdge = (geometryId: string): GeometrySelection => ({
  */
 export const selectVertex = (geometryId: string): GeometrySelection => ({
   kind: "VERTEX",
+  geometryId
+});
+
+/** Creates a canonical physical Wall selection reference. */
+export const selectWall = (geometryId: string): GeometrySelection => ({
+  kind: "WALL",
+  geometryId
+});
+
+/** Creates a Door selection reference. */
+export const selectDoor = (geometryId: string): GeometrySelection => ({
+  kind: "DOOR",
+  geometryId
+});
+
+/** Creates a Window selection reference. */
+export const selectWindow = (geometryId: string): GeometrySelection => ({
+  kind: "WINDOW",
   geometryId
 });
 

@@ -260,6 +260,18 @@ export enum ValidationErrorCode {
    */
   OPENING_OUTSIDE_WALL = "OPENING_OUTSIDE_WALL",
 
+  /** An Opening identifier does not resolve to an owned Opening. */
+  OPENING_NOT_FOUND = "OPENING_NOT_FOUND",
+
+  /** An Opening has non-positive or otherwise invalid dimensions. */
+  INVALID_OPENING_DIMENSIONS = "INVALID_OPENING_DIMENSIONS",
+
+  /** An Opening's vertical span falls outside its owning Wall. */
+  OPENING_OUTSIDE_WALL_HEIGHT = "OPENING_OUTSIDE_WALL_HEIGHT",
+
+  /** Two Opening intervals violate the authoritative adjacent-clearance policy. */
+  OPENING_COLLISION = "OPENING_COLLISION",
+
   /**
    * A StairFlight has identical start and end coordinates.
    */

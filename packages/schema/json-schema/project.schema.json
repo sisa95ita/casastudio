@@ -160,10 +160,10 @@
                       "$ref": "#/$defs/__schema0"
                     },
                     "name": {
-                      "$ref": "#/$defs/__schema16"
+                      "$ref": "#/$defs/__schema17"
                     },
                     "description": {
-                      "$ref": "#/$defs/__schema17"
+                      "$ref": "#/$defs/__schema18"
                     },
                     "fromLevelId": {
                       "$ref": "#/$defs/__schema0"
@@ -190,10 +190,10 @@
                             "$ref": "#/$defs/__schema0"
                           },
                           "name": {
-                            "$ref": "#/$defs/__schema16"
+                            "$ref": "#/$defs/__schema17"
                           },
                           "description": {
-                            "$ref": "#/$defs/__schema17"
+                            "$ref": "#/$defs/__schema18"
                           },
                           "start": {
                             "$ref": "#/$defs/__schema10"
@@ -208,10 +208,10 @@
                             "$ref": "#/$defs/__schema1"
                           },
                           "startElevation": {
-                            "$ref": "#/$defs/__schema18"
+                            "$ref": "#/$defs/__schema19"
                           },
                           "endElevation": {
-                            "$ref": "#/$defs/__schema18"
+                            "$ref": "#/$defs/__schema19"
                           }
                         },
                         "required": [
@@ -235,10 +235,10 @@
                             "$ref": "#/$defs/__schema0"
                           },
                           "name": {
-                            "$ref": "#/$defs/__schema16"
+                            "$ref": "#/$defs/__schema17"
                           },
                           "description": {
-                            "$ref": "#/$defs/__schema17"
+                            "$ref": "#/$defs/__schema18"
                           },
                           "position": {
                             "$ref": "#/$defs/__schema10"
@@ -305,28 +305,28 @@
             "$ref": "#/$defs/__schema0"
           },
           "name": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema17"
           },
           "description": {
-            "$ref": "#/$defs/__schema17"
+            "$ref": "#/$defs/__schema18"
           },
           "levelId": {
             "$ref": "#/$defs/__schema0"
           },
           "roomId": {
-            "$ref": "#/$defs/__schema19"
+            "$ref": "#/$defs/__schema20"
           },
           "cameraPosition": {
-            "$ref": "#/$defs/__schema20"
-          },
-          "cameraTarget": {
-            "$ref": "#/$defs/__schema20"
-          },
-          "fieldOfView": {
             "$ref": "#/$defs/__schema21"
           },
-          "projection": {
+          "cameraTarget": {
+            "$ref": "#/$defs/__schema21"
+          },
+          "fieldOfView": {
             "$ref": "#/$defs/__schema22"
+          },
+          "projection": {
+            "$ref": "#/$defs/__schema23"
           }
         },
         "required": [
@@ -349,10 +349,10 @@
             "$ref": "#/$defs/__schema0"
           },
           "name": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema17"
           },
           "description": {
-            "$ref": "#/$defs/__schema17"
+            "$ref": "#/$defs/__schema18"
           },
           "viewpointId": {
             "$ref": "#/$defs/__schema0"
@@ -393,37 +393,37 @@
             "$ref": "#/$defs/__schema0"
           },
           "name": {
-            "$ref": "#/$defs/__schema16"
-          },
-          "description": {
             "$ref": "#/$defs/__schema17"
           },
+          "description": {
+            "$ref": "#/$defs/__schema18"
+          },
           "promptText": {
-            "$ref": "#/$defs/__schema23"
+            "$ref": "#/$defs/__schema24"
           },
           "style": {
-            "$ref": "#/$defs/__schema23"
+            "$ref": "#/$defs/__schema24"
           },
           "constraints": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/__schema23"
+              "$ref": "#/$defs/__schema24"
             }
           },
           "palette": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/__schema23"
+              "$ref": "#/$defs/__schema24"
             }
           },
           "referenceAssetRefs": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/__schema23"
+              "$ref": "#/$defs/__schema24"
             }
           },
           "notes": {
-            "$ref": "#/$defs/__schema23"
+            "$ref": "#/$defs/__schema24"
           }
         },
         "required": [
@@ -445,10 +445,10 @@
             "$ref": "#/$defs/__schema0"
           },
           "name": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema17"
           },
           "description": {
-            "$ref": "#/$defs/__schema17"
+            "$ref": "#/$defs/__schema18"
           },
           "viewpointId": {
             "$ref": "#/$defs/__schema0"
@@ -460,28 +460,28 @@
             "$ref": "#/$defs/__schema0"
           },
           "status": {
-            "$ref": "#/$defs/__schema24"
-          },
-          "requestedProviderId": {
             "$ref": "#/$defs/__schema25"
           },
+          "requestedProviderId": {
+            "$ref": "#/$defs/__schema26"
+          },
           "requestedModelId": {
-            "$ref": "#/$defs/__schema27"
+            "$ref": "#/$defs/__schema28"
           },
           "requestedResultCount": {
-            "$ref": "#/$defs/__schema28"
+            "$ref": "#/$defs/__schema29"
           },
           "createdAt": {
             "$ref": "#/$defs/__schema2"
           },
           "startedAt": {
-            "$ref": "#/$defs/__schema29"
-          },
-          "completedAt": {
             "$ref": "#/$defs/__schema30"
           },
-          "error": {
+          "completedAt": {
             "$ref": "#/$defs/__schema31"
+          },
+          "error": {
+            "$ref": "#/$defs/__schema32"
           }
         },
         "required": [
@@ -504,43 +504,43 @@
             "$ref": "#/$defs/__schema0"
           },
           "name": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema17"
           },
           "description": {
-            "$ref": "#/$defs/__schema17"
+            "$ref": "#/$defs/__schema18"
           },
           "renderRequestId": {
             "$ref": "#/$defs/__schema0"
           },
           "status": {
-            "$ref": "#/$defs/__schema24"
+            "$ref": "#/$defs/__schema25"
           },
           "createdAt": {
             "$ref": "#/$defs/__schema2"
           },
           "assetRef": {
-            "$ref": "#/$defs/__schema32"
+            "$ref": "#/$defs/__schema33"
           },
           "providerId": {
-            "$ref": "#/$defs/__schema34"
-          },
-          "modelId": {
             "$ref": "#/$defs/__schema35"
           },
-          "notes": {
+          "modelId": {
             "$ref": "#/$defs/__schema36"
           },
-          "favorite": {
+          "notes": {
             "$ref": "#/$defs/__schema37"
           },
-          "error": {
+          "favorite": {
             "$ref": "#/$defs/__schema38"
           },
-          "width": {
+          "error": {
             "$ref": "#/$defs/__schema39"
           },
-          "height": {
+          "width": {
             "$ref": "#/$defs/__schema40"
+          },
+          "height": {
+            "$ref": "#/$defs/__schema41"
           }
         },
         "required": [
@@ -696,17 +696,31 @@
                 "$ref": "#/$defs/__schema4"
               },
               "width": {
-                "$ref": "#/$defs/__schema4"
+                "$ref": "#/$defs/__schema12"
               },
               "height": {
-                "$ref": "#/$defs/__schema4"
+                "$ref": "#/$defs/__schema12"
               },
               "elevation": {
-                "$ref": "#/$defs/__schema4"
+                "$ref": "#/$defs/__schema16"
               },
               "type": {
                 "type": "string",
                 "const": "DOOR"
+              },
+              "hingeSide": {
+                "type": "string",
+                "enum": [
+                  "START",
+                  "END"
+                ]
+              },
+              "swingSide": {
+                "type": "string",
+                "enum": [
+                  "LEFT",
+                  "RIGHT"
+                ]
               },
               "connectedRoomIds": {
                 "$ref": "#/$defs/__schema14"
@@ -738,13 +752,13 @@
                 "$ref": "#/$defs/__schema4"
               },
               "width": {
-                "$ref": "#/$defs/__schema4"
+                "$ref": "#/$defs/__schema12"
               },
               "height": {
-                "$ref": "#/$defs/__schema4"
+                "$ref": "#/$defs/__schema12"
               },
               "elevation": {
-                "$ref": "#/$defs/__schema4"
+                "$ref": "#/$defs/__schema16"
               },
               "type": {
                 "type": "string",
@@ -765,20 +779,24 @@
       }
     },
     "__schema16": {
-      "type": "string",
-      "minLength": 1
+      "minimum": 0,
+      "$ref": "#/$defs/__schema4"
     },
     "__schema17": {
       "type": "string",
       "minLength": 1
     },
     "__schema18": {
-      "type": "number"
+      "type": "string",
+      "minLength": 1
     },
     "__schema19": {
-      "$ref": "#/$defs/__schema0"
+      "type": "number"
     },
     "__schema20": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "__schema21": {
       "type": "object",
       "properties": {
         "x": {
@@ -798,22 +816,22 @@
       ],
       "additionalProperties": false
     },
-    "__schema21": {
+    "__schema22": {
       "exclusiveMaximum": 180,
       "$ref": "#/$defs/__schema12"
     },
-    "__schema22": {
+    "__schema23": {
       "type": "string",
       "enum": [
         "PERSPECTIVE",
         "ORTHOGRAPHIC"
       ]
     },
-    "__schema23": {
+    "__schema24": {
       "type": "string",
       "minLength": 1
     },
-    "__schema24": {
+    "__schema25": {
       "type": "string",
       "enum": [
         "PENDING",
@@ -823,54 +841,54 @@
         "CANCELLED"
       ]
     },
-    "__schema25": {
-      "$ref": "#/$defs/__schema26"
-    },
     "__schema26": {
+      "$ref": "#/$defs/__schema27"
+    },
+    "__schema27": {
       "type": "string",
       "minLength": 1
     },
-    "__schema27": {
-      "$ref": "#/$defs/__schema26"
-    },
     "__schema28": {
-      "$ref": "#/$defs/__schema1"
+      "$ref": "#/$defs/__schema27"
     },
     "__schema29": {
-      "$ref": "#/$defs/__schema2"
+      "$ref": "#/$defs/__schema1"
     },
     "__schema30": {
       "$ref": "#/$defs/__schema2"
     },
     "__schema31": {
-      "$ref": "#/$defs/__schema26"
+      "$ref": "#/$defs/__schema2"
     },
     "__schema32": {
-      "$ref": "#/$defs/__schema33"
+      "$ref": "#/$defs/__schema27"
     },
     "__schema33": {
+      "$ref": "#/$defs/__schema34"
+    },
+    "__schema34": {
       "type": "string",
       "minLength": 1
     },
-    "__schema34": {
-      "$ref": "#/$defs/__schema33"
-    },
     "__schema35": {
-      "$ref": "#/$defs/__schema33"
+      "$ref": "#/$defs/__schema34"
     },
     "__schema36": {
-      "$ref": "#/$defs/__schema33"
+      "$ref": "#/$defs/__schema34"
     },
     "__schema37": {
-      "type": "boolean"
+      "$ref": "#/$defs/__schema34"
     },
     "__schema38": {
-      "$ref": "#/$defs/__schema33"
+      "type": "boolean"
     },
     "__schema39": {
-      "$ref": "#/$defs/__schema1"
+      "$ref": "#/$defs/__schema34"
     },
     "__schema40": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "__schema41": {
       "$ref": "#/$defs/__schema1"
     }
   }

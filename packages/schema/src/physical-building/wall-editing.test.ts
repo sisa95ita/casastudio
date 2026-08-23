@@ -250,6 +250,27 @@ describe("moveWallEndpoint", () => {
       errors: [{ code: ValidationErrorCode.WALL_ZERO_LENGTH }]
     });
   });
+
+  it("rejects shortening a Wall past an owned Opening", () => {
+    const project = createProject();
+    project.building.levels[0]!.walls[0]!.openings.push({
+      id: "window-near-end",
+      type: "WINDOW",
+      offsetFromStart: 60,
+      width: 30,
+      height: 120,
+      elevation: 90
+    });
+    const before = clone(project);
+    const result = moveWallEndpoint(project, {
+      levelId: "ground-floor",
+      wallId: "existing-wall",
+      endpoint: "end",
+      position: { x: 80, z: 0 }
+    });
+    expect(result).toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.OPENING_OUTSIDE_WALL }] });
+    expect(project).toEqual(before);
+  });
 });
 
 describe("deleteWall", () => {
@@ -314,8 +335,8 @@ function createProject(): Project {
           elevation: 0,
           rooms: [],
           walls: [
-            { ...editableWall, id: "existing-wall" },
-            { ...editableWall, id: "unreferenced-wall", start: { x: 0, z: 100 }, end: { x: 100, z: 100 } }
+            { ...editableWall, id: "existing-wall", openings: [] },
+            { ...editableWall, id: "unreferenced-wall", start: { x: 0, z: 100 }, end: { x: 100, z: 100 }, openings: [] }
           ],
           staircases: []
         },

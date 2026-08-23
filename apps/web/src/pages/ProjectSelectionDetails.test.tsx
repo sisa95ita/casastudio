@@ -7,6 +7,36 @@ import { ProjectSelectionDetails } from "./ProjectSelectionDetails";
 afterEach(cleanup);
 
 describe("ProjectSelectionDetails", () => {
+  it("shows the canonical Wall inspector for architectural Wall selections", () => {
+    render(
+      <ProjectSelectionDetails
+        model={model}
+        selectionState={{ selected: [{ kind: "WALL", geometryId: "wall-a" }] }}
+        wall={{
+          id: "wall-a",
+          name: "Exterior wall",
+          start: { x: 0, z: 0 },
+          end: { x: 100, z: 0 },
+          height: 280,
+          thickness: 20,
+          roomIds: [],
+          openings: []
+        }}
+        units={{ length: "cm", angle: "deg" }}
+        endpointAvailability={{
+          roomReferenced: false,
+          start: { topology: "standalone", draggable: true },
+          end: { topology: "standalone", draggable: true }
+        }}
+        onDeleteWall={vi.fn()}
+        onUpdateWallProperties={vi.fn(() => true)}
+      />
+    );
+
+    expect(screen.getByText("Wall")).toBeTruthy();
+    expect(screen.getByLabelText("Thickness (cm)")).toBeTruthy();
+  });
+
   it("shows runtime Vertex coordinates and incident domain Wall IDs read-only", () => {
     render(
       <ProjectSelectionDetails

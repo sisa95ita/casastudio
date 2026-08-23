@@ -31,11 +31,15 @@
     "title": "Shortcuts",
     "clearSelection": "Clear selection",
     "cancelInteraction": "Cancel interaction / clear selection",
-    "deleteWall": "Delete selected wall",
+    "deleteWall": "Delete selected wall or opening",
     "fitViewport": "Fit viewport",
     "resetViewport": "Reset viewport",
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "selectTool": "Select tool",
+    "drawWallTool": "Draw Wall tool",
+    "doorTool": "Door tool",
+    "windowTool": "Window tool"
   },
   "status": {
     "engineBuildFailed": "Engine: build failed",

@@ -219,7 +219,7 @@ export function moveWallEndpoint(
     );
   }
 
-  return success(
+  return validateCanonicalEditingResult(
     mapLevel(project, levelIndex, (currentLevel) => ({
       ...currentLevel,
       walls: currentLevel.walls.map((currentWall, currentWallIndex) =>
@@ -227,7 +227,8 @@ export function moveWallEndpoint(
           ? { ...currentWall, [input.endpoint]: positionResult.data }
           : currentWall
       )
-    }))
+    })),
+    "Wall endpoint movement"
   );
 }
 
@@ -306,13 +307,14 @@ export function updateWallProperties(
         });
   }
 
-  return success(
+  return validateCanonicalEditingResult(
     mapLevel(project, levelIndex, (currentLevel) => ({
       ...currentLevel,
       walls: currentLevel.walls.map((currentWall, currentWallIndex) =>
         currentWallIndex === wallIndex ? wallResult.data : currentWall
       )
-    }))
+    })),
+    "Wall property update"
   );
 }
 
@@ -744,12 +746,19 @@ function mergeWallOpenings(
       0;
     for (const opening of wall.openings) {
       seen.add(opening.id);
-      openings.push({
-        ...opening,
-        offsetFromStart: aligned
-          ? startDistance + opening.offsetFromStart
-          : startDistance - opening.offsetFromStart - opening.width
-      });
+      const offsetFromStart = aligned
+        ? startDistance + opening.offsetFromStart
+        : startDistance - opening.offsetFromStart - opening.width;
+      openings.push(
+        opening.type === "DOOR" && !aligned
+          ? {
+              ...opening,
+              offsetFromStart,
+              hingeSide: (opening.hingeSide ?? "START") === "START" ? "END" : "START",
+              swingSide: (opening.swingSide ?? "LEFT") === "LEFT" ? "RIGHT" : "LEFT"
+            }
+          : { ...opening, offsetFromStart }
+      );
     }
   }
 
@@ -927,7 +936,7 @@ function validateCanonicalEditingResult(
     if (!result.valid) return { ok: false, errors: result.errors };
   }
 
-  return success(parsed.data);
+  return success(project);
 }
 
 /**
@@ -935,6 +944,8 @@ function validateCanonicalEditingResult(
  *
  * A Wall used by a Room boundary or carrying reciprocal `roomIds` is rejected
  * so the operation cannot create dangling canonical references implicitly.
+ * When deletion is allowed, its owned Openings are deleted with the Wall and
+ * can never become orphaned.
  */
 export function deleteWall(
   project: Project,

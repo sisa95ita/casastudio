@@ -1,6 +1,7 @@
 export { GeometryBuildErrorCode, type GeometryBuildError } from "./geometry-build-error.js";
 export type { GeometryBuildResult } from "./geometry-build-result.js";
 export { GeometryEngine } from "./geometry-engine.js";
+export * from "./architectural-plan.js";
 export {
   BoundaryEdge,
   BoundaryEdgeUse,

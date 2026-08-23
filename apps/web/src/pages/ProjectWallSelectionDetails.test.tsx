@@ -91,13 +91,19 @@ describe("ProjectWallSelectionDetails", () => {
     const thickness = screen.getByRole("spinbutton", {
       name: "Thickness (cm)"
     });
-    fireEvent.change(thickness, { target: { value: "24" } });
+    fireEvent.change(thickness, { target: { value: "24.126" } });
     expect(handleUpdate).not.toHaveBeenCalled();
     fireEvent.blur(thickness);
-    expect(handleUpdate).toHaveBeenCalledWith({ thickness: 24 });
+    expect(handleUpdate).toHaveBeenCalledWith({ thickness: 24.13 });
+    expect(thickness).toHaveProperty("value", "24.13");
+
+    const height = screen.getByRole("spinbutton", { name: "Height (cm)" });
+    fireEvent.change(height, { target: { value: "310.126" } });
+    fireEvent.blur(height);
+    expect(handleUpdate).toHaveBeenCalledWith({ height: 310.13 });
+    expect(height).toHaveProperty("value", "310.13");
 
     handleUpdate.mockReturnValue(false);
-    const height = screen.getByRole("spinbutton", { name: "Height (cm)" });
     fireEvent.change(height, { target: { value: "0" } });
     fireEvent.blur(height);
     expect(handleUpdate).toHaveBeenCalledWith({ height: 0 });

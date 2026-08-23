@@ -13,6 +13,7 @@ import type {
 import type { RootState } from "./store";
 import type { ProjectEditorTool } from "./project-editor-tools";
 import type { DrawWallSnapCandidate } from "./project-wall-snapping";
+import type { OpeningPlacementCandidate } from "./project-opening-editing";
 
 /** Mutually exclusive interaction modes for the 2D Project workspace. */
 export type ProjectWorkspaceMode = "view" | "edit";
@@ -45,10 +46,30 @@ export type MoveJunctionInteraction = {
   readonly currentPointerPoint: WorldPointXZ;
 };
 
+/** Describes a Door/Window proposal that has not entered Project history. */
+export type PlaceOpeningInteraction = {
+  readonly kind: "place-opening";
+  readonly openingType: "DOOR" | "WINDOW";
+  readonly candidate?: OpeningPlacementCandidate;
+};
+
+/** Describes an Opening drag constrained to its owning Wall. */
+export type MoveOpeningInteraction = {
+  readonly kind: "move-opening";
+  readonly levelId: string;
+  readonly wallId: string;
+  readonly openingId: string;
+  readonly pointerId: number;
+  readonly currentOffsetFromStart: number;
+  readonly dragging: boolean;
+  readonly valid: boolean;
+};
+
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
-    DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction | null;
+    DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
+    PlaceOpeningInteraction | MoveOpeningInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
@@ -199,6 +220,9 @@ const projectEditorSlice = createSlice({
       state.history.future = [];
       state.draft = cloneProject(nextDraft);
       state.dirty = true;
+      if (state.transient.interaction?.kind === "place-opening") {
+        state.transient = { interaction: null };
+      }
       if (
         !nextDraft.building.levels.some(
           (level) => level.id === state.activeLevelId
@@ -364,6 +388,67 @@ const projectEditorSlice = createSlice({
         state.transient.interaction.currentPointerPoint = action.payload.point;
       }
     },
+    editorOpeningPlacementChanged(
+      state,
+      action: PayloadAction<{
+        readonly openingType: "DOOR" | "WINDOW";
+        readonly candidate?: OpeningPlacementCandidate;
+      }>
+    ) {
+      if (
+        state.mode === "edit" &&
+        ((state.activeTool === "door" && action.payload.openingType === "DOOR") ||
+          (state.activeTool === "window" && action.payload.openingType === "WINDOW"))
+      ) {
+        state.transient.interaction = {
+          kind: "place-opening",
+          openingType: action.payload.openingType,
+          candidate: action.payload.candidate
+        };
+      }
+    },
+    editorOpeningDragStarted(
+      state,
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly wallId: string;
+        readonly openingId: string;
+        readonly pointerId: number;
+        readonly offsetFromStart: number;
+      }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-opening",
+          levelId: action.payload.levelId,
+          wallId: action.payload.wallId,
+          openingId: action.payload.openingId,
+          pointerId: action.payload.pointerId,
+          currentOffsetFromStart: action.payload.offsetFromStart,
+          dragging: false,
+          valid: true
+        };
+      }
+    },
+    editorOpeningDragThresholdCrossed(
+      state,
+      action: PayloadAction<{ readonly pointerId: number }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "move-opening" && interaction.pointerId === action.payload.pointerId) {
+        interaction.dragging = true;
+      }
+    },
+    editorOpeningDragPreviewChanged(
+      state,
+      action: PayloadAction<{ readonly pointerId: number; readonly offsetFromStart: number; readonly valid: boolean }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "move-opening" && interaction.pointerId === action.payload.pointerId) {
+        interaction.currentOffsetFromStart = action.payload.offsetFromStart;
+        interaction.valid = action.payload.valid;
+      }
+    },
     editorTransientInteractionCleared(state) {
       if (state.mode === "edit") {
         state.transient = { interaction: null };
@@ -440,6 +525,10 @@ export const {
   editorActiveToolChanged,
   editorDrawWallStarted,
   editorDrawWallPointerMoved,
+  editorOpeningPlacementChanged,
+  editorOpeningDragStarted,
+  editorOpeningDragThresholdCrossed,
+  editorOpeningDragPreviewChanged,
   editorEndpointDragStarted,
   editorJunctionDragStarted,
   editorTransientPointerMoved,
