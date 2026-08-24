@@ -3,31 +3,53 @@ import { updateOpening, type Project } from "@casastudio/schema";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ProjectOpeningSelectionDetails } from "./ProjectOpeningSelectionDetails";
+import {
+  ProjectOpeningPropertiesDetails,
+  ProjectOpeningSelectionDetails
+} from "./ProjectOpeningSelectionDetails";
 
 afterEach(cleanup);
 
 describe("ProjectOpeningSelectionDetails", () => {
-  it("edits every individual Door measurement and orientation without changing another Door", () => {
+  it("edits every individual Door measurement without changing another Door", () => {
     const onProjectChange = vi.fn();
     render(<OpeningInspectorHarness openingId="door-a" onProjectChange={onProjectChange} />);
 
     commitMeasurement("Width (cm)", "85");
     commitMeasurement("Height (cm)", "215");
     commitMeasurement("Position from wall start (cm)", "10");
-    fireEvent.click(screen.getByRole("button", { name: "Flip hinge" }));
-    fireEvent.click(screen.getByRole("button", { name: "Flip swing" }));
 
     const project = onProjectChange.mock.calls.at(-1)?.[0] as Project;
     expect(opening(project, "door-a")).toMatchObject({
       width: 85,
       height: 215,
       offsetFromStart: 10,
-      hingeSide: "END",
-      swingSide: "RIGHT"
+      hingeSide: "START",
+      swingSide: "LEFT"
     });
     expect(opening(project, "door-b")).toMatchObject({ width: 95, height: 205 });
     expect(screen.queryByLabelText("Sill height (cm)")).toBeNull();
+  });
+
+  it("keeps Door orientation and deletion as contextual Selection actions", () => {
+    const onUpdate = vi.fn(() => true);
+    const project = createProject();
+    const wall = project.building.levels[0]!.walls[0]!;
+    render(
+      <ProjectOpeningSelectionDetails
+        wall={wall}
+        opening={opening(project, "door-a")}
+        units={project.units}
+        onUpdate={onUpdate}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Flip hinge" }));
+    fireEvent.click(screen.getByRole("button", { name: "Flip swing" }));
+    expect(onUpdate).toHaveBeenNthCalledWith(1, { hingeSide: "END" });
+    expect(onUpdate).toHaveBeenNthCalledWith(2, { swingSide: "RIGHT" });
   });
 
   it("edits every individual Window measurement without changing another Window", () => {
@@ -100,11 +122,10 @@ function OpeningInspectorHarness({
   const wall = project.building.levels[0]!.walls[0]!;
   const selected = opening(project, openingId);
   return (
-    <ProjectOpeningSelectionDetails
+    <ProjectOpeningPropertiesDetails
       wall={wall}
       opening={selected}
       units={project.units}
-      onDelete={() => undefined}
       onUpdate={(properties) => {
         const result = updateOpening(project, {
           levelId: "level",

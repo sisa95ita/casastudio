@@ -1,5 +1,5 @@
 /** Tools available to the manual 2D Project editor. */
-export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "measure" | "pan";
+export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "room" | "measure" | "pan";
 
 /** Interaction capabilities consumed by the shared geometry viewer. */
 export type ProjectEditorInteraction = {
@@ -65,6 +65,17 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         drawWallEnabled: false,
         wallEndpointEditingEnabled: false,
         openingPlacement: "WINDOW",
+        openingEditingEnabled: false
+      }
+    },
+    {
+      id: "room",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: false,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false,
         openingEditingEnabled: false
       }
     },

@@ -15,6 +15,13 @@
     "web:build": "pnpm --filter @casastudio/web build",
     "web:test": "pnpm --filter @casastudio/web test",
     "web:lint": "pnpm --filter @casastudio/web lint",
+    "e2e:infra:up": "docker compose up -d postgres keycloak",
+    "e2e:infra:down": "docker compose stop postgres keycloak",
+    "e2e:prepare": "pnpm db:migrate:deploy && pnpm db:seed",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report",
     "app:dev": "pnpm --parallel --filter @casastudio/api --filter @casastudio/web dev",
     "app:build": "pnpm --filter @casastudio/api build && pnpm --filter @casastudio/web build",
     "app:test": "pnpm --filter @casastudio/api test && pnpm --filter @casastudio/web test",
@@ -43,6 +50,7 @@
     "test": "pnpm version:test && turbo test"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@eslint/js": "^9.33.0",
     "@types/node": "^24.2.0",
     "eslint": "^9.33.0",

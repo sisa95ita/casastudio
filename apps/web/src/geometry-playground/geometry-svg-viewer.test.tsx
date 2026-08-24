@@ -308,6 +308,10 @@ describe("GeometrySvgViewer", () => {
         ...polygon,
         points: presentationPoints,
         svgPoints: irregularPoints,
+        centroid: {
+          world: { x: 213.25, z: 139.75 },
+          screen: { x: 213.25, y: 139.75 }
+        },
         screenBounds: { x: 120, y: 80, width: 240, height: 180 }
       }],
       boundaryEdges: screenPoints.map((start, index) => {
@@ -332,6 +336,7 @@ describe("GeometrySvgViewer", () => {
     const roomPolygon = screen.getByTestId("geometry-polygon");
     const roomContour = screen.getByTestId("room-contour");
     const bounds = screen.getByTestId("polygon-bounds");
+    const centroid = screen.getByTestId("polygon-centroid");
     const layers = [...container.querySelectorAll("g[data-layer]")];
     const boundsLayer = container.querySelector('[data-layer="polygon-bounds"]');
 
@@ -346,6 +351,8 @@ describe("GeometrySvgViewer", () => {
     expect(bounds.getAttribute("y")).toBe("80");
     expect(bounds.getAttribute("width")).toBe("240");
     expect(bounds.getAttribute("height")).toBe("180");
+    expect(centroid.querySelector("circle")?.getAttribute("cx")).toBe("213.25");
+    expect(centroid.querySelector("circle")?.getAttribute("cy")).toBe("139.75");
     expect(bounds.hasAttribute("points")).toBe(false);
     expect(boundsLayer?.getAttribute("data-diagnostic")).toBe("true");
     expect(boundsLayer?.getAttribute("aria-hidden")).toBe("true");
@@ -370,6 +377,8 @@ describe("GeometrySvgViewer", () => {
 
   it("uses architectural Project defaults without removing editor hit geometry", () => {
     expect(projectGeometryDisplayOptions).toMatchObject({
+      architecturalWalls: true,
+      openings: true,
       polygons: true,
       roomContours: true,
       boundaryEdges: true,
@@ -790,7 +799,7 @@ describe("GeometrySvgViewer", () => {
     });
   });
 
-  it("emits zoom viewport updates from wheel input", () => {
+  it("consumes one cancelable wheel event and emits one cursor-centered zoom update", () => {
     const level = getPlaygroundLevel();
     const viewport = { zoom: 1, offsetX: 0, offsetY: 0 };
     const handleViewportChange = vi.fn();
@@ -819,7 +828,15 @@ describe("GeometrySvgViewer", () => {
       toJSON: () => undefined
     });
 
-    fireEvent.wheel(svg, { clientX: 400, clientY: 260, deltaY: -120 });
+    const wheelEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 400,
+      clientY: 260,
+      deltaY: -120
+    });
+    expect(svg.dispatchEvent(wheelEvent)).toBe(false);
+    expect(wheelEvent.defaultPrevented).toBe(true);
 
     expect(handleViewportChange).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -831,6 +848,49 @@ describe("GeometrySvgViewer", () => {
     expect(handleViewportChange.mock.calls[0]?.[0].zoom).toBeGreaterThan(
       viewport.zoom
     );
+    expect(handleViewportChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers one non-passive wheel listener and removes the same listener", () => {
+    const level = getPlaygroundLevel();
+    const addEventListener = vi.spyOn(SVGSVGElement.prototype, "addEventListener");
+    const removeEventListener = vi.spyOn(
+      SVGSVGElement.prototype,
+      "removeEventListener"
+    );
+    const { rerender, unmount } = render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        options={defaultGeometryDisplayOptions}
+        onViewportChange={vi.fn()}
+      />
+    );
+    rerender(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        options={defaultGeometryDisplayOptions}
+        onViewportChange={vi.fn()}
+      />
+    );
+
+    const wheelRegistrations = addEventListener.mock.calls.filter(
+      ([type]) => type === "wheel"
+    );
+    expect(wheelRegistrations).toHaveLength(1);
+    expect(wheelRegistrations[0]?.[2]).toEqual({
+      passive: false,
+      capture: false
+    });
+    unmount();
+    const wheelRemovals = removeEventListener.mock.calls.filter(
+      ([type]) => type === "wheel"
+    );
+    expect(wheelRemovals).toHaveLength(1);
+    expect(wheelRemovals[0]?.[1]).toBe(wheelRegistrations[0]?.[1]);
+    expect(wheelRemovals[0]?.[2]).toEqual({
+      passive: false,
+      capture: false
+    });
   });
 
   it("emits pan viewport updates from background dragging", () => {
@@ -891,7 +951,7 @@ describe("GeometrySvgViewer", () => {
         onRoomFaceCandidateClick={handleFaceClick}
         editorOverlay={{
           roomFaceCandidates: [{
-            key: "face-a",
+            faceKey: "face-a",
             vertices: [
               { x: 0, z: 0 },
               { x: 100, z: 0 },

@@ -15,22 +15,19 @@ import { useCasaTranslation } from "../i18n";
 import type { WallEndpointEditingAvailability } from "../state/project-wall-editing";
 import { formatEditorMeasurement, normalizeEditorMeasurement } from "./editor-measurement";
 
-/** Displays canonical Wall details and commits supported scalar property edits. */
+/** Displays canonical Wall identity, geometry summary, and safe contextual actions. */
 export function ProjectWallSelectionDetails({
   wall,
   units,
   endpointAvailability,
   onDelete,
-  onUpdateProperties
+  editable = true
 }: {
   readonly wall?: Wall;
   readonly units: Project["units"];
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly onDelete: () => void;
-  readonly onUpdateProperties: (properties: {
-    readonly height?: number;
-    readonly thickness?: number;
-  }) => boolean;
+  readonly editable?: boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
 
@@ -47,6 +44,7 @@ export function ProjectWallSelectionDetails({
 
   const length = measureWall(wall).length;
   const items = [
+    [t("wall.labels.identity"), wall.name ?? wall.id],
     [t("wall.labels.type"), t("wall.type")],
     [t("wall.labels.length"), formatArchitecturalLength(length, units.length)],
     [t("wall.labels.start"), formatPoint(wall.start, units.length)],
@@ -84,18 +82,6 @@ export function ProjectWallSelectionDetails({
           </Stack>
         ))}
       </Stack>
-      <WallMeasurementField
-        label={t("wall.labels.thickness")}
-        unit={units.length}
-        value={wall.thickness}
-        onCommit={(thickness) => onUpdateProperties({ thickness })}
-      />
-      <WallMeasurementField
-        label={t("wall.labels.height")}
-        unit={units.length}
-        value={wall.height}
-        onCommit={(height) => onUpdateProperties({ height })}
-      />
       {endpointAvailability ? (
         <Stack spacing={0.5}>
           <Typography variant="caption" color="text.secondary">
@@ -136,7 +122,7 @@ export function ProjectWallSelectionDetails({
           {t("wall.sharedEndpointEditingUnavailable")}
         </Alert>
       ) : null}
-      <Button
+      {editable ? <Button
         color="error"
         variant="outlined"
         size="small"
@@ -144,11 +130,57 @@ export function ProjectWallSelectionDetails({
         onClick={onDelete}
       >
         {t("wall.delete")}
-      </Button>
+      </Button> : null}
     </Stack>
   );
 }
 
+/** Renders the scalar Wall values supported by semantic property operations. */
+export function ProjectWallPropertiesDetails({
+  wall,
+  units,
+  onUpdateProperties
+}: {
+  readonly wall?: Wall;
+  readonly units: Project["units"];
+  readonly onUpdateProperties: (properties: {
+    readonly height?: number;
+    readonly thickness?: number;
+  }) => boolean;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  if (!wall) return <PropertiesUnavailable />;
+
+  return (
+    <Stack component="section" spacing={1.5}>
+      <Typography variant="subtitle2">{t("wall.propertiesTitle")}</Typography>
+      <WallMeasurementField
+        label={t("wall.labels.thickness")}
+        unit={units.length}
+        value={wall.thickness}
+        onCommit={(thickness) => onUpdateProperties({ thickness })}
+      />
+      <WallMeasurementField
+        label={t("wall.labels.height")}
+        unit={units.length}
+        value={wall.height}
+        onCommit={(height) => onUpdateProperties({ height })}
+      />
+    </Stack>
+  );
+}
+
+/** Renders the empty Wall properties state without implying unsupported edits. */
+function PropertiesUnavailable() {
+  const { t } = useCasaTranslation("project-viewer");
+  return (
+    <Typography variant="caption" color="text.secondary">
+      {t("properties.selectObject")}
+    </Typography>
+  );
+}
+
+/** Commits one normalized Wall measurement on blur or Enter. */
 function WallMeasurementField({
   label,
   unit,

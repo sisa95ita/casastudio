@@ -44,6 +44,8 @@ import {
 
 /** Props for the shared interactive 2D geometry viewer panel. */
 export type GeometryViewerPanelProps = {
+  /** Whether the surrounding Project shell owns all viewer chrome. */
+  readonly workspaceCanvas?: boolean;
   readonly title: string;
   readonly headingId: string;
   readonly presentationModel: GeometryPresentationModel2D;
@@ -90,6 +92,7 @@ export type GeometryViewerPanelProps = {
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
 export function GeometryViewerPanel({
+  workspaceCanvas = false,
   title,
   headingId,
   presentationModel,
@@ -127,11 +130,11 @@ export function GeometryViewerPanel({
   return (
     <Paper
       component="section"
-      className="geometry-viewer-panel"
+      className={workspaceCanvas ? "geometry-viewer-panel geometry-viewer-panel--workspace" : "geometry-viewer-panel"}
       aria-labelledby={headingId}
       variant="outlined"
     >
-      <Box className="geometry-viewer-panel__toolbar">
+      {!workspaceCanvas ? <Box className="geometry-viewer-panel__toolbar">
         <Stack
           direction="row"
           spacing={1}
@@ -171,7 +174,7 @@ export function GeometryViewerPanel({
             <RestartAltRoundedIcon fontSize="small" />
           </ViewportButton>
         </Stack>
-      </Box>
+      </Box> : null}
       <Box className="geometry-viewer-panel__canvas">
         <GeometrySvgViewer
           presentationModel={presentationModel}
@@ -200,7 +203,7 @@ export function GeometryViewerPanel({
           <Typography variant="caption">{t("viewer.canvasHint")}</Typography>
         </Box>
       </Box>
-      <Box className="geometry-viewer-panel__technical-bar" role="group" aria-label={t("toolbar.technical")}>
+      {!workspaceCanvas ? <Box className="geometry-viewer-panel__technical-bar" role="group" aria-label={t("toolbar.technical")}>
         <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
           {documentScaleDenominator ? (
             onDocumentScaleChange ? (
@@ -236,7 +239,7 @@ export function GeometryViewerPanel({
             ) : null}
           </Stack>
         ) : null}
-      </Box>
+      </Box> : null}
     </Paper>
   );
 }

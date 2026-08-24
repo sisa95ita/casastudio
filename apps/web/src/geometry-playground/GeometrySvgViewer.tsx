@@ -1,9 +1,9 @@
 import {
+  useEffect,
   useRef,
   type KeyboardEvent,
   type MouseEvent,
-  type PointerEvent,
-  type WheelEvent
+  type PointerEvent
 } from "react";
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 
@@ -61,6 +61,8 @@ export const geometrySvgViewport = Object.freeze({
  * state. Room contours use the same ordered polygon points as Room fills.
  */
 export type GeometryDisplayOptions = {
+  readonly architecturalWalls: boolean;
+  readonly openings: boolean;
   readonly polygons: boolean;
   /** Whether ordered architectural Room polygon contours are visible. */
   readonly roomContours: boolean;
@@ -79,6 +81,8 @@ export type GeometryDisplayOptions = {
  */
 export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
   Object.freeze({
+    architecturalWalls: true,
+    openings: true,
     polygons: true,
     roomContours: true,
     boundaryEdges: true,
@@ -99,6 +103,8 @@ export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
  */
 export const projectGeometryDisplayOptions: GeometryDisplayOptions =
   Object.freeze({
+    architecturalWalls: true,
+    openings: true,
     polygons: true,
     roomContours: true,
     boundaryEdges: true,
@@ -177,7 +183,7 @@ const openingDragThresholdCssPixels = 5;
 /** Editor-only geometry rendered above the stable presentation model. */
 export type GeometryEditorOverlay = {
   readonly roomFaceCandidates?: readonly {
-    readonly key: string;
+    readonly faceKey: string;
     readonly vertices: readonly WorldPointXZ[];
     readonly selected: boolean;
   }[];
@@ -256,19 +262,59 @@ export function GeometrySvgViewer({
   const { t } = useCasaTranslation("geometry-playground");
   const bounds = presentationModel.bounds;
   const lastPanPointRef = useRef<ScreenPoint | undefined>(undefined);
-  const currentViewportRef = useRef<ViewportState | undefined>(undefined);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const currentViewportRef = useRef<ViewportState>(viewport);
+  const viewportTransformRef = useRef(createViewportTransform2D(viewport));
+  const onViewportChangeRef = useRef(onViewportChange);
   const suppressNextBackgroundClickRef = useRef(false);
   const endpointPointerIdRef = useRef<number | undefined>(undefined);
   const openingPointerInteractionRef = useRef<OpeningPointerInteraction | undefined>(undefined);
 
   currentViewportRef.current = viewport;
+  viewportTransformRef.current = createViewportTransform2D(viewport);
+  onViewportChangeRef.current = onViewportChange;
   const resolvedSelectionState =
     selectionState ?? createGeometrySelectionState();
-  const transform = createViewportTransform2D(viewport);
+  const transform = viewportTransformRef.current;
   const vertexRadius = Math.max(3, Math.min(6, viewport.zoom * 5));
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
-  if (!bounds && !interaction.drawWallEnabled && !interaction.measurementEnabled) {
+  const rendersSvgViewport = Boolean(
+    bounds || interaction.drawWallEnabled || interaction.measurementEnabled
+  );
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!rendersSvgViewport || !svg) return;
+
+    const listenerOptions = { passive: false, capture: false } as const;
+    const handleWheel = (event: globalThis.WheelEvent) => {
+      const viewportChange = onViewportChangeRef.current;
+      if (!viewportChange) return;
+
+      event.preventDefault();
+      const normalized = normalizeClientPointToSvgViewport({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        bounds: svg.getBoundingClientRect(),
+        viewBoxWidth: geometrySvgViewport.width,
+        viewBoxHeight: geometrySvgViewport.height
+      });
+      const nextViewport = zoomViewportState({
+        viewport: currentViewportRef.current,
+        zoomFactor: Math.exp(-event.deltaY * 0.0015),
+        center: normalized.point
+      });
+
+      currentViewportRef.current = nextViewport;
+      viewportChange(nextViewport);
+    };
+
+    svg.addEventListener("wheel", handleWheel, listenerOptions);
+    return () => svg.removeEventListener("wheel", handleWheel, listenerOptions);
+  }, [rendersSvgViewport]);
+
+  if (!rendersSvgViewport) {
     return (
       <div className="geometry-empty-state" role="status">
         {t("viewer.empty")}
@@ -299,22 +345,6 @@ export function GeometrySvgViewer({
     readonly clientY: number;
     readonly currentTarget: SVGSVGElement;
   }): ScreenPoint => getEventPointer(event).svgPoint;
-
-  const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
-    if (!onViewportChange) {
-      return;
-    }
-
-    event.preventDefault();
-    const nextViewport = zoomViewportState({
-      viewport: currentViewportRef.current ?? viewport,
-      zoomFactor: Math.exp(-event.deltaY * 0.0015),
-      center: getEventPoint(event)
-    });
-
-    currentViewportRef.current = nextViewport;
-    onViewportChange(nextViewport);
-  };
 
   const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
     if (openingPointerInteractionRef.current?.completed) {
@@ -552,6 +582,7 @@ export function GeometrySvgViewer({
 
   return (
     <svg
+      ref={svgRef}
       className={`geometry-svg geometry-svg--${
         interaction.drawWallEnabled
           ? "draw-wall"
@@ -566,7 +597,6 @@ export function GeometrySvgViewer({
       viewBox={`0 0 ${geometrySvgViewport.width} ${geometrySvgViewport.height}`}
       role="img"
       aria-labelledby="geometry-svg-title geometry-svg-description"
-      onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -666,7 +696,7 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
-      {architecturalModel ? (
+      {architecturalModel && options.architecturalWalls ? (
         <g data-layer="architectural-walls">
           <g aria-hidden="true" data-layer="wall-joins">
             {architecturalModel.joins.map((join, index) => (
@@ -835,7 +865,7 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
-      {architecturalModel ? (
+      {architecturalModel && options.openings ? (
         <g data-layer="architectural-openings">
           {architecturalModel.doors.map((door) => (
             <g
@@ -1049,9 +1079,9 @@ function GeometryEditorOverlayLayer({
         <g data-layer="room-face-candidates">
           {overlay.roomFaceCandidates.map((face) => (
             <polygon
-              key={face.key}
+              key={face.faceKey}
               data-testid="room-face-candidate"
-              data-face-key={face.key}
+              data-face-key={face.faceKey}
               className={`geometry-room-face-candidate geometry-room-face-candidate--focusable${
                 face.selected ? " geometry-room-face-candidate--selected" : ""
               }`}
@@ -1064,13 +1094,13 @@ function GeometryEditorOverlayLayer({
               tabIndex={0}
               onClick={(event) => {
                 event.stopPropagation();
-                onRoomFaceCandidateClick?.(face.key);
+                onRoomFaceCandidateClick?.(face.faceKey);
               }}
               onKeyDown={(event: KeyboardEvent<SVGPolygonElement>) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
                 event.stopPropagation();
-                onRoomFaceCandidateClick?.(face.key);
+                onRoomFaceCandidateClick?.(face.faceKey);
               }}
             />
           ))}

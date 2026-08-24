@@ -12,12 +12,17 @@ import {
 import type { RoomMeasurement } from "@casastudio/geometry";
 
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
-import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
 import type { GeometrySelectionState } from "../geometry-playground/geometry-selection-state";
 import { useCasaTranslation } from "../i18n";
 import type { WallEndpointEditingAvailability } from "../state/project-wall-editing";
-import { ProjectWallSelectionDetails } from "./ProjectWallSelectionDetails";
-import { ProjectOpeningSelectionDetails } from "./ProjectOpeningSelectionDetails";
+import {
+  ProjectWallPropertiesDetails,
+  ProjectWallSelectionDetails
+} from "./ProjectWallSelectionDetails";
+import {
+  ProjectOpeningPropertiesDetails,
+  ProjectOpeningSelectionDetails
+} from "./ProjectOpeningSelectionDetails";
 
 /** Dispatches Edit-mode selection details by runtime geometry kind. */
 export function ProjectSelectionDetails({
@@ -27,14 +32,14 @@ export function ProjectSelectionDetails({
   units,
   endpointAvailability,
   onDeleteWall,
-  onUpdateWallProperties,
   opening,
   room,
   roomMeasurement,
   openingWall,
   openingDisplayOffsetFromStart,
   onDeleteOpening,
-  onUpdateOpening
+  onUpdateOpening,
+  editable = true
 }: {
   readonly model: GeometryPresentationModel2D;
   readonly selectionState: GeometrySelectionState;
@@ -42,10 +47,6 @@ export function ProjectSelectionDetails({
   readonly units: Project["units"];
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly onDeleteWall: () => void;
-  readonly onUpdateWallProperties: (properties: {
-    readonly height?: number;
-    readonly thickness?: number;
-  }) => boolean;
   readonly opening?: Opening;
   readonly room?: Room;
   readonly roomMeasurement?: RoomMeasurement;
@@ -54,6 +55,7 @@ export function ProjectSelectionDetails({
   readonly openingDisplayOffsetFromStart?: number;
   readonly onDeleteOpening?: () => void;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
+  readonly editable?: boolean;
 }) {
   const selection = selectionState.selected;
 
@@ -65,7 +67,7 @@ export function ProjectSelectionDetails({
     (selection[0]?.kind === "DOOR" || selection[0]?.kind === "WINDOW") &&
     opening && openingWall
   ) {
-    return <ProjectOpeningSelectionDetails wall={openingWall} opening={opening} displayOffsetFromStart={openingDisplayOffsetFromStart} units={units} onDelete={onDeleteOpening ?? (() => undefined)} onUpdate={onUpdateOpening ?? (() => false)} />;
+    return <ProjectOpeningSelectionDetails wall={openingWall} opening={opening} displayOffsetFromStart={openingDisplayOffsetFromStart} units={units} onDelete={onDeleteOpening ?? (() => undefined)} onUpdate={onUpdateOpening ?? (() => false)} editable={editable} />;
   }
   if (
     selection.length === 1 &&
@@ -86,7 +88,7 @@ export function ProjectSelectionDetails({
         units={units}
         endpointAvailability={endpointAvailability}
         onDelete={onDeleteWall}
-        onUpdateProperties={onUpdateWallProperties}
+        editable={editable}
       />
     );
   }
@@ -104,8 +106,118 @@ export function ProjectSelectionDetails({
       );
   }
 
+  return <ProjectMultiSelectionDetails selectionState={selectionState} />;
+}
+
+/** Routes the selected entity to the supported editable property surface. */
+export function ProjectPropertiesDetails({
+  selectionState,
+  wall,
+  opening,
+  openingWall,
+  openingDisplayOffsetFromStart,
+  room,
+  units,
+  onUpdateWallProperties,
+  onUpdateOpening
+}: {
+  readonly selectionState: GeometrySelectionState;
+  readonly wall?: Wall;
+  readonly opening?: Opening;
+  readonly openingWall?: Wall;
+  /** Transient Wall-local Opening offset used only for Properties display. */
+  readonly openingDisplayOffsetFromStart?: number;
+  readonly room?: Room;
+  readonly units: Project["units"];
+  readonly onUpdateWallProperties: (properties: {
+    readonly height?: number;
+    readonly thickness?: number;
+  }) => boolean;
+  readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  if (selectionState.selected.length === 0) {
+    return <PropertiesMessage message={t("properties.selectObject")} />;
+  }
+  if (selectionState.selected.length > 1) {
+    return <PropertiesMessage message={t("properties.multipleUnsupported")} />;
+  }
+  const selection = selectionState.selected[0];
+  if ((selection?.kind === "BOUNDARY_EDGE" || selection?.kind === "WALL") && wall) {
+    return (
+      <ProjectWallPropertiesDetails
+        wall={wall}
+        units={units}
+        onUpdateProperties={onUpdateWallProperties}
+      />
+    );
+  }
+  if (
+    (selection?.kind === "DOOR" || selection?.kind === "WINDOW") &&
+    opening &&
+    openingWall
+  ) {
+    return (
+      <ProjectOpeningPropertiesDetails
+        wall={openingWall}
+        opening={opening}
+        displayOffsetFromStart={openingDisplayOffsetFromStart}
+        units={units}
+        onUpdate={onUpdateOpening ?? (() => false)}
+      />
+    );
+  }
+  if (selection?.kind === "POLYGON" && room) {
+    return <PropertiesMessage message={t("properties.roomUnavailable")} />;
+  }
+  return <PropertiesMessage message={t("properties.unavailable")} />;
+}
+
+/** Displays a product-oriented summary for heterogeneous or homogeneous selections. */
+function ProjectMultiSelectionDetails({
+  selectionState
+}: {
+  readonly selectionState: GeometrySelectionState;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  const counts = new Map<string, number>();
+  for (const selection of selectionState.selected) {
+    const kind = selection.kind === "BOUNDARY_EDGE" || selection.kind === "WALL"
+      ? "walls"
+      : selection.kind === "POLYGON"
+        ? "rooms"
+        : selection.kind === "DOOR"
+          ? "doors"
+          : selection.kind === "WINDOW"
+            ? "windows"
+            : "junctions";
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  const composition = [...counts.entries()]
+    .map(([kind, count]) => t(`selection.summary.${kind}`, { count }))
+    .join(", ");
+
   return (
-    <GeometrySelectionDetails model={model} selectionState={selectionState} />
+    <Stack component="section" spacing={1}>
+      <Typography variant="subtitle2">
+        {t("selection.multipleTitle", { count: selectionState.selected.length })}
+      </Typography>
+      <Typography variant="body2">{composition}</Typography>
+      <Typography variant="caption" color="text.secondary">
+        {t("selection.multipleHint")}
+      </Typography>
+    </Stack>
+  );
+}
+
+/** Displays a restrained explanation when no safe property editor applies. */
+function PropertiesMessage({ message }: { readonly message: string }) {
+  const { t } = useCasaTranslation("project-viewer");
+  return (
+    <Stack component="section" spacing={1}>
+      <Typography variant="subtitle2">{t("properties.title")}</Typography>
+      <Typography variant="caption" color="text.secondary">{message}</Typography>
+    </Stack>
   );
 }
 

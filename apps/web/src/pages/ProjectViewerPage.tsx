@@ -8,14 +8,12 @@ import {
 } from "@casastudio/geometry";
 import {
   createConnectedWall,
-  createRoom,
   classifyLevelRoomTopology,
   deleteWallAndCollapseRedundantTopology,
   deleteOpening,
   moveOpening,
   moveJunction,
   moveWallEndpoint,
-  reconcileRoomSubdivision,
   updateWallProperties,
   updateOpening,
   ValidationErrorCode,
@@ -36,14 +34,11 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
-  FormControlLabel,
   IconButton,
   InputLabel,
   MenuItem,
   Paper,
   Select,
-  Switch,
-  TextField,
   Snackbar,
   Stack,
   Tab,
@@ -87,12 +82,10 @@ import {
 import { useCasaStudioApi } from "../api/ApiProvider";
 import type { GeometryLevel, GeometrySnapshot } from "../api/api-types";
 import { useAppShellContent } from "../app-shell/AppShellContext";
-import { GeometryLayerControls } from "../geometry-playground/GeometryLayerControls";
 import { createArchitecturalPresentationModel2D } from "../geometry-playground/architectural-presentation-model-2d";
 import { createArchitecturalDimensionPresentationModel2D } from "../geometry-playground/architectural-dimension-presentation-model-2d";
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { createRuntimeGeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
-import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
 import { GeometryShortcutGuide } from "../geometry-playground/GeometryShortcutGuide";
 import { GeometryViewerPanel } from "../geometry-playground/GeometryViewerPanel";
 import {
@@ -106,7 +99,10 @@ import {
   type GeometrySelectionState
 } from "../geometry-playground/geometry-selection-state";
 import { collectLevelBounds } from "../geometry-playground/geometry-svg-helpers";
-import { getGeometryViewerShortcutAction } from "../geometry-playground/geometry-viewer-shortcuts";
+import {
+  getGeometryViewerShortcutAction,
+  isEditableShortcutTarget
+} from "../geometry-playground/geometry-viewer-shortcuts";
 import {
   geometrySvgViewport,
   projectGeometryDisplayOptions,
@@ -202,7 +198,16 @@ import {
   geometrySelectionReset,
   selectGeometrySelection
 } from "../state/viewer-slice";
-import { ProjectSelectionDetails } from "./ProjectSelectionDetails";
+import {
+  ProjectPropertiesDetails,
+  ProjectSelectionDetails
+} from "./ProjectSelectionDetails";
+import { ProjectEditorStatusBar } from "./ProjectEditorStatusBar";
+import { ProjectLayerControls } from "./ProjectLayerControls";
+import {
+  collectActionableRoomFaces,
+  commitRoomFaceCandidate
+} from "./project-room-authoring";
 import {
   ProjectPersistenceDialogs,
   type ProjectPersistenceDialog
@@ -261,7 +266,6 @@ export function ProjectViewerPage() {
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [editingError, setEditingError] = useState<EditingErrorKey>();
-  const [selectedRoomFaceKey, setSelectedRoomFaceKey] = useState<string>();
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
@@ -363,7 +367,6 @@ export function ProjectViewerPage() {
 
   const selectedEditWall = useMemo(() => {
     if (
-      workspaceMode !== "edit" ||
       !presentationResult?.ok ||
       selectionState.selected.length !== 1 ||
       (selectionState.selected[0]?.kind !== "BOUNDARY_EDGE" &&
@@ -377,16 +380,15 @@ export function ProjectViewerPage() {
       ? presentationResult.model.boundaryEdges.find((edge) => edge.geometryId === selected.geometryId)
       : undefined;
     return findProjectWall(
-      editor.draft,
-      editor.activeLevelId,
+      activeProject ?? null,
+      activeProjectLevel?.id ?? null,
       selected?.kind === "WALL" ? selected.geometryId : selectedEdge?.sourceWallId
     );
   }, [
-    editor.activeLevelId,
-    editor.draft,
+    activeProject,
+    activeProjectLevel?.id,
     presentationResult,
-    selectionState.selected,
-    workspaceMode
+    selectionState.selected
   ]);
   const selectedWallEndpointAvailability =
     getWallEndpointEditingAvailability(
@@ -399,9 +401,9 @@ export function ProjectViewerPage() {
       ? selectionState.selected[0]
       : undefined;
     return selected && (selected.kind === "DOOR" || selected.kind === "WINDOW")
-      ? findProjectOpening(editor.draft, editor.activeLevelId, selected.geometryId)
+      ? findProjectOpening(activeProject ?? null, activeProjectLevel?.id ?? null, selected.geometryId)
       : undefined;
-  }, [editor.activeLevelId, editor.draft, selectionState.selected]);
+  }, [activeProject, activeProjectLevel?.id, selectionState.selected]);
   const selectedRoom = useMemo(() => {
     const selected = selectionState.selected.length === 1
       ? selectionState.selected[0]
@@ -494,25 +496,8 @@ export function ProjectViewerPage() {
   );
   const actionableRoomFaces = useMemo(() => {
     if (!roomTopology) return [];
-    const faces = new Map(roomTopology.unassigned.map((face) => [face.key, face]));
-    for (const subdivision of roomTopology.subdivisions) {
-      for (const face of subdivision.faces) faces.set(face.key, face);
-    }
-    return [...faces.values()].sort((first, second) => first.key.localeCompare(second.key));
+    return collectActionableRoomFaces(roomTopology);
   }, [roomTopology]);
-
-  useEffect(() => {
-    if (
-      selectedRoomFaceKey &&
-      !actionableRoomFaces.some((face) => face.key === selectedRoomFaceKey)
-    ) {
-      setSelectedRoomFaceKey(undefined);
-    }
-  }, [actionableRoomFaces, selectedRoomFaceKey]);
-
-  useEffect(() => {
-    setSelectedRoomFaceKey(undefined);
-  }, [editor.activeLevelId, projectId, workspaceMode]);
 
   const editorOverlay = useMemo<GeometryEditorOverlay | undefined>(() => {
     if (workspaceMode !== "edit") return undefined;
@@ -563,11 +548,11 @@ export function ProjectViewerPage() {
 
     return {
       roomFaceCandidates:
-        editor.activeTool === null || editor.activeTool === "select"
+        editor.activeTool === "room"
           ? actionableRoomFaces.map((face) => ({
-              key: face.key,
+              faceKey: face.key,
               vertices: face.vertices,
-              selected: face.key === selectedRoomFaceKey
+              selected: false
             }))
           : undefined,
       drawWall:
@@ -615,7 +600,6 @@ export function ProjectViewerPage() {
     editor.precision,
     editor.activeTool,
     actionableRoomFaces,
-    selectedRoomFaceKey,
     workspaceMode
   ]);
 
@@ -1300,72 +1284,37 @@ export function ProjectViewerPage() {
     [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedEditOpening]
   );
 
-  const handleCreateRoom = useCallback(() => {
+  const handleCreateRoom = useCallback((faceKey: string) => {
     if (
       saveInteractionBlocked ||
       workspaceMode !== "edit" ||
+      editor.activeTool !== "room" ||
       !editor.draft ||
       !editor.activeLevelId
     ) return;
-    const selectedFace = actionableRoomFaces.find(
-      (face) => face.key === selectedRoomFaceKey
+    const commit = commitRoomFaceCandidate(
+      editor.draft,
+      editor.activeLevelId,
+      faceKey,
+      createRoomIdentifier
     );
-    if (!selectedFace || !roomTopology) {
+    if (!commit) {
       setEditingError("errors.room.none");
       return;
     }
-    const level = editor.draft.building.levels
-      .find((candidate) => candidate.id === editor.activeLevelId)!;
-    const subdivision = roomTopology.subdivisions.find((candidate) =>
-      candidate.faces.some((face) => face.key === selectedFace.key)
-    );
-    const result = subdivision
-      ? reconcileRoomSubdivision(editor.draft, {
-          levelId: editor.activeLevelId,
-          roomId: subdivision.roomId,
-          expectedFaceKeys: subdivision.faces.map((face) => face.key),
-          newRoomAssignments: subdivision.faces
-            .filter((face) => face.key !== subdivision.preservedFaceKey)
-            .map((face, index) => ({
-              faceKey: face.key,
-              room: {
-                id: createRoomIdentifier(),
-                name: `Room ${level.rooms.length + index + 1}`,
-                type: "OTHER" as const
-              }
-            }))
-        })
-      : roomTopology.unassigned.some((face) => face.key === selectedFace.key)
-        ? createRoom(editor.draft, {
-            levelId: editor.activeLevelId,
-            room: {
-              id: createRoomIdentifier(),
-              name: `Room ${level.rooms.length + 1}`,
-              type: "OTHER",
-              boundary: [...selectedFace.boundary]
-            }
-          })
-        : undefined;
-    if (!result) {
-      setEditingError("errors.room.assigned");
-      return;
-    }
-    if (result.ok) {
+    if (commit.result.ok) {
       setEditingError(undefined);
-      setSelectedRoomFaceKey(undefined);
       dispatch(editorSelectionCleared());
-      dispatch(editingDraftReplaced(result.project));
+      dispatch(editingDraftReplaced(commit.result.project));
     } else {
-      setEditingError(getRoomEditingErrorKey(result.errors[0]?.code));
+      setEditingError(getRoomEditingErrorKey(commit.result.errors[0]?.code));
     }
   }, [
-    actionableRoomFaces,
     dispatch,
     editor.activeLevelId,
+    editor.activeTool,
     editor.draft,
-    roomTopology,
     saveInteractionBlocked,
-    selectedRoomFaceKey,
     workspaceMode
   ]);
 
@@ -1377,8 +1326,11 @@ export function ProjectViewerPage() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (shortcutsOpen || saveInteractionBlocked) return;
       const target = event.target as HTMLElement | null;
-      const isTextInput = target?.isContentEditable ||
-        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      if (
+        typeof target?.closest === "function" &&
+        target.closest('[role="dialog"]')
+      ) return;
+      const isTextInput = isEditableShortcutTarget(target);
       const modifier = event.metaKey || event.ctrlKey;
       if (workspaceMode === "edit" && modifier && !isTextInput) {
         const key = event.key.toLowerCase();
@@ -1440,8 +1392,6 @@ export function ProjectViewerPage() {
             editor.transient.snapCandidate !== undefined)
         ) {
           dispatch(editorTransientInteractionCleared());
-        } else if (workspaceMode === "edit" && selectedRoomFaceKey) {
-          setSelectedRoomFaceKey(undefined);
         } else {
           dispatch(
             workspaceMode === "edit"
@@ -1469,7 +1419,6 @@ export function ProjectViewerPage() {
     selectedLevel,
     selectedEditWall,
     selectedEditOpening,
-    selectedRoomFaceKey,
     saveInteractionBlocked,
     shortcutsOpen,
     workspaceMode
@@ -1705,18 +1654,13 @@ export function ProjectViewerPage() {
         selectionState={selectionState}
         options={resolvedDisplayOptions}
         onOptionsChange={handleDisplayOptionsChange}
-        level={selectedLevel.sourceLevelId}
-        revision={
-          workspaceMode === "edit"
-            ? editor.baseRevision
-            : geometryResponse?.sourceRevision
-        }
         mode={workspaceMode}
         selectedWall={selectedEditWall}
         selectedOpening={selectedEditOpening}
         selectedOpeningDisplayOffset={transientOpeningOffset}
         selectedRoom={selectedRoom}
         selectedRoomMeasurement={selectedRoomMeasurement}
+        levelMeasurement={activeLevelMeasurement}
         endpointAvailability={selectedWallEndpointAvailability}
         units={projectResponse?.project.units}
         onDeleteWall={handleDeleteSelectedWall}
@@ -1735,6 +1679,7 @@ export function ProjectViewerPage() {
     selectedEditOpening,
     selectedRoom,
     selectedRoomMeasurement,
+    activeLevelMeasurement,
     editor.transient.interaction,
     selectedWallEndpointAvailability,
     selectionState,
@@ -1751,31 +1696,91 @@ export function ProjectViewerPage() {
     () => ({
       title: projectResponse?.project.name ?? t("shell.title"),
       breadcrumb: t("shell.breadcrumb"),
+      headerContextAccessory: !isPhone && projectResponse && !consistencyFailure ? (
+        <ProjectLevelControl
+          mode={workspaceMode}
+          viewLevels={viewLevels}
+          selectedViewLevel={selectedViewLevel}
+          draftLevelIds={editor.draft?.building.levels.map((level) => ({
+            id: level.id,
+            name: level.name
+          })) ?? []}
+          activeEditLevelId={editor.activeLevelId}
+          onViewLevelChange={setSelectedViewLevelId}
+          onEditLevelChange={(levelId) => dispatch(editorActiveLevelChanged(levelId))}
+        />
+      ) : undefined,
+      headerCenter: !isPhone && projectResponse && !consistencyFailure ? (
+        <WorkspaceModeControl
+          mode={workspaceMode}
+          disabled={saveInteractionBlocked}
+          onChange={handleModeChange}
+        />
+      ) : undefined,
+      headerAccessory: !isPhone && projectResponse && !consistencyFailure ? (
+        <ProjectHeaderActions
+          mode={workspaceMode}
+          dirty={editor.dirty}
+          disabled={saveInteractionBlocked}
+          canUndo={editor.history.past.length > 0}
+          canRedo={editor.history.future.length > 0}
+          shortcutsOpen={shortcutsOpen}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
+          onCloseShortcuts={() => setShortcutsOpen(false)}
+          onUndo={() => dispatch(editorUndoRequested())}
+          onRedo={() => dispatch(editorRedoRequested())}
+          onDiscard={() => setPersistenceDialog("discard")}
+          onSave={handleSave}
+        />
+      ) : undefined,
       inspector: isTablet || isPhone ? undefined : inspector,
-      status:
-        projectQuery.isFetching || geometryQuery.isFetching
-          ? t("status.loading")
-          : selectedLevel
-            ? t(workspaceMode === "edit" ? "status.editing" : "status.saved", {
-                level: selectedLevel.sourceLevelId,
-                revision:
-                  workspaceMode === "edit"
-                    ? editor.baseRevision
-                    : geometryResponse?.sourceRevision
-              })
-            : t("status.unavailable")
+      status: selectedLevel && activeProject ? (
+        <ProjectEditorStatusBar
+          scale={workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75}
+          units={activeProject.units}
+          gridVisible={workspaceMode === "edit" && editor.precision.gridVisible}
+          snapToGrid={workspaceMode === "edit" && editor.precision.snapToGrid}
+          gridSpacing={editor.precision.gridSpacing}
+          zoom={activeViewport.zoom}
+          editing={workspaceMode === "edit"}
+          onScaleChange={(scale) => dispatch(editorDocumentScaleChanged(scale))}
+          onGridVisibleChange={(visible) => dispatch(editorGridVisibilityChanged(visible))}
+          onSnapToGridChange={(enabled) => dispatch(editorGridSnappingChanged(enabled))}
+          onGridSpacingChange={(spacing) => dispatch(editorGridSpacingChanged(spacing))}
+          onZoom={handleZoomViewport}
+          onFit={handleFitViewport}
+        />
+      ) : t("status.unavailable"),
+      immersiveWorkspace: true
     }),
     [
-      editor.baseRevision,
-      geometryQuery.isFetching,
-      geometryResponse,
+      activeProject,
+      activeViewport.zoom,
+      consistencyFailure,
+      dispatch,
+      editor.activeLevelId,
+      editor.dirty,
+      editor.draft,
+      editor.history.future.length,
+      editor.history.past.length,
+      editor.precision.gridSpacing,
+      editor.precision.gridVisible,
+      editor.precision.snapToGrid,
+      editor.presentation.scaleDenominator,
+      handleFitViewport,
+      handleModeChange,
+      handleSave,
+      handleZoomViewport,
       inspector,
       isPhone,
       isTablet,
-      projectQuery.isFetching,
       projectResponse,
+      saveInteractionBlocked,
       selectedLevel,
+      selectedViewLevel,
+      shortcutsOpen,
       t,
+      viewLevels,
       workspaceMode
     ]
   );
@@ -1833,6 +1838,9 @@ export function ProjectViewerPage() {
 
   return (
     <Stack className="geometry-page project-workspace" spacing={0}>
+      <Typography component="h1" className="project-workspace__title">
+        {projectResponse.project.name}
+      </Typography>
       <ProjectPersistenceDialogs
         dialog={activePersistenceDialog}
         saving={saveInteractionBlocked}
@@ -1872,114 +1880,11 @@ export function ProjectViewerPage() {
         </Alert>
       </Snackbar>
 
-      <Box className="project-viewer-context">
-        <Box className="project-viewer-context__title">
-          <Typography variant="overline" color="primary.dark">
-            {t(
-              workspaceMode === "edit" ? "intro.editEyebrow" : "intro.eyebrow"
-            )}
-          </Typography>
-          <Typography component="h1" variant="h3">
-            {projectResponse.project.name}
-          </Typography>
-        </Box>
-
-        {!isPhone ? (
-          <WorkspaceModeControl
-            mode={workspaceMode}
-            disabled={saveInteractionBlocked}
-            onChange={handleModeChange}
-          />
-        ) : (
-          <Chip
-            icon={<LockOutlineRoundedIcon />}
-            label={t("workspace.readOnly")}
-          />
-        )}
-
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <ProjectLevelControl
-            mode={workspaceMode}
-            viewLevels={viewLevels}
-            selectedViewLevel={selectedViewLevel}
-            draftLevelIds={
-              editor.draft?.building.levels.map((level) => ({
-                id: level.id,
-                name: level.name
-              })) ?? []
-            }
-            activeEditLevelId={editor.activeLevelId}
-            onViewLevelChange={setSelectedViewLevelId}
-            onEditLevelChange={(levelId) =>
-              dispatch(editorActiveLevelChanged(levelId))
-            }
-          />
-          {!isPhone ? (
-            <ShortcutsHelpControl
-              open={shortcutsOpen}
-              onOpen={() => setShortcutsOpen(true)}
-              onClose={() => setShortcutsOpen(false)}
-            />
-          ) : null}
-          <Chip
-            icon={
-              workspaceMode === "edit" ? (
-                <EditRoundedIcon />
-              ) : (
-                <CheckCircleRoundedIcon />
-              )
-            }
-            color={
-              editor.dirty && workspaceMode === "edit" ? "warning" : "success"
-            }
-            variant="outlined"
-            label={
-              workspaceMode === "edit"
-                ? t(editor.dirty ? "workspace.unsaved" : "workspace.clean")
-                : t("workspace.saved")
-            }
-          />
-          {workspaceMode === "edit" ? (
-            <Stack direction="row" spacing={1}>
-              {editor.dirty ? (
-                <Button
-                  color="inherit"
-                  disabled={saveInteractionBlocked}
-                  onClick={() => setPersistenceDialog("discard")}
-                >
-                  {t("persistence.discardAction")}
-                </Button>
-              ) : null}
-              <Button
-                variant="contained"
-                disabled={!editor.dirty || saveInteractionBlocked}
-                onClick={handleSave}
-              >
-                {t("persistence.save")}
-              </Button>
-            </Stack>
-          ) : null}
-        </Stack>
-      </Box>
-
       {workspaceMode === "edit" ? (
         <ProjectEditorToolbar
           activeTool={editor.activeTool}
           disabled={saveInteractionBlocked}
           onToolChange={(tool) => dispatch(editorActiveToolChanged(tool))}
-          canUndo={editor.history.past.length > 0}
-          canRedo={editor.history.future.length > 0}
-          onUndo={() => dispatch(editorUndoRequested())}
-          onRedo={() => dispatch(editorRedoRequested())}
-          roomCandidateCount={actionableRoomFaces.length}
-          roomCandidateSelected={Boolean(selectedRoomFaceKey)}
-          onCreateRoom={handleCreateRoom}
-          gridVisible={editor.precision.gridVisible}
-          snapToGrid={editor.precision.snapToGrid}
-          gridSpacing={editor.precision.gridSpacing}
-          onGridVisibleChange={(visible) => dispatch(editorGridVisibilityChanged(visible))}
-          onSnapToGridChange={(enabled) => dispatch(editorGridSnappingChanged(enabled))}
-          onGridSpacingChange={(spacing) => dispatch(editorGridSpacingChanged(spacing))}
         />
       ) : null}
 
@@ -1996,6 +1901,7 @@ export function ProjectViewerPage() {
         <ProjectViewerError error={presentationResult.error} />
       ) : selectedLevel && presentationResult?.ok ? (
         <GeometryViewerPanel
+          workspaceCanvas
           title={t("viewer.title")}
           headingId="project-geometry-viewer-heading"
           presentationModel={presentationResult.model}
@@ -2037,8 +1943,8 @@ export function ProjectViewerPage() {
           onOpeningPointerUp={handleOpeningPointerUp}
           onOpeningPointerCancel={handleOpeningPointerCancel}
           onRoomFaceCandidateClick={(faceKey) => {
-            setSelectedRoomFaceKey(faceKey);
             dispatch(editorSelectionCleared());
+            handleCreateRoom(faceKey);
           }}
         />
       ) : (
@@ -2110,43 +2016,104 @@ function WorkspaceModeControl({
   );
 }
 
+/** Header actions associated with local editing history and persistence. */
+type ProjectHeaderActionsProps = {
+  readonly mode: ProjectWorkspaceMode;
+  readonly dirty: boolean;
+  readonly disabled: boolean;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  readonly shortcutsOpen: boolean;
+  readonly onOpenShortcuts: () => void;
+  readonly onCloseShortcuts: () => void;
+  readonly onUndo: () => void;
+  readonly onRedo: () => void;
+  readonly onDiscard: () => void;
+  readonly onSave: () => void;
+};
+
+/** Renders history, dirty state, and transactional actions in the Project header. */
+function ProjectHeaderActions({
+  mode,
+  dirty,
+  disabled,
+  canUndo,
+  canRedo,
+  shortcutsOpen,
+  onOpenShortcuts,
+  onCloseShortcuts,
+  onUndo,
+  onRedo,
+  onDiscard,
+  onSave
+}: ProjectHeaderActionsProps) {
+  const { t } = useCasaTranslation("project-viewer");
+
+  if (mode === "view") {
+    return (
+      <Chip
+        className="project-header-status"
+        icon={<CheckCircleRoundedIcon />}
+        color="success"
+        variant="outlined"
+        label={t("workspace.saved")}
+      />
+    );
+  }
+
+  return (
+    <Stack direction="row" className="project-header-actions">
+      <Box className="project-header-actions__history" role="group" aria-label={t("header.history")}>
+        <Tooltip title={t("tools.undo")}>
+          <span>
+            <IconButton size="small" aria-label={t("tools.undo")} disabled={disabled || !canUndo} onClick={onUndo}>
+              <UndoRoundedIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title={t("tools.redo")}>
+          <span>
+            <IconButton size="small" aria-label={t("tools.redo")} disabled={disabled || !canRedo} onClick={onRedo}>
+              <RedoRoundedIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Box>
+      <ShortcutsHelpControl
+        open={shortcutsOpen}
+        onOpen={onOpenShortcuts}
+        onClose={onCloseShortcuts}
+      />
+      <Chip
+        className="project-header-status"
+        icon={<EditRoundedIcon />}
+        color={dirty ? "warning" : "default"}
+        variant="outlined"
+        label={t(dirty ? "workspace.unsaved" : "workspace.clean")}
+      />
+      {dirty ? (
+        <Button color="inherit" disabled={disabled} onClick={onDiscard}>
+          {t("persistence.discardAction")}
+        </Button>
+      ) : null}
+      <Button variant="contained" disabled={!dirty || disabled} onClick={onSave}>
+        {t("persistence.save")}
+      </Button>
+    </Stack>
+  );
+}
+
 type ProjectEditorToolbarProps = {
   readonly activeTool: ProjectEditorTool | null;
   readonly disabled: boolean;
   readonly onToolChange: (tool: ProjectEditorTool | null) => void;
-  readonly canUndo: boolean;
-  readonly canRedo: boolean;
-  readonly onUndo: () => void;
-  readonly onRedo: () => void;
-  readonly roomCandidateCount: number;
-  readonly roomCandidateSelected: boolean;
-  readonly onCreateRoom: () => void;
-  readonly gridVisible: boolean;
-  readonly snapToGrid: boolean;
-  readonly gridSpacing: number;
-  readonly onGridVisibleChange: (visible: boolean) => void;
-  readonly onSnapToGridChange: (enabled: boolean) => void;
-  readonly onGridSpacingChange: (spacing: number) => void;
 };
 
-/** Renders enabled editor tools and explicitly disabled future actions. */
+/** Renders the mutually exclusive architectural authoring and navigation tools. */
 function ProjectEditorToolbar({
   activeTool,
   disabled,
-  onToolChange,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
-  roomCandidateCount,
-  roomCandidateSelected,
-  onCreateRoom,
-  gridVisible,
-  snapToGrid,
-  gridSpacing,
-  onGridVisibleChange,
-  onSnapToGridChange,
-  onGridSpacingChange
+  onToolChange
 }: ProjectEditorToolbarProps) {
   const { t } = useCasaTranslation("project-viewer");
   const icons = {
@@ -2154,6 +2121,7 @@ function ProjectEditorToolbar({
     "draw-wall": <LinearScaleRoundedIcon fontSize="small" />,
     door: <DoorFrontRoundedIcon fontSize="small" />,
     window: <WindowRoundedIcon fontSize="small" />,
+    room: <MeetingRoomRoundedIcon fontSize="small" />,
     measure: <StraightenRoundedIcon fontSize="small" />,
     pan: <PanToolAltRoundedIcon fontSize="small" />
   } satisfies Record<ProjectEditorTool, ReactNode>;
@@ -2201,53 +2169,6 @@ function ProjectEditorToolbar({
         })}
       </ToggleButtonGroup>
 
-      <Stack direction="row" spacing={0.5}>
-        <Button
-          disabled={disabled || !canUndo}
-          startIcon={<UndoRoundedIcon />}
-          onClick={onUndo}
-          size="small"
-        >
-          {t("tools.undo")}
-        </Button>
-        <Button
-          disabled={disabled || !canRedo}
-          startIcon={<RedoRoundedIcon />}
-          onClick={onRedo}
-          size="small"
-        >
-          {t("tools.redo")}
-        </Button>
-        <Button
-          disabled={disabled || !roomCandidateSelected}
-          aria-label={t("tools.createRoom")}
-          startIcon={<MeetingRoomRoundedIcon />}
-          onClick={onCreateRoom}
-          size="small"
-        >
-          {t("tools.createRoom")}
-          {roomCandidateCount > 0 ? ` (${roomCandidateCount})` : ""}
-        </Button>
-      </Stack>
-      <Stack direction="row" spacing={1} className="project-editor-toolbar__precision">
-        <FormControlLabel
-          control={<Switch size="small" checked={gridVisible} onChange={(_event, checked) => onGridVisibleChange(checked)} />}
-          label={t("precision.grid")}
-        />
-        <FormControlLabel
-          control={<Switch size="small" checked={snapToGrid} onChange={(_event, checked) => onSnapToGridChange(checked)} />}
-          label={t("precision.snapGrid")}
-        />
-        <TextField
-          size="small"
-          type="number"
-          label={t("precision.spacing")}
-          value={gridSpacing}
-          slotProps={{ htmlInput: { min: 1, step: 1 } }}
-          onChange={(event) => onGridSpacingChange(Number(event.target.value))}
-          sx={{ width: 110 }}
-        />
-      </Stack>
     </Box>
   );
 }
@@ -2279,6 +2200,11 @@ function ShortcutsHelpControl({
       <Dialog
         open={open}
         onClose={onClose}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+          }
+        }}
         aria-labelledby="project-shortcuts-dialog-title"
         maxWidth="xs"
         fullWidth
@@ -2368,13 +2294,12 @@ type ProjectWorkspaceInspectorProps = {
   readonly selectionState: GeometrySelectionState;
   readonly options: GeometryDisplayOptions;
   readonly onOptionsChange: (options: GeometryDisplayOptions) => void;
-  readonly level: string;
-  readonly revision?: number | null;
   readonly mode: ProjectWorkspaceMode;
   readonly selectedWall?: Wall;
   readonly selectedOpening?: { readonly wall: Wall; readonly opening: Opening };
   readonly selectedRoom?: Room;
   readonly selectedRoomMeasurement?: RoomMeasurement;
+  readonly levelMeasurement?: ReturnType<typeof measureLevel>;
   /** Transient Wall-local Opening offset used only for Inspector display. */
   readonly selectedOpeningDisplayOffset?: number;
   readonly endpointAvailability?: ReturnType<
@@ -2396,13 +2321,12 @@ function ProjectWorkspaceInspector({
   selectionState,
   options,
   onOptionsChange,
-  level,
-  revision,
   mode,
   selectedWall,
   selectedOpening,
   selectedRoom,
   selectedRoomMeasurement,
+  levelMeasurement,
   selectedOpeningDisplayOffset,
   endpointAvailability,
   units,
@@ -2430,13 +2354,14 @@ function ProjectWorkspaceInspector({
       </Tabs>
       <Box className="project-inspector__content" role="tabpanel">
         {tab === "layers" ? (
-          <GeometryLayerControls
+          <ProjectLayerControls
             options={options}
             onOptionsChange={onOptionsChange}
-            showDiagnostics={false}
+            measurement={levelMeasurement}
+            units={units}
           />
         ) : tab === "selection" ? (
-          mode === "edit" && units ? (
+          units ? (
             <ProjectSelectionDetails
               model={model}
               selectionState={selectionState}
@@ -2449,28 +2374,29 @@ function ProjectWorkspaceInspector({
               units={units}
               endpointAvailability={endpointAvailability}
               onDeleteWall={onDeleteWall}
-              onUpdateWallProperties={onUpdateWallProperties}
               onDeleteOpening={onDeleteOpening}
+              onUpdateOpening={onUpdateOpening}
+              editable={mode === "edit"}
+            />
+          ) : null
+        ) : (
+          units && mode === "edit" ? (
+            <ProjectPropertiesDetails
+              selectionState={selectionState}
+              wall={selectedWall}
+              opening={selectedOpening?.opening}
+              openingWall={selectedOpening?.wall}
+              openingDisplayOffsetFromStart={selectedOpeningDisplayOffset}
+              room={selectedRoom}
+              units={units}
+              onUpdateWallProperties={onUpdateWallProperties}
               onUpdateOpening={onUpdateOpening}
             />
           ) : (
-            <GeometrySelectionDetails
-              model={model}
-              selectionState={selectionState}
-            />
+            <Typography variant="caption" color="text.secondary">
+              {t("properties.editModeOnly")}
+            </Typography>
           )
-        ) : (
-          <Stack spacing={1.5}>
-            <Typography variant="subtitle2">
-              {t(mode === "edit" ? "inspector.draft" : "inspector.snapshot")}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {t("inspector.level", { level })}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {t("inspector.revision", { revision })}
-            </Typography>
-          </Stack>
         )}
       </Box>
     </Box>

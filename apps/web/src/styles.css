@@ -360,6 +360,13 @@ img {
   padding-left: 18px;
 }
 
+.workspace-header__context-accessory,
+.workspace-header__center {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+}
+
 .workspace-mode {
   align-items: center;
   display: flex;
@@ -394,6 +401,44 @@ img {
   grid-template-columns: 76px minmax(0, 1fr) 340px;
   min-height: 0;
   min-width: 0;
+}
+
+.app-shell__navigation-slot {
+  display: contents;
+}
+
+.app-shell--immersive {
+  grid-template-rows: 76px minmax(0, 1fr) 58px;
+}
+
+.app-shell--immersive .workspace-header {
+  gap: 14px;
+  padding-inline: 24px;
+}
+
+.app-shell--immersive .app-shell__layout {
+  grid-template-columns: minmax(0, 1fr) 390px;
+}
+
+.app-shell--immersive .app-shell__navigation-slot {
+  display: none;
+}
+
+.app-shell--immersive .main-workspace {
+  overflow: hidden;
+  padding: 0;
+}
+
+.app-shell--immersive .inspector-panel {
+  width: 390px;
+}
+
+.app-shell--immersive .inspector-panel__header {
+  display: none;
+}
+
+.app-shell--immersive .inspector-panel__content {
+  padding: 0;
 }
 
 .project-navigation {
@@ -501,6 +546,21 @@ img {
   flex: 0 0 auto;
   margin-left: auto !important;
   padding-left: 16px;
+}
+
+.workspace-status--custom {
+  min-height: 58px;
+  padding: 0;
+}
+
+.workspace-status--custom .workspace-status__context {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+.workspace-status--custom .workspace-status__icon,
+.workspace-status--custom .workspace-status__version {
+  display: none;
 }
 
 /* Projects home */
@@ -631,26 +691,14 @@ img {
   min-height: 0;
 }
 
-.project-viewer-context {
-  align-items: center;
-  background: var(--casa-paper);
-  border: 1px solid var(--casa-border);
-  border-bottom: 0;
-  border-radius: 10px 10px 0 0;
-  display: flex;
-  justify-content: space-between;
-  min-height: 58px;
-  padding: 8px 12px 8px 16px;
-  gap: 16px;
-}
-
-.project-viewer-context__title {
-  display: grid;
-  line-height: 1.1;
-}
-
-.project-viewer-context__title .MuiTypography-overline {
-  font-size: 0.61rem;
+.project-workspace__title {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 .project-level-selector {
@@ -671,25 +719,23 @@ img {
 .project-editor-toolbar {
   align-items: center;
   background: var(--casa-paper);
-  border: 1px solid var(--casa-border);
-  border-bottom: 0;
+  border: 0;
+  border-bottom: 1px solid var(--casa-border);
   display: flex;
-  justify-content: space-between;
-  min-height: 52px;
-  padding: 6px 10px;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  min-height: 58px;
+  overflow-x: auto;
+  padding: 7px 20px;
   gap: 10px;
-  flex-wrap: wrap;
-}
-
-.project-editor-toolbar__precision {
-  align-items: center;
-  margin-left: auto;
+  flex-wrap: nowrap;
 }
 
 .project-editor-toolbar .MuiToggleButton-root {
   gap: 7px;
-  min-height: 38px;
-  padding-inline: 13px;
+  min-height: 42px;
+  padding-inline: 15px;
+  white-space: nowrap;
 }
 
 .project-editor-toolbar .MuiToggleButton-root.Mui-selected {
@@ -707,18 +753,18 @@ img {
 
 .project-inspector .MuiTabs-root {
   border-bottom: 1px solid var(--casa-border);
-  min-height: 42px;
+  min-height: 62px;
 }
 
 .project-inspector .MuiTab-root {
   font-size: 0.72rem;
-  min-height: 42px;
+  min-height: 62px;
   min-width: 0;
   padding-inline: 5px;
 }
 
 .project-inspector__content {
-  padding-top: 16px;
+  padding: 20px 18px;
 }
 
 .project-workspace__tablet-inspector {
@@ -735,6 +781,11 @@ img {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+
+.geometry-viewer-panel--workspace {
+  border: 0 !important;
+  border-radius: 0 !important;
 }
 
 .geometry-viewer-panel__toolbar {
@@ -764,6 +815,117 @@ img {
   justify-content: space-between;
   min-height: 50px;
   padding: 6px 12px;
+}
+
+.project-layer-list {
+  border: 1px solid var(--casa-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.project-layer-control {
+  border-bottom: 1px solid var(--casa-border);
+  justify-content: space-between;
+  margin: 0 !important;
+  min-height: 54px;
+  padding: 3px 7px 3px 14px;
+  width: 100%;
+}
+
+.project-layer-control:last-child {
+  border-bottom: 0;
+}
+
+.project-layer-control__icon {
+  align-items: center;
+  color: var(--casa-sage);
+  display: flex;
+}
+
+.project-plan-summary {
+  background: var(--casa-paper-muted);
+  border: 1px solid var(--casa-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.project-plan-summary__row {
+  border-top: 1px solid var(--casa-border);
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.project-header-actions {
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.project-header-actions__history {
+  align-items: center;
+  border: 1px solid var(--casa-border);
+  border-radius: 8px;
+  display: flex;
+  padding: 2px;
+}
+
+.project-header-status {
+  background: var(--casa-paper) !important;
+}
+
+.project-editor-status {
+  align-items: stretch;
+  display: flex;
+  height: 100%;
+  justify-content: space-between;
+  min-width: 0;
+  width: 100%;
+}
+
+.project-editor-status__document,
+.project-editor-status__viewport {
+  align-items: center;
+}
+
+.project-editor-status__document > *,
+.project-editor-status__viewport > * {
+  border-right: 1px solid var(--casa-border);
+}
+
+.project-editor-status__item {
+  align-items: center;
+  gap: 6px;
+  min-height: 100%;
+  padding: 0 20px;
+  white-space: nowrap;
+}
+
+.project-editor-status__item .MuiSelect-select {
+  font-size: 0.82rem;
+  padding: 4px 24px 4px 2px !important;
+}
+
+.project-editor-status__item .MuiSwitch-root {
+  margin-inline: -5px;
+}
+
+.project-editor-status__viewport {
+  flex: 0 0 auto;
+}
+
+.project-editor-status__viewport .MuiIconButton-root {
+  border-radius: 0;
+  height: 100%;
+  padding-inline: 17px;
+}
+
+.project-editor-status__zoom {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-width: 72px;
+  padding-inline: 12px;
 }
 
 .geometry-document-scale {
@@ -1308,6 +1470,36 @@ img {
     display: inline-flex !important;
   }
 
+  .app-shell--immersive .app-shell__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--immersive .main-workspace {
+    overflow: auto;
+  }
+
+  .app-shell--immersive .auth-controls__identity,
+  .project-header-actions .project-header-status {
+    display: none;
+  }
+
+  .app-shell--immersive .workspace-header {
+    gap: 10px;
+    padding-inline: 16px;
+  }
+
+  .app-shell--immersive .workspace-header__context {
+    min-width: 120px;
+  }
+
+  .app-shell--immersive .project-level-selector {
+    min-width: 130px !important;
+  }
+
+  .app-shell--immersive .project-editor-status__item {
+    padding-inline: 12px;
+  }
+
   .landing-hero > .MuiContainer-root {
     grid-template-columns: minmax(300px, 0.7fr) minmax(460px, 1.3fr);
   }
@@ -1379,17 +1571,21 @@ img {
     grid-template-columns: minmax(240px, 0.8fr) minmax(300px, 1.2fr);
   }
 
-  .project-viewer-context {
-    flex-wrap: wrap;
-  }
-
-  .project-viewer-context__title {
-    flex: 1 1 180px;
-  }
-
   .project-editor-toolbar .MuiToggleButton-root span,
   .project-editor-toolbar .MuiButton-root {
     font-size: 0.74rem;
+  }
+
+  .app-shell--immersive .workspace-header {
+    padding-inline: 14px;
+  }
+
+  .project-editor-status__item {
+    padding-inline: 9px;
+  }
+
+  .project-editor-status__item > .MuiTypography-caption:last-child {
+    display: none;
   }
 }
 
@@ -1476,6 +1672,28 @@ img {
 
   .app-shell {
     grid-template-rows: 60px minmax(0, 1fr);
+  }
+
+  .app-shell--immersive {
+    grid-template-rows: 68px minmax(0, 1fr);
+  }
+
+  .app-shell--immersive .app-shell__navigation-slot {
+    display: contents;
+  }
+
+  .app-shell--immersive .main-workspace {
+    overflow: auto;
+    padding: 10px;
+  }
+
+  .app-shell--immersive .workspace-header {
+    padding-inline: 12px;
+  }
+
+  .workspace-header__context-accessory,
+  .workspace-header__center {
+    display: none;
   }
 
   .workspace-header {
@@ -1583,25 +1801,6 @@ img {
   .geometry-page {
     height: auto;
     min-height: 100%;
-  }
-
-  .project-viewer-context {
-    align-items: flex-start;
-    border-bottom: 1px solid var(--casa-border);
-    border-radius: 10px;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 10px;
-    padding: 12px;
-  }
-
-  .project-viewer-context__title {
-    width: 100%;
-  }
-
-  .project-viewer-context > .MuiStack-root {
-    flex-wrap: wrap;
-    width: 100%;
   }
 
   .project-level-selector {

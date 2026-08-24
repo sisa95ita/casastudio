@@ -29,12 +29,11 @@ describe("ProjectSelectionDetails", () => {
           end: { topology: "standalone", draggable: true }
         }}
         onDeleteWall={vi.fn()}
-        onUpdateWallProperties={vi.fn(() => true)}
       />
     );
 
     expect(screen.getByText("Wall")).toBeTruthy();
-    expect(screen.getByLabelText("Thickness (cm)")).toBeTruthy();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 
   it("shows runtime Vertex coordinates and incident domain Wall IDs read-only", () => {
@@ -51,7 +50,6 @@ describe("ProjectSelectionDetails", () => {
           end: { topology: "standalone", draggable: false }
         }}
         onDeleteWall={vi.fn()}
-        onUpdateWallProperties={vi.fn(() => true)}
       />
     );
 
@@ -76,12 +74,32 @@ describe("ProjectSelectionDetails", () => {
           end: { topology: "standalone", draggable: false }
         }}
         onDeleteWall={vi.fn()}
-        onUpdateWallProperties={vi.fn(() => true)}
       />
     );
     expect(
       screen.getByText("Select geometry in the plan to inspect its details.")
     ).toBeTruthy();
+  });
+
+  it("summarizes heterogeneous multi-selection by product entity type", () => {
+    render(
+      <ProjectSelectionDetails
+        model={model}
+        selectionState={{
+          selected: [
+            { kind: "WALL", geometryId: "wall-a" },
+            { kind: "BOUNDARY_EDGE", geometryId: "edge-b" },
+            { kind: "DOOR", geometryId: "door-a" }
+          ]
+        }}
+        units={{ length: "cm", angle: "deg" }}
+        onDeleteWall={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("3 objects selected")).toBeTruthy();
+    expect(screen.getByText("2 Walls, 1 Door")).toBeTruthy();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 });
 

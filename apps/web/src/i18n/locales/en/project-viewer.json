@@ -77,6 +77,7 @@
     "draw-wall": "Draw Wall",
     "door": "Door",
     "window": "Window",
+    "room": "Room",
     "measure": "Measure",
     "pan": "Pan",
     "undo": "Undo",
@@ -88,6 +89,7 @@
       "draw-wall": "Draw connected walls as a continuous chain.",
       "door": "Place a door on a wall.",
       "window": "Place a window on a wall.",
+      "room": "Create an explicit Room from a bounded plan region.",
       "measure": "Measure between snapped points without changing the project.",
       "pan": "Move around the plan without changing geometry."
     }
@@ -96,6 +98,22 @@
     "grid": "Grid",
     "snapGrid": "Snap to grid",
     "spacing": "Spacing"
+  },
+  "header": {
+    "history": "Edit history"
+  },
+  "statusBar": {
+    "label": "Project editor status bar",
+    "scale": "Scale",
+    "units": "Units",
+    "grid": "Grid",
+    "snap": "Snap",
+    "spacing": "Spacing",
+    "on": "On",
+    "off": "Off",
+    "unitValues": {
+      "cm": "centimeters"
+    }
   },
   "shortcuts": {
     "title": "Shortcuts",
@@ -147,6 +165,32 @@
     "draft": "Local Project draft",
     "level": "Source level: {{level}}",
     "revision": "Source revision: {{revision}}"
+  },
+  "layers": {
+    "label": "Architectural layers",
+    "title": "Layers",
+    "description": "Control the visible plan detail",
+    "items": {
+      "walls": "Walls",
+      "rooms": "Rooms",
+      "openings": "Openings",
+      "dimensions": "Dimensions",
+      "annotations": "Annotations"
+    }
+  },
+  "planSummary": {
+    "title": "Plan information",
+    "totalArea": "Total room area",
+    "width": "Overall width",
+    "depth": "Overall depth"
+  },
+  "properties": {
+    "title": "Properties",
+    "selectObject": "Select an object to edit its available properties.",
+    "multipleUnsupported": "This selection has no safe shared property operation.",
+    "roomUnavailable": "This Room has no editable metadata operation in the current editor.",
+    "unavailable": "The selected object has no editable properties.",
+    "editModeOnly": "Enter Edit mode to change object properties."
   },
   "consistency": {
     "title": "Project geometry is inconsistent",
@@ -211,6 +255,7 @@
   },
   "wall": {
     "selectionTitle": "Selection",
+    "propertiesTitle": "Wall properties",
     "emptySelection": "Select a wall in the plan to inspect it.",
     "type": "Wall",
     "delete": "Delete Wall",
@@ -224,6 +269,7 @@
     "endpointRoomBoundary": "Room boundary junction",
     "labels": {
       "type": "Type",
+      "identity": "Identity",
       "length": "Length",
       "thickness": "Thickness",
       "height": "Height",
@@ -244,6 +290,21 @@
     "title": "Selection",
     "empty": "Select geometry in the plan to inspect its details.",
     "vertex": "Vertex",
+    "multipleTitle_one": "{{count}} object selected",
+    "multipleTitle_other": "{{count}} objects selected",
+    "multipleHint": "Shared changes appear only when they are safe for every selected object.",
+    "summary": {
+      "walls_one": "{{count}} Wall",
+      "walls_other": "{{count}} Walls",
+      "rooms_one": "{{count}} Room",
+      "rooms_other": "{{count}} Rooms",
+      "doors_one": "{{count}} Door",
+      "doors_other": "{{count}} Doors",
+      "windows_one": "{{count}} Window",
+      "windows_other": "{{count}} Windows",
+      "junctions_one": "{{count}} Junction",
+      "junctions_other": "{{count}} Junctions"
+    },
     "moveJunction": "Move junction",
     "selectRoomRegion": "Select room region",
     "labels": {
@@ -257,6 +318,9 @@
     "selectionTitle": "Opening",
     "door": "Door",
     "window": "Window",
+    "doorProperties": "Door properties",
+    "windowProperties": "Window properties",
+    "ownedBy": "Owned by {{wall}}",
     "flipHinge": "Flip hinge",
     "flipSwing": "Flip swing",
     "delete": "Delete Opening",

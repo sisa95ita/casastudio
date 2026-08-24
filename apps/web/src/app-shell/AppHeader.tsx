@@ -1,5 +1,5 @@
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
-import { Box, Chip, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 import { Link as RouterLink } from "react-router-dom";
 
@@ -10,6 +10,8 @@ import { useCasaTranslation } from "../i18n";
 export type AppHeaderProps = {
   readonly title: string;
   readonly breadcrumb?: string;
+  readonly contextAccessory?: ReactNode;
+  readonly center?: ReactNode;
   readonly accessory?: ReactNode;
   readonly inspectorAvailable?: boolean;
   readonly onOpenInspector?: () => void;
@@ -19,6 +21,8 @@ export type AppHeaderProps = {
 export function AppHeader({
   title,
   breadcrumb,
+  contextAccessory,
+  center,
   accessory,
   inspectorAvailable = false,
   onOpenInspector
@@ -40,9 +44,13 @@ export function AppHeader({
         </Typography>
       </Box>
 
-      <Box className="workspace-mode" aria-label={t("shell.mode.label")}>
-        <Chip label={t("shell.mode.twoD")} color="primary" />
-      </Box>
+      {contextAccessory ? (
+        <Box className="workspace-header__context-accessory">{contextAccessory}</Box>
+      ) : null}
+
+      <Box className="workspace-header__spacer" />
+
+      {center ? <Box className="workspace-header__center">{center}</Box> : null}
 
       <Box className="workspace-header__spacer" />
 
