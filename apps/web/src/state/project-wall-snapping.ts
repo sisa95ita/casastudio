@@ -30,6 +30,9 @@ export type DrawWallSnapCandidate =
   | (SnapBase & { readonly kind: "grid" })
   | (SnapBase & { readonly kind: "free" });
 
+/** Shared Project-point snap result used by authoring and measurement tools. */
+export type ProjectPointSnapCandidate = DrawWallSnapCandidate;
+
 /** Optional editing context used after topology targets have been considered. */
 export type DrawWallSnapOptions = {
   readonly cssPixelsPerSvgUnit?: number;
@@ -178,6 +181,9 @@ export function resolveDrawWallSnapCandidate(
     visualDistancePixels: 0
   };
 }
+
+/** Shared resolver for tools that acquire a point in canonical Project space. */
+export const resolveProjectPointSnapCandidate = resolveDrawWallSnapCandidate;
 
 function chooseNearest<T extends DrawWallSnapCandidate>(candidates: readonly T[]): T | undefined {
   return [...candidates].sort((first, second) => {

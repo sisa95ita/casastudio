@@ -7,7 +7,8 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import type { Project, Wall } from "@casastudio/schema";
+import { formatArchitecturalLength, type Project, type Wall } from "@casastudio/schema";
+import { measureWall } from "@casastudio/geometry";
 import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { useCasaTranslation } from "../i18n";
@@ -44,13 +45,10 @@ export function ProjectWallSelectionDetails({
     );
   }
 
-  const length = Math.hypot(
-    wall.end.x - wall.start.x,
-    wall.end.z - wall.start.z
-  );
+  const length = measureWall(wall).length;
   const items = [
     [t("wall.labels.type"), t("wall.type")],
-    [t("wall.labels.length"), formatMeasurement(length, units.length)],
+    [t("wall.labels.length"), formatArchitecturalLength(length, units.length)],
     [t("wall.labels.start"), formatPoint(wall.start, units.length)],
     [t("wall.labels.end"), formatPoint(wall.end, units.length)]
   ] as const;
@@ -203,9 +201,6 @@ function WallMeasurementField({
     />
   );
 }
-
-const formatMeasurement = (value: number, unit: string): string =>
-  `${formatEditorMeasurement(value)} ${unit}`;
 
 const formatPoint = (point: Wall["start"], unit: string): string =>
   `${formatEditorMeasurement(point.x)}, ${formatEditorMeasurement(point.z)} ${unit}`;

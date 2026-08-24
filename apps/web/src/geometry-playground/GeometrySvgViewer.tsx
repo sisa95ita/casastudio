@@ -9,6 +9,10 @@ import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 
 import { useCasaTranslation } from "../i18n";
 import type { ArchitecturalPresentationModel2D } from "./architectural-presentation-model-2d";
+import type {
+  ArchitecturalDimensionPresentationModel2D,
+  LinearDimensionPresentation2D
+} from "./architectural-dimension-presentation-model-2d";
 import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import type { ProjectEditorInteraction } from "../state/project-editor-tools";
 import {
@@ -65,6 +69,9 @@ export type GeometryDisplayOptions = {
   readonly centroids: boolean;
   readonly bounds: boolean;
   readonly entityLabels: boolean;
+  readonly overallDimensions: boolean;
+  readonly selectedDimensions: boolean;
+  readonly roomMetrics: boolean;
 };
 
 /**
@@ -78,7 +85,10 @@ export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
     vertices: true,
     centroids: true,
     bounds: false,
-    entityLabels: false
+    entityLabels: false,
+    overallDimensions: false,
+    selectedDimensions: false,
+    roomMetrics: false
   });
 
 /**
@@ -95,7 +105,10 @@ export const projectGeometryDisplayOptions: GeometryDisplayOptions =
     vertices: true,
     centroids: true,
     bounds: false,
-    entityLabels: false
+    entityLabels: false,
+    overallDimensions: true,
+    selectedDimensions: true,
+    roomMetrics: true
   });
 
 /**
@@ -104,6 +117,7 @@ export const projectGeometryDisplayOptions: GeometryDisplayOptions =
 export type GeometrySvgViewerProps = {
   readonly presentationModel: GeometryPresentationModel2D;
   readonly architecturalModel?: ArchitecturalPresentationModel2D;
+  readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
   readonly selectionState?: GeometrySelectionState;
@@ -182,6 +196,7 @@ export type GeometryEditorOverlay = {
     readonly draggingEndpoint?: WallEndpoint;
   };
   readonly snapCandidate?: DrawWallSnapCandidate;
+  readonly snapMarkerPurpose?: "authoring" | "measurement";
   readonly selectedJunction?: {
     readonly position: WorldPointXZ;
     readonly previewPosition: WorldPointXZ;
@@ -218,6 +233,7 @@ const defaultViewerInteraction: ProjectEditorInteraction = Object.freeze({
 export function GeometrySvgViewer({
   presentationModel,
   architecturalModel,
+  dimensionModel,
   options,
   viewport,
   selectionState,
@@ -252,7 +268,7 @@ export function GeometrySvgViewer({
   const vertexRadius = Math.max(3, Math.min(6, viewport.zoom * 5));
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
-  if (!bounds && !interaction.drawWallEnabled) {
+  if (!bounds && !interaction.drawWallEnabled && !interaction.measurementEnabled) {
     return (
       <div className="geometry-empty-state" role="status">
         {t("viewer.empty")}
@@ -402,7 +418,7 @@ export function GeometrySvgViewer({
   };
 
   const handleSvgClick = (event: MouseEvent<SVGSVGElement>) => {
-    if (interaction.drawWallEnabled || interaction.openingPlacement) {
+    if (interaction.drawWallEnabled || interaction.openingPlacement || interaction.measurementEnabled) {
       onEditorCanvasClick?.(getEventPointer(event));
     }
   };
@@ -539,6 +555,8 @@ export function GeometrySvgViewer({
       className={`geometry-svg geometry-svg--${
         interaction.drawWallEnabled
           ? "draw-wall"
+          : interaction.measurementEnabled
+            ? "measure"
           : interaction.selectionEnabled
             ? "select"
             : interaction.panEnabled
@@ -884,6 +902,10 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
+      {dimensionModel ? (
+        <ArchitecturalDimensionLayer model={dimensionModel} includeTemporary={false} />
+      ) : null}
+
       <GeometryEditorOverlayLayer
         overlay={editorOverlay}
         transform={transform}
@@ -892,7 +914,89 @@ export function GeometrySvgViewer({
         onJunctionPointerDown={handleJunctionPointerDown}
         onRoomFaceCandidateClick={onRoomFaceCandidateClick}
       />
+      {dimensionModel?.temporary ? (
+        <ArchitecturalDimensionLayer model={dimensionModel} includeTemporary />
+      ) : null}
     </svg>
+  );
+}
+
+/** Renders non-interactive architectural dimension graphics in semantic SVG groups. */
+function ArchitecturalDimensionLayer({
+  model,
+  includeTemporary
+}: {
+  readonly model: ArchitecturalDimensionPresentationModel2D;
+  readonly includeTemporary: boolean;
+}) {
+  if (includeTemporary) {
+    return model.temporary ? (
+      <g data-layer="temporary-measurement" className="architectural-dimension-layer architectural-dimension-layer--temporary">
+        <ArchitecturalLinearDimension dimension={model.temporary} testId="temporary-measurement" />
+      </g>
+    ) : null;
+  }
+  return (
+    <>
+      <g data-layer="automatic-dimensions" className="architectural-dimension-layer">
+        {model.automatic.map((dimension, index) => (
+          <ArchitecturalLinearDimension key={`automatic-${index}`} dimension={dimension} testId="automatic-dimension" />
+        ))}
+      </g>
+      <g data-layer="selected-dimensions" className="architectural-dimension-layer architectural-dimension-layer--selected">
+        {model.selected.map((dimension, index) => (
+          <ArchitecturalLinearDimension key={`selected-${index}`} dimension={dimension} testId="selected-dimension" />
+        ))}
+      </g>
+      <g data-layer="room-metrics" className="architectural-room-metric-layer">
+        {model.roomMetrics.map((metric) => (
+          <text
+            key={metric.roomId}
+            data-testid="room-metric"
+            data-source-room-id={metric.roomId}
+            x={formatSvgNumber(metric.anchor.x)}
+            y={formatSvgNumber(metric.anchor.y + 18)}
+            textAnchor="middle"
+          >
+            <tspan x={formatSvgNumber(metric.anchor.x)}>{metric.formattedArea}</tspan>
+            <tspan x={formatSvgNumber(metric.anchor.x)} dy="13">{metric.formattedPerimeter}</tspan>
+          </text>
+        ))}
+      </g>
+    </>
+  );
+}
+
+/** Renders one projected linear dimension without participating in hit testing. */
+function ArchitecturalLinearDimension({
+  dimension,
+  testId
+}: {
+  readonly dimension: LinearDimensionPresentation2D;
+  readonly testId: string;
+}) {
+  return (
+    <g
+      data-testid={testId}
+      data-physical-value={dimension.physicalValue}
+      data-orientation={dimension.orientation}
+    >
+      {dimension.extensionLines.map((line, index) => (
+        <line key={`extension-${index}`} className="architectural-dimension-extension" {...lineAttributes(line.start, line.end)} />
+      ))}
+      <line className="architectural-dimension-line" {...lineAttributes(dimension.dimensionLine.start, dimension.dimensionLine.end)} />
+      {dimension.markers.map((line, index) => (
+        <line key={`marker-${index}`} className="architectural-dimension-marker" {...lineAttributes(line.start, line.end)} />
+      ))}
+      <text
+        className="architectural-dimension-label"
+        x={formatSvgNumber(dimension.labelAnchor.x)}
+        y={formatSvgNumber(dimension.labelAnchor.y - 5)}
+        textAnchor="middle"
+      >
+        {dimension.formattedValue}
+      </text>
+    </g>
   );
 }
 
@@ -996,7 +1100,10 @@ function GeometryEditorOverlayLayer({
         </g>
       ) : null}
       {snapPoint && overlay?.snapCandidate && overlay.snapCandidate.kind !== "free" ? (
-        <g aria-hidden="true" data-testid="draw-wall-snap-marker">
+        <g
+          aria-hidden="true"
+          data-testid={overlay.snapMarkerPurpose === "measurement" ? "measurement-snap-marker" : "draw-wall-snap-marker"}
+        >
           <circle
             className={`geometry-wall-snap-marker geometry-wall-snap-marker--${overlay.snapCandidate.kind}`}
             cx={formatSvgNumber(snapPoint.x)}

@@ -9,7 +9,10 @@
     "showVertices": "Show vertices",
     "showCentroids": "Show centroids",
     "showBoundingBoxes": "Show bounding boxes",
-    "showEntityLabels": "Show geometry labels"
+    "showEntityLabels": "Show geometry labels",
+    "showOverallDimensions": "Overall dimensions",
+    "showSelectedDimensions": "Selected dimensions",
+    "showRoomMetrics": "Room metrics"
   },
   "selection": {
     "title": "Selection",

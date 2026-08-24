@@ -13,7 +13,10 @@ const controlLabels: ReadonlyArray<{
   { option: "roomContours", labelKey: "layers.showRoomContours" },
   { option: "boundaryEdges", labelKey: "layers.showBoundaryEdges" },
   { option: "vertices", labelKey: "layers.showVertices" },
-  { option: "centroids", labelKey: "layers.showCentroids" }
+  { option: "centroids", labelKey: "layers.showCentroids" },
+  { option: "overallDimensions", labelKey: "layers.showOverallDimensions" },
+  { option: "selectedDimensions", labelKey: "layers.showSelectedDimensions" },
+  { option: "roomMetrics", labelKey: "layers.showRoomMetrics" }
 ];
 
 /** Technical geometry controls omitted from architectural authoring surfaces. */

@@ -3,6 +3,10 @@ import {
   createSlice,
   type PayloadAction
 } from "@reduxjs/toolkit";
+import {
+  architecturalScaleDenominators,
+  type ArchitecturalScaleDenominator
+} from "@casastudio/geometry";
 import type { Project, WallEndpoint } from "@casastudio/schema";
 import type { WorldPointXZ } from "../geometry-playground/viewport-transform-2d";
 
@@ -65,11 +69,19 @@ export type MoveOpeningInteraction = {
   readonly valid: boolean;
 };
 
+/** Describes a temporary two-point ruler that never enters the Project draft. */
+export type MeasureInteraction = {
+  readonly kind: "measure";
+  readonly startPoint: WorldPointXZ;
+  readonly currentPointerPoint: WorldPointXZ;
+  readonly completed: boolean;
+};
+
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
     DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
-    PlaceOpeningInteraction | MoveOpeningInteraction | null;
+    PlaceOpeningInteraction | MoveOpeningInteraction | MeasureInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
@@ -78,6 +90,19 @@ export type ProjectEditorPrecisionState = {
   readonly gridVisible: boolean;
   readonly snapToGrid: boolean;
   readonly gridSpacing: number;
+};
+
+/** Visibility preferences for derived architectural measurement layers. */
+export type ProjectDimensionDisplayState = {
+  readonly overallDimensions: boolean;
+  readonly selectedDimensions: boolean;
+  readonly roomMetrics: boolean;
+};
+
+/** Session-local document presentation settings independent from viewport state. */
+export type ProjectEditorPresentationState = {
+  readonly scaleDenominator: ArchitecturalScaleDenominator;
+  readonly dimensions: ProjectDimensionDisplayState;
 };
 
 /** Bounded history of meaningful complete-Project draft commits. */
@@ -99,6 +124,7 @@ export type ProjectEditorState = {
   readonly hover?: GeometrySelection;
   readonly transient: ProjectEditorTransientState;
   readonly precision: ProjectEditorPrecisionState;
+  readonly presentation: ProjectEditorPresentationState;
   readonly history: ProjectEditorHistoryState;
 };
 
@@ -110,6 +136,16 @@ export const defaultProjectEditorPrecision: ProjectEditorPrecisionState = Object
   gridVisible: false,
   snapToGrid: false,
   gridSpacing: 100
+});
+
+/** Default architectural presentation for a newly entered edit session. */
+export const defaultProjectEditorPresentation: ProjectEditorPresentationState = Object.freeze({
+  scaleDenominator: 75,
+  dimensions: Object.freeze({
+    overallDimensions: true,
+    selectedDimensions: true,
+    roomMetrics: true
+  })
 });
 
 /** Initial editor state before an explicit local editing session begins. */
@@ -125,6 +161,7 @@ export const initialProjectEditorState: ProjectEditorState = {
   hover: undefined,
   transient: { interaction: null },
   precision: defaultProjectEditorPrecision,
+  presentation: defaultProjectEditorPresentation,
   history: { past: [], future: [] }
 };
 
@@ -180,6 +217,10 @@ const projectEditorSlice = createSlice({
         state.hover = undefined;
         state.transient = { interaction: null };
         state.precision = { ...defaultProjectEditorPrecision };
+        state.presentation = {
+          ...defaultProjectEditorPresentation,
+          dimensions: { ...defaultProjectEditorPresentation.dimensions }
+        };
         state.history = { past: [], future: [] };
       }
     },
@@ -269,6 +310,22 @@ const projectEditorSlice = createSlice({
     editorGridSpacingChanged(state, action: PayloadAction<number>) {
       if (state.mode === "edit" && Number.isFinite(action.payload) && action.payload > 0) {
         state.precision.gridSpacing = action.payload;
+      }
+    },
+    editorDocumentScaleChanged(state, action: PayloadAction<ArchitecturalScaleDenominator>) {
+      if (state.mode === "edit" && architecturalScaleDenominators.includes(action.payload)) {
+        state.presentation.scaleDenominator = action.payload;
+      }
+    },
+    editorDimensionDisplayChanged(
+      state,
+      action: PayloadAction<Partial<ProjectDimensionDisplayState>>
+    ) {
+      if (state.mode === "edit") {
+        state.presentation.dimensions = {
+          ...state.presentation.dimensions,
+          ...action.payload
+        };
       }
     },
     editorActiveLevelChanged(state, action: PayloadAction<string>) {
@@ -385,6 +442,44 @@ const projectEditorSlice = createSlice({
       if (state.mode !== "edit" || state.activeTool !== "draw-wall") return;
       state.transient.snapCandidate = action.payload.snapCandidate;
       if (state.transient.interaction?.kind === "draw-wall") {
+        state.transient.interaction.currentPointerPoint = action.payload.point;
+      }
+    },
+    editorMeasurementPointSet(
+      state,
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly snapCandidate?: DrawWallSnapCandidate;
+      }>
+    ) {
+      if (state.mode !== "edit" || state.activeTool !== "measure") return;
+      const interaction = state.transient.interaction;
+      state.transient.snapCandidate = action.payload.snapCandidate;
+      if (interaction?.kind === "measure" && !interaction.completed) {
+        interaction.currentPointerPoint = action.payload.point;
+        interaction.completed = true;
+      } else {
+        state.transient.interaction = {
+          kind: "measure",
+          startPoint: action.payload.point,
+          currentPointerPoint: action.payload.point,
+          completed: false
+        };
+      }
+    },
+    editorMeasurementPointerMoved(
+      state,
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly snapCandidate?: DrawWallSnapCandidate;
+      }>
+    ) {
+      if (state.mode !== "edit" || state.activeTool !== "measure") return;
+      state.transient.snapCandidate = action.payload.snapCandidate;
+      if (
+        state.transient.interaction?.kind === "measure" &&
+        !state.transient.interaction.completed
+      ) {
         state.transient.interaction.currentPointerPoint = action.payload.point;
       }
     },
@@ -521,10 +616,14 @@ export const {
   editorGridVisibilityChanged,
   editorGridSnappingChanged,
   editorGridSpacingChanged,
+  editorDocumentScaleChanged,
+  editorDimensionDisplayChanged,
   editorActiveLevelChanged,
   editorActiveToolChanged,
   editorDrawWallStarted,
   editorDrawWallPointerMoved,
+  editorMeasurementPointSet,
+  editorMeasurementPointerMoved,
   editorOpeningPlacementChanged,
   editorOpeningDragStarted,
   editorOpeningDragThresholdCrossed,

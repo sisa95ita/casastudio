@@ -466,6 +466,112 @@ describe("ProjectViewerPage", () => {
     );
   });
 
+  it("keeps document scale independent from Project geometry, history, and viewport zoom", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const draft = store.getState().projectEditor.draft;
+    const serializedDraft = JSON.stringify(draft);
+    const automatic = (await screen.findAllByTestId("automatic-dimension"))[0]!;
+    const physicalValue = automatic.getAttribute("data-physical-value");
+    const originalLine = automatic.querySelector(".architectural-dimension-line")?.getAttribute("y1");
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Scale" }));
+    fireEvent.click(screen.getByRole("option", { name: "1:100" }));
+
+    expect(store.getState().projectEditor.presentation.scaleDenominator).toBe(100);
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(JSON.stringify(store.getState().projectEditor.draft)).toBe(serializedDraft);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+    const rescaled = screen.getAllByTestId("automatic-dimension")[0]!;
+    expect(rescaled.getAttribute("data-physical-value")).toBe(physicalValue);
+    expect(rescaled.querySelector(".architectural-dimension-line")?.getAttribute("y1")).not.toBe(originalLine);
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(store.getState().projectEditor.presentation.scaleDenominator).toBe(100);
+    expect(screen.getAllByTestId("automatic-dimension")[0]?.getAttribute("data-physical-value")).toBe(physicalValue);
+    fireEvent.click(screen.getByRole("button", { name: "Fit to view" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset viewport" }));
+    expect(store.getState().projectEditor.presentation.scaleDenominator).toBe(100);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+  });
+
+  it("controls derived dimensions without dirtying the Project", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    expect((await screen.findAllByTestId("automatic-dimension")).length).toBeGreaterThan(0);
+    const inspector = screen.getByRole("complementary", { name: "Test inspector" });
+    const toggle = within(inspector).getByRole("switch", { name: "Overall dimensions" });
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId("automatic-dimension")).toBeNull();
+    expect(store.getState().projectEditor.presentation.dimensions.overallDimensions).toBe(false);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history.past).toHaveLength(0);
+  });
+
+  it("shows exact selected Wall and Room measurements from canonical geometry", async () => {
+    renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const wallTarget = document.querySelector(
+      '.architectural-wall-hit-target[data-geometry-id="left-room-north-wall"]'
+    );
+    expect(wallTarget).not.toBeNull();
+    fireEvent.click(wallTarget as Element);
+    const selectedDimension = await screen.findByTestId("selected-dimension");
+    expect(selectedDimension.getAttribute("data-physical-value")).toBe("400");
+    expect(within(selectedDimension).getByText("4.00 m")).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("selected-dimension")).toBeNull();
+
+    fireEvent.click(screen.getAllByTestId("geometry-polygon")[0]!);
+    const inspector = screen.getByRole("complementary", { name: "Test inspector" });
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Selection" }));
+    expect(within(inspector).getByText("Left Room")).toBeTruthy();
+    expect(within(inspector).getByText("12.00 m²")).toBeTruthy();
+    expect(within(inspector).getByText("14.00 m")).toBeTruthy();
+    expect(screen.getByText(/Total room area: 24.00 m²/)).toBeTruthy();
+    expect(screen.getByText(/Overall width: 8.00 m/)).toBeTruthy();
+    expect(screen.getByText(/Overall depth: 3.00 m/)).toBeTruthy();
+  });
+
+  it("measures snapped Project points transiently and cancels with Escape", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.keyDown(window, { key: "m" });
+    expect(store.getState().projectEditor.activeTool).toBe("measure");
+    const svg = screen.getByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const edge = screen.getAllByTestId("boundary-edge")[0]!;
+    const start = { x: Number(edge.getAttribute("x1")), y: Number(edge.getAttribute("y1")) };
+    const midpoint = {
+      x: (Number(edge.getAttribute("x1")) + Number(edge.getAttribute("x2"))) / 2,
+      y: (Number(edge.getAttribute("y1")) + Number(edge.getAttribute("y2"))) / 2
+    };
+    const draft = store.getState().projectEditor.draft;
+
+    fireEvent.click(svg, { clientX: start.x, clientY: start.y });
+    fireEvent.pointerMove(svg, { clientX: midpoint.x + 2, clientY: midpoint.y + 2, pointerId: 1 });
+    expect(store.getState().projectEditor.transient.snapCandidate?.kind).toBe("wall-midpoint");
+    expect(screen.getByTestId("measurement-snap-marker")).toBeTruthy();
+    const temporary = screen.getByTestId("temporary-measurement");
+    expect(Number(temporary.getAttribute("data-physical-value"))).toBeGreaterThan(0);
+    fireEvent.click(svg, { clientX: midpoint.x + 2, clientY: midpoint.y + 2 });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "measure",
+      completed: true
+    });
+    expect(store.getState().projectEditor.draft).toBe(draft);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+    expect(store.getState().projectEditor.dirty).toBe(false);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("temporary-measurement")).toBeNull();
+    expect(store.getState().projectEditor.activeTool).toBe("measure");
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+  });
+
   it("renders Edit geometry from the draft instead of a stale authoritative snapshot", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
@@ -1339,6 +1445,7 @@ describe("ProjectViewerPage", () => {
     const hitTargets = document.querySelectorAll(".geometry-edge-hit-target");
     fireEvent.click(hitTargets[hitTargets.length - 1]!);
     expect(screen.getByTestId("selected-wall-overlay")).toBeTruthy();
+    const selectedLengthBefore = screen.getByTestId("selected-dimension").getAttribute("data-physical-value");
     expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "End endpoint" })).toBeTruthy();
 
@@ -1407,6 +1514,8 @@ describe("ProjectViewerPage", () => {
           .start
       ).not.toEqual(startBefore)
     );
+    expect(screen.getByTestId("selected-dimension").getAttribute("data-physical-value"))
+      .not.toBe(selectedLengthBefore);
     expect(buildSpy).toHaveBeenCalledTimes(buildCount + 1);
     expect(
       document.querySelectorAll(".geometry-edge--drag-source")
@@ -2455,6 +2564,8 @@ describe("ProjectViewerPage", () => {
     expect(within(dialog).getAllByText("Redo")).toHaveLength(2);
     expect(within(dialog).getByText("Ctrl/Cmd + Shift + Z")).toBeTruthy();
     expect(within(dialog).getByText("Ctrl/Cmd + Y")).toBeTruthy();
+    expect(within(dialog).getByText("Measure tool")).toBeTruthy();
+    expect(within(dialog).getByText("M")).toBeTruthy();
     expect(within(dialog).queryByText(/Zoom/i)).toBeNull();
 
     fireEvent.keyDown(dialog, { key: "Escape" });

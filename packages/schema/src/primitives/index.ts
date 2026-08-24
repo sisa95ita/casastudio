@@ -4,3 +4,4 @@ export * from "./metadata.js";
 export * from "./numbers.js";
 export * from "./points.js";
 export * from "./units.js";
+export * from "./physical-measurement.js";

@@ -1,5 +1,15 @@
 import { Divider, Stack, Typography } from "@mui/material";
-import type { Opening, Project, UpdateOpeningProperties, Wall } from "@casastudio/schema";
+import {
+  formatArchitecturalArea,
+  formatArchitecturalLength,
+  formatDisplayValue,
+  type Opening,
+  type Project,
+  type Room,
+  type UpdateOpeningProperties,
+  type Wall
+} from "@casastudio/schema";
+import type { RoomMeasurement } from "@casastudio/geometry";
 
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
@@ -19,6 +29,8 @@ export function ProjectSelectionDetails({
   onDeleteWall,
   onUpdateWallProperties,
   opening,
+  room,
+  roomMeasurement,
   openingWall,
   openingDisplayOffsetFromStart,
   onDeleteOpening,
@@ -35,6 +47,8 @@ export function ProjectSelectionDetails({
     readonly thickness?: number;
   }) => boolean;
   readonly opening?: Opening;
+  readonly room?: Room;
+  readonly roomMeasurement?: RoomMeasurement;
   readonly openingWall?: Wall;
   /** Transient Wall-local Opening offset used only for Inspector display. */
   readonly openingDisplayOffsetFromStart?: number;
@@ -52,6 +66,14 @@ export function ProjectSelectionDetails({
     opening && openingWall
   ) {
     return <ProjectOpeningSelectionDetails wall={openingWall} opening={opening} displayOffsetFromStart={openingDisplayOffsetFromStart} units={units} onDelete={onDeleteOpening ?? (() => undefined)} onUpdate={onUpdateOpening ?? (() => false)} />;
+  }
+  if (
+    selection.length === 1 &&
+    selection[0]?.kind === "POLYGON" &&
+    room &&
+    roomMeasurement
+  ) {
+    return <ProjectRoomSelectionDetails room={room} measurement={roomMeasurement} units={units} />;
   }
   if (
     selection.length === 1 &&
@@ -84,6 +106,41 @@ export function ProjectSelectionDetails({
 
   return (
     <GeometrySelectionDetails model={model} selectionState={selectionState} />
+  );
+}
+
+/** Displays semantic Room identity and metrics from the reusable measurement model. */
+function ProjectRoomSelectionDetails({
+  room,
+  measurement,
+  units
+}: {
+  readonly room: Room;
+  readonly measurement: RoomMeasurement;
+  readonly units: Project["units"];
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  const rows = [
+    [t("room.labels.name"), room.name],
+    [t("room.labels.type"), room.type],
+    [t("room.labels.area"), formatArchitecturalArea(measurement.area, units.length)],
+    [t("room.labels.perimeter"), formatArchitecturalLength(measurement.perimeter, units.length)]
+  ] as const;
+  return (
+    <Stack component="section" spacing={1.5}>
+      <Typography variant="subtitle2">{t("room.selectionTitle")}</Typography>
+      <Stack component="dl" spacing={0} sx={{ m: 0 }}>
+        {rows.map(([label, value]) => (
+          <Stack key={label} spacing={0.75}>
+            <Divider />
+            <Stack className="geometry-summary-item" direction="row" spacing={1.5} sx={{ justifyContent: "space-between" }}>
+              <Typography component="dt" variant="caption" color="text.secondary">{label}</Typography>
+              <Typography component="dd" variant="caption" sx={{ fontWeight: 700, m: 0, textAlign: "right" }}>{value}</Typography>
+            </Stack>
+          </Stack>
+        ))}
+      </Stack>
+    </Stack>
   );
 }
 
@@ -176,4 +233,4 @@ function ProjectVertexSelectionDetails({
   );
 }
 
-const formatNumber = (value: number): number => Number(value.toFixed(2));
+const formatNumber = (value: number): string => formatDisplayValue(value, 2);

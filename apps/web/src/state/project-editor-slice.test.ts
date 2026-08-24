@@ -11,6 +11,8 @@ import {
   editorActiveToolChanged,
   editorDrawWallPointerMoved,
   editorDrawWallStarted,
+  editorDocumentScaleChanged,
+  editorDimensionDisplayChanged,
   editorEndpointDragStarted,
   editorGridSnappingChanged,
   editorGridSpacingChanged,
@@ -18,6 +20,8 @@ import {
   editorOpeningDragPreviewChanged,
   editorOpeningDragStarted,
   editorOpeningDragThresholdCrossed,
+  editorMeasurementPointSet,
+  editorMeasurementPointerMoved,
   editorRedoRequested,
   editorSelectionChanged,
   editorTransientInteractionCleared,
@@ -426,6 +430,85 @@ describe("Project editor state", () => {
       snapToGrid: true,
       gridSpacing: 25
     });
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("keeps document scale and dimension visibility out of Project geometry and history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    const originalDraft = structuredClone(state.draft);
+    const draftReference = state.draft;
+    state = projectEditorReducer(state, editorDocumentScaleChanged(100));
+    state = projectEditorReducer(state, editorDimensionDisplayChanged({
+      overallDimensions: false,
+      roomMetrics: false
+    }));
+
+    expect(state.presentation).toEqual({
+      scaleDenominator: 100,
+      dimensions: {
+        overallDimensions: false,
+        selectedDimensions: true,
+        roomMetrics: false
+      }
+    });
+    expect(state.draft).toBe(draftReference);
+    expect(state.draft).toEqual(originalDraft);
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("keeps temporary ruler points and snapping outside Project history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("measure"));
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorMeasurementPointSet({
+      point: { x: 0, z: 0 },
+      snapCandidate: {
+        kind: "vertex",
+        geometryId: "vertex:0:0",
+        point: { x: 0, z: 0 },
+        visualDistancePixels: 2
+      }
+    }));
+    state = projectEditorReducer(state, editorMeasurementPointerMoved({
+      point: { x: 300, z: 400 },
+      snapCandidate: {
+        kind: "wall-midpoint",
+        geometryId: "wall:midpoint",
+        wallId: "wall",
+        point: { x: 300, z: 400 },
+        visualDistancePixels: 3
+      }
+    }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "measure",
+      startPoint: { x: 0, z: 0 },
+      currentPointerPoint: { x: 300, z: 400 },
+      completed: false
+    });
+    state = projectEditorReducer(state, editorMeasurementPointSet({ point: { x: 300, z: 400 } }));
+    expect(state.transient.interaction).toMatchObject({ kind: "measure", completed: true });
+    state = projectEditorReducer(state, editorMeasurementPointSet({ point: { x: 25, z: 50 } }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "measure",
+      startPoint: { x: 25, z: 50 },
+      currentPointerPoint: { x: 25, z: 50 },
+      completed: false
+    });
+    expect(state.draft).toBe(draft);
     expect(state.history).toEqual({ past: [], future: [] });
     expect(state.dirty).toBe(false);
   });

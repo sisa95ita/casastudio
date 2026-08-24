@@ -77,6 +77,7 @@
     "draw-wall": "Draw Wall",
     "door": "Door",
     "window": "Window",
+    "measure": "Measure",
     "pan": "Pan",
     "undo": "Undo",
     "redo": "Redo",
@@ -87,6 +88,7 @@
       "draw-wall": "Draw connected walls as a continuous chain.",
       "door": "Place a door on a wall.",
       "window": "Place a window on a wall.",
+      "measure": "Measure between snapped points without changing the project.",
       "pan": "Move around the plan without changing geometry."
     }
   },
@@ -123,7 +125,15 @@
     "fit": "Fit to view",
     "reset": "Reset viewport",
     "zoomIn": "Zoom in",
-    "zoomOut": "Zoom out"
+    "zoomOut": "Zoom out",
+    "technical": "Plan scale and measurements",
+    "scale": "Scale",
+    "zoom": "Zoom"
+  },
+  "metrics": {
+    "totalArea": "Total room area",
+    "width": "Overall width",
+    "depth": "Overall depth"
   },
   "revision": {
     "agreement": "Revision {{revision}}"
@@ -219,6 +229,15 @@
       "height": "Height",
       "start": "Start point",
       "end": "End point"
+    }
+  },
+  "room": {
+    "selectionTitle": "Room",
+    "labels": {
+      "name": "Name",
+      "type": "Type",
+      "area": "Area",
+      "perimeter": "Perimeter"
     }
   },
   "selection": {

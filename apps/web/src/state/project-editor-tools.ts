@@ -1,5 +1,5 @@
 /** Tools available to the manual 2D Project editor. */
-export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "pan";
+export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "measure" | "pan";
 
 /** Interaction capabilities consumed by the shared geometry viewer. */
 export type ProjectEditorInteraction = {
@@ -9,6 +9,7 @@ export type ProjectEditorInteraction = {
   readonly wallEndpointEditingEnabled: boolean;
   readonly openingPlacement?: "DOOR" | "WINDOW";
   readonly openingEditingEnabled?: boolean;
+  readonly measurementEnabled?: boolean;
 };
 
 /** Durable UI and interaction contract for one editor tool. */
@@ -68,6 +69,18 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
       }
     },
     {
+      id: "measure",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: false,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false,
+        openingEditingEnabled: false,
+        measurementEnabled: true
+      }
+    },
+    {
       id: "pan",
       enabled: true,
       interaction: {
@@ -91,7 +104,8 @@ export function getProjectEditorInteraction(
       panEnabled: false,
       drawWallEnabled: false,
       wallEndpointEditingEnabled: false,
-      openingEditingEnabled: false
+      openingEditingEnabled: false,
+      measurementEnabled: false
     }
   );
 }

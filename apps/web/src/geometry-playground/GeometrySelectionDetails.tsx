@@ -1,4 +1,5 @@
 import { Divider, Stack, Typography } from "@mui/material";
+import { formatDisplayValue } from "@casastudio/schema";
 
 import { useCasaTranslation } from "../i18n";
 import type {
@@ -165,4 +166,4 @@ const getSelectionItems = (
 const formatSelectionReference = (selection: GeometrySelection): string =>
   `${selection.kind} ${selection.geometryId}`;
 
-const formatMeasurement = (value: number): string => Number(value.toFixed(2)).toString();
+const formatMeasurement = (value: number): string => formatDisplayValue(value, 2);

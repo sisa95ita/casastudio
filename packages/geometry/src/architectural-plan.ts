@@ -8,6 +8,7 @@ import {
   type Wall,
   type Window
 } from "@casastudio/schema";
+import { measureWall } from "./architectural-measurements.js";
 
 /** Result of projecting a world-space point into one Wall's local axis. */
 export type WallPointProjection = {
@@ -51,12 +52,12 @@ export type ArchitecturalWallShape = {
 
 /** Derives the physical strip for an entire Wall. */
 export function createArchitecturalWallShape(wall: Wall): ArchitecturalWallShape {
-  return createWallSegmentShape(wall, 0, wallLength(wall));
+  return createWallSegmentShape(wall, 0, measureWall(wall).length);
 }
 
 /** Derives Wall-body strips around all valid Opening intervals. */
 export function createArchitecturalWallBodyShapes(wall: Wall): readonly ArchitecturalWallShape[] {
-  const length = wallLength(wall);
+  const length = measureWall(wall).length;
   const intervals = wall.openings.map(getOpeningInterval).sort((a, b) => a.start - b.start);
   const shapes: ArchitecturalWallShape[] = [];
   let cursor = 0;
@@ -191,12 +192,8 @@ function wallLocalPoint(wall: Pick<Wall, "start" | "end">, along: number, perpen
 }
 
 function wallBasis(wall: Pick<Wall, "start" | "end">) {
-  const length = wallLength(wall);
+  const length = measureWall(wall).length;
   if (length === 0) throw new Error("Cannot derive architectural geometry for a zero-length Wall.");
   const tangent = { x: (wall.end.x - wall.start.x) / length, z: (wall.end.z - wall.start.z) / length };
   return { tangent, normal: { x: -tangent.z, z: tangent.x } };
-}
-
-function wallLength(wall: Pick<Wall, "start" | "end">): number {
-  return Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z);
 }

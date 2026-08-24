@@ -1,4 +1,11 @@
-import { GeometryEngine, LevelGeometry, projectPointOntoWall } from "@casastudio/geometry";
+import {
+  GeometryEngine,
+  LevelGeometry,
+  measureLevel,
+  measureRoom,
+  projectPointOntoWall,
+  type RoomMeasurement
+} from "@casastudio/geometry";
 import {
   createConnectedWall,
   createRoom,
@@ -13,6 +20,7 @@ import {
   updateOpening,
   ValidationErrorCode,
   type Project,
+  type Room,
   type Wall,
   type WallEndpoint,
   type Opening,
@@ -56,6 +64,7 @@ import KeyboardRoundedIcon from "@mui/icons-material/KeyboardRounded";
 import NearMeRoundedIcon from "@mui/icons-material/NearMeRounded";
 import PanToolAltRoundedIcon from "@mui/icons-material/PanToolAltRounded";
 import RedoRoundedIcon from "@mui/icons-material/RedoRounded";
+import StraightenRoundedIcon from "@mui/icons-material/StraightenRounded";
 import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
 import DoorFrontRoundedIcon from "@mui/icons-material/DoorFrontRounded";
 import WindowRoundedIcon from "@mui/icons-material/WindowRounded";
@@ -80,6 +89,7 @@ import type { GeometryLevel, GeometrySnapshot } from "../api/api-types";
 import { useAppShellContent } from "../app-shell/AppShellContext";
 import { GeometryLayerControls } from "../geometry-playground/GeometryLayerControls";
 import { createArchitecturalPresentationModel2D } from "../geometry-playground/architectural-presentation-model-2d";
+import { createArchitecturalDimensionPresentationModel2D } from "../geometry-playground/architectural-dimension-presentation-model-2d";
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { createRuntimeGeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import { GeometrySelectionDetails } from "../geometry-playground/GeometrySelectionDetails";
@@ -134,11 +144,15 @@ import {
   editorActiveToolChanged,
   editorDrawWallPointerMoved,
   editorDrawWallStarted,
+  editorDocumentScaleChanged,
+  editorDimensionDisplayChanged,
   editorEndpointDragStarted,
   editorGridSnappingChanged,
   editorGridSpacingChanged,
   editorGridVisibilityChanged,
   editorJunctionDragStarted,
+  editorMeasurementPointSet,
+  editorMeasurementPointerMoved,
   editorOpeningDragThresholdCrossed,
   editorOpeningDragPreviewChanged,
   editorOpeningDragStarted,
@@ -172,7 +186,10 @@ import {
   getWallEditingErrorKey,
   type WallEditingErrorKey
 } from "../state/project-wall-editing";
-import { resolveDrawWallSnapCandidate } from "../state/project-wall-snapping";
+import {
+  resolveDrawWallSnapCandidate,
+  resolveProjectPointSnapCandidate
+} from "../state/project-wall-snapping";
 import {
   commitOpeningPlacementCandidate,
   createOpeningIdentifier,
@@ -300,6 +317,13 @@ export function ProjectViewerPage() {
     viewportOwnerKey === viewportKey
       ? viewport
       : createInitialViewportState(selectedLevel);
+  const activeProject = workspaceMode === "edit" ? editor.draft : projectResponse?.project;
+  const activeProjectLevel = activeProject?.building.levels.find(
+    (level) => level.id === selectedLevel?.sourceLevelId
+  );
+  const resolvedDisplayOptions: GeometryDisplayOptions = workspaceMode === "edit"
+    ? { ...displayOptions, ...editor.presentation.dimensions }
+    : displayOptions;
 
   const presentationResult = useMemo(() => {
     if (!selectedLevel || (workspaceMode === "view" && consistencyFailure)) {
@@ -308,8 +332,6 @@ export function ProjectViewerPage() {
 
     try {
       const transform = createViewportTransform2D(activeViewport);
-      const projectLevel = (workspaceMode === "edit" ? editor.draft : projectResponse?.project)
-        ?.building.levels.find((level) => level.id === selectedLevel.sourceLevelId);
       const model =
         workspaceMode === "edit"
           ? createRuntimeGeometryPresentationModel2D({
@@ -323,8 +345,8 @@ export function ProjectViewerPage() {
               selectionState
             });
 
-      const architecturalModel = projectLevel
-        ? createArchitecturalPresentationModel2D(projectLevel, transform, selectionState)
+      const architecturalModel = activeProjectLevel
+        ? createArchitecturalPresentationModel2D(activeProjectLevel, transform, selectionState)
         : undefined;
       return { ok: true as const, model, architecturalModel };
     } catch (error) {
@@ -336,8 +358,7 @@ export function ProjectViewerPage() {
     selectedLevel,
     selectionState,
     workspaceMode,
-    editor.draft,
-    projectResponse?.project
+    activeProjectLevel
   ]);
 
   const selectedEditWall = useMemo(() => {
@@ -381,6 +402,67 @@ export function ProjectViewerPage() {
       ? findProjectOpening(editor.draft, editor.activeLevelId, selected.geometryId)
       : undefined;
   }, [editor.activeLevelId, editor.draft, selectionState.selected]);
+  const selectedRoom = useMemo(() => {
+    const selected = selectionState.selected.length === 1
+      ? selectionState.selected[0]
+      : undefined;
+    if (selected?.kind !== "POLYGON" || !presentationResult?.ok || !activeProjectLevel) {
+      return undefined;
+    }
+    const polygon = presentationResult.model.polygons.find(
+      (candidate) => candidate.geometryId === selected.geometryId
+    );
+    return activeProjectLevel.rooms.find((room) => room.id === polygon?.sourceRoomId);
+  }, [activeProjectLevel, presentationResult, selectionState.selected]);
+  const selectedRoomMeasurement = useMemo(
+    () => activeProjectLevel && selectedRoom
+      ? measureRoom(activeProjectLevel, selectedRoom)
+      : undefined,
+    [activeProjectLevel, selectedRoom]
+  );
+  const activeLevelMeasurement = useMemo(
+    () => activeProjectLevel ? measureLevel(activeProjectLevel) : undefined,
+    [activeProjectLevel]
+  );
+  const dimensionModel = useMemo(() => {
+    if (!activeProjectLevel || !activeProject || !presentationResult?.ok) return undefined;
+    const measurement = editor.transient.interaction?.kind === "measure"
+      ? {
+          start: editor.transient.interaction.startPoint,
+          end: editor.transient.interaction.currentPointerPoint
+        }
+      : undefined;
+    return createArchitecturalDimensionPresentationModel2D({
+      level: activeProjectLevel,
+      units: activeProject.units,
+      transform: createViewportTransform2D(activeViewport),
+      geometryModel: presentationResult.model,
+      scaleDenominator: workspaceMode === "edit"
+        ? editor.presentation.scaleDenominator
+        : 75,
+      display: {
+        overallDimensions: resolvedDisplayOptions.overallDimensions,
+        selectedDimensions: resolvedDisplayOptions.selectedDimensions,
+        roomMetrics: resolvedDisplayOptions.roomMetrics
+      },
+      selectedWall: selectedEditWall,
+      selectedRoom,
+      temporaryMeasurement: measurement
+    });
+  }, [
+    activeProject,
+    activeProjectLevel,
+    activeViewport,
+    editor.presentation.scaleDenominator,
+    editor.transient.interaction,
+    presentationResult,
+    resolvedDisplayOptions.overallDimensions,
+    resolvedDisplayOptions.roomMetrics,
+    resolvedDisplayOptions.selectedDimensions,
+    selectedEditWall,
+    selectedRoom,
+    workspaceMode
+  ]);
   const selectedEditVertex = useMemo(() => {
     if (
       workspaceMode !== "edit" ||
@@ -496,6 +578,7 @@ export function ProjectViewerPage() {
             }
           : undefined,
       snapCandidate: editor.transient.snapCandidate,
+      snapMarkerPurpose: editor.activeTool === "measure" ? "measurement" : "authoring",
       selectedWall,
       selectedJunction:
         selectedEditVertex && selectedJunctionWallIds.length > 1
@@ -632,6 +715,25 @@ export function ProjectViewerPage() {
         !editor.draft ||
         !editor.activeLevelId
       ) {
+        return;
+      }
+
+      if (editor.activeTool === "measure") {
+        const snapCandidate = presentationResult?.ok
+          ? resolveProjectPointSnapCandidate(pointer.svgPoint, presentationResult.model, {
+              cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+              worldPoint: pointer.worldPoint,
+              grid: {
+                enabled: editor.precision.snapToGrid,
+                spacing: editor.precision.gridSpacing,
+                worldToSvgScale: activeViewport.zoom
+              }
+            })
+          : undefined;
+        dispatch(editorMeasurementPointSet({
+          point: snapCandidate?.point ?? pointer.worldPoint,
+          snapCandidate
+        }));
         return;
       }
 
@@ -830,6 +932,28 @@ export function ProjectViewerPage() {
             snapCandidate
           })
         );
+      } else if (
+        workspaceMode === "edit" &&
+        editor.activeTool === "measure" &&
+        presentationResult?.ok
+      ) {
+        const snapCandidate = resolveProjectPointSnapCandidate(
+          pointer.svgPoint,
+          presentationResult.model,
+          {
+            cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            worldPoint: pointer.worldPoint,
+            grid: {
+              enabled: editor.precision.snapToGrid,
+              spacing: editor.precision.gridSpacing,
+              worldToSvgScale: activeViewport.zoom
+            }
+          }
+        );
+        dispatch(editorMeasurementPointerMoved({
+          point: snapCandidate.point,
+          snapCandidate
+        }));
       } else if (workspaceMode === "edit" && editor.transient.interaction) {
         dispatch(
           editorTransientPointerMoved({
@@ -1274,6 +1398,8 @@ export function ProjectViewerPage() {
           ? "door"
           : event.key.toLowerCase() === "n"
             ? "window"
+            : event.key.toLowerCase() === "m"
+              ? "measure"
             : event.key.toLowerCase() === "w"
               ? "draw-wall"
               : event.key.toLowerCase() === "v"
@@ -1551,6 +1677,17 @@ export function ProjectViewerPage() {
     refreshingAuthoritativeState
   ]);
 
+  const handleDisplayOptionsChange = useCallback((options: GeometryDisplayOptions) => {
+    setDisplayOptions(options);
+    if (workspaceMode === "edit") {
+      dispatch(editorDimensionDisplayChanged({
+        overallDimensions: options.overallDimensions,
+        selectedDimensions: options.selectedDimensions,
+        roomMetrics: options.roomMetrics
+      }));
+    }
+  }, [dispatch, workspaceMode]);
+
   const inspector = useMemo(() => {
     if (!presentationResult?.ok || !selectedLevel) {
       return undefined;
@@ -1566,8 +1703,8 @@ export function ProjectViewerPage() {
       <ProjectWorkspaceInspector
         model={presentationResult.model}
         selectionState={selectionState}
-        options={displayOptions}
-        onOptionsChange={setDisplayOptions}
+        options={resolvedDisplayOptions}
+        onOptionsChange={handleDisplayOptionsChange}
         level={selectedLevel.sourceLevelId}
         revision={
           workspaceMode === "edit"
@@ -1578,6 +1715,8 @@ export function ProjectViewerPage() {
         selectedWall={selectedEditWall}
         selectedOpening={selectedEditOpening}
         selectedOpeningDisplayOffset={transientOpeningOffset}
+        selectedRoom={selectedRoom}
+        selectedRoomMeasurement={selectedRoomMeasurement}
         endpointAvailability={selectedWallEndpointAvailability}
         units={projectResponse?.project.units}
         onDeleteWall={handleDeleteSelectedWall}
@@ -1587,13 +1726,15 @@ export function ProjectViewerPage() {
       />
     );
   }, [
-    displayOptions,
+    resolvedDisplayOptions,
     editor.baseRevision,
     geometryResponse,
     presentationResult,
     selectedLevel,
     selectedEditWall,
     selectedEditOpening,
+    selectedRoom,
+    selectedRoomMeasurement,
     editor.transient.interaction,
     selectedWallEndpointAvailability,
     selectionState,
@@ -1602,7 +1743,8 @@ export function ProjectViewerPage() {
     handleDeleteSelectedWall,
     handleUpdateSelectedWallProperties,
     handleDeleteSelectedOpening,
-    handleUpdateSelectedOpening
+    handleUpdateSelectedOpening,
+    handleDisplayOptionsChange
   ]);
 
   const shellContent = useMemo(
@@ -1858,7 +2000,8 @@ export function ProjectViewerPage() {
           headingId="project-geometry-viewer-heading"
           presentationModel={presentationResult.model}
           architecturalModel={presentationResult.architecturalModel}
-          options={displayOptions}
+          dimensionModel={dimensionModel}
+          options={resolvedDisplayOptions}
           viewport={activeViewport}
           selectionState={selectionState}
           onSelectionStateChange={handleSelectionStateChange}
@@ -1866,6 +2009,12 @@ export function ProjectViewerPage() {
           onFitViewport={handleFitViewport}
           onResetViewport={handleResetViewport}
           onZoomViewport={handleZoomViewport}
+          documentScaleDenominator={workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75}
+          onDocumentScaleChange={workspaceMode === "edit"
+            ? (denominator) => dispatch(editorDocumentScaleChanged(denominator))
+            : undefined}
+          levelMeasurement={activeLevelMeasurement}
+          units={activeProject?.units}
           statusLabel={t(
             workspaceMode === "edit"
               ? "workspace.editing"
@@ -2005,6 +2154,7 @@ function ProjectEditorToolbar({
     "draw-wall": <LinearScaleRoundedIcon fontSize="small" />,
     door: <DoorFrontRoundedIcon fontSize="small" />,
     window: <WindowRoundedIcon fontSize="small" />,
+    measure: <StraightenRoundedIcon fontSize="small" />,
     pan: <PanToolAltRoundedIcon fontSize="small" />
   } satisfies Record<ProjectEditorTool, ReactNode>;
 
@@ -2223,6 +2373,8 @@ type ProjectWorkspaceInspectorProps = {
   readonly mode: ProjectWorkspaceMode;
   readonly selectedWall?: Wall;
   readonly selectedOpening?: { readonly wall: Wall; readonly opening: Opening };
+  readonly selectedRoom?: Room;
+  readonly selectedRoomMeasurement?: RoomMeasurement;
   /** Transient Wall-local Opening offset used only for Inspector display. */
   readonly selectedOpeningDisplayOffset?: number;
   readonly endpointAvailability?: ReturnType<
@@ -2249,6 +2401,8 @@ function ProjectWorkspaceInspector({
   mode,
   selectedWall,
   selectedOpening,
+  selectedRoom,
+  selectedRoomMeasurement,
   selectedOpeningDisplayOffset,
   endpointAvailability,
   units,
@@ -2290,6 +2444,8 @@ function ProjectWorkspaceInspector({
               opening={selectedOpening?.opening}
               openingWall={selectedOpening?.wall}
               openingDisplayOffsetFromStart={selectedOpeningDisplayOffset}
+              room={selectedRoom}
+              roomMeasurement={selectedRoomMeasurement}
               units={units}
               endpointAvailability={endpointAvailability}
               onDeleteWall={onDeleteWall}

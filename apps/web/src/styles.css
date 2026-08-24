@@ -755,6 +755,21 @@ img {
   position: relative;
 }
 
+.geometry-viewer-panel__technical-bar {
+  align-items: center;
+  background: rgba(255, 253, 249, 0.98);
+  border-top: 1px solid var(--casa-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 50px;
+  padding: 6px 12px;
+}
+
+.geometry-document-scale {
+  min-width: 112px !important;
+}
+
 .geometry-canvas-hint {
   background: rgba(255, 253, 249, 0.9);
   border: 1px solid var(--casa-border);
@@ -819,6 +834,14 @@ img {
 .geometry-svg--draw-wall .geometry-polygon,
 .geometry-svg--draw-wall .geometry-edge-hit-target,
 .geometry-svg--draw-wall .geometry-vertex {
+  cursor: crosshair;
+}
+
+.geometry-svg--measure,
+.geometry-svg--measure .geometry-pan-background,
+.geometry-svg--measure .geometry-polygon,
+.geometry-svg--measure .geometry-edge-hit-target,
+.geometry-svg--measure .geometry-vertex {
   cursor: crosshair;
 }
 
@@ -929,6 +952,53 @@ img {
 
 .architectural-window-line {
   stroke-width: 1.25 !important;
+}
+
+.architectural-dimension-layer,
+.architectural-room-metric-layer {
+  color: #596267;
+  pointer-events: none;
+}
+
+.architectural-dimension-extension,
+.architectural-dimension-line,
+.architectural-dimension-marker {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.85;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-dimension-extension {
+  opacity: 0.72;
+}
+
+.architectural-dimension-label,
+.architectural-room-metric-layer text {
+  fill: currentColor;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: rgba(250, 248, 243, 0.96);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.architectural-dimension-layer--selected {
+  color: #a64e31;
+}
+
+.architectural-dimension-layer--temporary {
+  color: #bc552f;
+}
+
+.architectural-dimension-layer--temporary .architectural-dimension-line {
+  stroke-width: 1.35;
+}
+
+.architectural-room-metric-layer {
+  color: #5c655f;
 }
 
 .architectural-opening-preview {

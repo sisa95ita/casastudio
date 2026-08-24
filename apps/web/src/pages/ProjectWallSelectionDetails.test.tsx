@@ -30,7 +30,7 @@ describe("ProjectWallSelectionDetails", () => {
       />
     );
 
-    expect(screen.getByText("50 cm")).toBeTruthy();
+    expect(screen.getByText("0.50 m")).toBeTruthy();
     expect(
       screen.getByRole("spinbutton", { name: "Thickness (cm)" })
     ).toHaveProperty("value", "20");
