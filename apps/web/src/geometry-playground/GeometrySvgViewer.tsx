@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent
@@ -74,6 +75,8 @@ export type GeometryDisplayOptions = {
   readonly overallDimensions: boolean;
   readonly selectedDimensions: boolean;
   readonly roomMetrics: boolean;
+  /** Whether persisted product annotations are visible when available. */
+  readonly annotations: boolean;
 };
 
 /**
@@ -92,7 +95,8 @@ export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
     entityLabels: false,
     overallDimensions: false,
     selectedDimensions: false,
-    roomMetrics: false
+    roomMetrics: false,
+    annotations: false
   });
 
 /**
@@ -106,7 +110,7 @@ export const projectGeometryDisplayOptions: GeometryDisplayOptions =
     architecturalWalls: true,
     openings: true,
     polygons: true,
-    roomContours: true,
+    roomContours: false,
     boundaryEdges: true,
     vertices: true,
     centroids: true,
@@ -114,7 +118,8 @@ export const projectGeometryDisplayOptions: GeometryDisplayOptions =
     entityLabels: false,
     overallDimensions: true,
     selectedDimensions: true,
-    roomMetrics: true
+    roomMetrics: true,
+    annotations: true
   });
 
 /**
@@ -175,6 +180,13 @@ type OpeningPointerInteraction = {
   readonly cssPixelsPerSvgUnit: number;
   dragStarted: boolean;
   completed: boolean;
+};
+
+/** Captured pointer state for one viewport-only pan gesture. */
+type ViewportPanInteraction = {
+  readonly pointerId: number;
+  readonly extent: "background" | "viewport";
+  lastPoint: ScreenPoint;
 };
 
 /** Minimum pointer travel required before an Opening interaction becomes a drag. */
@@ -261,7 +273,8 @@ export function GeometrySvgViewer({
 }: GeometrySvgViewerProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const bounds = presentationModel.bounds;
-  const lastPanPointRef = useRef<ScreenPoint | undefined>(undefined);
+  const panInteractionRef = useRef<ViewportPanInteraction | undefined>(undefined);
+  const [isPanning, setIsPanning] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const currentViewportRef = useRef<ViewportState>(viewport);
   const viewportTransformRef = useRef(createViewportTransform2D(viewport));
@@ -314,6 +327,23 @@ export function GeometrySvgViewer({
     return () => svg.removeEventListener("wheel", handleWheel, listenerOptions);
   }, [rendersSvgViewport]);
 
+  useEffect(() => {
+    const panInteraction = panInteractionRef.current;
+    if (
+      interaction.panAnywhere ||
+      panInteraction?.extent !== "viewport"
+    ) {
+      return;
+    }
+
+    const svg = svgRef.current;
+    if (svg?.hasPointerCapture(panInteraction.pointerId)) {
+      svg.releasePointerCapture(panInteraction.pointerId);
+    }
+    panInteractionRef.current = undefined;
+    setIsPanning(false);
+  }, [interaction.panAnywhere]);
+
   if (!rendersSvgViewport) {
     return (
       <div className="geometry-empty-state" role="status">
@@ -353,13 +383,19 @@ export function GeometrySvgViewer({
     if (
       !interaction.panEnabled ||
       !onViewportChange ||
-      !isBackgroundPanEvent(event)
+      (!interaction.panAnywhere && !isBackgroundPanEvent(event))
     ) {
       return;
     }
 
-    lastPanPointRef.current = getEventPoint(event);
-    suppressNextBackgroundClickRef.current = false;
+    event.preventDefault();
+    panInteractionRef.current = {
+      pointerId: event.pointerId,
+      extent: interaction.panAnywhere ? "viewport" : "background",
+      lastPoint: getEventPoint(event)
+    };
+    setIsPanning(true);
+    suppressNextBackgroundClickRef.current = Boolean(interaction.panAnywhere);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -381,16 +417,23 @@ export function GeometrySvgViewer({
       if (!openingInteraction.dragStarted) return;
     }
 
-    onEditorPointerMove?.(pointer, event.pointerId);
+    const panInteraction = panInteractionRef.current;
+    if (!panInteraction || panInteraction.pointerId !== event.pointerId) {
+      onEditorPointerMove?.(pointer, event.pointerId);
+    }
 
-    if (!onViewportChange || !lastPanPointRef.current) {
+    if (
+      !onViewportChange ||
+      !panInteraction ||
+      panInteraction.pointerId !== event.pointerId
+    ) {
       return;
     }
 
     const nextPoint = getEventPoint(event);
     const delta = {
-      x: nextPoint.x - lastPanPointRef.current.x,
-      y: nextPoint.y - lastPanPointRef.current.y
+      x: nextPoint.x - panInteraction.lastPoint.x,
+      y: nextPoint.y - panInteraction.lastPoint.y
     };
 
     if (Math.abs(delta.x) + Math.abs(delta.y) > 0) {
@@ -401,7 +444,7 @@ export function GeometrySvgViewer({
       );
       currentViewportRef.current = nextViewport;
       onViewportChange(nextViewport);
-      lastPanPointRef.current = nextPoint;
+      panInteraction.lastPoint = nextPoint;
     }
   };
 
@@ -425,9 +468,12 @@ export function GeometrySvgViewer({
       return;
     }
 
-    if (lastPanPointRef.current) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-      lastPanPointRef.current = undefined;
+    if (panInteractionRef.current?.pointerId === event.pointerId) {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      panInteractionRef.current = undefined;
+      setIsPanning(false);
     }
   };
 
@@ -444,10 +490,27 @@ export function GeometrySvgViewer({
       }
       endpointPointerIdRef.current = undefined;
     }
-    lastPanPointRef.current = undefined;
+    if (panInteractionRef.current?.pointerId === event.pointerId) {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      panInteractionRef.current = undefined;
+      setIsPanning(false);
+    }
+  };
+
+  const handleLostPointerCapture = (event: PointerEvent<SVGSVGElement>) => {
+    if (panInteractionRef.current?.pointerId !== event.pointerId) return;
+    panInteractionRef.current = undefined;
+    setIsPanning(false);
   };
 
   const handleSvgClick = (event: MouseEvent<SVGSVGElement>) => {
+    if (suppressNextBackgroundClickRef.current) {
+      suppressNextBackgroundClickRef.current = false;
+      event.stopPropagation();
+      return;
+    }
     if (interaction.drawWallEnabled || interaction.openingPlacement || interaction.measurementEnabled) {
       onEditorCanvasClick?.(getEventPointer(event));
     }
@@ -511,10 +574,6 @@ export function GeometrySvgViewer({
   };
 
   const handleBackgroundClick = (event: MouseEvent<SVGRectElement>) => {
-    if (!interaction.selectionEnabled) {
-      return;
-    }
-
     if (
       suppressNextBackgroundClickRef.current ||
       (openingPointerInteractionRef.current?.completed === true &&
@@ -526,6 +585,10 @@ export function GeometrySvgViewer({
       return;
     }
 
+    if (!interaction.selectionEnabled) {
+      return;
+    }
+
     event.stopPropagation();
     onSelectionStateChange?.(clearGeometrySelection(resolvedSelectionState));
   };
@@ -534,6 +597,11 @@ export function GeometrySvgViewer({
     event: MouseEvent<SVGElement>,
     nextSelection: GeometrySelection
   ) => {
+    if (suppressNextBackgroundClickRef.current) {
+      suppressNextBackgroundClickRef.current = false;
+      event.stopPropagation();
+      return;
+    }
     if (!interaction.selectionEnabled) {
       return;
     }
@@ -560,6 +628,11 @@ export function GeometrySvgViewer({
     event: MouseEvent<SVGGElement>,
     selection: GeometrySelection
   ) => {
+    if (suppressNextBackgroundClickRef.current) {
+      suppressNextBackgroundClickRef.current = false;
+      event.stopPropagation();
+      return;
+    }
     if (!interaction.selectionEnabled) return;
     event.stopPropagation();
     const pointerInteraction = openingPointerInteractionRef.current;
@@ -590,10 +663,10 @@ export function GeometrySvgViewer({
             ? "measure"
           : interaction.selectionEnabled
             ? "select"
-            : interaction.panEnabled
+            : interaction.panAnywhere
               ? "pan"
               : "neutral"
-      }${editorOverlay?.activeOpeningDragId ? " geometry-svg--opening-drag" : ""}`}
+      }${editorOverlay ? " geometry-svg--authoring" : " geometry-svg--presentation"}${editorOverlay?.activeOpeningDragId ? " geometry-svg--opening-drag" : ""}${isPanning ? " geometry-svg--panning" : ""}`}
       viewBox={`0 0 ${geometrySvgViewport.width} ${geometrySvgViewport.height}`}
       role="img"
       aria-labelledby="geometry-svg-title geometry-svg-description"
@@ -601,6 +674,7 @@ export function GeometrySvgViewer({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handleLostPointerCapture}
       onClick={handleSvgClick}
     >
       <title id="geometry-svg-title">{t("viewer.svgTitle")}</title>
@@ -942,7 +1016,13 @@ export function GeometrySvgViewer({
         endpointEditingEnabled={interaction.wallEndpointEditingEnabled}
         onEndpointPointerDown={handleEndpointPointerDown}
         onJunctionPointerDown={handleJunctionPointerDown}
-        onRoomFaceCandidateClick={onRoomFaceCandidateClick}
+        onRoomFaceCandidateClick={(faceKey) => {
+          if (suppressNextBackgroundClickRef.current) {
+            suppressNextBackgroundClickRef.current = false;
+            return;
+          }
+          onRoomFaceCandidateClick?.(faceKey);
+        }}
       />
       {dimensionModel?.temporary ? (
         <ArchitecturalDimensionLayer model={dimensionModel} includeTemporary />
@@ -985,11 +1065,11 @@ function ArchitecturalDimensionLayer({
             data-testid="room-metric"
             data-source-room-id={metric.roomId}
             x={formatSvgNumber(metric.anchor.x)}
-            y={formatSvgNumber(metric.anchor.y + 18)}
+            y={formatSvgNumber(metric.anchor.y - 3)}
             textAnchor="middle"
           >
-            <tspan x={formatSvgNumber(metric.anchor.x)}>{metric.formattedArea}</tspan>
-            <tspan x={formatSvgNumber(metric.anchor.x)} dy="13">{metric.formattedPerimeter}</tspan>
+            <tspan className="architectural-room-label__name" x={formatSvgNumber(metric.anchor.x)}>{metric.roomName}</tspan>
+            <tspan className="architectural-room-label__area" x={formatSvgNumber(metric.anchor.x)} dy="14">{metric.formattedArea}</tspan>
           </text>
         ))}
       </g>

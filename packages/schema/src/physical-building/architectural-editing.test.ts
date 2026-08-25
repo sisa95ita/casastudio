@@ -2,16 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import type { Project } from "../project/index.js";
 import { ValidationErrorCode } from "../validation/index.js";
-import { createConnectedWall } from "./wall-editing.js";
+import { createConnectedWall, deleteWall } from "./wall-editing.js";
 import {
   classifyLevelRoomTopology,
   createRoom,
   deleteRoom,
+  dissolveRoom,
   deriveBoundedFaces,
   discoverRoomCandidates,
   moveJunction,
   partitionRoom,
   reconcileRoomSubdivision,
+  updateRoomProperties,
   type RoomSubdivision
 } from "./architectural-editing.js";
 import type { Room } from "./room.js";
@@ -622,14 +624,249 @@ describe("junction movement", () => {
 });
 
 describe("Room deletion", () => {
+  it("restores the surviving architectural region after a reconciled subdivision", () => {
+    const original = createMultiWallPartitionProject();
+    const originalRoom = structuredClone(original.building.levels[0]!.rooms[0]!);
+    const originalMetrics = measureBoundary(originalRoom, original.building.levels[0]!.walls);
+    const originalWallRoomIds = new Map(
+      original.building.levels[0]!.walls.map((wall) => [wall.id, [...wall.roomIds]])
+    );
+    const subdivision = classifyLevelRoomTopology(original, "ground-level").subdivisions[0]!;
+    const reconciled = reconcileRoomSubdivision(original, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      expectedFaceKeys: subdivision.faces.map((face) => face.key),
+      newRoomAssignments: assignNewRooms(subdivision, [
+        { id: "new-room", name: "New Room", type: "OTHER" }
+      ])
+    });
+    expect(reconciled.ok).toBe(true);
+    if (!reconciled.ok) return;
+
+    const deleted = dissolveRoom(reconciled.project, {
+      levelId: "ground-level",
+      roomId: "new-room"
+    });
+
+    expect(deleted.ok).toBe(true);
+    if (!deleted.ok) return;
+    const level = deleted.project.building.levels[0]!;
+    expect(level.rooms).toEqual([originalRoom]);
+    expect(measureBoundary(level.rooms[0]!, level.walls)).toEqual(originalMetrics);
+    expect(originalMetrics.area).toBe(
+      subdivision.faces.reduce((sum, face) => sum + face.area, 0)
+    );
+    expect(level.walls).toHaveLength(reconciled.project.building.levels[0]!.walls.length);
+    for (const wallId of ["path-one", "path-two", "path-three"]) {
+      expect(level.walls.find((item) => item.id === wallId)?.roomIds).toEqual([]);
+    }
+    for (const wall of level.walls.filter((item) => !item.id.startsWith("path-"))) {
+      expect(wall.roomIds).toEqual(originalWallRoomIds.get(wall.id));
+    }
+    const separatorDeletion = deleteWall(deleted.project, {
+      levelId: "ground-level",
+      wallId: "path-two"
+    });
+    expect(separatorDeletion.ok).toBe(true);
+    if (separatorDeletion.ok) {
+      expect(separatorDeletion.project.building.levels[0]!.walls.some(
+        (wall) => wall.id === "path-two"
+      )).toBe(false);
+    }
+  });
+
+  it("reassigns supported Room references to the absorbing Room", () => {
+    const project = createMultiWallPartitionProject();
+    const subdivision = classifyLevelRoomTopology(project, "ground-level").subdivisions[0]!;
+    const reconciled = reconcileRoomSubdivision(project, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      expectedFaceKeys: subdivision.faces.map((face) => face.key),
+      newRoomAssignments: assignNewRooms(subdivision, [
+        { id: "new-room", name: "New Room", type: "OTHER" }
+      ])
+    });
+    expect(reconciled.ok).toBe(true);
+    if (!reconciled.ok) return;
+    const referenced = structuredClone(reconciled.project);
+    referenced.building.levels[0]!.walls.find((wall) => wall.id === "path-two")!.openings.push({
+      id: "separator-door",
+      type: "DOOR",
+      offsetFromStart: 5,
+      width: 5,
+      height: 200,
+      elevation: 0,
+      connectedRoomIds: ["whole-room", "new-room"]
+    });
+    referenced.viewpoints.push({
+      id: "new-room-view",
+      levelId: "ground-level",
+      roomId: "new-room",
+      cameraPosition: { x: 80, y: 160, z: 90 },
+      cameraTarget: { x: 60, y: 100, z: 80 },
+      fieldOfView: 60,
+      projection: "PERSPECTIVE"
+    });
+    referenced.building.levels[0]!.staircases.push({
+      id: "room-stair",
+      fromLevelId: "ground-level",
+      toLevelId: "ground-level",
+      fromRoomId: "new-room",
+      toRoomId: "whole-room",
+      width: 80,
+      flights: [],
+      landings: []
+    });
+
+    const result = dissolveRoom(referenced, {
+      levelId: "ground-level",
+      roomId: "new-room"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.viewpoints[0]?.roomId).toBe("whole-room");
+    expect(result.project.building.levels[0]!.staircases[0]).toMatchObject({
+      fromRoomId: "whole-room",
+      toRoomId: "whole-room"
+    });
+    expect(result.project.building.levels[0]!.walls
+      .find((wall) => wall.id === "path-two")?.openings[0])
+      .toMatchObject({ connectedRoomIds: ["whole-room"] });
+  });
+
+  it("rejects a Room with multiple adjacent merge targets atomically", () => {
+    const project = createThreeFacePartitionProject();
+    const subdivision = classifyLevelRoomTopology(project, "ground-level").subdivisions[0]!;
+    const reconciled = reconcileRoomSubdivision(project, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      expectedFaceKeys: subdivision.faces.map((face) => face.key),
+      newRoomAssignments: assignNewRooms(subdivision, [
+        { id: "new-room-a", name: "New A", type: "OTHER" },
+        { id: "new-room-b", name: "New B", type: "OTHER" }
+      ])
+    });
+    expect(reconciled.ok).toBe(true);
+    if (!reconciled.ok) return;
+    const level = reconciled.project.building.levels[0]!;
+    const middleRoom = level.rooms.find((room) =>
+      room.boundary.some((edge) => edge.wallId === "partition-a") &&
+      room.boundary.some((edge) => edge.wallId === "partition-b")
+    )!;
+    const before = structuredClone(reconciled.project);
+
+    expect(dissolveRoom(reconciled.project, {
+      levelId: "ground-level",
+      roomId: middleRoom.id
+    })).toMatchObject({
+      ok: false,
+      errors: [{ code: ValidationErrorCode.ROOM_DISSOLUTION_AMBIGUOUS }]
+    });
+    expect(reconciled.project).toEqual(before);
+  });
+
   it("removes an explicit Room and clears Wall reciprocity", () => {
     const project = createPartitionProject();
+    project.building.levels[0]!.walls.find((wall) => wall.id === "partition")!.openings.push({
+      id: "unrelated-window",
+      type: "WINDOW",
+      offsetFromStart: 10,
+      width: 20,
+      height: 100,
+      elevation: 90
+    });
+    const wallCount = project.building.levels[0]!.walls.length;
     const result = deleteRoom(project, { levelId: "ground-level", roomId: "whole-room" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.project.building.levels[0]?.rooms).toEqual([]);
+      expect(result.project.building.levels[0]?.walls).toHaveLength(wallCount);
       expect(result.project.building.levels[0]?.walls.every((wall) => wall.roomIds.length === 0)).toBe(true);
+      expect(result.project.building.levels[0]?.walls.flatMap((wall) => wall.openings))
+        .toMatchObject([{ id: "unrelated-window", type: "WINDOW" }]);
     }
+  });
+
+  it("rejects deletion of an externally referenced Room without mutation", () => {
+    const project = createPartitionProject();
+    project.viewpoints.push({
+      id: "room-view",
+      levelId: "ground-level",
+      roomId: "whole-room",
+      cameraPosition: { x: 25, y: 160, z: 25 },
+      cameraTarget: { x: 50, y: 100, z: 50 },
+      fieldOfView: 60,
+      projection: "PERSPECTIVE"
+    });
+    const before = structuredClone(project);
+
+    expect(deleteRoom(project, { levelId: "ground-level", roomId: "whole-room" }))
+      .toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.ROOM_IS_REFERENCED }] });
+    expect(project).toEqual(before);
+  });
+});
+
+describe("Room metadata editing", () => {
+  it("updates canonical name and type without changing boundary or Wall reciprocity", () => {
+    const project = createPartitionProject();
+    const before = structuredClone(project);
+    const boundaryBefore = JSON.stringify(project.building.levels[0]!.rooms[0]!.boundary);
+    const wallRoomIdsBefore = project.building.levels[0]!.walls.map((wall) => [...wall.roomIds]);
+
+    const result = updateRoomProperties(project, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      name: "Master Bedroom",
+      type: "BEDROOM"
+    });
+
+    expect(result.ok).toBe(true);
+    expect(project).toEqual(before);
+    if (!result.ok) return;
+    const level = result.project.building.levels[0]!;
+    expect(level.rooms[0]).toMatchObject({ name: "Master Bedroom", type: "BEDROOM" });
+    expect(JSON.stringify(level.rooms[0]!.boundary)).toBe(boundaryBefore);
+    expect(level.walls.map((wall) => wall.roomIds)).toEqual(wallRoomIdsBefore);
+  });
+
+  it("updates a Room name or canonical type independently", () => {
+    const project = createPartitionProject();
+    const named = updateRoomProperties(project, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      name: "Kitchen"
+    });
+    expect(named.ok).toBe(true);
+    if (!named.ok) return;
+    expect(named.project.building.levels[0]!.rooms[0]).toMatchObject({
+      name: "Kitchen",
+      type: "OTHER"
+    });
+    const typed = updateRoomProperties(named.project, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      type: "BATHROOM"
+    });
+    expect(typed.ok).toBe(true);
+    if (typed.ok) expect(typed.project.building.levels[0]!.rooms[0]!.type).toBe("BATHROOM");
+  });
+
+  it("rejects invalid metadata atomically", () => {
+    const project = createPartitionProject();
+    const before = structuredClone(project);
+    const result = updateRoomProperties(project, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      name: "",
+      type: "BEDROOM"
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      errors: [{ code: ValidationErrorCode.PROJECT_SCHEMA_VALIDATION_FAILED }]
+    });
+    expect(project).toEqual(before);
   });
 });
 
@@ -796,6 +1033,33 @@ function assignNewRooms(
   return subdivision.faces
     .filter((face) => face.key !== subdivision.preservedFaceKey)
     .map((face, index) => ({ faceKey: face.key, room: rooms[index]! }));
+}
+
+function measureBoundary(room: Room, walls: readonly Wall[]) {
+  const wallsById = new Map(walls.map((item) => [item.id, item]));
+  const vertices = room.boundary.map((edge) => {
+    const ownedWall = wallsById.get(edge.wallId)!;
+    return edge.direction === "FORWARD" ? ownedWall.start : ownedWall.end;
+  });
+  const twiceArea = vertices.reduce((sum, point, index) => {
+    const next = vertices[(index + 1) % vertices.length]!;
+    return sum + point.x * next.z - next.x * point.z;
+  }, 0);
+  const area = Math.abs(twiceArea / 2);
+  const perimeter = vertices.reduce((sum, point, index) => {
+    const next = vertices[(index + 1) % vertices.length]!;
+    return sum + Math.hypot(next.x - point.x, next.z - point.z);
+  }, 0);
+  const centroidScale = 1 / (3 * twiceArea);
+  const centroid = vertices.reduce((result, point, index) => {
+    const next = vertices[(index + 1) % vertices.length]!;
+    const factor = point.x * next.z - next.x * point.z;
+    return {
+      x: result.x + (point.x + next.x) * factor * centroidScale,
+      z: result.z + (point.z + next.z) * factor * centroidScale
+    };
+  }, { x: 0, z: 0 });
+  return { vertices, area, perimeter, centroid };
 }
 
 function createProject(walls: Wall[], rooms: Room[] = []): Project {

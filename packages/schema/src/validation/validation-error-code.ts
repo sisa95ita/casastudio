@@ -66,6 +66,16 @@ export enum ValidationErrorCode {
   ROOM_IS_REFERENCED = "ROOM_IS_REFERENCED",
 
   /**
+   * A Room does not have exactly one adjacent explicit Room suitable for dissolution.
+   */
+  ROOM_DISSOLUTION_AMBIGUOUS = "ROOM_DISSOLUTION_AMBIGUOUS",
+
+  /**
+   * Adjacent Room boundaries cannot be combined into one exact simple outer cycle.
+   */
+  INVALID_ROOM_DISSOLUTION = "INVALID_ROOM_DISSOLUTION",
+
+  /**
    * No shared canonical Wall endpoint exists at the requested position.
    */
   JUNCTION_NOT_FOUND = "JUNCTION_NOT_FOUND",

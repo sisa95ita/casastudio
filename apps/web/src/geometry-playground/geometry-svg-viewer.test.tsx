@@ -375,12 +375,12 @@ describe("GeometrySvgViewer", () => {
     }));
   });
 
-  it("uses architectural Project defaults without removing editor hit geometry", () => {
+  it("uses clean architectural Project defaults without removing physical hit geometry", () => {
     expect(projectGeometryDisplayOptions).toMatchObject({
       architecturalWalls: true,
       openings: true,
       polygons: true,
-      roomContours: true,
+      roomContours: false,
       boundaryEdges: true,
       vertices: true,
       centroids: true,
@@ -937,6 +937,62 @@ describe("GeometrySvgViewer", () => {
       offsetX: 30,
       offsetY: 20
     });
+  });
+
+  it("captures full-viewport pan drags over Rooms, Walls, and Openings without selecting", () => {
+    const level = getPlaygroundLevel();
+    const handleViewportChange = vi.fn();
+    const handleSelectionStateChange = vi.fn();
+    const { container } = render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        architecturalModel={architecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        interaction={{
+          selectionEnabled: false,
+          panEnabled: true,
+          panAnywhere: true,
+          drawWallEnabled: false,
+          wallEndpointEditingEnabled: false,
+          openingEditingEnabled: false
+        }}
+        onViewportChange={handleViewportChange}
+        onSelectionStateChange={handleSelectionStateChange}
+      />
+    );
+    const svg = container.querySelector("svg")!;
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      bottom: 520, height: 520, left: 0, right: 800, top: 0, width: 800,
+      x: 0, y: 0, toJSON: () => undefined
+    });
+    svg.setPointerCapture = vi.fn();
+    svg.releasePointerCapture = vi.fn();
+    svg.hasPointerCapture = vi.fn(() => true);
+    const targets = [
+      screen.getAllByTestId("geometry-polygon")[0]!,
+      container.querySelector(".architectural-wall-hit-target")!,
+      screen.getByTestId("architectural-door"),
+      screen.getByTestId("architectural-window")
+    ];
+
+    targets.forEach((target, index) => {
+      const pointerId = index + 20;
+      fireEvent.pointerDown(target, { clientX: 100, clientY: 100, pointerId });
+      expect(svg.classList).toContain("geometry-svg--panning");
+      fireEvent.pointerMove(svg, { clientX: 110, clientY: 105, pointerId });
+      fireEvent.pointerUp(svg, { clientX: 110, clientY: 105, pointerId });
+      expect(svg.classList).not.toContain("geometry-svg--panning");
+    });
+
+    expect(handleViewportChange).toHaveBeenCalledTimes(4);
+    expect(handleSelectionStateChange).not.toHaveBeenCalled();
+    expect(svg.setPointerCapture).toHaveBeenCalledTimes(4);
+    expect(svg.releasePointerCapture).toHaveBeenCalledTimes(4);
+
+    fireEvent.pointerDown(targets[0]!, { clientX: 100, clientY: 100, pointerId: 30 });
+    fireEvent.pointerCancel(svg, { pointerId: 30 });
+    expect(svg.releasePointerCapture).toHaveBeenLastCalledWith(30);
+    expect(svg.classList).not.toContain("geometry-svg--panning");
   });
 
   it("renders selectable transient Room faces without changing geometry selection", () => {

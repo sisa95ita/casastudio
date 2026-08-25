@@ -105,6 +105,23 @@ export type DeleteRoomInput = {
   readonly roomId: Identifier;
 };
 
+/** Input for absorbing one Room into its uniquely adjacent explicit Room. */
+export type DissolveRoomInput = {
+  readonly levelId: Identifier;
+  readonly roomId: Identifier;
+};
+
+/** Canonical Room metadata supported by semantic property editing. */
+export type UpdateRoomProperties = Pick<Room, "name" | "type">;
+
+/** Input for replacing the editable metadata of one exact Room. */
+export type UpdateRoomPropertiesInput = {
+  readonly levelId: Identifier;
+  readonly roomId: Identifier;
+  readonly name?: Room["name"];
+  readonly type?: Room["type"];
+};
+
 /** Input for moving every Wall endpoint incident to one exact canonical point. */
 export type MoveJunctionInput = {
   readonly levelId: Identifier;
@@ -573,6 +590,48 @@ export function partitionRoom(
   });
 }
 
+/**
+ * Replaces one Room's supported metadata without changing architectural topology.
+ *
+ * The complete resulting Project is validated before it is returned. Room
+ * boundary order and orientation, reciprocal Wall references, and every
+ * unrelated entity remain unchanged.
+ */
+export function updateRoomProperties(
+  project: Project,
+  input: UpdateRoomPropertiesInput
+): ProjectEditingResult {
+  const levelIndex = findLevelIndex(project, input.levelId);
+  if (levelIndex < 0) return failure(levelNotFound(input.levelId));
+  const level = project.building.levels[levelIndex]!;
+  const roomIndex = level.rooms.findIndex((room) => room.id === input.roomId);
+  if (roomIndex < 0) return failure(roomNotFound(input.levelId, input.roomId));
+
+  const currentRoom = level.rooms[roomIndex]!;
+  const parsedRoom = RoomSchema.safeParse({
+    ...currentRoom,
+    name: input.name ?? currentRoom.name,
+    type: input.type ?? currentRoom.type
+  });
+  if (!parsedRoom.success) {
+    return failure({
+      code: ValidationErrorCode.PROJECT_SCHEMA_VALIDATION_FAILED,
+      path: "properties",
+      message: "Room properties must satisfy the canonical Room metadata contract."
+    });
+  }
+
+  const candidate = mapLevel(project, levelIndex, (current) => ({
+    ...current,
+    rooms: current.rooms.map((room, index) =>
+      index === roomIndex
+        ? { ...room, name: parsedRoom.data.name, type: parsedRoom.data.type }
+        : room
+    )
+  }));
+  return validateCanonicalResult(candidate, "Room property update");
+}
+
 /** Removes one Room and clears its reciprocal Wall references atomically. */
 export function deleteRoom(project: Project, input: DeleteRoomInput): ProjectEditingResult {
   const levelIndex = findLevelIndex(project, input.levelId);
@@ -609,6 +668,115 @@ export function deleteRoom(project: Project, input: DeleteRoomInput): ProjectEdi
     walls: rebuildWallRoomIds(current.walls, rooms)
   }));
   return validateCanonicalResult(candidate, "Room deletion");
+}
+
+/**
+ * Absorbs one Room into its unique adjacent Room without removing physical Walls.
+ *
+ * The shared boundary must cancel into one exact simple outer cycle whose area
+ * equals both source regions. All current Room-scoped Door, Viewpoint, and
+ * Staircase references are reassigned to the surviving Room because the full
+ * dissolved region is incorporated into it. Ambiguous adjacency or invalid
+ * union topology is rejected before any Project state is returned.
+ */
+export function dissolveRoom(project: Project, input: DissolveRoomInput): ProjectEditingResult {
+  const levelIndex = findLevelIndex(project, input.levelId);
+  if (levelIndex < 0) return failure(levelNotFound(input.levelId));
+  const level = project.building.levels[levelIndex]!;
+  const dissolvedRoom = level.rooms.find((room) => room.id === input.roomId);
+  if (!dissolvedRoom) return failure(roomNotFound(input.levelId, input.roomId));
+
+  const dissolvedWallIds = new Set(dissolvedRoom.boundary.map((edge) => edge.wallId));
+  const adjacentRooms = level.rooms.filter(
+    (room) =>
+      room.id !== dissolvedRoom.id &&
+      room.boundary.some((edge) => dissolvedWallIds.has(edge.wallId))
+  );
+  if (adjacentRooms.length !== 1) {
+    return failure({
+      code: ValidationErrorCode.ROOM_DISSOLUTION_AMBIGUOUS,
+      path: "roomId",
+      message: `Room "${dissolvedRoom.id}" does not have one unique adjacent Room.`
+    });
+  }
+
+  const survivingRoom = adjacentRooms[0]!;
+  const survivingEdgesByWallId = new Map(
+    survivingRoom.boundary.map((edge) => [edge.wallId, edge])
+  );
+  const sharedWallIds = new Set(
+    dissolvedRoom.boundary
+      .map((edge) => edge.wallId)
+      .filter((wallId) => survivingEdgesByWallId.has(wallId))
+  );
+  const sharedBoundaryIsOpposed = dissolvedRoom.boundary
+    .filter((edge) => sharedWallIds.has(edge.wallId))
+    .every(
+      (edge) => survivingEdgesByWallId.get(edge.wallId)?.direction !== edge.direction
+    );
+  if (sharedWallIds.size === 0 || !sharedBoundaryIsOpposed) {
+    return failure(invalidRoomDissolution(dissolvedRoom.id));
+  }
+
+  const mergedBoundary = canonicalizeCycle(
+    [...survivingRoom.boundary, ...dissolvedRoom.boundary].filter(
+      (edge) => !sharedWallIds.has(edge.wallId)
+    ),
+    level.walls
+  );
+  if (!mergedBoundary) return failure(invalidRoomDissolution(dissolvedRoom.id));
+
+  const dissolvedArea = Math.abs(
+    signedArea(getBoundaryVertices(dissolvedRoom.boundary, level.walls))
+  );
+  const survivingArea = Math.abs(
+    signedArea(getBoundaryVertices(survivingRoom.boundary, level.walls))
+  );
+  const mergedArea = Math.abs(signedArea(getBoundaryVertices(mergedBoundary, level.walls)));
+  if (!nearlyEqual(mergedArea, dissolvedArea + survivingArea)) {
+    return failure(invalidRoomDissolution(dissolvedRoom.id));
+  }
+
+  const rooms = level.rooms
+    .filter((room) => room.id !== dissolvedRoom.id)
+    .map((room) =>
+      room.id === survivingRoom.id ? { ...room, boundary: mergedBoundary } : room
+    );
+  const candidate: Project = {
+    ...project,
+    building: {
+      ...project.building,
+      levels: project.building.levels.map((current, index) => {
+        const wallsWithReferences = replaceDoorRoomReference(
+          current.walls,
+          dissolvedRoom.id,
+          survivingRoom.id
+        );
+        return {
+          ...current,
+          rooms: index === levelIndex ? rooms : current.rooms,
+          walls: index === levelIndex
+            ? rebuildWallRoomIds(wallsWithReferences, rooms)
+            : wallsWithReferences,
+          staircases: current.staircases.map((staircase) => ({
+            ...staircase,
+            fromRoomId: staircase.fromRoomId === dissolvedRoom.id
+              ? survivingRoom.id
+              : staircase.fromRoomId,
+            toRoomId: staircase.toRoomId === dissolvedRoom.id
+              ? survivingRoom.id
+              : staircase.toRoomId
+          }))
+        };
+      })
+    },
+    viewpoints: project.viewpoints.map((viewpoint) =>
+      viewpoint.roomId === dissolvedRoom.id
+        ? { ...viewpoint, roomId: survivingRoom.id }
+        : viewpoint
+    )
+  };
+  return validateCanonicalResult(candidate, "Room dissolution");
 }
 
 /**
@@ -776,6 +944,31 @@ function rebuildWallRoomIds(walls: readonly Wall[], rooms: readonly Room[]): Wal
       .filter((room) => room.boundary.some((edge) => edge.wallId === wall.id))
       .map((room) => room.id)
       .sort((first, second) => roomOrder.get(first)! - roomOrder.get(second)!)
+  }));
+}
+
+/** Reassigns Door connectivity when one complete Room region is absorbed. */
+function replaceDoorRoomReference(
+  walls: readonly Wall[],
+  dissolvedRoomId: Identifier,
+  survivingRoomId: Identifier
+): Wall[] {
+  return walls.map((wall) => ({
+    ...wall,
+    openings: wall.openings.map((opening) => {
+      if (
+        opening.type !== "DOOR" ||
+        !opening.connectedRoomIds?.includes(dissolvedRoomId)
+      ) {
+        return opening;
+      }
+      return {
+        ...opening,
+        connectedRoomIds: [...new Set(opening.connectedRoomIds.map((roomId) =>
+          roomId === dissolvedRoomId ? survivingRoomId : roomId
+        ))]
+      };
+    })
   }));
 }
 
@@ -1140,6 +1333,15 @@ function invalidRoomBoundary(path: string, roomId: Identifier): ValidationError 
     code: ValidationErrorCode.INVALID_ROOM_BOUNDARY,
     path,
     message: `Room "${roomId}" boundary must form one closed simple Wall cycle.`
+  };
+}
+
+/** Creates the stable error returned when adjacent boundaries cannot form one Room. */
+function invalidRoomDissolution(roomId: Identifier): ValidationError {
+  return {
+    code: ValidationErrorCode.INVALID_ROOM_DISSOLUTION,
+    path: "roomId",
+    message: `Room "${roomId}" cannot be dissolved into one exact simple adjacent region.`
   };
 }
 

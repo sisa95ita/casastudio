@@ -40,20 +40,17 @@ const productLayers: readonly ProductLayer[] = Object.freeze([
     visible: (options) => options.architecturalWalls,
     apply: (options, visible) => ({
       ...options,
-      architecturalWalls: visible,
-      boundaryEdges: visible,
-      vertices: visible
+      architecturalWalls: visible
     })
   },
   {
     id: "rooms",
     icon: <MeetingRoomRoundedIcon fontSize="small" />,
-    visible: (options) => options.polygons || options.roomContours,
+    visible: (options) => options.polygons || options.roomMetrics,
     apply: (options, visible) => ({
       ...options,
       polygons: visible,
-      roomContours: visible,
-      centroids: visible
+      roomMetrics: visible
     })
   },
   {
@@ -75,8 +72,8 @@ const productLayers: readonly ProductLayer[] = Object.freeze([
   {
     id: "annotations",
     icon: <NotesRoundedIcon fontSize="small" />,
-    visible: (options) => options.roomMetrics,
-    apply: (options, visible) => ({ ...options, roomMetrics: visible })
+    visible: (options) => options.annotations,
+    apply: (options, visible) => ({ ...options, annotations: visible })
   }
 ]);
 

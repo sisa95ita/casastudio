@@ -42,6 +42,7 @@
     "deleteWall": "Delete selected wall or opening",
     "fitViewport": "Fit viewport",
     "resetViewport": "Reset viewport",
+    "panViewport": "Pan viewport",
     "undo": "Undo",
     "redo": "Redo",
     "selectTool": "Select tool",

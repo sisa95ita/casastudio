@@ -1,8 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
-import { ProjectSelectionDetails } from "./ProjectSelectionDetails";
+import { ProjectPropertiesDetails, ProjectSelectionDetails } from "./ProjectSelectionDetails";
 
 afterEach(cleanup);
 
@@ -100,6 +100,61 @@ describe("ProjectSelectionDetails", () => {
     expect(screen.getByText("3 objects selected")).toBeTruthy();
     expect(screen.getByText("2 Walls, 1 Door")).toBeTruthy();
     expect(screen.queryByRole("spinbutton")).toBeNull();
+  });
+
+  it("separates Room metrics and deletion from canonical metadata properties", () => {
+    const onDeleteRoom = vi.fn();
+    const onUpdateRoomProperties = vi.fn(() => true);
+    const room = {
+      id: "room-a",
+      name: "Kitchen",
+      type: "KITCHEN" as const,
+      boundary: [
+        { wallId: "wall-a", direction: "FORWARD" as const },
+        { wallId: "wall-b", direction: "FORWARD" as const },
+        { wallId: "wall-c", direction: "FORWARD" as const }
+      ]
+    };
+    const selectionState = { selected: [{ kind: "POLYGON" as const, geometryId: "polygon-a" }] };
+    const { rerender } = render(
+      <ProjectSelectionDetails
+        model={model}
+        selectionState={selectionState}
+        room={room}
+        roomMeasurement={{
+          roomId: room.id,
+          area: 98_000,
+          perimeter: 1_300,
+          boundaryPoints: []
+        }}
+        units={{ length: "cm", angle: "deg" }}
+        onDeleteWall={vi.fn()}
+        onDeleteRoom={onDeleteRoom}
+      />
+    );
+
+    expect(screen.getAllByText("Kitchen")).toHaveLength(2);
+    expect(screen.getByText("9.80 m²")).toBeTruthy();
+    expect(screen.getByText("13.00 m")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete Room" }));
+    expect(onDeleteRoom).toHaveBeenCalledOnce();
+
+    rerender(
+      <ProjectPropertiesDetails
+        selectionState={selectionState}
+        room={room}
+        units={{ length: "cm", angle: "deg" }}
+        onUpdateWallProperties={vi.fn(() => true)}
+        onUpdateRoomProperties={onUpdateRoomProperties}
+      />
+    );
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Dining Room" } });
+    fireEvent.blur(name);
+    expect(onUpdateRoomProperties).toHaveBeenCalledWith({ name: "Dining Room" });
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Type" }));
+    fireEvent.click(screen.getByRole("option", { name: "Living room" }));
+    expect(onUpdateRoomProperties).toHaveBeenCalledWith({ type: "LIVING_ROOM" });
   });
 });
 

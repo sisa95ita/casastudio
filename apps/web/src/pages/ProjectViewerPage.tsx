@@ -9,6 +9,7 @@ import {
 import {
   createConnectedWall,
   classifyLevelRoomTopology,
+  dissolveRoom,
   deleteWallAndCollapseRedundantTopology,
   deleteOpening,
   moveOpening,
@@ -16,13 +17,15 @@ import {
   moveWallEndpoint,
   updateWallProperties,
   updateOpening,
+  updateRoomProperties,
   ValidationErrorCode,
   type Project,
   type Room,
   type Wall,
   type WallEndpoint,
   type Opening,
-  type UpdateOpeningProperties
+  type UpdateOpeningProperties,
+  type UpdateRoomProperties
 } from "@casastudio/schema";
 import {
   Alert,
@@ -57,7 +60,6 @@ import LinearScaleRoundedIcon from "@mui/icons-material/LinearScaleRounded";
 import LockOutlineRoundedIcon from "@mui/icons-material/LockOutlineRounded";
 import KeyboardRoundedIcon from "@mui/icons-material/KeyboardRounded";
 import NearMeRoundedIcon from "@mui/icons-material/NearMeRounded";
-import PanToolAltRoundedIcon from "@mui/icons-material/PanToolAltRounded";
 import RedoRoundedIcon from "@mui/icons-material/RedoRounded";
 import StraightenRoundedIcon from "@mui/icons-material/StraightenRounded";
 import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
@@ -225,6 +227,10 @@ type RoomEditingErrorKey =
   | "errors.room.staircaseReference"
   | "errors.room.stale"
   | "errors.room.geometry"
+  | "errors.room.referenced"
+  | "errors.room.dissolutionAmbiguous"
+  | "errors.room.dissolutionInvalid"
+  | "errors.room.metadata"
   | "errors.room.invalid";
 type EditingErrorKey = WallEditingErrorKey | RoomEditingErrorKey | "errors.opening.invalid";
 
@@ -265,6 +271,8 @@ export function ProjectViewerPage() {
   >();
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [viewportPanModifierActive, setViewportPanModifierActive] =
+    useState(false);
   const [editingError, setEditingError] = useState<EditingErrorKey>();
 
   const projectResponse = projectQuery.data;
@@ -283,6 +291,45 @@ export function ProjectViewerPage() {
     ownsEditingSession && !isPhone ? "edit" : "view";
   const saveInteractionBlocked =
     replaceProjectMutation.isPending || refreshingAuthoritativeState;
+
+  useEffect(() => {
+    const enabled =
+      workspaceMode === "edit" && !shortcutsOpen && !saveInteractionBlocked;
+    if (!enabled) {
+      setViewportPanModifierActive(false);
+      return;
+    }
+
+    const handleSpaceDown = (event: KeyboardEvent) => {
+      if (
+        (event.key !== " " && event.code !== "Space") ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        isEditableShortcutTarget(event.target)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      setViewportPanModifierActive(true);
+    };
+    const handleSpaceUp = (event: KeyboardEvent) => {
+      if (event.key !== " " && event.code !== "Space") return;
+      event.preventDefault();
+      setViewportPanModifierActive(false);
+    };
+    const handleWindowBlur = () => setViewportPanModifierActive(false);
+
+    window.addEventListener("keydown", handleSpaceDown);
+    window.addEventListener("keyup", handleSpaceUp);
+    window.addEventListener("blur", handleWindowBlur);
+    return () => {
+      window.removeEventListener("keydown", handleSpaceDown);
+      window.removeEventListener("keyup", handleSpaceUp);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [saveInteractionBlocked, shortcutsOpen, workspaceMode]);
   const viewLevels = geometryResponse?.geometry.levels ?? [];
   const selectedViewLevel =
     viewLevels.find((level) => level.id === selectedViewLevelId) ??
@@ -327,7 +374,14 @@ export function ProjectViewerPage() {
   );
   const resolvedDisplayOptions: GeometryDisplayOptions = workspaceMode === "edit"
     ? { ...displayOptions, ...editor.presentation.dimensions }
-    : displayOptions;
+    : {
+        ...displayOptions,
+        boundaryEdges: false,
+        vertices: false,
+        centroids: false,
+        roomContours: false,
+        entityLabels: false
+      };
 
   const presentationResult = useMemo(() => {
     if (!selectedLevel || (workspaceMode === "view" && consistencyFailure)) {
@@ -1284,6 +1338,46 @@ export function ProjectViewerPage() {
     [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedEditOpening]
   );
 
+  const handleDeleteSelectedRoom = useCallback(() => {
+    if (!editor.draft || !editor.activeLevelId || !selectedRoom || saveInteractionBlocked) return;
+    const result = dissolveRoom(editor.draft, {
+      levelId: editor.activeLevelId,
+      roomId: selectedRoom.id
+    });
+    if (result.ok) {
+      setEditingError(undefined);
+      dispatch(editorSelectionCleared());
+      dispatch(editingDraftReplaced(result.project));
+    } else {
+      setEditingError(
+        result.errors[0]?.code === ValidationErrorCode.ROOM_DISSOLUTION_AMBIGUOUS
+          ? "errors.room.dissolutionAmbiguous"
+          : result.errors[0]?.code === ValidationErrorCode.INVALID_ROOM_DISSOLUTION
+            ? "errors.room.dissolutionInvalid"
+            : "errors.room.invalid"
+      );
+    }
+  }, [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedRoom]);
+
+  const handleUpdateSelectedRoomProperties = useCallback(
+    (properties: Partial<UpdateRoomProperties>): boolean => {
+      if (!editor.draft || !editor.activeLevelId || !selectedRoom || saveInteractionBlocked) return false;
+      const result = updateRoomProperties(editor.draft, {
+        levelId: editor.activeLevelId,
+        roomId: selectedRoom.id,
+        ...properties
+      });
+      if (!result.ok) {
+        setEditingError("errors.room.metadata");
+        return false;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+      return true;
+    },
+    [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedRoom]
+  );
+
   const handleCreateRoom = useCallback((faceKey: string) => {
     if (
       saveInteractionBlocked ||
@@ -1377,6 +1471,15 @@ export function ProjectViewerPage() {
       if (
         action === "DELETE_SELECTION" &&
         workspaceMode === "edit" &&
+        selectedRoom
+      ) {
+        event.preventDefault();
+        handleDeleteSelectedRoom();
+        return;
+      }
+      if (
+        action === "DELETE_SELECTION" &&
+        workspaceMode === "edit" &&
         selectedEditWall
       ) {
         event.preventDefault();
@@ -1413,12 +1516,14 @@ export function ProjectViewerPage() {
     handleFitViewport,
     handleDeleteSelectedWall,
     handleDeleteSelectedOpening,
+    handleDeleteSelectedRoom,
     handleResetViewport,
     editor.transient.interaction,
     editor.transient.snapCandidate,
     selectedLevel,
     selectedEditWall,
     selectedEditOpening,
+    selectedRoom,
     saveInteractionBlocked,
     shortcutsOpen,
     workspaceMode
@@ -1667,6 +1772,8 @@ export function ProjectViewerPage() {
         onUpdateWallProperties={handleUpdateSelectedWallProperties}
         onDeleteOpening={handleDeleteSelectedOpening}
         onUpdateOpening={handleUpdateSelectedOpening}
+        onDeleteRoom={handleDeleteSelectedRoom}
+        onUpdateRoomProperties={handleUpdateSelectedRoomProperties}
       />
     );
   }, [
@@ -1689,6 +1796,8 @@ export function ProjectViewerPage() {
     handleUpdateSelectedWallProperties,
     handleDeleteSelectedOpening,
     handleUpdateSelectedOpening,
+    handleDeleteSelectedRoom,
+    handleUpdateSelectedRoomProperties,
     handleDisplayOptionsChange
   ]);
 
@@ -1928,7 +2037,10 @@ export function ProjectViewerPage() {
           )}
           interaction={
             workspaceMode === "edit"
-              ? getProjectEditorInteraction(editor.activeTool)
+              ? getProjectEditorInteraction(
+                  editor.activeTool,
+                  viewportPanModifierActive
+                )
               : undefined
           }
           editorOverlay={editorOverlay}
@@ -1942,10 +2054,12 @@ export function ProjectViewerPage() {
           onOpeningDragThresholdCrossed={handleOpeningDragThresholdCrossed}
           onOpeningPointerUp={handleOpeningPointerUp}
           onOpeningPointerCancel={handleOpeningPointerCancel}
-          onRoomFaceCandidateClick={(faceKey) => {
-            dispatch(editorSelectionCleared());
-            handleCreateRoom(faceKey);
-          }}
+          onRoomFaceCandidateClick={viewportPanModifierActive
+            ? undefined
+            : (faceKey) => {
+                dispatch(editorSelectionCleared());
+                handleCreateRoom(faceKey);
+              }}
         />
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
@@ -2109,7 +2223,7 @@ type ProjectEditorToolbarProps = {
   readonly onToolChange: (tool: ProjectEditorTool | null) => void;
 };
 
-/** Renders the mutually exclusive architectural authoring and navigation tools. */
+/** Renders the mutually exclusive architectural authoring tools. */
 function ProjectEditorToolbar({
   activeTool,
   disabled,
@@ -2122,8 +2236,7 @@ function ProjectEditorToolbar({
     door: <DoorFrontRoundedIcon fontSize="small" />,
     window: <WindowRoundedIcon fontSize="small" />,
     room: <MeetingRoomRoundedIcon fontSize="small" />,
-    measure: <StraightenRoundedIcon fontSize="small" />,
-    pan: <PanToolAltRoundedIcon fontSize="small" />
+    measure: <StraightenRoundedIcon fontSize="small" />
   } satisfies Record<ProjectEditorTool, ReactNode>;
 
   return (
@@ -2313,6 +2426,8 @@ type ProjectWorkspaceInspectorProps = {
   }) => boolean;
   readonly onDeleteOpening: () => void;
   readonly onUpdateOpening: (properties: UpdateOpeningProperties) => boolean;
+  readonly onDeleteRoom: () => void;
+  readonly onUpdateRoomProperties: (properties: Partial<UpdateRoomProperties>) => boolean;
 };
 
 /** Provides the durable Layers, Selection, and Properties inspector foundation. */
@@ -2333,7 +2448,9 @@ function ProjectWorkspaceInspector({
   onDeleteWall,
   onUpdateWallProperties,
   onDeleteOpening,
-  onUpdateOpening
+  onUpdateOpening,
+  onDeleteRoom,
+  onUpdateRoomProperties
 }: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
   const [tab, setTab] = useState<"layers" | "selection" | "properties">(
@@ -2376,6 +2493,7 @@ function ProjectWorkspaceInspector({
               onDeleteWall={onDeleteWall}
               onDeleteOpening={onDeleteOpening}
               onUpdateOpening={onUpdateOpening}
+              onDeleteRoom={onDeleteRoom}
               editable={mode === "edit"}
             />
           ) : null
@@ -2391,6 +2509,7 @@ function ProjectWorkspaceInspector({
               units={units}
               onUpdateWallProperties={onUpdateWallProperties}
               onUpdateOpening={onUpdateOpening}
+              onUpdateRoomProperties={onUpdateRoomProperties}
             />
           ) : (
             <Typography variant="caption" color="text.secondary">

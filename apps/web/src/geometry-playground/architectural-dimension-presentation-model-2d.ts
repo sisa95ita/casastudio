@@ -3,6 +3,7 @@ import {
   createLinearDimension,
   createOrthogonalRoomDimensions,
   createWallDimension,
+  calculatePolygonInteriorAnchor,
   documentDistanceToProjectUnits,
   measureRoom,
   type ArchitecturalScaleDenominator,
@@ -11,7 +12,6 @@ import {
 } from "@casastudio/geometry";
 import {
   formatArchitecturalArea,
-  formatArchitecturalLength,
   type Level,
   type Point2D,
   type Room,
@@ -44,11 +44,11 @@ export type LinearDimensionPresentation2D = {
 /** Room label derived from exact ordered polygon metrics. */
 export type RoomMetricPresentation2D = {
   readonly roomId: string;
+  readonly roomName: string;
+  readonly roomType: Room["type"];
   readonly anchor: ScreenPoint;
   readonly area: number;
-  readonly perimeter: number;
   readonly formattedArea: string;
-  readonly formattedPerimeter: string;
 };
 
 /** Complete derived measurement model consumed by SVG presentation layers. */
@@ -121,13 +121,16 @@ export function createArchitecturalDimensionPresentationModel2D({
         const measurement = measureRoom(level, room);
         const polygon = geometryModel.polygons.find((candidate) => candidate.sourceRoomId === room.id);
         if (!measurement || !polygon) return [];
+        const interiorAnchor = calculatePolygonInteriorAnchor(
+          polygon.points.map((point) => point.world)
+        );
         return [{
           roomId: room.id,
-          anchor: polygon.centroid.screen,
+          roomName: room.name,
+          roomType: room.type,
+          anchor: interiorAnchor ? transform.worldToScreen(interiorAnchor) : polygon.centroid.screen,
           area: measurement.area,
-          perimeter: measurement.perimeter,
-          formattedArea: formatArchitecturalArea(measurement.area, units.length),
-          formattedPerimeter: formatArchitecturalLength(measurement.perimeter, units.length)
+          formattedArea: formatArchitecturalArea(measurement.area, units.length)
         }];
       })
     : [];

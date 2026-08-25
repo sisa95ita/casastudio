@@ -1,4 +1,5 @@
-import { Divider, Stack, Typography } from "@mui/material";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import { Button, Divider, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
 import {
   formatArchitecturalArea,
   formatArchitecturalLength,
@@ -6,10 +7,13 @@ import {
   type Opening,
   type Project,
   type Room,
+  RoomTypeValues,
+  type UpdateRoomProperties,
   type UpdateOpeningProperties,
   type Wall
 } from "@casastudio/schema";
 import type { RoomMeasurement } from "@casastudio/geometry";
+import { useEffect, useState } from "react";
 
 import type { GeometryPresentationModel2D } from "../geometry-playground/geometry-presentation-model-2d";
 import type { GeometrySelectionState } from "../geometry-playground/geometry-selection-state";
@@ -39,6 +43,7 @@ export function ProjectSelectionDetails({
   openingDisplayOffsetFromStart,
   onDeleteOpening,
   onUpdateOpening,
+  onDeleteRoom,
   editable = true
 }: {
   readonly model: GeometryPresentationModel2D;
@@ -55,6 +60,7 @@ export function ProjectSelectionDetails({
   readonly openingDisplayOffsetFromStart?: number;
   readonly onDeleteOpening?: () => void;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
+  readonly onDeleteRoom?: () => void;
   readonly editable?: boolean;
 }) {
   const selection = selectionState.selected;
@@ -75,7 +81,7 @@ export function ProjectSelectionDetails({
     room &&
     roomMeasurement
   ) {
-    return <ProjectRoomSelectionDetails room={room} measurement={roomMeasurement} units={units} />;
+    return <ProjectRoomSelectionDetails room={room} measurement={roomMeasurement} units={units} onDelete={onDeleteRoom} editable={editable} />;
   }
   if (
     selection.length === 1 &&
@@ -119,7 +125,8 @@ export function ProjectPropertiesDetails({
   room,
   units,
   onUpdateWallProperties,
-  onUpdateOpening
+  onUpdateOpening,
+  onUpdateRoomProperties
 }: {
   readonly selectionState: GeometrySelectionState;
   readonly wall?: Wall;
@@ -134,6 +141,7 @@ export function ProjectPropertiesDetails({
     readonly thickness?: number;
   }) => boolean;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
+  readonly onUpdateRoomProperties?: (properties: Partial<UpdateRoomProperties>) => boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   if (selectionState.selected.length === 0) {
@@ -168,7 +176,7 @@ export function ProjectPropertiesDetails({
     );
   }
   if (selection?.kind === "POLYGON" && room) {
-    return <PropertiesMessage message={t("properties.roomUnavailable")} />;
+    return <ProjectRoomPropertiesDetails room={room} onUpdate={onUpdateRoomProperties ?? (() => false)} />;
   }
   return <PropertiesMessage message={t("properties.unavailable")} />;
 }
@@ -225,16 +233,20 @@ function PropertiesMessage({ message }: { readonly message: string }) {
 function ProjectRoomSelectionDetails({
   room,
   measurement,
-  units
+  units,
+  onDelete,
+  editable
 }: {
   readonly room: Room;
   readonly measurement: RoomMeasurement;
   readonly units: Project["units"];
+  readonly onDelete?: () => void;
+  readonly editable: boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const rows = [
     [t("room.labels.name"), room.name],
-    [t("room.labels.type"), room.type],
+    [t("room.labels.type"), t(`room.types.${room.type}`)],
     [t("room.labels.area"), formatArchitecturalArea(measurement.area, units.length)],
     [t("room.labels.perimeter"), formatArchitecturalLength(measurement.perimeter, units.length)]
   ] as const;
@@ -252,6 +264,73 @@ function ProjectRoomSelectionDetails({
           </Stack>
         ))}
       </Stack>
+      {editable ? <Button
+        color="error"
+        variant="outlined"
+        size="small"
+        startIcon={<DeleteOutlineRoundedIcon />}
+        onClick={onDelete}
+      >
+        {t("room.delete")}
+      </Button> : null}
+    </Stack>
+  );
+}
+
+/** Renders canonical Room metadata fields without exposing topology. */
+function ProjectRoomPropertiesDetails({
+  room,
+  onUpdate
+}: {
+  readonly room: Room;
+  readonly onUpdate: (properties: Partial<UpdateRoomProperties>) => boolean;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  const [name, setName] = useState(room.name);
+  useEffect(() => setName(room.name), [room.name]);
+  const commitName = () => {
+    const nextName = name.trim();
+    if (nextName === room.name) {
+      setName(room.name);
+      return;
+    }
+    if (!onUpdate({ name: nextName })) setName(room.name);
+  };
+
+  return (
+    <Stack component="section" spacing={1.5}>
+      <Typography variant="subtitle2">{t("room.propertiesTitle")}</Typography>
+      <TextField
+        size="small"
+        label={t("room.labels.name")}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onBlur={commitName}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            commitName();
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            setName(room.name);
+            event.currentTarget.blur();
+          }
+        }}
+        slotProps={{ htmlInput: { "aria-label": t("room.labels.name") } }}
+      />
+      <FormControl size="small">
+        <InputLabel id="room-type-label">{t("room.labels.type")}</InputLabel>
+        <Select
+          labelId="room-type-label"
+          label={t("room.labels.type")}
+          value={room.type}
+          inputProps={{ "aria-label": t("room.labels.type") }}
+          onChange={(event) => onUpdate({ type: event.target.value as Room["type"] })}
+        >
+          {RoomTypeValues.map((type) => (
+            <MenuItem key={type} value={type}>{t(`room.types.${type}`)}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
     </Stack>
   );
 }

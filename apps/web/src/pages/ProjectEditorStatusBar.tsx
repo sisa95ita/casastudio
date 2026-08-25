@@ -89,6 +89,7 @@ export function ProjectEditorStatusBar({
         ) : null}
         <StatusSwitch
           label={t("statusBar.snap")}
+          helpText={t("statusBar.snapHelp")}
           checked={snapToGrid}
           disabled={!editing}
           onChange={onSnapToGridChange}
@@ -155,14 +156,15 @@ function StatusValue({ label, value }: { readonly label: string; readonly value:
 }
 
 /** Renders a compact local-presentation switch in the status bar. */
-function StatusSwitch({ label, checked, disabled, onChange }: {
+function StatusSwitch({ label, helpText, checked, disabled, onChange }: {
   readonly label: string;
+  readonly helpText?: string;
   readonly checked: boolean;
   readonly disabled?: boolean;
   readonly onChange: (checked: boolean) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
-  return (
+  const control = (
     <Stack direction="row" className="project-editor-status__item">
       <Typography variant="caption" color="text.secondary">{label}</Typography>
       <Switch
@@ -177,6 +179,11 @@ function StatusSwitch({ label, checked, disabled, onChange }: {
       </Typography>
     </Stack>
   );
+  return helpText ? (
+    <Tooltip title={helpText} describeChild>
+      {control}
+    </Tooltip>
+  ) : control;
 }
 
 /** Renders one tooltip-labelled viewport action. */

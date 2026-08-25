@@ -18,3 +18,4 @@ export {
   type LoopKind,
   type PolygonWinding
 } from "./model/index.js";
+export { calculatePolygonInteriorAnchor } from "./model/index.js";

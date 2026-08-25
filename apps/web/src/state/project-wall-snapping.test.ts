@@ -154,6 +154,21 @@ describe("resolveDrawWallSnapCandidate", () => {
       worldPoint: { x: 37, z: 31 }
     })).toMatchObject({ kind: "free", point: { x: 37, z: 31 } });
   });
+
+  it("keeps geometric snapping independent from the grid-enabled option", () => {
+    const model = createModel();
+    const withoutGrid = resolveDrawWallSnapCandidate({ x: 8, y: 2 }, model, {
+      worldPoint: { x: 8, z: -2 },
+      grid: { enabled: false, spacing: 25, worldToSvgScale: 1 }
+    });
+    const withGrid = resolveDrawWallSnapCandidate({ x: 8, y: 2 }, model, {
+      worldPoint: { x: 8, z: -2 },
+      grid: { enabled: true, spacing: 25, worldToSvgScale: 1 }
+    });
+
+    expect(withoutGrid.kind).toBe("vertex");
+    expect(withGrid.kind).toBe("vertex");
+  });
 });
 
 function createModel({ vertexOrder = ["vertex-a", "vertex-b"] } = {}) {

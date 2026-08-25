@@ -346,6 +346,8 @@ describe("ProjectViewerPage", () => {
       screen.getByRole("img", { name: /interactive 2d geometry viewer/i })
     ).toBeTruthy();
     expect(screen.getAllByTestId("geometry-polygon")).toHaveLength(1);
+    expect(screen.queryByTestId("polygon-centroid")).toBeNull();
+    expect(screen.queryByTestId("boundary-edge")).toBeNull();
     const inspector = screen.getByRole("complementary", {
       name: "Test inspector"
     });
@@ -365,7 +367,12 @@ describe("ProjectViewerPage", () => {
     expect(within(statusBar).getByText(/^Units/)).toBeTruthy();
     expect(within(statusBar).getByText("centimeters")).toBeTruthy();
     expect(within(statusBar).getByRole("switch", { name: "Grid" })).toBeTruthy();
-    expect(within(statusBar).getByRole("switch", { name: "Snap" })).toBeTruthy();
+    const snapToGrid = within(statusBar).getByRole("switch", { name: "Snap to grid" });
+    expect(snapToGrid).toBeTruthy();
+    fireEvent.mouseOver(snapToGrid);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "Align points to the current grid spacing"
+    );
     expect(within(statusBar).getByRole("button", { name: "Zoom out" })).toBeTruthy();
     expect(within(statusBar).getByText(/%$/)).toBeTruthy();
     expect(within(statusBar).getByRole("button", { name: "Zoom in" })).toBeTruthy();
@@ -431,7 +438,8 @@ describe("ProjectViewerPage", () => {
 
     const toolbar = await screen.findByRole("toolbar", { name: "Editing tools" });
     expect(within(toolbar).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
-      .toEqual(["Select", "Draw Wall", "Door", "Window", "Room", "Measure", "Pan"]);
+      .toEqual(["Select", "Draw Wall", "Door", "Window", "Room", "Measure"]);
+    expect(within(toolbar).queryByRole("button", { name: "Pan" })).toBeNull();
     expect(within(toolbar).queryByText(/Grid|Snap|Scale|Zoom|Save|Discard/)).toBeNull();
     expect(buildSpy).toHaveBeenCalledWith(store.getState().projectEditor.draft);
     expect(store.getState().projectEditor.draft).not.toBe(demoProjectFixture);
@@ -443,7 +451,6 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     const select = screen.getByRole("button", { name: "Select" });
-    const pan = screen.getByRole("button", { name: "Pan" });
     const drawWall = screen.getByRole("button", { name: "Draw Wall" });
 
     expect(store.getState().projectEditor.activeTool).toBeNull();
@@ -457,20 +464,129 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.activeTool).toBeNull();
     expect(select.getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(pan);
-    expect(store.getState().projectEditor.activeTool).toBe("pan");
-    expect(pan.getAttribute("aria-pressed")).toBe("true");
-
-    fireEvent.click(pan);
-    expect(store.getState().projectEditor.activeTool).toBeNull();
-    expect(pan.getAttribute("aria-pressed")).toBe("false");
-
     fireEvent.click(drawWall);
     expect(drawWall.hasAttribute("disabled")).toBe(false);
     expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
 
     fireEvent.click(drawWall);
     expect(store.getState().projectEditor.activeTool).toBeNull();
+  });
+
+  it.each(["Select", "Draw Wall", "Door", "Window", "Room", "Measure"])(
+    "pans empty background with %s active without starting an architectural interaction",
+    async (toolLabel) => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const svg = document.querySelector("svg.geometry-svg") as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    const draftBefore = store.getState().projectEditor.draft;
+    const polygonBefore = screen.getAllByTestId("geometry-polygon")[0]!.getAttribute("points");
+    fireEvent.click(screen.getByRole("button", { name: toolLabel }));
+    const background = document.querySelector(".geometry-pan-background")!;
+    fireEvent.pointerDown(background, { clientX: 100, clientY: 100, pointerId: 80 });
+    fireEvent.pointerMove(svg, { clientX: 115, clientY: 110, pointerId: 80 });
+    fireEvent.pointerUp(svg, { clientX: 115, clientY: 110, pointerId: 80 });
+    fireEvent.click(background, { clientX: 115, clientY: 110 });
+    expect(screen.getAllByTestId("geometry-polygon")[0]!.getAttribute("points"))
+      .not.toBe(polygonBefore);
+    expect(store.getState().projectEditor.draft).toBe(draftBefore);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    },
+    15_000
+  );
+
+  it("temporarily pans from rendered entities with Space while preserving the active tool", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = document.querySelector("svg.geometry-svg") as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.click(svg, { clientX: 120, clientY: 120 });
+    const draftBefore = store.getState().projectEditor.draft;
+    const historyBefore = store.getState().projectEditor.history;
+    const transientBefore = store.getState().projectEditor.transient.interaction;
+    expect(transientBefore?.kind).toBe("draw-wall");
+    const room = screen.getAllByTestId("geometry-polygon")[0]!;
+    const pointsBefore = room.getAttribute("points");
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    expect(svg.classList).toContain("geometry-svg--pan");
+    const panTargets = [
+      room,
+      document.querySelector(".architectural-wall-hit-target")!,
+      screen.getAllByTestId("automatic-dimension")[0]!,
+      screen.getAllByTestId("room-metric")[0]!
+    ];
+    panTargets.forEach((target, index) => {
+      const pointerId = 90 + index;
+      fireEvent.pointerDown(target, { clientX: 180, clientY: 160, pointerId });
+      expect(svg.classList).toContain("geometry-svg--panning");
+      fireEvent.pointerMove(svg, { clientX: 192, clientY: 169, pointerId });
+      fireEvent.pointerUp(svg, { clientX: 192, clientY: 169, pointerId });
+      fireEvent.click(target);
+      expect(svg.classList).not.toContain("geometry-svg--panning");
+    });
+
+    expect(room.getAttribute("points")).not.toBe(pointsBefore);
+    expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
+    expect(store.getState().projectEditor.selection).toEqual([]);
+    expect(store.getState().projectEditor.draft).toBe(draftBefore);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toBe(historyBefore);
+    expect(store.getState().projectEditor.transient.interaction).toBe(
+      transientBefore
+    );
+
+    fireEvent.keyUp(window, { key: " ", code: "Space" });
+    expect(svg.classList).toContain("geometry-svg--draw-wall");
+    expect(svg.classList).not.toContain("geometry-svg--pan");
+    expect(store.getState().projectEditor.activeTool).toBe("draw-wall");
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    fireEvent.keyUp(window, { key: " ", code: "Space" });
+    fireEvent.click(document.querySelector(".architectural-wall-hit-target")!);
+    expect(store.getState().projectEditor.selection).toHaveLength(1);
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    fireEvent.pointerDown(room, { clientX: 180, clientY: 160, pointerId: 120 });
+    expect(svg.classList).toContain("geometry-svg--panning");
+    fireEvent.keyUp(window, { key: " ", code: "Space" });
+    expect(svg.classList).not.toContain("geometry-svg--panning");
+    expect(svg.releasePointerCapture).toHaveBeenCalledWith(120);
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    expect(svg.classList).toContain("geometry-svg--pan");
+    fireEvent.blur(window);
+    expect(svg.classList).toContain("geometry-svg--select");
+  });
+
+  it("does not activate temporary pan for Space typed in an editable control", async () => {
+    renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    const svg = document.querySelector("svg.geometry-svg") as SVGSVGElement;
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.keyDown(input, { key: " ", code: "Space" });
+    expect(svg.classList).toContain("geometry-svg--draw-wall");
+    expect(svg.classList).not.toContain("geometry-svg--pan");
+    input.remove();
+  });
+
+  it("removes temporary-pan keyboard and blur listeners on unmount", async () => {
+    const removeListener = vi.spyOn(window, "removeEventListener");
+    const { unmount } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    removeListener.mockClear();
+
+    unmount();
+
+    expect(removeListener).toHaveBeenCalledWith("keyup", expect.any(Function));
+    expect(removeListener).toHaveBeenCalledWith("blur", expect.any(Function));
+    removeListener.mockRestore();
   });
 
   it("describes editor tool outcomes with accessible tooltips", async () => {
@@ -561,6 +677,79 @@ describe("ProjectViewerPage", () => {
     expect(within(inspector).getByText("24.00 m²")).toBeTruthy();
     expect(within(inspector).getByText("8.00 m")).toBeTruthy();
     expect(within(inspector).getByText("3.00 m")).toBeTruthy();
+  });
+
+  it("commits Room metadata and dissolution once each with semantic undo", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getAllByTestId("geometry-polygon")[0]!);
+    const inspector = screen.getByRole("complementary", { name: "Test inspector" });
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Properties" }));
+    const boundaryBefore = JSON.stringify(
+      store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]!.boundary
+    );
+    const roomIdsBefore = store.getState().projectEditor.draft!.building.levels[0]!.walls
+      .map((wall) => [...wall.roomIds]);
+    const name = within(inspector).getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Kitchen" } });
+    fireEvent.blur(name);
+
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]!.name).toBe("Kitchen");
+    expect(JSON.stringify(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]!.boundary))
+      .toBe(boundaryBefore);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.map((wall) => wall.roomIds))
+      .toEqual(roomIdsBefore);
+    expect(screen.getAllByTestId("room-metric")[0]!.textContent).toContain("Kitchen");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]!.name).toBe("Left Room");
+
+    fireEvent.click(screen.getAllByTestId("geometry-polygon")[0]!);
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Selection" }));
+    const survivingLabelBefore = screen.getAllByTestId("room-metric")
+      .find((label) => label.textContent?.includes("Right Room"))!;
+    const survivingAnchorBefore = {
+      x: survivingLabelBefore.getAttribute("x"),
+      y: survivingLabelBefore.getAttribute("y")
+    };
+    const wallCount = store.getState().projectEditor.draft!.building.levels[0]!.walls.length;
+    fireEvent.click(within(inspector).getByRole("button", { name: "Delete Room" }));
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(1);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toHaveLength(wallCount);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.find(
+      (wall) => wall.id === "left-room-east-shared-wall"
+    )?.roomIds).toEqual([]);
+    const mergedLabel = screen.getByTestId("room-metric");
+    expect(mergedLabel.textContent).toContain("24.00 m²");
+    expect({ x: mergedLabel.getAttribute("x"), y: mergedLabel.getAttribute("y") })
+      .not.toEqual(survivingAnchorBefore);
+    expect(screen.getAllByTestId("polygon-centroid")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(2);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.find(
+      (wall) => wall.id === "left-room-east-shared-wall"
+    )?.roomIds).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(1);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.find(
+      (wall) => wall.id === "left-room-east-shared-wall"
+    )?.roomIds).toEqual([]);
+    fireEvent.click(screen.getByTestId("geometry-polygon"));
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Selection" }));
+    expect(within(inspector).getByText("24.00 m²")).toBeTruthy();
+    expect(within(inspector).getByText("22.00 m")).toBeTruthy();
+    const separatorTarget = document.querySelector(
+      '.architectural-wall-hit-target[data-geometry-id="left-room-east-shared-wall"]'
+    );
+    expect(separatorTarget).not.toBeNull();
+    fireEvent.click(separatorTarget as Element);
+    fireEvent.click(within(inspector).getByRole("button", { name: "Delete Wall" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls.some(
+      (wall) => wall.id === "left-room-east-shared-wall"
+    )).toBe(false);
   });
 
   it("measures snapped Project points transiently and cancels with Escape", async () => {
@@ -872,7 +1061,7 @@ describe("ProjectViewerPage", () => {
     const redo = screen.getByRole("button", { name: "Redo" });
     expect(undo.hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("switch", { name: "Grid" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Snap" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Snap to grid" }));
     expect(document.querySelector('[data-layer="editor-grid"]')).toBeTruthy();
     expect(store.getState().projectEditor.dirty).toBe(false);
 
@@ -955,7 +1144,7 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.history.past)
       .toHaveLength(historyBeforeRoom + 1);
     expect(screen.getByTestId("geometry-polygon")).toBeTruthy();
-    expect(screen.getByTestId("room-contour")).toBeTruthy();
+    expect(screen.queryByTestId("room-contour")).toBeNull();
     expect(screen.getByTestId("polygon-centroid")).toBeTruthy();
     expect(screen.queryByTestId("room-face-candidate")).toBeNull();
   });
@@ -985,10 +1174,7 @@ describe("ProjectViewerPage", () => {
     const polygonPointSequences = screen.getAllByTestId("geometry-polygon")
       .map((polygon) => polygon.getAttribute("points"))
       .sort();
-    const contourPointSequences = screen.getAllByTestId("room-contour")
-      .map((contour) => contour.getAttribute("points"))
-      .sort();
-    expect(contourPointSequences).toEqual(polygonPointSequences);
+    expect(screen.queryByTestId("room-contour")).toBeNull();
     expect(polygonPointSequences).toContain(clickedCandidatePoints);
     expect(polygonPointSequences.every((points) => points?.split(" ").length === 6)).toBe(true);
     expect(screen.queryByTestId("polygon-bounds")).toBeNull();
@@ -1729,7 +1915,7 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.transient.interaction).toBeNull();
   });
 
-  it("clears selected geometry when entering Draw Wall or Pan", async () => {
+  it("clears selected geometry when entering Draw Wall", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
@@ -1754,14 +1940,6 @@ describe("ProjectViewerPage", () => {
     expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull();
     expect(buildSpy).toHaveBeenCalledTimes(buildCount);
 
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
-    fireEvent.click(document.querySelectorAll(".geometry-edge-hit-target")[7]!);
-    expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Pan" }));
-    expect(store.getState().projectEditor.selection).toEqual([]);
-    expect(screen.queryByTestId("selected-wall-overlay")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull();
-    expect(buildSpy).toHaveBeenCalledTimes(buildCount);
   });
 
   it("commits Wall properties on blur and rejects invalid intermediary input", async () => {
@@ -2663,9 +2841,12 @@ describe("ProjectViewerPage", () => {
     expect(within(dialog).getByText("Delete / Backspace")).toBeTruthy();
     expect(within(dialog).getByText("Undo")).toBeTruthy();
     expect(within(dialog).getByText("Ctrl/Cmd + Z")).toBeTruthy();
-    expect(within(dialog).getAllByText("Redo")).toHaveLength(2);
-    expect(within(dialog).getByText("Ctrl/Cmd + Shift + Z")).toBeTruthy();
-    expect(within(dialog).getByText("Ctrl/Cmd + Y")).toBeTruthy();
+    expect(within(dialog).getAllByText("Redo")).toHaveLength(1);
+    expect(
+      within(dialog).getByText("Ctrl/Cmd + Shift + Z · Ctrl/Cmd + Y")
+    ).toBeTruthy();
+    expect(within(dialog).getByText("Pan viewport")).toBeTruthy();
+    expect(within(dialog).getByText("Space + drag")).toBeTruthy();
     expect(within(dialog).getByText("Measure tool")).toBeTruthy();
     expect(within(dialog).getByText("M")).toBeTruthy();
     expect(within(dialog).queryByText(/Zoom/i)).toBeNull();

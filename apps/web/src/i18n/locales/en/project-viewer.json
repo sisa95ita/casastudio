@@ -79,7 +79,6 @@
     "window": "Window",
     "room": "Room",
     "measure": "Measure",
-    "pan": "Pan",
     "undo": "Undo",
     "redo": "Redo",
     "createRoom": "Create Room",
@@ -90,8 +89,7 @@
       "door": "Place a door on a wall.",
       "window": "Place a window on a wall.",
       "room": "Create an explicit Room from a bounded plan region.",
-      "measure": "Measure between snapped points without changing the project.",
-      "pan": "Move around the plan without changing geometry."
+      "measure": "Measure between snapped points without changing the project."
     }
   },
   "precision": {
@@ -107,7 +105,8 @@
     "scale": "Scale",
     "units": "Units",
     "grid": "Grid",
-    "snap": "Snap",
+    "snap": "Snap to grid",
+    "snapHelp": "Align points to the current grid spacing",
     "spacing": "Spacing",
     "on": "On",
     "off": "Off",
@@ -188,7 +187,6 @@
     "title": "Properties",
     "selectObject": "Select an object to edit its available properties.",
     "multipleUnsupported": "This selection has no safe shared property operation.",
-    "roomUnavailable": "This Room has no editable metadata operation in the current editor.",
     "unavailable": "The selected object has no editable properties.",
     "editModeOnly": "Enter Edit mode to change object properties."
   },
@@ -247,6 +245,10 @@
       "staircaseReference": "A staircase endpoint cannot be assigned safely after subdivision.",
       "stale": "The room topology changed. Select the region again and retry.",
       "geometry": "The resulting room geometry is invalid.",
+      "referenced": "This room is used by another project entity and cannot be deleted.",
+      "dissolutionAmbiguous": "This room does not have one uniquely adjacent room to absorb its region.",
+      "dissolutionInvalid": "This room cannot be dissolved into one valid architectural boundary.",
+      "metadata": "The room name or type is invalid. The previous values were kept.",
       "invalid": "The room could not be created from the available boundary."
     },
     "opening": {
@@ -279,6 +281,18 @@
   },
   "room": {
     "selectionTitle": "Room",
+    "propertiesTitle": "Room properties",
+    "delete": "Delete Room",
+    "types": {
+      "LIVING_ROOM": "Living room",
+      "KITCHEN": "Kitchen",
+      "BEDROOM": "Bedroom",
+      "BATHROOM": "Bathroom",
+      "STUDIO": "Studio",
+      "CORRIDOR": "Corridor",
+      "STORAGE": "Storage",
+      "OTHER": "Other"
+    },
     "labels": {
       "name": "Name",
       "type": "Type",

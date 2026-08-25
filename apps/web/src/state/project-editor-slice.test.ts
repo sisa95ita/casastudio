@@ -97,10 +97,6 @@ describe("Project editor state", () => {
         .activeTool
     ).toBe("select");
     expect(
-      projectEditorReducer(editingState, editorActiveToolChanged("pan"))
-        .activeTool
-    ).toBe("pan");
-    expect(
       projectEditorReducer(editingState, editorActiveToolChanged(null))
         .activeTool
     ).toBeNull();
@@ -287,7 +283,7 @@ describe("Project editor state", () => {
     expect(state.transient).toEqual({ interaction: null });
   });
 
-  it.each(["draw-wall", "pan"] as const)(
+  it.each(["draw-wall", "door"] as const)(
     "clears Select geometry and transient state when switching to %s",
     (nextTool) => {
       let state = projectEditorReducer(
@@ -430,6 +426,23 @@ describe("Project editor state", () => {
       snapToGrid: true,
       gridSpacing: 25
     });
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("keeps grid visibility and grid snapping as independent presentation state", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorGridVisibilityChanged(true));
+    expect(state.precision).toMatchObject({ gridVisible: true, snapToGrid: false });
+    state = projectEditorReducer(state, editorGridVisibilityChanged(false));
+    state = projectEditorReducer(state, editorGridSnappingChanged(true));
+    expect(state.precision).toMatchObject({ gridVisible: false, snapToGrid: true });
     expect(state.history).toEqual({ past: [], future: [] });
     expect(state.dirty).toBe(false);
   });

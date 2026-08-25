@@ -724,17 +724,17 @@ img {
   display: flex;
   flex: 0 0 auto;
   justify-content: flex-start;
-  min-height: 58px;
+  min-height: 54px;
   overflow-x: auto;
-  padding: 7px 20px;
-  gap: 10px;
+  padding: 6px 18px;
+  gap: 8px;
   flex-wrap: nowrap;
 }
 
 .project-editor-toolbar .MuiToggleButton-root {
   gap: 7px;
-  min-height: 42px;
-  padding-inline: 15px;
+  min-height: 40px;
+  padding-inline: 14px;
   white-space: nowrap;
 }
 
@@ -753,18 +753,18 @@ img {
 
 .project-inspector .MuiTabs-root {
   border-bottom: 1px solid var(--casa-border);
-  min-height: 62px;
+  min-height: 56px;
 }
 
 .project-inspector .MuiTab-root {
   font-size: 0.72rem;
-  min-height: 62px;
+  min-height: 56px;
   min-width: 0;
   padding-inline: 5px;
 }
 
 .project-inspector__content {
-  padding: 20px 18px;
+  padding: 18px 20px;
 }
 
 .project-workspace__tablet-inspector {
@@ -827,7 +827,7 @@ img {
   border-bottom: 1px solid var(--casa-border);
   justify-content: space-between;
   margin: 0 !important;
-  min-height: 54px;
+  min-height: 50px;
   padding: 3px 7px 3px 14px;
   width: 100%;
 }
@@ -942,22 +942,12 @@ img {
   padding: 5px 10px;
   pointer-events: none;
   position: absolute;
+  display: none;
   transform: translateX(-50%);
 }
 
 .geometry-svg {
-  background:
-    linear-gradient(rgba(72, 102, 90, 0.105) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(72, 102, 90, 0.105) 1px, transparent 1px),
-    linear-gradient(rgba(72, 102, 90, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(72, 102, 90, 0.045) 1px, transparent 1px),
-    #faf8f3;
-  background-position: -1px -1px;
-  background-size:
-    36px 36px,
-    36px 36px,
-    9px 9px,
-    9px 9px;
+  background: #fdfcf9;
   display: block;
   flex: 1 1 auto;
   height: 100%;
@@ -969,18 +959,22 @@ img {
 .geometry-pan-background {
   cursor: grab;
   fill: transparent;
+  pointer-events: all;
 }
 .geometry-pan-background:active {
   cursor: grabbing;
 }
 
-.geometry-svg--pan .geometry-polygon,
-.geometry-svg--pan .geometry-edge-hit-target,
-.geometry-svg--pan .geometry-vertex {
-  cursor: grab;
+.geometry-svg--pan,
+.geometry-svg--pan * {
+  cursor: grab !important;
 }
 
-.geometry-svg--neutral .geometry-pan-background,
+.geometry-svg--panning,
+.geometry-svg--panning * {
+  cursor: grabbing !important;
+}
+
 .geometry-svg--neutral .geometry-polygon,
 .geometry-svg--neutral .geometry-edge-hit-target,
 .geometry-svg--neutral .geometry-vertex {
@@ -992,7 +986,6 @@ img {
 }
 
 .geometry-svg--draw-wall,
-.geometry-svg--draw-wall .geometry-pan-background,
 .geometry-svg--draw-wall .geometry-polygon,
 .geometry-svg--draw-wall .geometry-edge-hit-target,
 .geometry-svg--draw-wall .geometry-vertex {
@@ -1000,7 +993,6 @@ img {
 }
 
 .geometry-svg--measure,
-.geometry-svg--measure .geometry-pan-background,
 .geometry-svg--measure .geometry-polygon,
 .geometry-svg--measure .geometry-edge-hit-target,
 .geometry-svg--measure .geometry-vertex {
@@ -1009,9 +1001,9 @@ img {
 
 .geometry-polygon {
   cursor: pointer;
-  fill: rgba(72, 102, 90, 0.1);
-  stroke: rgba(72, 102, 90, 0.22);
-  stroke-width: 1;
+  fill: rgba(233, 224, 211, 0.46);
+  stroke: rgba(124, 111, 94, 0.14);
+  stroke-width: 0.7;
   transition:
     fill 130ms ease,
     stroke 130ms ease;
@@ -1020,23 +1012,25 @@ img {
 .geometry-room-contour {
   fill: none;
   pointer-events: none;
-  stroke: rgba(138, 111, 158, 0.72);
-  stroke-dasharray: 6 5;
+  stroke: rgba(36, 103, 174, 0.72);
+  stroke-dasharray: 4 4;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.5;
 }
 
 .architectural-wall-body {
-  fill: #263238;
-  stroke: #1c272c;
-  stroke-width: 0.75;
+  fill: #242a2a;
+  stroke: #151a1a;
+  stroke-width: 0.65;
   pointer-events: none;
 }
 
 .architectural-wall-body.geometry-entity-hovered,
 .architectural-wall-body.geometry-entity-selected {
-  fill: #344b55;
+  fill: #242a2a;
+  stroke: #246caf !important;
+  stroke-width: 2.2;
 }
 
 .architectural-wall-hit-target,
@@ -1051,7 +1045,7 @@ img {
 }
 
 .architectural-opening {
-  color: #15252c;
+  color: #343d3f;
 }
 
 .architectural-opening--draggable {
@@ -1068,7 +1062,7 @@ img {
 .architectural-opening path {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.7;
+  stroke-width: 1.25;
   vector-effect: non-scaling-stroke;
 }
 
@@ -1080,11 +1074,11 @@ img {
 
 .architectural-opening.geometry-entity-hovered,
 .architectural-opening.geometry-entity-selected {
-  color: #e66a2c;
+  color: #246caf;
 }
 
 .architectural-opening-drag-handle {
-  color: var(--casa-terracotta);
+  color: #246caf;
 }
 
 .architectural-opening-drag-handle__surface {
@@ -1104,8 +1098,8 @@ img {
 }
 
 .architectural-door-arc {
-  stroke-dasharray: 3 2;
-  opacity: 0.78;
+  stroke-dasharray: none;
+  opacity: 0.68;
 }
 
 .architectural-door-hinge {
@@ -1113,12 +1107,12 @@ img {
 }
 
 .architectural-window-line {
-  stroke-width: 1.25 !important;
+  stroke-width: 1.05 !important;
 }
 
 .architectural-dimension-layer,
 .architectural-room-metric-layer {
-  color: #596267;
+  color: #687178;
   pointer-events: none;
 }
 
@@ -1127,28 +1121,28 @@ img {
 .architectural-dimension-marker {
   fill: none;
   stroke: currentColor;
-  stroke-width: 0.85;
+  stroke-width: 0.7;
   vector-effect: non-scaling-stroke;
 }
 
 .architectural-dimension-extension {
-  opacity: 0.72;
+  opacity: 0.58;
 }
 
 .architectural-dimension-label,
 .architectural-room-metric-layer text {
   fill: currentColor;
   font-family: inherit;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 8.5px;
+  font-weight: 550;
   paint-order: stroke;
-  stroke: rgba(250, 248, 243, 0.96);
-  stroke-width: 3px;
+  stroke: rgba(253, 252, 249, 0.98);
+  stroke-width: 3.5px;
   stroke-linejoin: round;
 }
 
 .architectural-dimension-layer--selected {
-  color: #a64e31;
+  color: #246caf;
 }
 
 .architectural-dimension-layer--temporary {
@@ -1160,7 +1154,19 @@ img {
 }
 
 .architectural-room-metric-layer {
-  color: #5c655f;
+  color: #303838;
+}
+
+.architectural-room-label__name {
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.015em;
+}
+
+.architectural-room-label__area {
+  fill: #596160;
+  font-size: 9px;
+  font-weight: 600;
 }
 
 .architectural-opening-preview {
@@ -1182,16 +1188,16 @@ img {
 }
 
 .project-workspace .geometry-edge {
-  stroke: rgba(255, 255, 255, 0.16);
+  stroke: transparent;
   stroke-width: 1;
 }
 
 .project-workspace .geometry-edge-shared {
-  stroke: rgba(255, 255, 255, 0.2);
+  stroke: transparent;
 }
 
 .project-workspace .geometry-vertex {
-  opacity: 0.45;
+  opacity: 0.28;
 }
 
 .geometry-edge {
@@ -1226,16 +1232,16 @@ img {
 }
 
 .geometry-centroid {
-  fill: #dca36a;
+  fill: rgba(36, 103, 174, 0.18);
   pointer-events: none;
-  stroke: #5d4632;
-  stroke-width: 1.25;
+  stroke: rgba(36, 103, 174, 0.7);
+  stroke-width: 0.9;
 }
 
 .geometry-centroid-cross {
   pointer-events: none;
-  stroke: #5d4632;
-  stroke-width: 1.25;
+  stroke: rgba(36, 103, 174, 0.7);
+  stroke-width: 0.9;
 }
 .geometry-polygon-bounds {
   fill: none;
@@ -1247,18 +1253,18 @@ img {
   stroke-width: 1;
 }
 .geometry-entity-hovered {
-  filter: drop-shadow(0 0 4px rgba(199, 85, 50, 0.38));
+  filter: drop-shadow(0 0 3px rgba(36, 103, 174, 0.3));
 }
 .geometry-entity-selected {
-  stroke: var(--casa-terracotta) !important;
-  stroke-width: 7;
+  stroke: #246caf !important;
+  stroke-width: 3;
 }
 
 .geometry-wall-preview,
 .geometry-selected-wall {
   fill: none;
   pointer-events: none;
-  stroke: var(--casa-terracotta);
+  stroke: #246caf;
   stroke-linecap: round;
   stroke-width: 5;
 }
@@ -1305,7 +1311,7 @@ img {
 .geometry-wall-endpoint {
   fill: var(--casa-paper);
   pointer-events: none;
-  stroke: var(--casa-terracotta);
+  stroke: #246caf;
   stroke-width: 2;
 }
 
@@ -1330,8 +1336,8 @@ img {
 }
 
 .geometry-selected-wall {
-  opacity: 0.9;
-  stroke-width: 7;
+  opacity: 0.95;
+  stroke-width: 2.5;
 }
 
 .geometry-selected-wall--dragging {
@@ -1355,14 +1361,14 @@ img {
 }
 
 .geometry-wall-endpoint-hit-target:focus-visible {
-  fill: rgba(199, 85, 50, 0.16);
+  fill: rgba(36, 103, 174, 0.14);
   outline: none;
-  stroke: var(--casa-terracotta);
+  stroke: #246caf;
   stroke-width: 2;
 }
 .geometry-polygon.geometry-entity-selected {
-  fill: rgba(199, 85, 50, 0.16);
-  stroke-width: 3;
+  fill: rgba(36, 103, 174, 0.12);
+  stroke-width: 2;
 }
 .geometry-vertex.geometry-entity-selected {
   fill: #fff;
