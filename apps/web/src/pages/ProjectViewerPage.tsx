@@ -1,6 +1,7 @@
 import {
   GeometryEngine,
   LevelGeometry,
+  calculatePolygonInteriorAnchor,
   measureLevel,
   measureRoom,
   projectPointOntoWall,
@@ -8,7 +9,9 @@ import {
 } from "@casastudio/geometry";
 import {
   createConnectedWall,
+  createRoomFromShape,
   classifyLevelRoomTopology,
+  deriveRoomShapeVertices,
   dissolveRoom,
   deleteWallAndCollapseRedundantTopology,
   deleteOpening,
@@ -18,6 +21,9 @@ import {
   updateWallProperties,
   updateOpening,
   updateRoomProperties,
+  validateRoomShapeDefinition,
+  convertPhysicalLength,
+  formatDisplayValue,
   ValidationErrorCode,
   type Project,
   type Room,
@@ -25,7 +31,9 @@ import {
   type WallEndpoint,
   type Opening,
   type UpdateOpeningProperties,
-  type UpdateRoomProperties
+  type UpdateRoomProperties,
+  type RoomShapeDefinition,
+  type RoomShapeRotation
 } from "@casastudio/schema";
 import {
   Alert,
@@ -97,6 +105,7 @@ import {
 import {
   createGeometrySelectionState,
   selectDoor,
+  selectPolygon,
   selectWindow,
   type GeometrySelectionState
 } from "../geometry-playground/geometry-selection-state";
@@ -151,6 +160,9 @@ import {
   editorJunctionDragStarted,
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
+  editorRoomShapePlacementChanged,
+  editorRoomShapePlacementPointerMoved,
+  editorRoomShapePlacementStarted,
   editorOpeningDragThresholdCrossed,
   editorOpeningDragPreviewChanged,
   editorOpeningDragStarted,
@@ -182,10 +194,12 @@ import {
   getWallEndpointEditingAvailability,
   getIncidentWallIds,
   getWallEditingErrorKey,
+  newWallDefaults,
   type WallEditingErrorKey
 } from "../state/project-wall-editing";
 import {
   resolveDrawWallSnapCandidate,
+  resolveGridSnapCandidate,
   resolveProjectPointSnapCandidate
 } from "../state/project-wall-snapping";
 import {
@@ -215,8 +229,20 @@ import {
   type ProjectPersistenceDialog
 } from "./ProjectPersistenceDialogs";
 import { normalizeEditorMeasurement } from "./editor-measurement";
+import {
+  ProjectRoomAuthoringMenu,
+  type RoomShapeDimensionDraft
+} from "./ProjectRoomAuthoringMenu";
 
 const emptySelectionState = createGeometrySelectionState();
+/** Initial editable Room shape values in canonical centimeter Project units. */
+const defaultRoomShapeDimensions: RoomShapeDimensionDraft = Object.freeze({
+  width: "400",
+  depth: "300",
+  notchWidth: "150",
+  notchDepth: "120",
+  rotation: "0"
+});
 /** Localized feedback categories for explicit Room authoring actions. */
 type RoomEditingErrorKey =
   | "errors.room.none"
@@ -274,6 +300,10 @@ export function ProjectViewerPage() {
   const [viewportPanModifierActive, setViewportPanModifierActive] =
     useState(false);
   const [editingError, setEditingError] = useState<EditingErrorKey>();
+  const [roomMenuAnchor, setRoomMenuAnchor] = useState<HTMLElement | null>(null);
+  const [roomDetectionActive, setRoomDetectionActive] = useState(false);
+  const [roomShapeDimensions, setRoomShapeDimensions] =
+    useState<RoomShapeDimensionDraft>(defaultRoomShapeDimensions);
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
@@ -301,17 +331,23 @@ export function ProjectViewerPage() {
     }
 
     const handleSpaceDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const roomDimensionInput =
+        typeof target?.matches === "function" &&
+        target.matches('input[type="number"]') &&
+        target.closest(".project-room-authoring-menu__dimensions") !== null;
       if (
         (event.key !== " " && event.code !== "Space") ||
         event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
-        isEditableShortcutTarget(event.target)
+        (isEditableShortcutTarget(event.target) && !roomDimensionInput)
       ) {
         return;
       }
 
       event.preventDefault();
+      if (roomDimensionInput) target?.blur();
       setViewportPanModifierActive(true);
     };
     const handleSpaceUp = (event: KeyboardEvent) => {
@@ -321,12 +357,12 @@ export function ProjectViewerPage() {
     };
     const handleWindowBlur = () => setViewportPanModifierActive(false);
 
-    window.addEventListener("keydown", handleSpaceDown);
-    window.addEventListener("keyup", handleSpaceUp);
+    window.addEventListener("keydown", handleSpaceDown, true);
+    window.addEventListener("keyup", handleSpaceUp, true);
     window.addEventListener("blur", handleWindowBlur);
     return () => {
-      window.removeEventListener("keydown", handleSpaceDown);
-      window.removeEventListener("keyup", handleSpaceUp);
+      window.removeEventListener("keydown", handleSpaceDown, true);
+      window.removeEventListener("keyup", handleSpaceUp, true);
       window.removeEventListener("blur", handleWindowBlur);
     };
   }, [saveInteractionBlocked, shortcutsOpen, workspaceMode]);
@@ -372,6 +408,17 @@ export function ProjectViewerPage() {
   const activeProjectLevel = activeProject?.building.levels.find(
     (level) => level.id === selectedLevel?.sourceLevelId
   );
+  const roomShapePlacement = editor.transient.interaction?.kind === "place-room-shape"
+    ? editor.transient.interaction
+    : undefined;
+  const activeRoomShapeKind = roomShapePlacement?.shape.kind;
+  const validatedRoomShape = useMemo(
+    () => activeRoomShapeKind
+      ? parseRoomShapeDefinition(activeRoomShapeKind, roomShapeDimensions)
+      : undefined,
+    [activeRoomShapeKind, roomShapeDimensions]
+  );
+  const roomShapeTemplateAvailable = activeProjectLevel?.walls.length === 0;
   const resolvedDisplayOptions: GeometryDisplayOptions = workspaceMode === "edit"
     ? { ...displayOptions, ...editor.presentation.dimensions }
     : {
@@ -553,6 +600,62 @@ export function ProjectViewerPage() {
     return collectActionableRoomFaces(roomTopology);
   }, [roomTopology]);
 
+  useEffect(() => {
+    if (workspaceMode === "edit" && editor.activeTool === "room") return;
+    setRoomMenuAnchor(null);
+    setRoomDetectionActive(false);
+  }, [editor.activeTool, workspaceMode]);
+
+  const handleRoomToggle = useCallback((anchor: HTMLElement) => {
+    if (saveInteractionBlocked || workspaceMode !== "edit") return;
+    if (editor.activeTool === "room") {
+      dispatch(editorTransientInteractionCleared());
+      setRoomDetectionActive(false);
+      setRoomMenuAnchor(null);
+      dispatch(editorActiveToolChanged(null));
+      return;
+    }
+    dispatch(editorActiveToolChanged("room"));
+    setRoomMenuAnchor(anchor);
+  }, [dispatch, editor.activeTool, saveInteractionBlocked, workspaceMode]);
+
+  const handleDetectRoom = useCallback(() => {
+    dispatch(editorTransientInteractionCleared());
+    setRoomDetectionActive(true);
+    setRoomMenuAnchor(null);
+  }, [dispatch]);
+
+  const handleSelectRoomShape = useCallback((kind: "RECTANGLE" | "L_SHAPE") => {
+    if (!editor.activeLevelId || !roomShapeTemplateAvailable) return;
+    const dimensions = getDefaultRoomShapeDimensions(kind);
+    const shape = parseRoomShapeDefinition(kind, dimensions);
+    if (!shape) return;
+    setRoomShapeDimensions(dimensions);
+    setRoomDetectionActive(false);
+    dispatch(editorActiveToolChanged("room"));
+    dispatch(editorRoomShapePlacementStarted({
+      levelId: editor.activeLevelId,
+      shape
+    }));
+  }, [dispatch, editor.activeLevelId, roomShapeTemplateAvailable]);
+
+  const handleRoomShapeDimensionChange = useCallback((
+    field: keyof RoomShapeDimensionDraft,
+    value: string
+  ) => {
+    if (!activeRoomShapeKind) return;
+    const nextDimensions = { ...roomShapeDimensions, [field]: value };
+    setRoomShapeDimensions(nextDimensions);
+    const shape = parseRoomShapeDefinition(activeRoomShapeKind, nextDimensions);
+    if (shape) dispatch(editorRoomShapePlacementChanged(shape));
+  }, [activeRoomShapeKind, dispatch, roomShapeDimensions]);
+
+  const handleCancelRoomAuthoring = useCallback(() => {
+    dispatch(editorTransientInteractionCleared());
+    setRoomDetectionActive(false);
+    setRoomMenuAnchor(null);
+  }, [dispatch]);
+
   const editorOverlay = useMemo<GeometryEditorOverlay | undefined>(() => {
     if (workspaceMode !== "edit") return undefined;
     const transient = editor.transient.interaction;
@@ -599,15 +702,37 @@ export function ProjectViewerPage() {
     const draggedOpening = transient?.kind === "move-opening" && transient.dragging && selectedEditOpening
       ? { ...selectedEditOpening.opening, offsetFromStart: transient.currentOffsetFromStart } as Opening
       : undefined;
+    const previewShape = transient?.kind === "place-room-shape"
+      ? transient.shape
+      : undefined;
+    const shapeVertices =
+      previewShape &&
+      transient?.kind === "place-room-shape" &&
+      transient.origin &&
+      validatedRoomShape
+        ? deriveRoomShapeVertices(transient.origin, previewShape)
+        : undefined;
+    const shapeLabelAnchor = shapeVertices
+      ? calculatePolygonInteriorAnchor(shapeVertices)
+      : undefined;
 
     return {
       roomFaceCandidates:
-        editor.activeTool === "room"
+        editor.activeTool === "room" && roomDetectionActive
           ? actionableRoomFaces.map((face) => ({
               faceKey: face.key,
               vertices: face.vertices,
               selected: false
             }))
+          : undefined,
+      roomShapePreview:
+        shapeVertices && shapeLabelAnchor && activeProject && previewShape
+          ? {
+              vertices: shapeVertices,
+              labelAnchor: shapeLabelAnchor,
+              label: formatRoomShapePreviewLabel(previewShape, activeProject.units.length),
+              kind: previewShape.kind
+            }
           : undefined,
       drawWall:
         transient?.kind === "draw-wall"
@@ -654,6 +779,9 @@ export function ProjectViewerPage() {
     editor.precision,
     editor.activeTool,
     actionableRoomFaces,
+    activeProject,
+    roomDetectionActive,
+    validatedRoomShape,
     workspaceMode
   ]);
 
@@ -753,6 +881,51 @@ export function ProjectViewerPage() {
         !editor.draft ||
         !editor.activeLevelId
       ) {
+        return;
+      }
+
+      if (editor.activeTool === "room") {
+        const placement = editor.transient.interaction;
+        if (placement?.kind !== "place-room-shape") return;
+        if (!validatedRoomShape) {
+          setEditingError("errors.room.geometry");
+          return;
+        }
+        const gridCandidate = resolveGridSnapCandidate(pointer.worldPoint, {
+          enabled: editor.precision.snapToGrid,
+          spacing: editor.precision.gridSpacing,
+          worldToSvgScale: activeViewport.zoom,
+          cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
+        });
+        const origin = gridCandidate?.point ?? pointer.worldPoint;
+        const roomId = createRoomIdentifier();
+        const wallCount = validatedRoomShape.kind === "RECTANGLE" ? 4 : 6;
+        const level = editor.draft.building.levels.find(
+          (candidate) => candidate.id === editor.activeLevelId
+        );
+        const result = createRoomFromShape(editor.draft, {
+          levelId: editor.activeLevelId,
+          origin,
+          shape: validatedRoomShape,
+          room: {
+            id: roomId,
+            name: `Room ${(level?.rooms.length ?? 0) + 1}`,
+            type: "OTHER"
+          },
+          wallIds: Array.from({ length: wallCount }, () => createWallIdentifier()),
+          wallHeight: newWallDefaults.height,
+          wallThickness: newWallDefaults.thickness
+        });
+        if (!result.ok) {
+          setEditingError(getRoomEditingErrorKey(result.errors[0]?.code));
+          return;
+        }
+        setEditingError(undefined);
+        setRoomDetectionActive(false);
+        dispatch(editingDraftReplaced(result.project));
+        dispatch(editorSelectionChanged(createGeometrySelectionState([
+          selectPolygon(`polygon:${roomId}`)
+        ])));
         return;
       }
 
@@ -877,6 +1050,7 @@ export function ProjectViewerPage() {
       editor.draft,
       editor.precision,
       editor.transient.interaction,
+      validatedRoomShape,
       activeViewport,
       presentationResult,
       saveInteractionBlocked,
@@ -891,6 +1065,22 @@ export function ProjectViewerPage() {
       ) {
         return;
       }
+      if (
+        workspaceMode === "edit" &&
+        editor.activeTool === "room" &&
+        editor.transient.interaction?.kind === "place-room-shape" &&
+        validatedRoomShape
+      ) {
+        const gridCandidate = resolveGridSnapCandidate(pointer.worldPoint, {
+          enabled: editor.precision.snapToGrid,
+          spacing: editor.precision.gridSpacing,
+          worldToSvgScale: activeViewport.zoom,
+          cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
+        });
+        dispatch(editorRoomShapePlacementPointerMoved(
+          gridCandidate?.point ?? pointer.worldPoint
+        ));
+      } else
       if (
         workspaceMode === "edit" &&
         editor.draft &&
@@ -1011,6 +1201,7 @@ export function ProjectViewerPage() {
       activeViewport,
       presentationResult,
       selectedEditOpening,
+      validatedRoomShape,
       saveInteractionBlocked,
       workspaceMode
     ]
@@ -1495,6 +1686,8 @@ export function ProjectViewerPage() {
             editor.transient.snapCandidate !== undefined)
         ) {
           dispatch(editorTransientInteractionCleared());
+          setRoomMenuAnchor(null);
+          setRoomDetectionActive(false);
         } else {
           dispatch(
             workspaceMode === "edit"
@@ -1994,8 +2187,22 @@ export function ProjectViewerPage() {
           activeTool={editor.activeTool}
           disabled={saveInteractionBlocked}
           onToolChange={(tool) => dispatch(editorActiveToolChanged(tool))}
+          roomMenuOpen={Boolean(roomMenuAnchor)}
+          onRoomToggle={handleRoomToggle}
         />
       ) : null}
+      <ProjectRoomAuthoringMenu
+        anchorEl={workspaceMode === "edit" ? roomMenuAnchor : null}
+        templateAvailable={roomShapeTemplateAvailable}
+        activeShape={activeRoomShapeKind}
+        dimensions={roomShapeDimensions}
+        unit={activeProject?.units.length ?? "cm"}
+        onDetectRoom={handleDetectRoom}
+        onSelectShape={handleSelectRoomShape}
+        onDimensionChange={handleRoomShapeDimensionChange}
+        onSpacePanChange={setViewportPanModifierActive}
+        onCancel={handleCancelRoomAuthoring}
+      />
 
       {editBuildFailed ? (
         <Alert className="project-workspace__geometry-error" severity="error">
@@ -2221,13 +2428,17 @@ type ProjectEditorToolbarProps = {
   readonly activeTool: ProjectEditorTool | null;
   readonly disabled: boolean;
   readonly onToolChange: (tool: ProjectEditorTool | null) => void;
+  readonly roomMenuOpen: boolean;
+  readonly onRoomToggle: (anchor: HTMLElement) => void;
 };
 
 /** Renders the mutually exclusive architectural authoring tools. */
 function ProjectEditorToolbar({
   activeTool,
   disabled,
-  onToolChange
+  onToolChange,
+  roomMenuOpen,
+  onRoomToggle
 }: ProjectEditorToolbarProps) {
   const { t } = useCasaTranslation("project-viewer");
   const icons = {
@@ -2249,9 +2460,14 @@ function ProjectEditorToolbar({
         exclusive
         size="small"
         value={activeTool}
-        onChange={(_event, value: ProjectEditorTool | null) =>
-          onToolChange(value)
-        }
+        onChange={(event, value: ProjectEditorTool | null) => {
+          const button = (event.target as HTMLElement).closest("button");
+          if (button?.getAttribute("value") === "room") {
+            onRoomToggle(button);
+            return;
+          }
+          onToolChange(value);
+        }}
       >
         {projectEditorTools.map((tool) => {
           const label = t(`tools.${tool.id}`);
@@ -2264,6 +2480,11 @@ function ProjectEditorToolbar({
               aria-label={
                 tool.enabled ? label : t("tools.comingSoon", { tool: label })
               }
+              aria-haspopup={tool.id === "room" ? "menu" : undefined}
+              aria-expanded={tool.id === "room" ? roomMenuOpen : undefined}
+              aria-controls={tool.id === "room" && roomMenuOpen
+                ? "room-authoring-menu"
+                : undefined}
             >
               {icons[tool.id]}
               <span>{label}</span>
@@ -2673,6 +2894,61 @@ type ErrorTranslator = (
   key: string,
   options?: Record<string, unknown>
 ) => string;
+
+/** Returns sensible editable defaults expressed in canonical Project units. */
+function getDefaultRoomShapeDimensions(
+  kind: "RECTANGLE" | "L_SHAPE"
+): RoomShapeDimensionDraft {
+  return kind === "RECTANGLE"
+    ? { ...defaultRoomShapeDimensions }
+    : {
+        width: "500",
+        depth: "400",
+        notchWidth: "200",
+        notchDepth: "150",
+        rotation: "0"
+      };
+}
+
+/** Parses locally editable fields into one validated authoring-only shape. */
+function parseRoomShapeDefinition(
+  kind: "RECTANGLE" | "L_SHAPE",
+  draft: RoomShapeDimensionDraft
+): RoomShapeDefinition | undefined {
+  const shape: RoomShapeDefinition = kind === "RECTANGLE"
+    ? {
+        kind,
+        dimensions: { width: Number(draft.width), depth: Number(draft.depth) },
+        rotation: Number(draft.rotation) as RoomShapeRotation
+      }
+    : {
+        kind,
+        dimensions: {
+          width: Number(draft.width),
+          depth: Number(draft.depth),
+          notchWidth: Number(draft.notchWidth),
+          notchDepth: Number(draft.notchDepth)
+        },
+        rotation: Number(draft.rotation) as RoomShapeRotation
+      };
+  return validateRoomShapeDefinition(shape) ? shape : undefined;
+}
+
+/** Formats compact physical dimensions for the transient Room preview. */
+function formatRoomShapePreviewLabel(
+  shape: RoomShapeDefinition,
+  unit: Project["units"]["length"]
+): string {
+  const format = (value: number) => formatDisplayValue(
+    convertPhysicalLength(value, unit, "m"),
+    2,
+    true
+  );
+  const outer = `${format(shape.dimensions.width)} × ${format(shape.dimensions.depth)} m`;
+  return shape.kind === "RECTANGLE"
+    ? outer
+    : `L ${outer} · ${format(shape.dimensions.notchWidth)} × ${format(shape.dimensions.notchDepth)} m`;
+}
 
 /** Maps Room-authoring validation codes to localized presentation messages. */
 function getRoomEditingErrorKey(

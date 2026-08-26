@@ -88,9 +88,24 @@
       "draw-wall": "Draw connected walls as a continuous chain.",
       "door": "Place a door on a wall.",
       "window": "Place a window on a wall.",
-      "room": "Create an explicit Room from a bounded plan region.",
+      "room": "Create a Room from existing walls or a predefined shape.",
       "measure": "Measure between snapped points without changing the project."
     }
+  },
+  "roomAuthoring": {
+    "menuLabel": "Room authoring",
+    "existingSection": "Create from existing walls",
+    "detectRoom": "Detect room",
+    "shapeSection": "Start from a shape",
+    "rectangle": "Rectangle",
+    "lShape": "L-shape",
+    "emptyLevelOnly": "Room shapes are currently available only on an empty level.",
+    "dimensions": "Physical dimensions",
+    "width": "Width",
+    "depth": "Depth",
+    "notchWidth": "Notch width",
+    "notchDepth": "Notch depth",
+    "rotation": "Rotation"
   },
   "precision": {
     "grid": "Grid",

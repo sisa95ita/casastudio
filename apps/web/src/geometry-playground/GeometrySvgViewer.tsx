@@ -203,6 +203,13 @@ export type GeometryEditorOverlay = {
     readonly start: WorldPointXZ;
     readonly end: WorldPointXZ;
   };
+  /** Exact transient Room footprint projected through the shared viewport. */
+  readonly roomShapePreview?: {
+    readonly vertices: readonly WorldPointXZ[];
+    readonly labelAnchor: WorldPointXZ;
+    readonly label: string;
+    readonly kind: "RECTANGLE" | "L_SHAPE";
+  };
   readonly selectedWall?: {
     readonly wallId: string;
     readonly start: WorldPointXZ;
@@ -293,7 +300,8 @@ export function GeometrySvgViewer({
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
   const rendersSvgViewport = Boolean(
-    bounds || interaction.drawWallEnabled || interaction.measurementEnabled
+    bounds || interaction.drawWallEnabled || interaction.measurementEnabled ||
+      interaction.roomShapePlacementEnabled
   );
 
   useEffect(() => {
@@ -511,7 +519,12 @@ export function GeometrySvgViewer({
       event.stopPropagation();
       return;
     }
-    if (interaction.drawWallEnabled || interaction.openingPlacement || interaction.measurementEnabled) {
+    if (
+      interaction.drawWallEnabled ||
+      interaction.openingPlacement ||
+      interaction.measurementEnabled ||
+      interaction.roomShapePlacementEnabled
+    ) {
       onEditorCanvasClick?.(getEventPointer(event));
     }
   };
@@ -1152,9 +1165,49 @@ function GeometryEditorOverlayLayer({
       ? createDoorPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
       : createWindowPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
     : undefined;
+  const roomShapePreview = overlay?.roomShapePreview
+    ? {
+        ...overlay.roomShapePreview,
+        vertices: overlay.roomShapePreview.vertices.map((vertex) =>
+          transform.worldToScreen(vertex)
+        ),
+        labelAnchor: transform.worldToScreen(overlay.roomShapePreview.labelAnchor)
+      }
+    : undefined;
 
   return (
     <g data-layer="editor-overlay">
+      {roomShapePreview ? (
+        <g
+          data-layer="room-shape-preview"
+          data-testid="room-shape-preview"
+          data-shape-kind={roomShapePreview.kind}
+          data-segment-count={roomShapePreview.vertices.length}
+          aria-hidden="true"
+        >
+          <polygon
+            className="geometry-room-shape-preview__fill"
+            points={roomShapePreview.vertices.map((point) =>
+              `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`
+            ).join(" ")}
+          />
+          <polygon
+            className="geometry-room-shape-preview__walls"
+            points={roomShapePreview.vertices.map((point) =>
+              `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`
+            ).join(" ")}
+          />
+          <text
+            className="geometry-room-shape-preview__label"
+            x={formatSvgNumber(roomShapePreview.labelAnchor.x)}
+            y={formatSvgNumber(roomShapePreview.labelAnchor.y)}
+            textAnchor="middle"
+            dominantBaseline="middle"
+          >
+            {roomShapePreview.label}
+          </text>
+        </g>
+      ) : null}
       {overlay?.roomFaceCandidates?.length ? (
         <g data-layer="room-face-candidates">
           {overlay.roomFaceCandidates.map((face) => (

@@ -743,6 +743,40 @@ img {
   color: var(--casa-terracotta-dark);
 }
 
+.project-room-authoring-menu {
+  border: 1px solid var(--casa-border);
+  margin-top: 5px;
+  min-width: 270px;
+  overflow: hidden;
+}
+
+.project-room-authoring-menu .MuiListSubheader-root {
+  background: transparent;
+  color: var(--casa-ink-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 30px;
+  text-transform: uppercase;
+}
+
+.project-room-authoring-menu__thumbnail {
+  fill: rgba(36, 108, 175, 0.08);
+  margin-right: 10px;
+  stroke: #246caf;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.project-room-authoring-menu__help {
+  margin: 6px 16px 10px;
+  max-width: 238px;
+}
+
+.project-room-authoring-menu__dimensions {
+  padding: 8px 16px 14px;
+}
+
 .project-workspace > .MuiAlert-root {
   border-radius: 0;
 }
@@ -1299,6 +1333,33 @@ img {
   fill: rgba(198, 113, 87, 0.24);
   stroke: #a6553e;
   stroke-width: 2.5;
+}
+
+.geometry-room-shape-preview__fill {
+  fill: rgba(36, 108, 175, 0.12);
+  pointer-events: none;
+  stroke: none;
+}
+
+.geometry-room-shape-preview__walls {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(36, 108, 175, 0.78);
+  stroke-linejoin: round;
+  stroke-width: 7;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-room-shape-preview__label {
+  fill: #174b7d;
+  font-family: var(--casa-font-sans);
+  font-size: 12px;
+  font-weight: 650;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: rgba(255, 253, 249, 0.88);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
 }
 
 .geometry-wall-preview {

@@ -7,7 +7,11 @@ import {
   architecturalScaleDenominators,
   type ArchitecturalScaleDenominator
 } from "@casastudio/geometry";
-import type { Project, WallEndpoint } from "@casastudio/schema";
+import type {
+  Project,
+  RoomShapeDefinition,
+  WallEndpoint
+} from "@casastudio/schema";
 import type { WorldPointXZ } from "../geometry-playground/viewport-transform-2d";
 
 import type {
@@ -77,11 +81,20 @@ export type MeasureInteraction = {
   readonly completed: boolean;
 };
 
+/** Authoring-only Room footprint state that never enters the Project draft. */
+export type PlaceRoomShapeInteraction = {
+  readonly kind: "place-room-shape";
+  readonly levelId: string;
+  readonly shape: RoomShapeDefinition;
+  readonly origin?: WorldPointXZ;
+};
+
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
     DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
-    PlaceOpeningInteraction | MoveOpeningInteraction | MeasureInteraction | null;
+    PlaceOpeningInteraction | MoveOpeningInteraction | MeasureInteraction |
+    PlaceRoomShapeInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
@@ -261,7 +274,10 @@ const projectEditorSlice = createSlice({
       state.history.future = [];
       state.draft = cloneProject(nextDraft);
       state.dirty = true;
-      if (state.transient.interaction?.kind === "place-opening") {
+      if (
+        state.transient.interaction?.kind === "place-opening" ||
+        state.transient.interaction?.kind === "place-room-shape"
+      ) {
         state.transient = { interaction: null };
       }
       if (
@@ -483,6 +499,45 @@ const projectEditorSlice = createSlice({
         state.transient.interaction.currentPointerPoint = action.payload.point;
       }
     },
+    editorRoomShapePlacementStarted(
+      state,
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly shape: RoomShapeDefinition;
+      }>
+    ) {
+      if (
+        state.mode === "edit" &&
+        state.activeTool === "room" &&
+        state.activeLevelId === action.payload.levelId
+      ) {
+        state.selection = [];
+        state.hover = undefined;
+        state.transient = {
+          interaction: {
+            kind: "place-room-shape",
+            levelId: action.payload.levelId,
+            shape: action.payload.shape
+          }
+        };
+      }
+    },
+    editorRoomShapePlacementChanged(
+      state,
+      action: PayloadAction<RoomShapeDefinition>
+    ) {
+      if (state.transient.interaction?.kind === "place-room-shape") {
+        state.transient.interaction.shape = action.payload;
+      }
+    },
+    editorRoomShapePlacementPointerMoved(
+      state,
+      action: PayloadAction<WorldPointXZ>
+    ) {
+      if (state.transient.interaction?.kind === "place-room-shape") {
+        state.transient.interaction.origin = action.payload;
+      }
+    },
     editorOpeningPlacementChanged(
       state,
       action: PayloadAction<{
@@ -624,6 +679,9 @@ export const {
   editorDrawWallPointerMoved,
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
+  editorRoomShapePlacementStarted,
+  editorRoomShapePlacementChanged,
+  editorRoomShapePlacementPointerMoved,
   editorOpeningPlacementChanged,
   editorOpeningDragStarted,
   editorOpeningDragThresholdCrossed,

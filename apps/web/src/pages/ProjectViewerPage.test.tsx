@@ -182,6 +182,23 @@ function successFetch(): typeof fetch {
   }) as typeof fetch;
 }
 
+function emptyProjectFetch(): typeof fetch {
+  const project = structuredClone(demoProjectFixture);
+  project.viewpoints = [];
+  project.baseImages = [];
+  project.building.levels = [{
+    ...project.building.levels[0]!,
+    rooms: [],
+    walls: [],
+    staircases: []
+  }];
+  return vi.fn(async (input: RequestInfo | URL) => Response.json(
+    String(input).endsWith("/geometry")
+      ? geometryResponse
+      : { project, sourceRevision: project.revision }
+  )) as typeof fetch;
+}
+
 function createMultiWallSubdivisionProject(): Project {
   const project = structuredClone(demoProjectFixture);
   const room: Room = {
@@ -584,7 +601,7 @@ describe("ProjectViewerPage", () => {
 
     unmount();
 
-    expect(removeListener).toHaveBeenCalledWith("keyup", expect.any(Function));
+    expect(removeListener).toHaveBeenCalledWith("keyup", expect.any(Function), true);
     expect(removeListener).toHaveBeenCalledWith("blur", expect.any(Function));
     removeListener.mockRestore();
   });
@@ -1035,6 +1052,231 @@ describe("ProjectViewerPage", () => {
       .toMatchObject({ type: "WINDOW" });
   });
 
+  it("opens the Room authoring menu and explains shape availability from canonical Walls", async () => {
+    renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+
+    expect(await screen.findByRole("menuitem", { name: "Detect room" })).toBeTruthy();
+    const rectangle = screen.getByRole("menuitem", { name: "Rectangle" });
+    const lShape = screen.getByRole("menuitem", { name: "L-shape" });
+    expect(rectangle.getAttribute("aria-disabled")).toBe("true");
+    expect(lShape.getAttribute("aria-disabled")).toBe("true");
+    const reason = screen.getByText(
+      "Room shapes are currently available only on an empty level."
+    );
+    expect(rectangle.getAttribute("aria-describedby")).toBe(reason.id);
+    expect(lShape.getAttribute("aria-describedby")).toBe(reason.id);
+  });
+
+  it("toggles Room authoring off and clears transient state on the second toolbar click", async () => {
+    const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const roomButton = screen.getByRole("button", { name: "Room" });
+    fireEvent.click(roomButton);
+    expect(store.getState().projectEditor.activeTool).toBe("room");
+    expect(screen.getByRole("menuitem", { name: "Rectangle" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rectangle" }));
+    const svg = await screen.findByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 140, clientY: 140, pointerId: 900 });
+    expect(screen.getByTestId("room-shape-preview")).toBeTruthy();
+    const before = store.getState().projectEditor;
+    fireEvent.click(roomButton);
+    expect(store.getState().projectEditor.activeTool).toBeNull();
+    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Rectangle" })).toBeNull();
+    expect(screen.queryByTestId("room-shape-preview")).toBeNull();
+    expect(store.getState().projectEditor.dirty).toBe(before.dirty);
+    expect(store.getState().projectEditor.history).toEqual(before.history);
+    fireEvent.click(roomButton);
+    expect(store.getState().projectEditor.activeTool).toBe("room");
+    expect(screen.getByRole("menuitem", { name: "Rectangle" })).toBeTruthy();
+  });
+
+  it("previews and atomically commits a snapped rectangular Room on an empty Level", async () => {
+    const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+
+    expect(await screen.findByRole("menuitem", { name: "Detect room" })).toBeTruthy();
+    const rectangle = screen.getByRole("menuitem", { name: "Rectangle" });
+    expect(rectangle.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(rectangle);
+
+    const width = screen.getByRole("spinbutton", { name: "Width" });
+    const depth = screen.getByRole("spinbutton", { name: "Depth" });
+    const rotation = screen.getByRole("combobox", { name: "Rotation" });
+    expect(rotation).toBeTruthy();
+    expect(width.parentElement?.textContent).toContain("cm");
+    expect(depth.parentElement?.textContent).toContain("cm");
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+
+    const svg = await screen.findByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 203, clientY: 195, pointerId: 401 });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      origin: { x: 203, z: -195 }
+    });
+    const preview = screen.getByTestId("room-shape-preview");
+    expect(preview.getAttribute("data-shape-kind")).toBe("RECTANGLE");
+    expect(preview.getAttribute("data-segment-count")).toBe("4");
+    const initialPoints = preview.querySelector("polygon")!.getAttribute("points");
+    fireEvent.mouseDown(rotation);
+    fireEvent.click(await screen.findByRole("option", { name: "90°" }));
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      shape: { rotation: 90 }
+    });
+    expect((width as HTMLInputElement).value).toBe("400");
+    expect((depth as HTMLInputElement).value).toBe("300");
+    fireEvent.change(width, { target: { value: "450" } });
+    expect(preview.querySelector("polygon")!.getAttribute("points")).not.toBe(initialPoints);
+    fireEvent.change(depth, { target: { value: "0" } });
+    expect(screen.queryByTestId("room-shape-preview")).toBeNull();
+    fireEvent.click(svg, { clientX: 203, clientY: 195 });
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toEqual([]);
+    expect(store.getState().projectEditor.history.past).toEqual([]);
+
+    fireEvent.change(depth, { target: { value: "300" } });
+    fireEvent.click(screen.getByRole("switch", { name: "Snap to grid" }));
+    fireEvent.pointerMove(svg, { clientX: 203, clientY: 195, pointerId: 402 });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-room-shape",
+      origin: { x: 200, z: -200 }
+    });
+
+    fireEvent.keyDown(depth, { key: " ", code: "Space" });
+    const panSvg = document.querySelector("svg.geometry-svg") as SVGSVGElement;
+    prepareSvgPointerCoordinates(panSvg);
+    expect(panSvg.classList).toContain("geometry-svg--pan");
+    fireEvent.pointerDown(panSvg, { clientX: 350, clientY: 260, pointerId: 403 });
+    fireEvent.pointerMove(panSvg, { clientX: 380, clientY: 280, pointerId: 403 });
+    fireEvent.pointerUp(panSvg, { clientX: 380, clientY: 280, pointerId: 403 });
+    fireEvent.click(panSvg, { clientX: 380, clientY: 280 });
+    fireEvent.keyUp(window, { key: " ", code: "Space" });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-room-shape",
+      shape: { dimensions: { width: 450, depth: 300 } }
+    });
+    expect(screen.getByTestId("room-shape-preview")).toBeTruthy();
+
+    fireEvent.pointerMove(panSvg, { clientX: 203, clientY: 195, pointerId: 404 });
+    fireEvent.click(panSvg, { clientX: 203, clientY: 195 });
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.walls).toHaveLength(4);
+    expect(level.rooms).toHaveLength(1);
+    expect(level.walls.every((wall) =>
+      wall.roomIds.length === 1 && wall.roomIds[0] === level.rooms[0]!.id
+    )).toBe(true);
+    expect(level.rooms[0]!.boundary).toEqual(level.walls.map((wall) => ({
+      wallId: wall.id,
+      direction: "FORWARD"
+    })));
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(store.getState().projectEditor.selection).toEqual([{
+      kind: "POLYGON",
+      geometryId: `polygon:${level.rooms[0]!.id}`
+    }]);
+    expect(screen.queryByTestId("room-shape-preview")).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Rectangle" }).getAttribute("aria-disabled"))
+      .toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toEqual([]);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toHaveLength(4);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(await screen.findByTestId("geometry-polygon"));
+    const inspector = screen.getByRole("complementary", { name: "Test inspector" });
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Properties" }));
+    const name = within(inspector).getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Studio" } });
+    fireEvent.blur(name);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]!.name)
+      .toBe("Studio");
+    fireEvent.mouseDown(within(inspector).getByRole("combobox", { name: "Type" }));
+    fireEvent.click(screen.getByRole("option", { name: "Bedroom" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]!.type)
+      .toBe("BEDROOM");
+  });
+
+  it("previews and atomically commits an exact six-segment L-shaped Room", async () => {
+    const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "L-shape" }));
+
+    const svg = await screen.findByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 150, clientY: 100, pointerId: 411 });
+    expect(screen.getByTestId("room-shape-preview").getAttribute("data-segment-count"))
+      .toBe("6");
+    const notchWidth = screen.getByRole("spinbutton", { name: "Notch width" });
+    fireEvent.change(notchWidth, { target: { value: "500" } });
+    expect(screen.queryByTestId("room-shape-preview")).toBeNull();
+    fireEvent.click(svg, { clientX: 150, clientY: 100 });
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toEqual([]);
+
+    fireEvent.change(notchWidth, { target: { value: "200" } });
+    fireEvent.pointerMove(svg, { clientX: 150, clientY: 100, pointerId: 412 });
+    fireEvent.click(svg, { clientX: 150, clientY: 100 });
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.walls).toHaveLength(6);
+    expect(level.rooms).toHaveLength(1);
+    const geometry = GeometryEngine.build(store.getState().projectEditor.draft!);
+    expect(geometry.ok).toBe(true);
+    if (!geometry.ok) return;
+    expect(geometry.model.levels[0]!.polygons[0]!.area).toBe(170_000);
+    expect(geometry.model.levels[0]!.polygons[0]!.centroid.x).toBeCloseTo(373.5294118);
+    expect(geometry.model.levels[0]!.polygons[0]!.centroid.z).toBeCloseTo(-322.0588235);
+    expect(screen.getByTestId("room-metric").textContent).toContain("17.00 m²");
+    expect(level.walls.reduce((sum, wall) => sum + Math.hypot(
+      wall.end.x - wall.start.x,
+      wall.end.z - wall.start.z
+    ), 0)).toBe(1_800);
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toHaveLength(6);
+  });
+
+  it("cancels Room shape placement without dirtying or adding history", async () => {
+    const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rectangle" }));
+    const svg = await screen.findByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 100, clientY: 100, pointerId: 420 });
+    expect(screen.getByTestId("room-shape-preview")).toBeTruthy();
+
+    fireEvent.wheel(svg, { clientX: 100, clientY: 100, deltaY: -80 });
+    expect(store.getState().projectEditor.transient.interaction?.kind)
+      .toBe("place-room-shape");
+    expect(screen.getByTestId("room-shape-preview")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    expect(screen.queryByTestId("room-shape-preview")).toBeNull();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rectangle" }));
+    const resumedSvg = await screen.findByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(resumedSvg);
+    fireEvent.pointerMove(resumedSvg, { clientX: 110, clientY: 110, pointerId: 421 });
+    expect(screen.getByTestId("room-shape-preview")).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("room-shape-preview")).toBeNull();
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toEqual([]);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+  });
+
   it("creates an explicit Room, supports undo and redo, and keeps grid controls transient", async () => {
     const unassignedProject = structuredClone(demoProjectFixture);
     unassignedProject.viewpoints = [];
@@ -1066,6 +1308,7 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.dirty).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Detect room" }));
     const clickedCandidate = (await screen.findAllByTestId("room-face-candidate"))[0]!;
     const clickedFaceKey = clickedCandidate.getAttribute("data-face-key");
     fireEvent.click(clickedCandidate);
@@ -1132,6 +1375,7 @@ describe("ProjectViewerPage", () => {
       .toHaveLength(4);
     const historyBeforeRoom = store.getState().projectEditor.history.past.length;
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Detect room" }));
     const candidate = await screen.findByTestId("room-face-candidate");
     expect(candidate.getAttribute("points")?.split(" ")).toHaveLength(4);
     fireEvent.click(candidate);
@@ -1155,6 +1399,7 @@ describe("ProjectViewerPage", () => {
     act(() => store.dispatch(editingDraftReplaced(createMultiWallSubdivisionProject())));
 
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Detect room" }));
     const candidates = await screen.findAllByTestId("room-face-candidate");
     expect(candidates).toHaveLength(1);
     const clickedCandidatePoints = candidates[0]!.getAttribute("points");
@@ -1197,6 +1442,7 @@ describe("ProjectViewerPage", () => {
     };
     act(() => store.dispatch(editingDraftReplaced(project)));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Detect room" }));
     const candidate = (await screen.findAllByTestId("room-face-candidate"))[0]!;
     fireEvent.click(candidate);
     const before = store.getState().projectEditor.draft;

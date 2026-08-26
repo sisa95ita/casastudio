@@ -160,19 +160,14 @@ export function resolveDrawWallSnapCandidate(
     if (candidate) return candidate;
   }
 
-  if (options.grid?.enabled && options.grid.spacing > 0 && Number.isFinite(options.grid.spacing) && options.worldPoint) {
-    const point = {
-      x: Math.round(options.worldPoint.x / options.grid.spacing) * options.grid.spacing,
-      z: Math.round(options.worldPoint.z / options.grid.spacing) * options.grid.spacing
-    };
-    const visualDistancePixels = Math.hypot(
-      point.x - options.worldPoint.x,
-      point.z - options.worldPoint.z
-    ) * options.grid.worldToSvgScale * cssScale;
-    if (visualDistancePixels <= tolerance) {
-      return { kind: "grid", geometryId: `grid:${point.x}:${point.z}`, point, visualDistancePixels };
-    }
-  }
+  const grid = options.worldPoint && options.grid
+    ? resolveGridSnapCandidate(options.worldPoint, {
+        ...options.grid,
+        cssPixelsPerSvgUnit: cssScale,
+        tolerancePixels: tolerance
+      })
+    : undefined;
+  if (grid) return grid;
 
   return {
     kind: "free",
@@ -184,6 +179,42 @@ export function resolveDrawWallSnapCandidate(
 
 /** Shared resolver for tools that acquire a point in canonical Project space. */
 export const resolveProjectPointSnapCandidate = resolveDrawWallSnapCandidate;
+
+/** Resolves grid-only authoring alignment using the shared visible tolerance. */
+export function resolveGridSnapCandidate(
+  worldPoint: WorldPointXZ,
+  options: {
+    readonly enabled: boolean;
+    readonly spacing: number;
+    readonly worldToSvgScale: number;
+    readonly cssPixelsPerSvgUnit?: number;
+    readonly tolerancePixels?: number;
+  }
+): Extract<DrawWallSnapCandidate, { readonly kind: "grid" }> | undefined {
+  if (!options.enabled || !Number.isFinite(options.spacing) || options.spacing <= 0) {
+    return undefined;
+  }
+  const point = {
+    x: Math.round(worldPoint.x / options.spacing) * options.spacing,
+    z: Math.round(worldPoint.z / options.spacing) * options.spacing
+  };
+  const visualDistancePixels = Math.hypot(
+    point.x - worldPoint.x,
+    point.z - worldPoint.z
+  ) * options.worldToSvgScale * (options.cssPixelsPerSvgUnit ?? 1);
+  if (
+    visualDistancePixels >
+    (options.tolerancePixels ?? drawWallSnapConfiguration.tolerancePixels)
+  ) {
+    return undefined;
+  }
+  return {
+    kind: "grid",
+    geometryId: `grid:${point.x}:${point.z}`,
+    point,
+    visualDistancePixels
+  };
+}
 
 function chooseNearest<T extends DrawWallSnapCandidate>(candidates: readonly T[]): T | undefined {
   return [...candidates].sort((first, second) => {

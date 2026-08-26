@@ -12,6 +12,8 @@ export type ProjectEditorInteraction = {
   readonly openingPlacement?: "DOOR" | "WINDOW";
   readonly openingEditingEnabled?: boolean;
   readonly measurementEnabled?: boolean;
+  /** Whether the canvas accepts and preserves Room shape placement input. */
+  readonly roomShapePlacementEnabled?: boolean;
 };
 
 /** Durable UI and interaction contract for one editor tool. */
@@ -83,7 +85,8 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         panAnywhere: false,
         drawWallEnabled: false,
         wallEndpointEditingEnabled: false,
-        openingEditingEnabled: false
+        openingEditingEnabled: false,
+        roomShapePlacementEnabled: true
       }
     },
     {
@@ -121,7 +124,8 @@ export function getProjectEditorInteraction(
       drawWallEnabled: false,
       wallEndpointEditingEnabled: false,
       openingEditingEnabled: false,
-      measurementEnabled: false
+      measurementEnabled: false,
+      roomShapePlacementEnabled: tool === "room"
     };
   }
 

@@ -124,6 +124,7 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
   const wallCountAfterDrawing = await wallEdges.count();
 
   await page.getByRole("button", { name: "Room" }).click();
+  await page.getByRole("menuitem", { name: "Detect room" }).click();
   const roomCandidate = editorViewport
     .locator('[data-testid="room-face-candidate"]')
     .first();
@@ -139,6 +140,128 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
   await expect(wallEdges).toHaveCount(wallCountAfterDrawing);
 
   await test.info().attach("browser-console-errors", {
+    body: Buffer.from(JSON.stringify(consoleErrors, null, 2)),
+    contentType: "application/json"
+  });
+  expect(pageErrors, "Unexpected uncaught browser errors").toEqual([]);
+  expect(consoleErrors, "Unexpected browser console errors").toEqual([]);
+});
+
+test("creates, places, persists, and reloads a rectangular Room shape", async ({
+  page
+}) => {
+  test.setTimeout(120_000);
+  const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;
+  if (!demoPassword) {
+    throw new Error(
+      "CASASTUDIO_KEYCLOAK_DEMO_PASSWORD is required in the environment or repository-root .env."
+    );
+  }
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message: ConsoleMessage) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto("/app");
+  await page.locator("#username").fill("demo");
+  await page.locator("#password").fill(demoPassword);
+  await page.locator("#kc-login").click();
+  await expect(page.getByRole("heading", { name: "Projects", level: 1 }))
+    .toBeVisible();
+
+  const projectName = `Room Shape ${Date.now()}`;
+  await page.getByRole("button", { name: "New Project" }).click();
+  await page.getByLabel("Project name").fill(projectName);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page.getByRole("heading", { name: projectName, level: 1 }))
+    .toBeVisible();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Room" }).click();
+  await expect(page.getByRole("menuitem", { name: "Detect room" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Rectangle" })).toBeEnabled();
+  await expect(page.getByRole("menuitem", { name: "L-shape" })).toBeEnabled();
+  await page.getByRole("menuitem", { name: "Rectangle" }).click();
+  await page.getByRole("spinbutton", { name: "Width" }).fill("400");
+  await page.getByRole("spinbutton", { name: "Depth" }).fill("300");
+
+  const editorViewport = page.locator(
+    'svg[aria-labelledby="geometry-svg-title geometry-svg-description"]'
+  );
+  await expect(editorViewport).toBeVisible();
+  const viewportBounds = await editorViewport.boundingBox();
+  if (!viewportBounds) throw new Error("The empty Project editor viewport has no bounds.");
+  const placement = {
+    x: viewportBounds.x + viewportBounds.width * 0.28,
+    y: viewportBounds.y + viewportBounds.height * 0.24
+  };
+  await page.mouse.move(placement.x, placement.y);
+  const preview = editorViewport.locator('[data-testid="room-shape-preview"]');
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-segment-count", "4");
+  await expect(page.getByText("No unsaved changes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Undo" })).toBeDisabled();
+
+  await page.keyboard.down("Space");
+  await expect(editorViewport).toHaveClass(/geometry-svg--pan/);
+  await page.mouse.move(placement.x + 30, placement.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(placement.x + 58, placement.y + 38);
+  await page.mouse.up();
+  await page.keyboard.up("Space");
+  await expect(preview).toBeVisible();
+  await expect(editorViewport).not.toHaveClass(/geometry-svg--pan/);
+
+  await page.mouse.move(placement.x, placement.y);
+  await expect(preview).toBeVisible();
+  await page.mouse.click(placement.x, placement.y);
+  await expect(preview).toHaveCount(0);
+  const roomLabels = editorViewport.locator('[data-testid="room-metric"]');
+  await expect(roomLabels).toHaveCount(1);
+  await expect(roomLabels).toContainText("12.00 m²");
+  await expect(editorViewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(1);
+  await expect(editorViewport.locator('[data-testid="architectural-wall-body"]')).toHaveCount(4);
+  await expect(page.getByRole("menuitem", { name: "Rectangle" })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "L-shape" })).toBeDisabled();
+  await expect(
+    page.getByText("Room shapes are currently available only on an empty level.")
+  ).toBeVisible();
+
+  await page.getByRole("tab", { name: "Properties" }).click();
+  const roomName = page.getByLabel("Name");
+  await roomName.fill("Rectangle Studio");
+  await roomName.press("Enter");
+  await expect(roomLabels).toContainText("Rectangle Studio");
+
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(roomLabels).toContainText("Room 1");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(roomLabels).toHaveCount(0);
+  await expect(editorViewport.locator('[data-testid="architectural-wall-body"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Redo" }).click();
+  await expect(roomLabels).toHaveCount(1);
+  await expect(editorViewport.locator('[data-testid="architectural-wall-body"]')).toHaveCount(4);
+  await page.getByRole("button", { name: "Redo" }).click();
+  await expect(roomLabels).toContainText("Rectangle Studio");
+
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  await page.reload();
+  await expect(page.getByRole("heading", { name: projectName, level: 1 }))
+    .toBeVisible();
+  const reloadedViewport = page.locator(
+    'svg[aria-labelledby="geometry-svg-title geometry-svg-description"]'
+  );
+  await expect(reloadedViewport.locator('[data-testid="room-metric"]'))
+    .toContainText("Rectangle Studio");
+  await expect(reloadedViewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(1);
+  await expect(reloadedViewport.locator('[data-testid="architectural-wall-body"]')).toHaveCount(4);
+
+  await test.info().attach("room-shape-browser-console-errors", {
     body: Buffer.from(JSON.stringify(consoleErrors, null, 2)),
     contentType: "application/json"
   });
