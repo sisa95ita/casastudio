@@ -20,6 +20,7 @@ import {
   editorOpeningDragPreviewChanged,
   editorOpeningDragStarted,
   editorOpeningDragThresholdCrossed,
+  editorOpeningAuthoringPropertiesChanged,
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
   editorRedoRequested,
@@ -212,6 +213,33 @@ describe("Project editor state", () => {
     expect(state.dirty).toBe(false);
   });
 
+  it.each([
+    ["door", "DOOR", 90],
+    ["window", "WINDOW", 120],
+    ["opening", "OPENING", 120]
+  ] as const)("initializes %s authoring defaults without dirtying history", (tool, openingType, width) => {
+    let state = projectEditorReducer(undefined, editingSessionEntered({
+      project: demoProjectFixture,
+      baseRevision: demoProjectFixture.revision
+    }));
+    state = projectEditorReducer(state, editorActiveToolChanged(tool));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "place-opening",
+      openingType,
+      properties: { width }
+    });
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorOpeningAuthoringPropertiesChanged({ width: 70 }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "place-opening",
+      openingType,
+      properties: { width: 70 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+    expect(state.history).toEqual({ past: [], future: [] });
+  });
+
   it("keeps valid and invalid Opening drag proposals outside draft history", () => {
     let state = projectEditorReducer(
       undefined,
@@ -315,7 +343,11 @@ describe("Project editor state", () => {
       expect(state.activeTool).toBe(nextTool);
       expect(state.selection).toEqual([]);
       expect(state.hover).toBeUndefined();
-      expect(state.transient.interaction).toBeNull();
+      if (nextTool === "door") {
+        expect(state.transient.interaction).toMatchObject({ kind: "place-opening", openingType: "DOOR" });
+      } else {
+        expect(state.transient.interaction).toBeNull();
+      }
     }
   );
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Level } from "@casastudio/schema";
 
-import { createGeometrySelectionState, selectDoor } from "./geometry-selection-state";
+import { createGeometrySelectionState, selectDoor, selectWallOpening } from "./geometry-selection-state";
 import { createArchitecturalPresentationModel2D } from "./architectural-presentation-model-2d";
 import { ViewportTransform2D } from "./viewport-transform-2d";
 
@@ -30,6 +30,21 @@ describe("architectural presentation model", () => {
     expect(model.windows[0]?.glazingLines).toHaveLength(2);
     expect(model.joins).toHaveLength(1);
     expect(model.joins[0]?.radius).toBe(10);
+  });
+
+  it("presents a selectable generic Wall Opening without type-specific graphics", () => {
+    const openingLevel: Level = structuredClone(level);
+    openingLevel.walls[0]!.openings.push({ id: "passage", type: "OPENING", offsetFromStart: 390, width: 80, height: 220, elevation: 0 });
+    const model = createArchitecturalPresentationModel2D(
+      openingLevel,
+      new ViewportTransform2D({ scale: 1, offsetX: 0, offsetY: 500 }),
+      createGeometrySelectionState([selectWallOpening("passage")])
+    );
+    expect(model.openings).toEqual([
+      expect.objectContaining({ kind: "OPENING", geometryId: "passage", selected: true })
+    ]);
+    expect(model.openings[0]).not.toHaveProperty("glazingLines");
+    expect(model.openings[0]).not.toHaveProperty("arcPath");
   });
 });
 

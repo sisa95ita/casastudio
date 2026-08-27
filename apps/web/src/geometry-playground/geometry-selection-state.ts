@@ -7,7 +7,8 @@ export type GeometrySelectionKind =
   | "VERTEX"
   | "WALL"
   | "DOOR"
-  | "WINDOW";
+  | "WINDOW"
+  | "OPENING";
 
 /**
  * UI-only selection reference for immutable presented geometry.
@@ -76,6 +77,12 @@ export const selectDoor = (geometryId: string): GeometrySelection => ({
 /** Creates a Window selection reference. */
 export const selectWindow = (geometryId: string): GeometrySelection => ({
   kind: "WINDOW",
+  geometryId
+});
+
+/** Creates a generic Wall Opening selection reference. */
+export const selectWallOpening = (geometryId: string): GeometrySelection => ({
+  kind: "OPENING",
   geometryId
 });
 

@@ -1,12 +1,12 @@
 import { projectPointOntoWall } from "@casastudio/geometry";
 import {
   IdentifierSchema,
-  createDoor,
-  createWindow,
+  createOpening,
   type Door,
   type Opening,
   type Project,
   type ProjectEditingResult,
+  type WallOpening,
   type Wall,
   type Window
 } from "@casastudio/schema";
@@ -16,8 +16,18 @@ import type { WorldPointXZ } from "../geometry-playground/viewport-transform-2d"
 /** Project-unit defaults used by the Door and Window placement tools. */
 export const newOpeningDefaults = Object.freeze({
   door: { width: 90, height: 210, elevation: 0 },
-  window: { width: 120, height: 120, elevation: 90 }
+  window: { width: 120, height: 120, elevation: 90 },
+  opening: { width: 120, height: 210, elevation: 0 }
 });
+
+/** Physical and orientation values consumed by a transient Opening preview. */
+export type OpeningPlacementProperties = {
+  readonly width: number;
+  readonly height: number;
+  readonly elevation: number;
+  readonly hingeSide?: "START" | "END";
+  readonly swingSide?: "LEFT" | "RIGHT";
+};
 
 /** Validated Wall-local proposal for one transient Opening placement. */
 export type OpeningPlacementCandidate = {
@@ -43,12 +53,17 @@ export function resolveOpeningPlacementCandidate(
   project: Project,
   levelId: string,
   point: WorldPointXZ,
-  type: "DOOR" | "WINDOW",
-  maxSegmentDistance: number
+  type: "DOOR" | "WINDOW" | "OPENING",
+  maxSegmentDistance: number,
+  pendingProperties?: OpeningPlacementProperties
 ): OpeningPlacementCandidate | undefined {
   const level = project.building.levels.find((candidate) => candidate.id === levelId);
   if (!level) return undefined;
-  const defaults = type === "DOOR" ? newOpeningDefaults.door : newOpeningDefaults.window;
+  const defaults: OpeningPlacementProperties = pendingProperties ?? (type === "DOOR"
+    ? newOpeningDefaults.door
+    : type === "WINDOW"
+      ? newOpeningDefaults.window
+      : newOpeningDefaults.opening);
   const projections = level.walls.flatMap((wall) => {
     const projection = projectPointOntoWall(point, wall);
     const wallLength = Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z);
@@ -73,15 +88,21 @@ export function resolveOpeningPlacementCandidate(
         id: "opening-placement-preview",
         type,
         offsetFromStart,
-        ...defaults,
-        hingeSide: "START",
-        swingSide: "LEFT",
+        width: defaults.width,
+        height: defaults.height,
+        elevation: defaults.elevation,
+        hingeSide: defaults.hingeSide ?? "START",
+        swingSide: defaults.swingSide ?? "LEFT",
         connectedRoomIds: nearest.wall.roomIds.length > 0 ? [...nearest.wall.roomIds] : undefined
       } satisfies Door)
-    : ({ id: "opening-placement-preview", type, offsetFromStart, ...defaults } satisfies Window);
-  const validation = type === "DOOR"
-    ? createDoor(project, { levelId, wallId: nearest.wall.id, door: opening as Door })
-    : createWindow(project, { levelId, wallId: nearest.wall.id, window: opening as Window });
+    : type === "WINDOW"
+      ? ({ id: "opening-placement-preview", type, offsetFromStart, width: defaults.width, height: defaults.height, elevation: defaults.elevation } satisfies Window)
+      : ({ id: "opening-placement-preview", type, offsetFromStart, width: defaults.width, height: defaults.height, elevation: defaults.elevation } satisfies WallOpening);
+  const validation = createOpening(project, {
+    levelId,
+    wallId: nearest.wall.id,
+    opening
+  });
   return {
     wallId: nearest.wall.id,
     wallStateKey: createOpeningPlacementWallStateKey(nearest.wall),
@@ -107,9 +128,11 @@ export function commitOpeningPlacementCandidate(
   ) return undefined;
 
   const opening = { ...candidate.opening, id: openingId } as Opening;
-  return opening.type === "DOOR"
-    ? createDoor(project, { levelId, wallId: candidate.wallId, door: opening })
-    : createWindow(project, { levelId, wallId: candidate.wallId, window: opening });
+  return createOpening(project, {
+    levelId,
+    wallId: candidate.wallId,
+    opening
+  });
 }
 
 /** Produces the canonical Wall-state guard carried by a transient placement. */

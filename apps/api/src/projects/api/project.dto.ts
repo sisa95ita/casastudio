@@ -90,7 +90,7 @@ export class RoomDto {
 }
 
 /**
- * Door or window opening owned by a Wall.
+ * Architectural opening owned by a Wall.
  */
 export class OpeningDto {
   @ApiProperty({ type: String })

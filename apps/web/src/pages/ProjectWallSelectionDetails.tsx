@@ -3,6 +3,10 @@ import {
   Alert,
   Button,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Typography
@@ -21,12 +25,14 @@ export function ProjectWallSelectionDetails({
   units,
   endpointAvailability,
   onDelete,
+  onAddVertex,
   editable = true
 }: {
   readonly wall?: Wall;
   readonly units: Project["units"];
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly onDelete: () => void;
+  readonly onAddVertex?: () => void;
   readonly editable?: boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
@@ -123,6 +129,13 @@ export function ProjectWallSelectionDetails({
         </Alert>
       ) : null}
       {editable ? <Button
+        variant="outlined"
+        size="small"
+        onClick={onAddVertex}
+      >
+        {t("wall.addVertex")}
+      </Button> : null}
+      {editable ? <Button
         color="error"
         variant="outlined"
         size="small"
@@ -144,16 +157,37 @@ export function ProjectWallPropertiesDetails({
   readonly wall?: Wall;
   readonly units: Project["units"];
   readonly onUpdateProperties: (properties: {
+    readonly length?: number;
+    readonly anchoredEndpoint?: "START" | "END";
     readonly height?: number;
     readonly thickness?: number;
   }) => boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
+  const [anchoredEndpoint, setAnchoredEndpoint] = useState<"START" | "END">("START");
   if (!wall) return <PropertiesUnavailable />;
 
   return (
     <Stack component="section" spacing={1.5}>
       <Typography variant="subtitle2">{t("wall.propertiesTitle")}</Typography>
+      <WallMeasurementField
+        label={t("wall.labels.length")}
+        unit={units.length}
+        value={measureWall(wall).length}
+        onCommit={(length) => onUpdateProperties({ length, anchoredEndpoint })}
+      />
+      <FormControl size="small" fullWidth>
+        <InputLabel id="wall-resize-anchor-label">{t("wall.resizeFrom")}</InputLabel>
+        <Select
+          labelId="wall-resize-anchor-label"
+          label={t("wall.resizeFrom")}
+          value={anchoredEndpoint}
+          onChange={(event) => setAnchoredEndpoint(event.target.value as "START" | "END")}
+        >
+          <MenuItem value="START">{t("wall.resizeFromStart")}</MenuItem>
+          <MenuItem value="END">{t("wall.resizeFromEnd")}</MenuItem>
+        </Select>
+      </FormControl>
       <WallMeasurementField
         label={t("wall.labels.thickness")}
         unit={units.length}

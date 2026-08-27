@@ -1,6 +1,7 @@
 import {
   createArchitecturalWallBodyShapes,
   createDoorPlanGeometry,
+  createWallOpeningPlanGeometry,
   createWindowPlanGeometry
 } from "@casastudio/geometry";
 import type { Level, Point2D } from "@casastudio/schema";
@@ -49,11 +50,24 @@ export type WindowPresentation2D = {
   readonly hovered: boolean;
 };
 
+/** Screen-oriented unadorned Wall Opening symbol. */
+export type WallOpeningPresentation2D = {
+  readonly kind: "OPENING";
+  readonly geometryId: string;
+  readonly wallId: string;
+  readonly spanStart: ScreenPoint;
+  readonly spanEnd: ScreenPoint;
+  readonly jambs: readonly [readonly [ScreenPoint, ScreenPoint], readonly [ScreenPoint, ScreenPoint]];
+  readonly selected: boolean;
+  readonly hovered: boolean;
+};
+
 /** Product-plan presentation kept separate from diagnostic runtime geometry. */
 export type ArchitecturalPresentationModel2D = {
   readonly walls: readonly ArchitecturalWallPresentation2D[];
   readonly doors: readonly DoorPresentation2D[];
   readonly windows: readonly WindowPresentation2D[];
+  readonly openings: readonly WallOpeningPresentation2D[];
   readonly joins: readonly { readonly point: ScreenPoint; readonly radius: number }[];
 };
 
@@ -77,6 +91,7 @@ export function createArchitecturalPresentationModel2D(
   }));
   const doors: DoorPresentation2D[] = [];
   const windows: WindowPresentation2D[] = [];
+  const openings: WallOpeningPresentation2D[] = [];
   for (const wall of level.walls) {
     for (const opening of wall.openings) {
       if (opening.type === "DOOR") {
@@ -96,7 +111,7 @@ export function createArchitecturalPresentationModel2D(
           selected: isGeometrySelectionMatch(selection.selected, "DOOR", opening.id),
           hovered: isGeometrySelectionMatch(selection.hovered, "DOOR", opening.id)
         });
-      } else {
+      } else if (opening.type === "WINDOW") {
         const geometry = createWindowPlanGeometry(wall, opening);
         windows.push({
           kind: "WINDOW",
@@ -108,6 +123,18 @@ export function createArchitecturalPresentationModel2D(
           jambs: mapLines(geometry.jambs, transform),
           selected: isGeometrySelectionMatch(selection.selected, "WINDOW", opening.id),
           hovered: isGeometrySelectionMatch(selection.hovered, "WINDOW", opening.id)
+        });
+      } else {
+        const geometry = createWallOpeningPlanGeometry(wall, opening);
+        openings.push({
+          kind: "OPENING",
+          geometryId: opening.id,
+          wallId: wall.id,
+          spanStart: transform.worldToScreen(geometry.span.start),
+          spanEnd: transform.worldToScreen(geometry.span.end),
+          jambs: mapLines(geometry.jambs, transform),
+          selected: isGeometrySelectionMatch(selection.selected, "OPENING", opening.id),
+          hovered: isGeometrySelectionMatch(selection.hovered, "OPENING", opening.id)
         });
       }
     }
@@ -135,6 +162,7 @@ export function createArchitecturalPresentationModel2D(
     walls,
     doors,
     windows,
+    openings,
     joins: [...junctions.values()]
       .filter((junction) => junction.count > 1 && !junction.blockedByOpening)
       .map((junction) => ({ point: transform.worldToScreen(junction.point), radius: transform.scaleLength(junction.thickness / 2) }))

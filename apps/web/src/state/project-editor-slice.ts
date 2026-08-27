@@ -54,11 +54,32 @@ export type MoveJunctionInteraction = {
   readonly currentPointerPoint: WorldPointXZ;
 };
 
-/** Describes a Door/Window proposal that has not entered Project history. */
+/** Editable physical defaults owned by one transient Opening tool session. */
+export type OpeningAuthoringProperties = {
+  readonly width: number;
+  readonly height: number;
+  readonly elevation: number;
+  readonly hingeSide?: "START" | "END";
+  readonly swingSide?: "LEFT" | "RIGHT";
+};
+
+/** Opening kinds supported by transient placement authoring. */
+export type OpeningAuthoringType = "DOOR" | "WINDOW" | "OPENING";
+
+/** Describes an Opening proposal that has not entered Project history. */
 export type PlaceOpeningInteraction = {
   readonly kind: "place-opening";
-  readonly openingType: "DOOR" | "WINDOW";
+  readonly openingType: OpeningAuthoringType;
+  readonly properties: OpeningAuthoringProperties;
   readonly candidate?: OpeningPlacementCandidate;
+};
+
+/** Describes a point-on-Wall split proposal that has not entered history. */
+export type AddWallVertexInteraction = {
+  readonly kind: "add-wall-vertex";
+  readonly levelId: string;
+  readonly wallId: string;
+  readonly splitPoint?: WorldPointXZ;
 };
 
 /** Describes an Opening drag constrained to its owning Wall. */
@@ -93,7 +114,7 @@ export type PlaceRoomShapeInteraction = {
 export type ProjectEditorTransientState = {
   readonly interaction:
     DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
-    PlaceOpeningInteraction | MoveOpeningInteraction | MeasureInteraction |
+    PlaceOpeningInteraction | AddWallVertexInteraction | MoveOpeningInteraction | MeasureInteraction |
     PlaceRoomShapeInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
@@ -183,6 +204,26 @@ type EnterEditingPayload = {
   readonly baseRevision: number;
   readonly preferredLevelId?: string;
 };
+
+/** Creates deterministic, Project-unit defaults for a new Opening tool session. */
+export function createOpeningAuthoringInteraction(
+  openingType: OpeningAuthoringType
+): PlaceOpeningInteraction {
+  return {
+    kind: "place-opening",
+    openingType,
+    properties: openingType === "DOOR"
+      ? { width: 90, height: 210, elevation: 0, hingeSide: "START", swingSide: "LEFT" }
+      : openingType === "WINDOW"
+        ? { width: 120, height: 120, elevation: 90 }
+        : { width: 120, height: 210, elevation: 0 }
+  };
+}
+
+/** Maps an Opening authoring tool to its canonical Opening discriminator. */
+function getOpeningTypeForTool(tool: ProjectEditorTool | null): OpeningAuthoringType | undefined {
+  return tool === "door" ? "DOOR" : tool === "window" ? "WINDOW" : tool === "opening" ? "OPENING" : undefined;
+}
 
 const projectEditorSlice = createSlice({
   name: "projectEditor",
@@ -365,7 +406,12 @@ const projectEditorSlice = createSlice({
         state.activeTool = action.payload;
         state.selection = [];
         state.hover = undefined;
-        state.transient = { interaction: null };
+        const openingType = getOpeningTypeForTool(action.payload);
+        state.transient = {
+          interaction: openingType
+            ? createOpeningAuthoringInteraction(openingType)
+            : null
+        };
       }
     },
     editorDrawWallStarted(
@@ -541,20 +587,61 @@ const projectEditorSlice = createSlice({
     editorOpeningPlacementChanged(
       state,
       action: PayloadAction<{
-        readonly openingType: "DOOR" | "WINDOW";
+        readonly openingType: OpeningAuthoringType;
+        readonly properties?: OpeningAuthoringProperties;
         readonly candidate?: OpeningPlacementCandidate;
       }>
     ) {
       if (
         state.mode === "edit" &&
         ((state.activeTool === "door" && action.payload.openingType === "DOOR") ||
-          (state.activeTool === "window" && action.payload.openingType === "WINDOW"))
+          (state.activeTool === "window" && action.payload.openingType === "WINDOW") ||
+          (state.activeTool === "opening" && action.payload.openingType === "OPENING"))
       ) {
+        const current = state.transient.interaction;
         state.transient.interaction = {
           kind: "place-opening",
           openingType: action.payload.openingType,
+          properties: action.payload.properties ??
+            (current?.kind === "place-opening" && current.openingType === action.payload.openingType
+              ? current.properties
+              : createOpeningAuthoringInteraction(action.payload.openingType).properties),
           candidate: action.payload.candidate
         };
+      }
+    },
+    editorOpeningAuthoringPropertiesChanged(
+      state,
+      action: PayloadAction<Partial<OpeningAuthoringProperties>>
+    ) {
+      if (state.transient.interaction?.kind === "place-opening") {
+        state.transient.interaction.properties = {
+          ...state.transient.interaction.properties,
+          ...action.payload
+        };
+        state.transient.interaction.candidate = undefined;
+      }
+    },
+    editorWallVertexPlacementStarted(
+      state,
+      action: PayloadAction<{ readonly levelId: string; readonly wallId: string }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient = {
+          interaction: {
+            kind: "add-wall-vertex",
+            levelId: action.payload.levelId,
+            wallId: action.payload.wallId
+          }
+        };
+      }
+    },
+    editorWallVertexPlacementChanged(
+      state,
+      action: PayloadAction<WorldPointXZ | undefined>
+    ) {
+      if (state.transient.interaction?.kind === "add-wall-vertex") {
+        state.transient.interaction.splitPoint = action.payload;
       }
     },
     editorOpeningDragStarted(
@@ -683,6 +770,9 @@ export const {
   editorRoomShapePlacementChanged,
   editorRoomShapePlacementPointerMoved,
   editorOpeningPlacementChanged,
+  editorOpeningAuthoringPropertiesChanged,
+  editorWallVertexPlacementStarted,
+  editorWallVertexPlacementChanged,
   editorOpeningDragStarted,
   editorOpeningDragThresholdCrossed,
   editorOpeningDragPreviewChanged,

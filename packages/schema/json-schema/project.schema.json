@@ -774,6 +774,45 @@
               "type"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "name": {
+                "$ref": "#/$defs/__schema9"
+              },
+              "description": {
+                "$ref": "#/$defs/__schema6"
+              },
+              "offsetFromStart": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "width": {
+                "$ref": "#/$defs/__schema12"
+              },
+              "height": {
+                "$ref": "#/$defs/__schema12"
+              },
+              "elevation": {
+                "$ref": "#/$defs/__schema16"
+              },
+              "type": {
+                "type": "string",
+                "const": "OPENING"
+              }
+            },
+            "required": [
+              "id",
+              "offsetFromStart",
+              "width",
+              "height",
+              "elevation",
+              "type"
+            ],
+            "additionalProperties": false
           }
         ]
       }

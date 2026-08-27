@@ -21,6 +21,7 @@ describe("shared enum schemas", () => {
 
   it("validates documented opening types", () => {
     expect(OpeningTypeSchema.parse("WINDOW")).toBe("WINDOW");
+    expect(OpeningTypeSchema.parse("OPENING")).toBe("OPENING");
     expect(OpeningTypeSchema.safeParse("ARCH").success).toBe(false);
   });
 

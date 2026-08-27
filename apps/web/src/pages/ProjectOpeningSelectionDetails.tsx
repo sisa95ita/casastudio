@@ -1,7 +1,7 @@
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import FlipRoundedIcon from "@mui/icons-material/FlipRounded";
-import { Button, Divider, Stack, TextField, Typography } from "@mui/material";
+import { Button, Divider, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
 import {
   formatArchitecturalLength,
   getDoorHingeSide,
@@ -15,6 +15,51 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { useCasaTranslation } from "../i18n";
 import { formatEditorMeasurement, normalizeEditorMeasurement } from "./editor-measurement";
+import type { OpeningAuthoringProperties, OpeningAuthoringType } from "../state/project-editor-slice";
+
+/** Renders editable defaults for an Opening before it is placed. */
+export function ProjectNewOpeningPropertiesDetails({
+  openingType,
+  properties,
+  units,
+  onChange
+}: {
+  readonly openingType: OpeningAuthoringType;
+  readonly properties: OpeningAuthoringProperties;
+  readonly units: Project["units"];
+  readonly onChange: (properties: Partial<OpeningAuthoringProperties>) => void;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  const title = openingType === "DOOR"
+    ? "opening.newDoor"
+    : openingType === "WINDOW" ? "opening.newWindow" : "opening.newWallOpening";
+  return (
+    <Stack component="section" spacing={1.5}>
+      <Typography variant="subtitle2">{t(title)}</Typography>
+      <OpeningMeasurementField label={t("opening.labels.width")} unit={units.length} value={properties.width} onCommit={(width) => { onChange({ width }); return true; }} />
+      <OpeningMeasurementField label={t("opening.labels.height")} unit={units.length} value={properties.height} onCommit={(height) => { onChange({ height }); return true; }} />
+      <OpeningMeasurementField label={t(openingType === "WINDOW" ? "opening.labels.sillHeight" : "opening.labels.elevation")} unit={units.length} value={properties.elevation} onCommit={(elevation) => { onChange({ elevation }); return true; }} />
+      {openingType === "DOOR" ? (
+        <>
+          <FormControl size="small">
+            <InputLabel id="new-door-hinge-label">{t("opening.labels.hingeSide")}</InputLabel>
+            <Select labelId="new-door-hinge-label" label={t("opening.labels.hingeSide")} value={properties.hingeSide ?? "START"} onChange={(event) => onChange({ hingeSide: event.target.value as "START" | "END" })}>
+              <MenuItem value="START">{t("wall.resizeFromStart")}</MenuItem>
+              <MenuItem value="END">{t("wall.resizeFromEnd")}</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small">
+            <InputLabel id="new-door-swing-label">{t("opening.labels.swingSide")}</InputLabel>
+            <Select labelId="new-door-swing-label" label={t("opening.labels.swingSide")} value={properties.swingSide ?? "LEFT"} onChange={(event) => onChange({ swingSide: event.target.value as "LEFT" | "RIGHT" })}>
+              <MenuItem value="LEFT">{t("opening.left")}</MenuItem>
+              <MenuItem value="RIGHT">{t("opening.right")}</MenuItem>
+            </Select>
+          </FormControl>
+        </>
+      ) : null}
+    </Stack>
+  );
+}
 
 /** Displays one canonical Wall-owned Door or Window and safe contextual actions. */
 export function ProjectOpeningSelectionDetails({
@@ -37,7 +82,7 @@ export function ProjectOpeningSelectionDetails({
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const rows = [
-    [t("opening.labels.type"), t(opening.type === "DOOR" ? "opening.door" : "opening.window")],
+    [t("opening.labels.type"), t(opening.type === "DOOR" ? "opening.door" : opening.type === "WINDOW" ? "opening.window" : "opening.wallOpening")],
     [t("opening.labels.wall"), wall.name ?? wall.id],
     [t("opening.labels.width"), formatArchitecturalLength(opening.width, units.length)],
     [t("opening.labels.height"), formatArchitecturalLength(opening.height, units.length)],
@@ -46,7 +91,7 @@ export function ProjectOpeningSelectionDetails({
   return (
     <Stack component="section" spacing={1.5}>
       <Typography variant="subtitle2">
-        {t(opening.type === "DOOR" ? "opening.door" : "opening.window")}
+        {t(opening.type === "DOOR" ? "opening.door" : opening.type === "WINDOW" ? "opening.window" : "opening.wallOpening")}
       </Typography>
       <Stack component="dl" spacing={0} sx={{ m: 0 }}>
         {rows.map(([label, value]) => (
@@ -89,7 +134,7 @@ export function ProjectOpeningPropertiesDetails({ wall, opening, displayOffsetFr
   return (
     <Stack component="section" spacing={1.5}>
       <Typography variant="subtitle2">
-        {t(opening.type === "DOOR" ? "opening.doorProperties" : "opening.windowProperties")}
+        {t(opening.type === "DOOR" ? "opening.doorProperties" : opening.type === "WINDOW" ? "opening.windowProperties" : "opening.wallOpeningProperties")}
       </Typography>
       <Typography variant="caption" color="text.secondary">
         {t("opening.ownedBy", { wall: wall.name ?? wall.id })}
@@ -97,7 +142,7 @@ export function ProjectOpeningPropertiesDetails({ wall, opening, displayOffsetFr
       <OpeningMeasurementField label={t("opening.labels.width")} unit={units.length} value={opening.width} onCommit={(width) => onUpdate({ width })} />
       <OpeningMeasurementField label={t("opening.labels.height")} unit={units.length} value={opening.height} onCommit={(height) => onUpdate({ height })} />
       <OpeningMeasurementField label={t("opening.labels.offset")} unit={units.length} value={displayOffsetFromStart ?? opening.offsetFromStart} onCommit={(offsetFromStart) => onUpdate({ offsetFromStart })} />
-      {opening.type === "WINDOW" ? (
+      {opening.type !== "DOOR" ? (
         <OpeningMeasurementField label={t("opening.labels.sillHeight")} unit={units.length} value={opening.elevation} onCommit={(elevation) => onUpdate({ elevation })} />
       ) : null}
     </Stack>

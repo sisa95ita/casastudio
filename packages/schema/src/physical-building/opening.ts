@@ -54,9 +54,23 @@ export const WindowSchema = OpeningBaseSchema.extend({
 });
 
 /**
+ * Represents an unadorned passage through a Wall.
+ *
+ * Wall Openings use the shared physical-fit contract without Door navigation
+ * metadata or Window glazing semantics.
+ */
+export const WallOpeningSchema = OpeningBaseSchema.extend({
+  type: z.literal("OPENING")
+});
+
+/**
  * Discriminated schema for architectural openings owned by Walls.
  */
-export const OpeningSchema = z.discriminatedUnion("type", [DoorSchema, WindowSchema]);
+export const OpeningSchema = z.discriminatedUnion("type", [
+  DoorSchema,
+  WindowSchema,
+  WallOpeningSchema
+]);
 
 /**
  * Door opening with optional connected-room references.
@@ -74,8 +88,11 @@ export type DoorSwingSide = z.infer<typeof DoorSwingSideSchema>;
  */
 export type Window = z.infer<typeof WindowSchema>;
 
+/** Unadorned passage Opening owned by a Wall. */
+export type WallOpening = z.infer<typeof WallOpeningSchema>;
+
 /**
- * Architectural opening represented as either a Door or a Window.
+ * Architectural opening owned by a Wall.
  */
 export type Opening = z.infer<typeof OpeningSchema>;
 

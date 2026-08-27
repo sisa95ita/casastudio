@@ -6,6 +6,7 @@ import {
   type Opening,
   type Point2D,
   type Wall,
+  type WallOpening,
   type Window
 } from "@casastudio/schema";
 import { measureWall } from "./architectural-measurements.js";
@@ -157,6 +158,25 @@ export function createWindowPlanGeometry(wall: Wall, window: Window): WindowPlan
       [wallLocalPoint(wall, window.offsetFromStart, -inset), wallLocalPoint(wall, window.offsetFromStart + window.width, -inset)]
     ],
     jambs: createOpeningJambs(wall, window)
+  };
+}
+
+/** Architectural linework for an unadorned Wall Opening. */
+export type WallOpeningPlanGeometry = {
+  readonly kind: "OPENING";
+  readonly span: OpeningPlanSpan;
+  readonly jambs: readonly [readonly [Point2D, Point2D], readonly [Point2D, Point2D]];
+};
+
+/** Derives the clean passage span and jambs for a Wall Opening. */
+export function createWallOpeningPlanGeometry(
+  wall: Wall,
+  opening: WallOpening
+): WallOpeningPlanGeometry {
+  return {
+    kind: "OPENING",
+    span: createOpeningPlanSpan(wall, opening),
+    jambs: createOpeningJambs(wall, opening)
   };
 }
 

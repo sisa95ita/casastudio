@@ -98,6 +98,16 @@ describe("ProjectWallSelectionDetails", () => {
     fireEvent.blur(height);
     expect(handleUpdate).toHaveBeenCalledWith({ height: 0 });
     expect(height).toHaveProperty("value", "300");
+
+    handleUpdate.mockReturnValue(true);
+    const length = screen.getByRole("spinbutton", { name: "Length (cm)" });
+    fireEvent.change(length, { target: { value: "125.5" } });
+    fireEvent.keyDown(length, { key: "Enter" });
+    expect(handleUpdate).toHaveBeenCalledWith({ length: 125.5, anchoredEndpoint: "START" });
+
+    fireEvent.change(length, { target: { value: "42" } });
+    fireEvent.keyDown(length, { key: "Escape" });
+    expect(length).toHaveProperty("value", "100");
   });
 
   it("explains unavailable endpoint editing while retaining property controls", () => {

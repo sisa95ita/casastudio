@@ -24,9 +24,11 @@ import {
   ProjectWallSelectionDetails
 } from "./ProjectWallSelectionDetails";
 import {
+  ProjectNewOpeningPropertiesDetails,
   ProjectOpeningPropertiesDetails,
   ProjectOpeningSelectionDetails
 } from "./ProjectOpeningSelectionDetails";
+import type { OpeningAuthoringProperties, OpeningAuthoringType } from "../state/project-editor-slice";
 
 /** Dispatches Edit-mode selection details by runtime geometry kind. */
 export function ProjectSelectionDetails({
@@ -35,7 +37,10 @@ export function ProjectSelectionDetails({
   wall,
   units,
   endpointAvailability,
+  selectedVertexRemovable = false,
   onDeleteWall,
+  onAddWallVertex,
+  onRemoveVertex,
   opening,
   room,
   roomMeasurement,
@@ -51,7 +56,10 @@ export function ProjectSelectionDetails({
   readonly wall?: Wall;
   readonly units: Project["units"];
   readonly endpointAvailability?: WallEndpointEditingAvailability;
+  readonly selectedVertexRemovable?: boolean;
   readonly onDeleteWall: () => void;
+  readonly onAddWallVertex?: () => void;
+  readonly onRemoveVertex?: () => void;
   readonly opening?: Opening;
   readonly room?: Room;
   readonly roomMeasurement?: RoomMeasurement;
@@ -70,7 +78,7 @@ export function ProjectSelectionDetails({
   }
   if (
     selection.length === 1 &&
-    (selection[0]?.kind === "DOOR" || selection[0]?.kind === "WINDOW") &&
+    (selection[0]?.kind === "DOOR" || selection[0]?.kind === "WINDOW" || selection[0]?.kind === "OPENING") &&
     opening && openingWall
   ) {
     return <ProjectOpeningSelectionDetails wall={openingWall} opening={opening} displayOffsetFromStart={openingDisplayOffsetFromStart} units={units} onDelete={onDeleteOpening ?? (() => undefined)} onUpdate={onUpdateOpening ?? (() => false)} editable={editable} />;
@@ -94,6 +102,7 @@ export function ProjectSelectionDetails({
         units={units}
         endpointAvailability={endpointAvailability}
         onDelete={onDeleteWall}
+        onAddVertex={onAddWallVertex}
         editable={editable}
       />
     );
@@ -108,6 +117,8 @@ export function ProjectSelectionDetails({
           model={model}
           vertexId={vertex.geometryId}
           unit={units.length}
+          removable={selectedVertexRemovable}
+          onRemove={onRemoveVertex}
         />
       );
   }
@@ -126,7 +137,9 @@ export function ProjectPropertiesDetails({
   units,
   onUpdateWallProperties,
   onUpdateOpening,
-  onUpdateRoomProperties
+  onUpdateRoomProperties,
+  openingAuthoring,
+  onUpdateOpeningAuthoring
 }: {
   readonly selectionState: GeometrySelectionState;
   readonly wall?: Wall;
@@ -137,13 +150,30 @@ export function ProjectPropertiesDetails({
   readonly room?: Room;
   readonly units: Project["units"];
   readonly onUpdateWallProperties: (properties: {
+    readonly length?: number;
+    readonly anchoredEndpoint?: "START" | "END";
     readonly height?: number;
     readonly thickness?: number;
   }) => boolean;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
   readonly onUpdateRoomProperties?: (properties: Partial<UpdateRoomProperties>) => boolean;
+  readonly openingAuthoring?: {
+    readonly openingType: OpeningAuthoringType;
+    readonly properties: OpeningAuthoringProperties;
+  };
+  readonly onUpdateOpeningAuthoring?: (properties: Partial<OpeningAuthoringProperties>) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
+  if (openingAuthoring) {
+    return (
+      <ProjectNewOpeningPropertiesDetails
+        openingType={openingAuthoring.openingType}
+        properties={openingAuthoring.properties}
+        units={units}
+        onChange={onUpdateOpeningAuthoring ?? (() => undefined)}
+      />
+    );
+  }
   if (selectionState.selected.length === 0) {
     return <PropertiesMessage message={t("properties.selectObject")} />;
   }
@@ -161,7 +191,7 @@ export function ProjectPropertiesDetails({
     );
   }
   if (
-    (selection?.kind === "DOOR" || selection?.kind === "WINDOW") &&
+    (selection?.kind === "DOOR" || selection?.kind === "WINDOW" || selection?.kind === "OPENING") &&
     opening &&
     openingWall
   ) {
@@ -196,8 +226,10 @@ function ProjectMultiSelectionDetails({
         ? "rooms"
         : selection.kind === "DOOR"
           ? "doors"
-          : selection.kind === "WINDOW"
-            ? "windows"
+        : selection.kind === "WINDOW"
+          ? "windows"
+          : selection.kind === "OPENING"
+            ? "openings"
             : "junctions";
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   }
@@ -350,11 +382,15 @@ function EmptySelectionDetails() {
 function ProjectVertexSelectionDetails({
   model,
   vertexId,
-  unit
+  unit,
+  removable,
+  onRemove
 }: {
   readonly model: GeometryPresentationModel2D;
   readonly vertexId: string;
   readonly unit: string;
+  readonly removable: boolean;
+  readonly onRemove?: () => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const vertex = model.vertices.find(
@@ -419,6 +455,11 @@ function ProjectVertexSelectionDetails({
             </Typography>
           ))}
         </Stack>
+      ) : null}
+      {removable ? (
+        <Button size="small" variant="outlined" onClick={onRemove}>
+          {t("wall.removeVertex")}
+        </Button>
       ) : null}
     </Stack>
   );

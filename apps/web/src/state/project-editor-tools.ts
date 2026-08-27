@@ -1,5 +1,5 @@
 /** Tools available to the manual 2D Project editor. */
-export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "room" | "measure";
+export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "opening" | "room" | "measure";
 
 /** Interaction capabilities consumed by the shared geometry viewer. */
 export type ProjectEditorInteraction = {
@@ -9,7 +9,7 @@ export type ProjectEditorInteraction = {
   readonly panAnywhere?: boolean;
   readonly drawWallEnabled: boolean;
   readonly wallEndpointEditingEnabled: boolean;
-  readonly openingPlacement?: "DOOR" | "WINDOW";
+  readonly openingPlacement?: "DOOR" | "WINDOW" | "OPENING";
   readonly openingEditingEnabled?: boolean;
   readonly measurementEnabled?: boolean;
   /** Whether the canvas accepts and preserves Room shape placement input. */
@@ -73,6 +73,19 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         drawWallEnabled: false,
         wallEndpointEditingEnabled: false,
         openingPlacement: "WINDOW",
+        openingEditingEnabled: false
+      }
+    },
+    {
+      id: "opening",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: true,
+        panAnywhere: false,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false,
+        openingPlacement: "OPENING",
         openingEditingEnabled: false
       }
     },

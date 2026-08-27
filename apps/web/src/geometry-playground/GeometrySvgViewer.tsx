@@ -22,6 +22,7 @@ import {
   createGeometrySelectionState,
   selectBoundaryEdge,
   selectDoor,
+  selectWallOpening,
   selectPolygon,
   selectVertex,
   selectWall,
@@ -43,7 +44,11 @@ import {
 } from "./viewport-transform-2d";
 import type { WallEndpoint } from "@casastudio/schema";
 import type { Opening, Wall } from "@casastudio/schema";
-import { createDoorPlanGeometry, createWindowPlanGeometry } from "@casastudio/geometry";
+import {
+  createDoorPlanGeometry,
+  createWallOpeningPlanGeometry,
+  createWindowPlanGeometry
+} from "@casastudio/geometry";
 import type { DrawWallSnapCandidate } from "../state/project-wall-snapping";
 
 /**
@@ -202,6 +207,8 @@ export type GeometryEditorOverlay = {
   readonly drawWall?: {
     readonly start: WorldPointXZ;
     readonly end: WorldPointXZ;
+    /** Architectural label derived from the exact Project-space preview. */
+    readonly lengthLabel?: string;
   };
   /** Exact transient Room footprint projected through the shared viewport. */
   readonly roomShapePreview?: {
@@ -226,6 +233,8 @@ export type GeometryEditorOverlay = {
     readonly position: WorldPointXZ;
     readonly previewPosition: WorldPointXZ;
   };
+  /** Point-on-Wall preview for a canonical split. */
+  readonly wallVertexPreview?: WorldPointXZ;
   readonly openingPreview?: {
     readonly wall: Wall;
     readonly opening: Opening;
@@ -613,6 +622,18 @@ export function GeometrySvgViewer({
     if (suppressNextBackgroundClickRef.current) {
       suppressNextBackgroundClickRef.current = false;
       event.stopPropagation();
+      return;
+    }
+    if (editorOverlay?.wallVertexPreview && nextSelection.kind === "WALL") {
+      const svg = event.currentTarget.ownerSVGElement;
+      event.stopPropagation();
+      if (svg) {
+        onEditorCanvasClick?.(getEventPointer({
+          clientX: event.clientX,
+          clientY: event.clientY,
+          currentTarget: svg
+        }));
+      }
       return;
     }
     if (!interaction.selectionEnabled) {
@@ -1016,6 +1037,34 @@ export function GeometrySvgViewer({
               ) : null}
             </g>
           ))}
+          {architecturalModel.openings.map((opening) => (
+            <g
+              key={opening.geometryId}
+              data-testid="architectural-wall-opening"
+              data-geometry-kind="OPENING"
+              data-geometry-id={opening.geometryId}
+              className={`${getEntityClassName("architectural-opening architectural-wall-opening", opening)}${interaction.openingEditingEnabled ? " architectural-opening--draggable" : ""}${editorOverlay?.activeOpeningDragId === opening.geometryId ? " architectural-opening--dragging" : ""}`}
+              data-dragging={editorOverlay?.activeOpeningDragId === opening.geometryId ? "true" : undefined}
+              onClick={(event) => handleOpeningClick(event, selectWallOpening(opening.geometryId))}
+              onMouseEnter={() => handleHoverChange(selectWallOpening(opening.geometryId))}
+              onMouseLeave={() => handleHoverChange(undefined)}
+              onPointerDown={(event) => handleOpeningPointerDown(event, selectWallOpening(opening.geometryId), opening.wallId)}
+            >
+              <line className="architectural-opening-hit-target" {...lineAttributes(opening.spanStart, opening.spanEnd)} />
+              {opening.jambs.map((line, index) => <line key={`jamb-${index}`} {...lineAttributes(line[0], line[1])} />)}
+              {opening.selected && resolvedSelectionState.selected.length === 1 ? (
+                <g
+                  className="architectural-opening-drag-handle"
+                  data-testid="selected-opening-drag-handle"
+                  aria-hidden="true"
+                  transform={`translate(${formatSvgNumber((opening.spanStart.x + opening.spanEnd.x) / 2)} ${formatSvgNumber((opening.spanStart.y + opening.spanEnd.y) / 2)})`}
+                >
+                  <circle className="architectural-opening-drag-handle__surface" r="8" />
+                  <DragIndicatorRoundedIcon className="architectural-opening-drag-handle__icon" x="-6" y="-6" width="12" height="12" />
+                </g>
+              ) : null}
+            </g>
+          ))}
         </g>
       ) : null}
 
@@ -1029,6 +1078,14 @@ export function GeometrySvgViewer({
         endpointEditingEnabled={interaction.wallEndpointEditingEnabled}
         onEndpointPointerDown={handleEndpointPointerDown}
         onJunctionPointerDown={handleJunctionPointerDown}
+        onWallVertexPreviewClick={() => {
+          if (!editorOverlay?.wallVertexPreview) return;
+          onEditorCanvasClick?.({
+            worldPoint: editorOverlay.wallVertexPreview,
+            svgPoint: transform.worldToScreen(editorOverlay.wallVertexPreview),
+            cssPixelsPerSvgUnit: 1
+          });
+        }}
         onRoomFaceCandidateClick={(faceKey) => {
           if (suppressNextBackgroundClickRef.current) {
             suppressNextBackgroundClickRef.current = false;
@@ -1129,6 +1186,7 @@ function GeometryEditorOverlayLayer({
   endpointEditingEnabled,
   onEndpointPointerDown,
   onJunctionPointerDown,
+  onWallVertexPreviewClick,
   onRoomFaceCandidateClick
 }: {
   readonly overlay?: GeometryEditorOverlay;
@@ -1139,6 +1197,7 @@ function GeometryEditorOverlayLayer({
     endpoint: WallEndpoint
   ) => void;
   readonly onJunctionPointerDown: (event: PointerEvent<SVGCircleElement>) => void;
+  readonly onWallVertexPreviewClick: () => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
@@ -1160,10 +1219,15 @@ function GeometryEditorOverlayLayer({
   const junctionPoint = overlay?.selectedJunction
     ? transform.worldToScreen(overlay.selectedJunction.previewPosition)
     : undefined;
+  const wallVertexPreview = overlay?.wallVertexPreview
+    ? transform.worldToScreen(overlay.wallVertexPreview)
+    : undefined;
   const openingPreview = overlay?.openingPreview
     ? overlay.openingPreview.opening.type === "DOOR"
       ? createDoorPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
-      : createWindowPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
+      : overlay.openingPreview.opening.type === "WINDOW"
+        ? createWindowPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
+        : createWallOpeningPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
     : undefined;
   const roomShapePreview = overlay?.roomShapePreview
     ? {
@@ -1260,6 +1324,18 @@ function GeometryEditorOverlayLayer({
             cy={formatSvgNumber(drawEnd.y)}
             r="4"
           />
+          {overlay?.drawWall?.lengthLabel ? (
+            <g
+              className="geometry-wall-preview-length"
+              data-testid="draw-wall-preview-length"
+              transform={`translate(${formatSvgNumber((drawStart.x + drawEnd.x) / 2)} ${formatSvgNumber((drawStart.y + drawEnd.y) / 2 - 14)})`}
+            >
+              <rect x="-31" y="-10" width="62" height="20" rx="4" />
+              <text textAnchor="middle" dominantBaseline="middle">
+                {overlay.drawWall.lengthLabel}
+              </text>
+            </g>
+          ) : null}
         </g>
       ) : null}
       {snapPoint && overlay?.snapCandidate && overlay.snapCandidate.kind !== "free" ? (
@@ -1283,6 +1359,42 @@ function GeometryEditorOverlayLayer({
           ) : null}
         </g>
       ) : null}
+      {wallVertexPreview ? (
+        <g
+          data-testid="add-wall-vertex-preview"
+          role="button"
+          aria-label={t("wall.addVertex")}
+          tabIndex={0}
+          onClick={(event) => {
+            event.stopPropagation();
+            onWallVertexPreviewClick();
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            onWallVertexPreviewClick();
+          }}
+        >
+          <circle
+            className="geometry-wall-vertex-preview-hit-target"
+            cx={formatSvgNumber(wallVertexPreview.x)}
+            cy={formatSvgNumber(wallVertexPreview.y)}
+            r="12"
+          />
+          <circle
+            className="geometry-wall-snap-marker geometry-wall-snap-marker--wall-interior"
+            cx={formatSvgNumber(wallVertexPreview.x)}
+            cy={formatSvgNumber(wallVertexPreview.y)}
+            r="7"
+          />
+          <circle
+            className="geometry-wall-snap-marker__inner"
+            cx={formatSvgNumber(wallVertexPreview.x)}
+            cy={formatSvgNumber(wallVertexPreview.y)}
+            r="2.5"
+          />
+        </g>
+      ) : null}
       {openingPreview && overlay?.openingPreview ? (
         <g
           data-testid="opening-placement-preview"
@@ -1299,9 +1411,9 @@ function GeometryEditorOverlayLayer({
               <line {...lineAttributes(transform.worldToScreen(openingPreview.hinge), transform.worldToScreen(openingPreview.openLeafEnd))} />
               <path d={`M ${formatSvgNumber(transform.worldToScreen(openingPreview.arcStart).x)},${formatSvgNumber(transform.worldToScreen(openingPreview.arcStart).y)} A ${formatSvgNumber(transform.scaleLength(openingPreview.arcRadius))} ${formatSvgNumber(transform.scaleLength(openingPreview.arcRadius))} 0 0 ${openingPreview.arcSweep === 1 ? 0 : 1} ${formatSvgNumber(transform.worldToScreen(openingPreview.arcEnd).x)},${formatSvgNumber(transform.worldToScreen(openingPreview.arcEnd).y)}`} />
             </>
-          ) : openingPreview.glazingLines.map((line, index) => (
+          ) : openingPreview.kind === "WINDOW" ? openingPreview.glazingLines.map((line, index) => (
             <line key={`glass-${index}`} {...lineAttributes(transform.worldToScreen(line[0]), transform.worldToScreen(line[1]))} />
-          ))}
+          )) : null}
         </g>
       ) : null}
       {junctionPoint && overlay?.selectedJunction && endpointEditingEnabled ? (

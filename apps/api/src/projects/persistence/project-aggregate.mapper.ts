@@ -126,7 +126,7 @@ export class ProjectAggregateMapper {
 
                 return {
                   ...commonOpening,
-                  type: "WINDOW" as const
+                  type: opening.type === "WINDOW" ? "WINDOW" as const : "OPENING" as const
                 };
               }
             )

@@ -10,11 +10,13 @@ import {
 import {
   DoorSchema,
   OpeningSchema,
+  WallOpeningSchema,
   WindowSchema,
   type Door,
   type DoorHingeSide,
   type DoorSwingSide,
   type Opening,
+  type WallOpening,
   type Window
 } from "./opening.js";
 import type { Wall } from "./wall.js";
@@ -100,6 +102,14 @@ export function createWindow(
   return createOpening(project, { ...input, opening: input.window });
 }
 
+/** Creates an unadorned passage parametrically mounted on one canonical Wall. */
+export function createWallOpening(
+  project: Project,
+  input: Omit<CreateOpeningInput, "opening"> & { readonly wallOpening: WallOpening }
+): ProjectEditingResult {
+  return createOpening(project, { ...input, opening: input.wallOpening });
+}
+
 /** Mounts one immutable Opening on a Wall after local invariant validation. */
 export function createOpening(project: Project, input: CreateOpeningInput): ProjectEditingResult {
   const location = findWall(project, input.levelId, input.wallId);
@@ -130,7 +140,7 @@ export function updateOpening(project: Project, input: UpdateOpeningInput): Proj
   const openingIndex = location.wall.openings.findIndex((opening) => opening.id === input.openingId);
   const opening = location.wall.openings[openingIndex];
   if (!opening) return failure(openingNotFound(input.openingId));
-  if (opening.type === "WINDOW" && (input.hingeSide !== undefined || input.swingSide !== undefined)) {
+  if (opening.type !== "DOOR" && (input.hingeSide !== undefined || input.swingSide !== undefined)) {
     return failure(invalidOpening("opening", input.openingId));
   }
   const candidate = {
@@ -142,7 +152,12 @@ export function updateOpening(project: Project, input: UpdateOpeningInput): Proj
     ...(input.hingeSide === undefined ? {} : { hingeSide: input.hingeSide }),
     ...(input.swingSide === undefined ? {} : { swingSide: input.swingSide })
   };
-  const parsed = (opening.type === "DOOR" ? DoorSchema : WindowSchema).safeParse(candidate);
+  const schema = opening.type === "DOOR"
+    ? DoorSchema
+    : opening.type === "WINDOW"
+      ? WindowSchema
+      : WallOpeningSchema;
+  const parsed = schema.safeParse(candidate);
   if (!parsed.success) return failure(invalidOpening("opening", input.openingId));
   const openings = location.wall.openings.map((current, index) =>
     index === openingIndex ? parsed.data : current

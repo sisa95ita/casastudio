@@ -314,7 +314,7 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
 
   await page.getByRole("button", { name: "Edit" }).click();
   const authoringToolbar = page.getByRole("toolbar", { name: "Editing tools" });
-  await expect(authoringToolbar.getByRole("button")).toHaveCount(6);
+  await expect(authoringToolbar.getByRole("button")).toHaveCount(7);
   await expect(authoringToolbar.getByRole("button", { name: "Pan" })).toHaveCount(0);
   await expect(editorViewport).toHaveClass(/geometry-svg--authoring/);
   await expect(editorViewport.locator('[data-testid="polygon-centroid"]')).toHaveCount(2);
@@ -456,6 +456,139 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
   await expect(roomLabels).toHaveCount(2);
 
   await test.info().attach("visual-browser-console-errors", {
+    body: Buffer.from(JSON.stringify(consoleErrors, null, 2)),
+    contentType: "application/json"
+  });
+  expect(pageErrors, "Unexpected uncaught browser errors").toEqual([]);
+  expect(consoleErrors, "Unexpected browser console errors").toEqual([]);
+});
+
+test("accepts precision Walls, vertices, pending Opening properties, and the wide Room menu", async ({ page }) => {
+  test.setTimeout(120_000);
+  const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;
+  if (!demoPassword) throw new Error("CASASTUDIO_KEYCLOAK_DEMO_PASSWORD is required.");
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message: ConsoleMessage) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto("/app");
+  await page.locator("#username").fill("demo");
+  await page.locator("#password").fill(demoPassword);
+  await page.locator("#kc-login").click();
+  const demoProject = page.getByRole("article").filter({ hasText: "Demo Project" });
+  await expect(demoProject).toBeVisible();
+  await demoProject.getByRole("link", { name: "Open project" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  const viewport = page.locator('svg[aria-labelledby="geometry-svg-title geometry-svg-description"]');
+  const viewportBox = await viewport.boundingBox();
+  if (!viewportBox) throw new Error("Expected the editor viewport.");
+  await page.getByRole("button", { name: "Draw Wall" }).click();
+  const previewStart = { x: viewportBox.x + 70, y: viewportBox.y + 70 };
+  const previewEnd = { x: previewStart.x + 120, y: previewStart.y + 45 };
+  await page.mouse.click(previewStart.x, previewStart.y);
+  await page.mouse.move(previewEnd.x, previewEnd.y);
+  await expect(viewport.locator('[data-testid="draw-wall-preview-length"]')).toContainText(/m|cm/);
+  await page.keyboard.press("Escape");
+  await expect(viewport.locator('[data-testid="draw-wall-preview-length"]')).toHaveCount(0);
+  await expect(page.getByText("No unsaved changes", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select" }).click();
+  const eastWall = viewport.locator('.architectural-wall-hit-target[data-geometry-id="living-east-wall"]');
+  await eastWall.click({ force: true });
+  await page.getByRole("tab", { name: "Properties" }).click();
+  const length = page.getByRole("spinbutton", { name: "Length (cm)" });
+  await expect(length).toHaveValue("400");
+  await length.fill("450");
+  await length.press("Enter");
+  await expect(length).toHaveValue("450");
+  await page.getByRole("combobox", { name: "Resize from" }).click();
+  await page.getByRole("option", { name: "End" }).click();
+  await length.fill("420");
+  await length.press("Enter");
+  await expect(length).toHaveValue("420");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
+
+  await eastWall.click({ force: true });
+  await page.getByRole("tab", { name: "Selection" }).click();
+  const wallCountBeforeSplit = await viewport.locator('[data-testid="boundary-edge"]').count();
+  await page.getByRole("button", { name: "Add vertex" }).click();
+  const wallBox = await eastWall.boundingBox();
+  if (!wallBox) throw new Error("Expected the selected Wall hit target.");
+  const splitPoint = { x: wallBox.x + wallBox.width / 2, y: wallBox.y + wallBox.height / 2 };
+  await page.mouse.move(splitPoint.x, splitPoint.y);
+  await expect(viewport.locator('[data-testid="add-wall-vertex-preview"]')).toBeVisible();
+  await page.mouse.click(splitPoint.x, splitPoint.y);
+  await expect(viewport.locator('[data-testid="boundary-edge"]')).toHaveCount(wallCountBeforeSplit + 1);
+  const vertices = viewport.locator('[data-testid="geometry-vertex"]');
+  let nearestVertex = vertices.first();
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < await vertices.count(); index += 1) {
+    const candidate = vertices.nth(index);
+    const box = await candidate.boundingBox();
+    if (!box) continue;
+    const distance = Math.hypot(box.x + box.width / 2 - splitPoint.x, box.y + box.height / 2 - splitPoint.y);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestVertex = candidate;
+    }
+  }
+  await nearestVertex.click({ force: true });
+  const removeVertex = page.getByRole("button", { name: "Remove vertex" });
+  await expect(removeVertex).toBeVisible();
+  await removeVertex.click();
+  await expect(viewport.locator('[data-testid="boundary-edge"]')).toHaveCount(wallCountBeforeSplit);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText("No unsaved changes", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Door" }).click();
+  await page.getByRole("tab", { name: "Properties" }).click();
+  await expect(page.getByText("New Door", { exact: true })).toBeVisible();
+  const pendingDoorWidth = page.getByRole("spinbutton", { name: "Width (cm)" });
+  await pendingDoorWidth.fill("70");
+  await pendingDoorWidth.press("Enter");
+  await expect(page.getByText("No unsaved changes", { exact: true })).toBeVisible();
+  const westWall = viewport.locator('.architectural-wall-hit-target[data-geometry-id="living-west-wall"]');
+  const westBox = await westWall.boundingBox();
+  if (!westBox) throw new Error("Expected the Door placement Wall.");
+  await page.mouse.move(westBox.x + westBox.width / 2, westBox.y + westBox.height / 2);
+  await expect(viewport.locator('[data-testid="opening-placement-preview"]')).toHaveAttribute("data-valid", "true");
+  await page.mouse.click(westBox.x + westBox.width / 2, westBox.y + westBox.height / 2);
+  await expect(viewport.locator('[data-testid="architectural-door"]')).toHaveCount(3);
+  await page.getByRole("button", { name: "Undo" }).click();
+
+  await page.getByRole("button", { name: "Wall Opening" }).click();
+  await page.getByRole("tab", { name: "Properties" }).click();
+  await expect(page.getByText("New Wall Opening", { exact: true })).toBeVisible();
+  const pendingOpeningWidth = page.getByRole("spinbutton", { name: "Width (cm)" });
+  await pendingOpeningWidth.fill("180");
+  await pendingOpeningWidth.press("Enter");
+  const southWall = viewport.locator('.architectural-wall-hit-target[data-geometry-id="ground-south-wall"]');
+  const southBox = await southWall.boundingBox();
+  if (!southBox) throw new Error("Expected the Wall Opening placement Wall.");
+  await page.mouse.move(southBox.x + southBox.width / 2, southBox.y + southBox.height / 2);
+  await page.mouse.click(southBox.x + southBox.width / 2, southBox.y + southBox.height / 2);
+  const wallOpening = viewport.locator('[data-testid="architectural-wall-opening"]');
+  await expect(wallOpening).toHaveCount(1);
+  await expect(wallOpening.locator(".architectural-door-arc")).toHaveCount(0);
+  await expect(wallOpening.locator(".architectural-door-leaf")).toHaveCount(0);
+  await expect(wallOpening.locator(".architectural-window-line")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Room" }).click();
+  const roomMenu = page.locator("#room-authoring-menu");
+  await expect(roomMenu).toBeVisible();
+  expect(await roomMenu.evaluate((element) => getComputedStyle(element).display)).toBe("grid");
+  const roomMenuBox = await roomMenu.boundingBox();
+  if (!roomMenuBox) throw new Error("Expected the Room authoring menu.");
+  expect(roomMenuBox.width).toBeGreaterThan(roomMenuBox.height);
+  await expect(page.getByRole("menuitem", { name: "Detect room" })).toBeVisible();
+
+  await test.info().attach("precision-browser-console-errors", {
     body: Buffer.from(JSON.stringify(consoleErrors, null, 2)),
     contentType: "application/json"
   });

@@ -46,6 +46,17 @@ export type MoveWallEndpointInput = {
   readonly position: Point2D;
 };
 
+/** Endpoint kept fixed by an exact Wall-length edit. */
+export type AnchoredWallEndpoint = "START" | "END";
+
+/** Input required to resize one Wall along its existing canonical axis. */
+export type SetWallLengthInput = {
+  readonly levelId: Identifier;
+  readonly wallId: Identifier;
+  readonly targetLength: number;
+  readonly anchoredEndpoint: AnchoredWallEndpoint;
+};
+
 /** Input required to remove an unreferenced Wall from a Level. */
 export type DeleteWallInput = {
   readonly levelId: Identifier;
@@ -230,6 +241,74 @@ export function moveWallEndpoint(
     })),
     "Wall endpoint movement"
   );
+}
+
+/**
+ * Sets an exact Wall length while preserving one endpoint and the Wall axis.
+ *
+ * When the opposite endpoint is a shared junction, every incident Wall
+ * endpoint is moved to the same destination. The complete candidate Project
+ * is validated atomically, including Opening fit and Room topology.
+ */
+export function setWallLength(
+  project: Project,
+  input: SetWallLengthInput
+): ProjectEditingResult {
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
+  if (levelIndex < 0) return failure(levelNotFound(input.levelId));
+
+  const level = project.building.levels[levelIndex];
+  const wall = level?.walls.find((candidate) => candidate.id === input.wallId);
+  if (!level || !wall) return failure(wallNotFound(input.levelId, input.wallId));
+  if (!Number.isFinite(input.targetLength) || input.targetLength <= 0) {
+    return failure(zeroLengthWall(input.wallId, "targetLength"));
+  }
+
+  const currentLength = getWallLength(wall);
+  if (currentLength === 0) return failure(zeroLengthWall(input.wallId, "wall"));
+  const anchored = input.anchoredEndpoint === "START" ? wall.start : wall.end;
+  const moved = input.anchoredEndpoint === "START" ? wall.end : wall.start;
+  const direction = input.anchoredEndpoint === "START"
+    ? {
+        x: (wall.end.x - wall.start.x) / currentLength,
+        z: (wall.end.z - wall.start.z) / currentLength
+      }
+    : {
+        x: (wall.start.x - wall.end.x) / currentLength,
+        z: (wall.start.z - wall.end.z) / currentLength
+      };
+  const destination = {
+    x: anchored.x + direction.x * input.targetLength,
+    z: anchored.z + direction.z * input.targetLength
+  };
+  const incidentWallIds = level.walls
+    .filter((candidate) =>
+      hasSamePoint(candidate.start, moved) || hasSamePoint(candidate.end, moved)
+    )
+    .map((candidate) => candidate.id);
+  if (!incidentWallIds.includes(wall.id)) {
+    return failure(wallNotFound(input.levelId, input.wallId));
+  }
+
+  const candidate = mapLevel(project, levelIndex, (currentLevel) => ({
+    ...currentLevel,
+    walls: currentLevel.walls.map((currentWall) =>
+      incidentWallIds.includes(currentWall.id)
+        ? {
+            ...currentWall,
+            start: hasSamePoint(currentWall.start, moved)
+              ? destination
+              : currentWall.start,
+            end: hasSamePoint(currentWall.end, moved)
+              ? destination
+              : currentWall.end
+          }
+        : currentWall
+    )
+  }));
+  return validateCanonicalEditingResult(candidate, "Wall length update");
 }
 
 /**
@@ -531,6 +610,20 @@ export function collapseWallJunction(
   return success(
     tryCollapseWallJunction(project, levelIndex, junctionResult.data) ?? project
   );
+}
+
+/** Returns whether an exact junction can be collapsed without changing the Project. */
+export function canCollapseWallJunction(
+  project: Project,
+  input: CollapseWallJunctionInput
+): boolean {
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
+  if (levelIndex < 0 || !Point2DSchema.safeParse(input.junction).success) {
+    return false;
+  }
+  return tryCollapseWallJunction(project, levelIndex, input.junction) !== undefined;
 }
 
 /**

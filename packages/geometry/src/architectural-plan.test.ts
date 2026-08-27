@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Door, Wall, Window } from "@casastudio/schema";
+import type { Door, Wall, WallOpening, Window } from "@casastudio/schema";
 
 import {
   createArchitecturalWallBodyShapes,
   createArchitecturalWallShape,
   createDoorPlanGeometry,
   createOpeningPlanSpan,
+  createWallOpeningPlanGeometry,
   createWindowPlanGeometry,
   projectPointOntoWall
 } from "./architectural-plan.js";
@@ -58,6 +59,17 @@ describe("architectural plan geometry", () => {
     const geometry = createWindowPlanGeometry(wall, opening);
     expect(distance(span.start, span.end)).toBeCloseTo(120);
     expect(distance(geometry.glazingLines[0][0], geometry.glazingLines[1][0])).toBeCloseTo(8);
+  });
+
+  it("derives a Wall Opening with jambs and no Door or Window linework", () => {
+    const opening: WallOpening = { id: "passage", type: "OPENING", offsetFromStart: 100, width: 160, height: 220, elevation: 0 };
+    const geometry = createWallOpeningPlanGeometry(wall, opening);
+    expect(geometry.kind).toBe("OPENING");
+    expect(distance(geometry.span.start, geometry.span.end)).toBeCloseTo(160);
+    expect(geometry.jambs).toHaveLength(2);
+    expect(geometry).not.toHaveProperty("glazingLines");
+    expect(geometry).not.toHaveProperty("openLeafEnd");
+    expect(geometry).not.toHaveProperty("arcRadius");
   });
 });
 

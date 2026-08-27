@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DoorSchema, OpeningSchema, WindowSchema } from "./opening.js";
+import { DoorSchema, OpeningSchema, WallOpeningSchema, WindowSchema } from "./opening.js";
 
 const validDoor = {
   id: "living-door",
@@ -20,6 +20,15 @@ const validWindow = {
   width: 120,
   height: 165,
   elevation: 90
+};
+
+const validWallOpening = {
+  id: "wide-passage",
+  type: "OPENING",
+  offsetFromStart: 40,
+  width: 180,
+  height: 230,
+  elevation: 0
 };
 
 describe("DoorSchema", () => {
@@ -43,9 +52,11 @@ describe("WindowSchema", () => {
 });
 
 describe("OpeningSchema", () => {
-  it("discriminates doors and windows by opening type", () => {
+  it("discriminates every canonical Opening type", () => {
     expect(OpeningSchema.parse(validDoor).type).toBe("DOOR");
     expect(OpeningSchema.parse(validWindow).type).toBe("WINDOW");
+    expect(OpeningSchema.parse(validWallOpening).type).toBe("OPENING");
+    expect(WallOpeningSchema.parse(validWallOpening)).toEqual(validWallOpening);
   });
 
   it("rejects undocumented opening types", () => {

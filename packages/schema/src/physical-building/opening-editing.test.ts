@@ -4,6 +4,7 @@ import type { Project } from "../project/index.js";
 import { ValidationErrorCode } from "../validation/index.js";
 import {
   createDoor,
+  createWallOpening,
   createWindow,
   deleteOpening,
   moveOpening,
@@ -59,6 +60,20 @@ describe("Opening editing", () => {
       wallId: "wall",
       window: { id: "overlap", type: "WINDOW", offsetFromStart: 99.99, width: 50, height: 100, elevation: 80 }
     })).toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.OPENING_COLLISION }] });
+  });
+
+  it("creates and validates a generic Wall Opening with the shared fit contract", () => {
+    const valid = createWallOpening(createProject(), {
+      levelId: "ground-floor",
+      wallId: "wall",
+      wallOpening: { id: "passage", type: "OPENING", offsetFromStart: 40, width: 180, height: 220, elevation: 0 }
+    });
+    expect(valid.ok).toBe(true);
+    expect(createWallOpening(createProject(), {
+      levelId: "ground-floor",
+      wallId: "wall",
+      wallOpening: { id: "too-tall", type: "OPENING", offsetFromStart: 40, width: 180, height: 300, elevation: 0 }
+    })).toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.OPENING_OUTSIDE_WALL_HEIGHT }] });
   });
 
   it("rejects endpoint overflow and invalid vertical Window extent", () => {

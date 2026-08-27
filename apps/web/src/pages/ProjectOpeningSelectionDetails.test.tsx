@@ -4,6 +4,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ProjectNewOpeningPropertiesDetails,
   ProjectOpeningPropertiesDetails,
   ProjectOpeningSelectionDetails
 } from "./ProjectOpeningSelectionDetails";
@@ -11,6 +12,26 @@ import {
 afterEach(cleanup);
 
 describe("ProjectOpeningSelectionDetails", () => {
+  it.each([
+    ["DOOR", "New Door"],
+    ["WINDOW", "New Window"],
+    ["OPENING", "New Wall Opening"]
+  ] as const)("shows transient %s properties before placement", (openingType, title) => {
+    const handleChange = vi.fn();
+    render(
+      <ProjectNewOpeningPropertiesDetails
+        openingType={openingType}
+        properties={{ width: 70, height: 200, elevation: openingType === "WINDOW" ? 90 : 0, hingeSide: "START", swingSide: "LEFT" }}
+        units={{ length: "cm", angle: "deg" }}
+        onChange={handleChange}
+      />
+    );
+    expect(screen.getByText(title)).toBeTruthy();
+    const width = screen.getByRole("spinbutton", { name: "Width (cm)" });
+    fireEvent.change(width, { target: { value: "65" } });
+    fireEvent.blur(width);
+    expect(handleChange).toHaveBeenCalledWith({ width: 65 });
+  });
   it("edits every individual Door measurement without changing another Door", () => {
     const onProjectChange = vi.fn();
     render(<OpeningInspectorHarness openingId="door-a" onProjectChange={onProjectChange} />);

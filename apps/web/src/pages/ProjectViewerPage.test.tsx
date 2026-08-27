@@ -455,7 +455,7 @@ describe("ProjectViewerPage", () => {
 
     const toolbar = await screen.findByRole("toolbar", { name: "Editing tools" });
     expect(within(toolbar).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
-      .toEqual(["Select", "Draw Wall", "Door", "Window", "Room", "Measure"]);
+      .toEqual(["Select", "Draw Wall", "Door", "Window", "Wall Opening", "Room", "Measure"]);
     expect(within(toolbar).queryByRole("button", { name: "Pan" })).toBeNull();
     expect(within(toolbar).queryByText(/Grid|Snap|Scale|Zoom|Save|Discard/)).toBeNull();
     expect(buildSpy).toHaveBeenCalledWith(store.getState().projectEditor.draft);
@@ -489,7 +489,7 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.activeTool).toBeNull();
   });
 
-  it.each(["Select", "Draw Wall", "Door", "Window", "Room", "Measure"])(
+  it.each(["Select", "Draw Wall", "Door", "Window", "Wall Opening", "Room", "Measure"])(
     "pans empty background with %s active without starting an architectural interaction",
     async (toolLabel) => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
@@ -509,7 +509,13 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.draft).toBe(draftBefore);
     expect(store.getState().projectEditor.dirty).toBe(false);
     expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
-    expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    if (toolLabel === "Door" || toolLabel === "Window" || toolLabel === "Wall Opening") {
+      expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+        kind: "place-opening"
+      });
+    } else {
+      expect(store.getState().projectEditor.transient.interaction).toBeNull();
+    }
     },
     15_000
   );

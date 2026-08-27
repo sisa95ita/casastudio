@@ -77,59 +77,34 @@ export function ProjectRoomAuthoringMenu({
       >
         <MenuList
           id="room-authoring-menu"
+          className="project-room-authoring-menu__layout"
           aria-label={t("roomAuthoring.menuLabel")}
           autoFocusItem
           dense
           onKeyDown={handleKeyDown}
         >
-          <ListSubheader disableSticky>
-            {t("roomAuthoring.existingSection")}
-          </ListSubheader>
-          <MenuItem onClick={onDetectRoom}>
-            {t("roomAuthoring.detectRoom")}
-          </MenuItem>
-          <Divider />
-          <ListSubheader disableSticky>
-            {t("roomAuthoring.shapeSection")}
-          </ListSubheader>
-          <RoomShapeMenuItem
-            kind="RECTANGLE"
-            label={t("roomAuthoring.rectangle")}
-            disabled={!templateAvailable}
-            describedBy={!templateAvailable ? helpId : undefined}
-            selected={activeShape === "RECTANGLE"}
-            onClick={() => onSelectShape("RECTANGLE")}
-          />
-          <RoomShapeMenuItem
-            kind="L_SHAPE"
-            label={t("roomAuthoring.lShape")}
-            disabled={!templateAvailable}
-            describedBy={!templateAvailable ? helpId : undefined}
-            selected={activeShape === "L_SHAPE"}
-            onClick={() => onSelectShape("L_SHAPE")}
-          />
-          {!templateAvailable ? (
-            <Typography
-              id={helpId}
-              className="project-room-authoring-menu__help"
-              component="p"
-              variant="caption"
-              color="text.secondary"
-            >
-              {t("roomAuthoring.emptyLevelOnly")}
-            </Typography>
-          ) : null}
-          {activeShape ? (
-            <Box
-              className="project-room-authoring-menu__dimensions"
-              component="li"
-              role="none"
-            >
-              <Divider />
+          <Box component="li" role="none" className="project-room-authoring-menu__existing">
+            <ListSubheader component="div" disableSticky>{t("roomAuthoring.existingSection")}</ListSubheader>
+            <MenuItem component="div" onClick={onDetectRoom}>{t("roomAuthoring.detectRoom")}</MenuItem>
+          </Box>
+          <Box component="li" role="none" className="project-room-authoring-menu__shapes">
+            <ListSubheader component="div" disableSticky>{t("roomAuthoring.shapeSection")}</ListSubheader>
+            <Stack direction="row">
+              <RoomShapeMenuItem kind="RECTANGLE" label={t("roomAuthoring.rectangle")} disabled={!templateAvailable} describedBy={!templateAvailable ? helpId : undefined} selected={activeShape === "RECTANGLE"} onClick={() => onSelectShape("RECTANGLE")} />
+              <RoomShapeMenuItem kind="L_SHAPE" label={t("roomAuthoring.lShape")} disabled={!templateAvailable} describedBy={!templateAvailable ? helpId : undefined} selected={activeShape === "L_SHAPE"} onClick={() => onSelectShape("L_SHAPE")} />
+            </Stack>
+            {!templateAvailable ? (
+              <Typography id={helpId} className="project-room-authoring-menu__help" component="p" variant="caption" color="text.secondary">
+                {t("roomAuthoring.emptyLevelOnly")}
+              </Typography>
+            ) : null}
+            {activeShape ? (
+              <Box className="project-room-authoring-menu__dimensions" component="div" role="none">
+              <Divider sx={{ mb: 1 }} />
               <Typography variant="caption" color="text.secondary">
                 {t("roomAuthoring.dimensions")}
               </Typography>
-              <Stack spacing={1} sx={{ mt: 1 }}>
+              <Box className="project-room-authoring-menu__dimension-grid" sx={{ mt: 1 }}>
                 <DimensionField
                   label={t("roomAuthoring.width")}
                   value={dimensions.width}
@@ -175,9 +150,10 @@ export function ProjectRoomAuthoringMenu({
                     ))}
                   </Select>
                 </FormControl>
-              </Stack>
-            </Box>
-          ) : null}
+              </Box>
+              </Box>
+            ) : null}
+          </Box>
         </MenuList>
       </Paper>
     </Popper>
@@ -202,6 +178,7 @@ function RoomShapeMenuItem({
 }) {
   return (
     <MenuItem
+      component="div"
       disabled={disabled}
       aria-describedby={describedBy}
       selected={selected}

@@ -118,6 +118,19 @@ const architecturalPresentationModel: ArchitecturalPresentationModel2D = {
     selected: false,
     hovered: false
   }],
+  openings: [{
+    kind: "OPENING",
+    geometryId: "passage",
+    wallId: "wall",
+    spanStart: { x: 300, y: 100 },
+    spanEnd: { x: 350, y: 100 },
+    jambs: [
+      [{ x: 300, y: 90 }, { x: 300, y: 110 }],
+      [{ x: 350, y: 90 }, { x: 350, y: 110 }]
+    ],
+    selected: false,
+    hovered: false
+  }],
   joins: []
 };
 
@@ -193,7 +206,7 @@ describe("GeometrySvgViewer", () => {
           wallEndpointEditingEnabled: true
         }}
         editorOverlay={{
-          drawWall: { start: { x: 0, z: 0 }, end: { x: 25, z: 25 } },
+          drawWall: { start: { x: 0, z: 0 }, end: { x: 25, z: 25 }, lengthLabel: "0.35 m" },
           selectedWall: {
             wallId: edge.sourceWallId,
             start: edge.startVertex,
@@ -211,6 +224,7 @@ describe("GeometrySvgViewer", () => {
         .querySelector("line")
         ?.getAttribute("class")
     ).toBe("geometry-wall-preview");
+    expect(screen.getByTestId("draw-wall-preview-length").textContent).toContain("0.35 m");
     expect(
       screen
         .getByTestId("selected-wall-overlay")
@@ -253,6 +267,7 @@ describe("GeometrySvgViewer", () => {
             ?.includes("geometry-edge--drag-source")
         )
     ).toBe(false);
+    expect(screen.queryByTestId("draw-wall-preview-length")).toBeNull();
   });
 
   it("uses layer options to hide and show diagnostic vertices and bounds", () => {
@@ -587,6 +602,27 @@ describe("GeometrySvgViewer", () => {
     fireEvent.click(screen.getByTestId("architectural-window"));
     expect(handleSelectionStateChange).toHaveBeenCalledWith({
       selected: [{ kind: "WINDOW", geometryId: "window" }],
+      hovered: undefined
+    });
+  });
+
+  it("renders and selects a clean Wall Opening without leaf, arc, or glazing", () => {
+    const handleSelectionStateChange = vi.fn();
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(getPlaygroundLevel())}
+        architecturalModel={architecturalPresentationModel}
+        options={defaultGeometryDisplayOptions}
+        onSelectionStateChange={handleSelectionStateChange}
+      />
+    );
+    const opening = screen.getByTestId("architectural-wall-opening");
+    expect(opening.querySelector("path")).toBeNull();
+    expect(opening.querySelector(".architectural-window-line")).toBeNull();
+    expect(opening.querySelector(".architectural-door-leaf")).toBeNull();
+    fireEvent.click(opening);
+    expect(handleSelectionStateChange).toHaveBeenCalledWith({
+      selected: [{ kind: "OPENING", geometryId: "passage" }],
       hovered: undefined
     });
   });

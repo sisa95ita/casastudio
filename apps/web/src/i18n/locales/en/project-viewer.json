@@ -77,6 +77,7 @@
     "draw-wall": "Draw Wall",
     "door": "Door",
     "window": "Window",
+    "opening": "Wall Opening",
     "room": "Room",
     "measure": "Measure",
     "undo": "Undo",
@@ -88,6 +89,7 @@
       "draw-wall": "Draw connected walls as a continuous chain.",
       "door": "Place a door on a wall.",
       "window": "Place a window on a wall.",
+      "opening": "Place an unadorned opening through a wall.",
       "room": "Create a Room from existing walls or a predefined shape.",
       "measure": "Measure between snapped points without changing the project."
     }
@@ -273,9 +275,14 @@
   "wall": {
     "selectionTitle": "Selection",
     "propertiesTitle": "Wall properties",
+    "resizeFrom": "Resize from",
+    "resizeFromStart": "Start",
+    "resizeFromEnd": "End",
     "emptySelection": "Select a wall in the plan to inspect it.",
     "type": "Wall",
     "delete": "Delete Wall",
+    "addVertex": "Add vertex",
+    "removeVertex": "Remove vertex",
     "startEndpoint": "Start endpoint",
     "endEndpoint": "End endpoint",
     "roomEndpointEditingUnavailable": "Room boundary junctions move all connected walls together.",
@@ -331,6 +338,8 @@
       "doors_other": "{{count}} Doors",
       "windows_one": "{{count}} Window",
       "windows_other": "{{count}} Windows",
+      "openings_one": "{{count}} Wall Opening",
+      "openings_other": "{{count}} Wall Openings",
       "junctions_one": "{{count}} Junction",
       "junctions_other": "{{count}} Junctions"
     },
@@ -347,18 +356,28 @@
     "selectionTitle": "Opening",
     "door": "Door",
     "window": "Window",
+    "wallOpening": "Wall Opening",
+    "newDoor": "New Door",
+    "newWindow": "New Window",
+    "newWallOpening": "New Wall Opening",
     "doorProperties": "Door properties",
     "windowProperties": "Window properties",
+    "wallOpeningProperties": "Wall Opening properties",
     "ownedBy": "Owned by {{wall}}",
     "flipHinge": "Flip hinge",
     "flipSwing": "Flip swing",
     "delete": "Delete Opening",
+    "left": "Left",
+    "right": "Right",
     "labels": {
       "type": "Type",
       "wall": "Owning wall",
       "width": "Width",
       "height": "Height",
       "sillHeight": "Sill height",
+      "elevation": "Elevation",
+      "hingeSide": "Hinge side",
+      "swingSide": "Swing side",
       "offset": "Position from wall start"
     }
   }

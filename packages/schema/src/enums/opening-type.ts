@@ -3,10 +3,10 @@ import { z } from "zod";
 /**
  * Stable vocabulary for concrete architectural openings.
  */
-export const OpeningTypeValues = ["DOOR", "WINDOW"] as const;
+export const OpeningTypeValues = ["DOOR", "WINDOW", "OPENING"] as const;
 
 /**
- * Validates the discriminant used to distinguish Door and Window openings.
+ * Validates the discriminant used to distinguish architectural Opening kinds.
  */
 export const OpeningTypeSchema = z.enum(OpeningTypeValues);
 

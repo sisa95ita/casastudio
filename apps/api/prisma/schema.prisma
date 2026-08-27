@@ -28,6 +28,7 @@ enum RoomType {
 enum OpeningType {
   DOOR
   WINDOW
+  OPENING
 }
 
 enum RoomBoundaryDirection {

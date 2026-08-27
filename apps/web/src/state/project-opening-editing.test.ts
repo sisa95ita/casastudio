@@ -23,6 +23,45 @@ describe("Project Opening interaction helpers", () => {
     expect(candidate?.projectedPoint.x).toBeCloseTo(candidate?.projectedPoint.z ?? 0);
   });
 
+  it("uses configured transient dimensions for short-Wall placement", () => {
+    const source = project();
+    source.building.levels[0]!.walls = [wall("short", 0, 0, 80, 0)];
+    expect(resolveOpeningPlacementCandidate(source, "level", { x: 40, z: 0 }, "DOOR", 20))
+      .toBeUndefined();
+    const candidate = resolveOpeningPlacementCandidate(
+      source,
+      "level",
+      { x: 40, z: 0 },
+      "DOOR",
+      20,
+      { width: 70, height: 200, elevation: 0, hingeSide: "END", swingSide: "RIGHT" }
+    );
+    expect(candidate).toMatchObject({
+      valid: true,
+      opening: { type: "DOOR", width: 70, height: 200, hingeSide: "END", swingSide: "RIGHT" }
+    });
+  });
+
+  it("previews and commits a generic Wall Opening exactly", () => {
+    const source = project();
+    const candidate = resolveOpeningPlacementCandidate(
+      source,
+      "level",
+      { x: 150, z: 150 },
+      "OPENING",
+      30,
+      { width: 140, height: 220, elevation: 10 }
+    );
+    expect(candidate).toMatchObject({ opening: { type: "OPENING", width: 140, height: 220, elevation: 10 } });
+    if (!candidate) return;
+    const committed = commitOpeningPlacementCandidate(source, "level", candidate, "wide-passage");
+    expect(committed?.ok).toBe(true);
+    if (committed?.ok) {
+      expect(findProjectOpening(committed.project, "level", "wide-passage")?.opening)
+        .toMatchObject({ type: "OPENING", width: 140, height: 220, elevation: 10 });
+    }
+  });
+
   it("rejects free-space targets and colliding Window previews", () => {
     expect(resolveOpeningPlacementCandidate(project(), "level", { x: 400, z: 0 }, "WINDOW", 20)).toBeUndefined();
     const source = project();
