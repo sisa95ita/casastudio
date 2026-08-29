@@ -199,6 +199,42 @@ function emptyProjectFetch(): typeof fetch {
   )) as typeof fetch;
 }
 
+function multiLevel3DFetch(): typeof fetch {
+  const project = structuredClone(demoProjectFixture);
+  const ground = project.building.levels[0]!;
+  project.building.levels = [
+    ground,
+    {
+      ...structuredClone(ground),
+      id: "level-upper",
+      name: "Upper Level",
+      elevation: 320
+    }
+  ];
+  const groundGeometry = geometryResponse.geometry.levels[0]!;
+  const geometry = {
+    ...geometryResponse,
+    geometry: {
+      ...geometryResponse.geometry,
+      levels: [
+        { ...groundGeometry, sourceLevelId: ground.id },
+        {
+          ...groundGeometry,
+          id: "geometry-level-upper",
+          sourceLevelId: "level-upper",
+          elevation: 320
+        }
+      ]
+    }
+  };
+
+  return vi.fn(async (input: RequestInfo | URL) => Response.json(
+    String(input).endsWith("/geometry")
+      ? geometry
+      : { project, sourceRevision: project.revision }
+  )) as typeof fetch;
+}
+
 function createMultiWallSubdivisionProject(): Project {
   const project = structuredClone(demoProjectFixture);
   const room: Room = {
@@ -397,6 +433,73 @@ describe("ProjectViewerPage", () => {
     expect(
       screen.getByRole("button", { name: "View" }).getAttribute("aria-pressed")
     ).toBe("true");
+  });
+
+  it("keeps 2D as default and mounts the lazy read-only 3D workspace", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+
+    const twoD = await screen.findByRole("button", { name: "2D workspace" });
+    expect(twoD.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("img", { name: /interactive 2d geometry viewer/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+
+    expect(await screen.findByTestId("project-3d-workspace")).toBeTruthy();
+    expect(screen.getByTestId("project-3d-canvas")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "3D workspace" }).getAttribute("aria-pressed"))
+      .toBe("true");
+    expect(screen.queryByRole("img", { name: /interactive 2d geometry viewer/i })).toBeNull();
+    expect(screen.queryByRole("toolbar", { name: "Editing tools" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Properties" })).toBeNull();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fit to building" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset camera" }));
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+
+    fireEvent.click(screen.getByRole("button", { name: "2D workspace" }));
+    expect(await screen.findByRole("img", { name: /interactive 2d geometry viewer/i })).toBeTruthy();
+    expect(screen.queryByTestId("project-3d-workspace")).toBeNull();
+  });
+
+  it("keeps 3D unavailable during Edit so the local draft is never discarded", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    act(() => store.dispatch(editingSessionMarkedDirty()));
+
+    expect(screen.getByRole("button", { name: "3D workspace" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(store.getState().projectEditor.mode).toBe("edit");
+    expect(store.getState().projectEditor.dirty).toBe(true);
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+  });
+
+  it("filters real multi-Level references as presentation-only 3D state", async () => {
+    const { store } = renderConnectedRoute(createApiClient(multiLevel3DFetch()));
+
+    fireEvent.click(await screen.findByRole("button", { name: "3D workspace" }));
+    const inspector = screen.getByRole("complementary", { name: "Test inspector" });
+    expect(await within(inspector).findByText("Upper Level")).toBeTruthy();
+    expect(within(inspector).getByText("3.20 m")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Active Level" }));
+    await waitFor(() => expect(within(inspector).queryByText("Upper Level")).toBeNull());
+    expect(within(inspector).getByText("0.00 m")).toBeTruthy();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+  });
+
+  it("shows a coherent empty architectural state in the 3D inspector", async () => {
+    renderConnectedRoute(createApiClient(emptyProjectFetch()));
+
+    fireEvent.click(await screen.findByRole("button", { name: "3D workspace" }));
+    expect(await screen.findByTestId("project-3d-workspace")).toBeTruthy();
+    expect(screen.getByText("Empty architectural geometry")).toBeTruthy();
   });
 
   it("switches authoritative geometry levels from the level selector", async () => {

@@ -28,6 +28,46 @@
     "unsaved": "Unsaved changes",
     "readOnly": "Read-only"
   },
+  "representation": {
+    "label": "Project representation",
+    "twoD": "2D workspace",
+    "threeD": "3D workspace"
+  },
+  "threeD": {
+    "title": "Architectural 3D viewer",
+    "description": "Read-only physical Level references derived from the authoritative Project.",
+    "loading": "Loading the 3D workspace…",
+    "fit": "Fit to building",
+    "reset": "Reset camera",
+    "status_one": "3D viewer · {{count}} visible Level · Read-only",
+    "status_other": "3D viewer · {{count}} visible Levels · Read-only",
+    "visibility": {
+      "label": "3D Level visibility",
+      "all": "All Levels",
+      "active": "Active Level"
+    },
+    "empty": {
+      "title": "No architectural reference geometry",
+      "detail": "This Project has no Wall reference lines yet. The physical ground and camera workspace remain available."
+    },
+    "inspector": {
+      "title": "3D viewer",
+      "readOnly": "This representation is read-only and does not change Project geometry.",
+      "project": "Project",
+      "referenceReady": "Physical references ready",
+      "empty": "Empty architectural geometry",
+      "visibleLevels": "Visible Levels",
+      "noVisibleLevels": "No Level reference is visible."
+    },
+    "errors": {
+      "unsupportedTitle": "3D rendering is unavailable",
+      "unsupportedDetail": "This browser or device could not initialize WebGL. You can continue using the 2D workspace.",
+      "runtimeTitle": "The 3D viewer stopped rendering",
+      "runtimeDetail": "The Project remains available. Return to 2D or retry the 3D workspace in a WebGL-capable browser.",
+      "derivationTitle": "The 3D scene could not be prepared",
+      "derivationDetail": "The authoritative Project is still available in 2D. No Project data was changed."
+    }
+  },
   "persistence": {
     "save": "Save",
     "discardAction": "Discard",
