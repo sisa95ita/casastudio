@@ -5,6 +5,7 @@ export { LevelGeometry } from "./level-geometry.js";
 export { Loop, type LoopKind } from "./loop.js";
 export { Polygon } from "./polygon.js";
 export type { BoundingBox, PolygonMetrics, PolygonWinding } from "./polygon-metrics.js";
+export { calculatePolygonInteriorAnchor } from "./polygon-metrics.js";
 export { Vertex } from "./vertex.js";
 
 /**

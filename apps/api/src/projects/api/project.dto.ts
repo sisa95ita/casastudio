@@ -90,7 +90,7 @@ export class RoomDto {
 }
 
 /**
- * Door or window opening owned by a Wall.
+ * Architectural opening owned by a Wall.
  */
 export class OpeningDto {
   @ApiProperty({ type: String })
@@ -119,6 +119,12 @@ export class OpeningDto {
 
   @ApiPropertyOptional({ type: [String] })
   readonly connectedRoomIds?: readonly string[];
+
+  @ApiPropertyOptional({ enum: ["START", "END"], enumName: "DoorHingeSide" })
+  readonly hingeSide?: "START" | "END";
+
+  @ApiPropertyOptional({ enum: ["LEFT", "RIGHT"], enumName: "DoorSwingSide" })
+  readonly swingSide?: "LEFT" | "RIGHT";
 }
 
 /**

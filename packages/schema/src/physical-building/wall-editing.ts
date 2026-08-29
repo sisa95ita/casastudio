@@ -46,6 +46,17 @@ export type MoveWallEndpointInput = {
   readonly position: Point2D;
 };
 
+/** Endpoint kept fixed by an exact Wall-length edit. */
+export type AnchoredWallEndpoint = "START" | "END";
+
+/** Input required to resize one Wall along its existing canonical axis. */
+export type SetWallLengthInput = {
+  readonly levelId: Identifier;
+  readonly wallId: Identifier;
+  readonly targetLength: number;
+  readonly anchoredEndpoint: AnchoredWallEndpoint;
+};
+
 /** Input required to remove an unreferenced Wall from a Level. */
 export type DeleteWallInput = {
   readonly levelId: Identifier;
@@ -84,6 +95,8 @@ export type WallInteriorConnection = {
 export type CreateConnectedWallInput = CreateWallInput & {
   readonly startConnection?: WallInteriorConnection;
   readonly endConnection?: WallInteriorConnection;
+  readonly startConnections?: readonly WallInteriorConnection[];
+  readonly endConnections?: readonly WallInteriorConnection[];
 };
 
 /**
@@ -217,7 +230,7 @@ export function moveWallEndpoint(
     );
   }
 
-  return success(
+  return validateCanonicalEditingResult(
     mapLevel(project, levelIndex, (currentLevel) => ({
       ...currentLevel,
       walls: currentLevel.walls.map((currentWall, currentWallIndex) =>
@@ -225,8 +238,77 @@ export function moveWallEndpoint(
           ? { ...currentWall, [input.endpoint]: positionResult.data }
           : currentWall
       )
-    }))
+    })),
+    "Wall endpoint movement"
   );
+}
+
+/**
+ * Sets an exact Wall length while preserving one endpoint and the Wall axis.
+ *
+ * When the opposite endpoint is a shared junction, every incident Wall
+ * endpoint is moved to the same destination. The complete candidate Project
+ * is validated atomically, including Opening fit and Room topology.
+ */
+export function setWallLength(
+  project: Project,
+  input: SetWallLengthInput
+): ProjectEditingResult {
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
+  if (levelIndex < 0) return failure(levelNotFound(input.levelId));
+
+  const level = project.building.levels[levelIndex];
+  const wall = level?.walls.find((candidate) => candidate.id === input.wallId);
+  if (!level || !wall) return failure(wallNotFound(input.levelId, input.wallId));
+  if (!Number.isFinite(input.targetLength) || input.targetLength <= 0) {
+    return failure(zeroLengthWall(input.wallId, "targetLength"));
+  }
+
+  const currentLength = getWallLength(wall);
+  if (currentLength === 0) return failure(zeroLengthWall(input.wallId, "wall"));
+  const anchored = input.anchoredEndpoint === "START" ? wall.start : wall.end;
+  const moved = input.anchoredEndpoint === "START" ? wall.end : wall.start;
+  const direction = input.anchoredEndpoint === "START"
+    ? {
+        x: (wall.end.x - wall.start.x) / currentLength,
+        z: (wall.end.z - wall.start.z) / currentLength
+      }
+    : {
+        x: (wall.start.x - wall.end.x) / currentLength,
+        z: (wall.start.z - wall.end.z) / currentLength
+      };
+  const destination = {
+    x: anchored.x + direction.x * input.targetLength,
+    z: anchored.z + direction.z * input.targetLength
+  };
+  const incidentWallIds = level.walls
+    .filter((candidate) =>
+      hasSamePoint(candidate.start, moved) || hasSamePoint(candidate.end, moved)
+    )
+    .map((candidate) => candidate.id);
+  if (!incidentWallIds.includes(wall.id)) {
+    return failure(wallNotFound(input.levelId, input.wallId));
+  }
+
+  const candidate = mapLevel(project, levelIndex, (currentLevel) => ({
+    ...currentLevel,
+    walls: currentLevel.walls.map((currentWall) =>
+      incidentWallIds.includes(currentWall.id)
+        ? {
+            ...currentWall,
+            start: hasSamePoint(currentWall.start, moved)
+              ? destination
+              : currentWall.start,
+            end: hasSamePoint(currentWall.end, moved)
+              ? destination
+              : currentWall.end
+          }
+        : currentWall
+    )
+  }));
+  return validateCanonicalEditingResult(candidate, "Wall length update");
 }
 
 /**
@@ -304,13 +386,14 @@ export function updateWallProperties(
         });
   }
 
-  return success(
+  return validateCanonicalEditingResult(
     mapLevel(project, levelIndex, (currentLevel) => ({
       ...currentLevel,
       walls: currentLevel.walls.map((currentWall, currentWallIndex) =>
         currentWallIndex === wallIndex ? wallResult.data : currentWall
       )
-    }))
+    })),
+    "Wall property update"
   );
 }
 
@@ -451,31 +534,28 @@ export function createConnectedWall(
   project: Project,
   input: CreateConnectedWallInput
 ): ProjectEditingResult {
-  if (
-    input.startConnection?.wallId === input.endConnection?.wallId &&
-    input.startConnection !== undefined
-  ) {
+  const startConnections = [
+    ...(input.startConnection ? [input.startConnection] : []),
+    ...(input.startConnections ?? [])
+  ];
+  const endConnections = [
+    ...(input.endConnection ? [input.endConnection] : []),
+    ...(input.endConnections ?? [])
+  ];
+  const allConnections = [...startConnections, ...endConnections];
+  if (new Set(allConnections.map((connection) => connection.wallId)).size !== allConnections.length) {
     return failure({
       code: ValidationErrorCode.WALL_SPLIT_POINT_NOT_ON_WALL,
       path: "wall",
-      message: "A connected Wall cannot split the same source Wall at both endpoints."
+      message: "A connected Wall cannot split the same source Wall more than once."
     });
   }
 
   let candidate = project;
   const connections = [
-    input.startConnection
-      ? { connection: input.startConnection, point: input.wall.start }
-      : undefined,
-    input.endConnection
-      ? { connection: input.endConnection, point: input.wall.end }
-      : undefined
-  ].filter(
-    (entry): entry is {
-      readonly connection: WallInteriorConnection;
-      readonly point: Point2D;
-    } => entry !== undefined
-  );
+    ...startConnections.map((connection) => ({ connection, point: input.wall.start })),
+    ...endConnections.map((connection) => ({ connection, point: input.wall.end }))
+  ];
 
   for (const { connection, point } of connections) {
     const splitResult = splitWall(candidate, {
@@ -530,6 +610,20 @@ export function collapseWallJunction(
   return success(
     tryCollapseWallJunction(project, levelIndex, junctionResult.data) ?? project
   );
+}
+
+/** Returns whether an exact junction can be collapsed without changing the Project. */
+export function canCollapseWallJunction(
+  project: Project,
+  input: CollapseWallJunctionInput
+): boolean {
+  const levelIndex = project.building.levels.findIndex(
+    (level) => level.id === input.levelId
+  );
+  if (levelIndex < 0 || !Point2DSchema.safeParse(input.junction).success) {
+    return false;
+  }
+  return tryCollapseWallJunction(project, levelIndex, input.junction) !== undefined;
 }
 
 /**
@@ -745,12 +839,19 @@ function mergeWallOpenings(
       0;
     for (const opening of wall.openings) {
       seen.add(opening.id);
-      openings.push({
-        ...opening,
-        offsetFromStart: aligned
-          ? startDistance + opening.offsetFromStart
-          : startDistance - opening.offsetFromStart - opening.width
-      });
+      const offsetFromStart = aligned
+        ? startDistance + opening.offsetFromStart
+        : startDistance - opening.offsetFromStart - opening.width;
+      openings.push(
+        opening.type === "DOOR" && !aligned
+          ? {
+              ...opening,
+              offsetFromStart,
+              hingeSide: (opening.hingeSide ?? "START") === "START" ? "END" : "START",
+              swingSide: (opening.swingSide ?? "LEFT") === "LEFT" ? "RIGHT" : "LEFT"
+            }
+          : { ...opening, offsetFromStart }
+      );
     }
   }
 
@@ -928,7 +1029,7 @@ function validateCanonicalEditingResult(
     if (!result.valid) return { ok: false, errors: result.errors };
   }
 
-  return success(parsed.data);
+  return success(project);
 }
 
 /**
@@ -936,6 +1037,8 @@ function validateCanonicalEditingResult(
  *
  * A Wall used by a Room boundary or carrying reciprocal `roomIds` is rejected
  * so the operation cannot create dangling canonical references implicitly.
+ * When deletion is allowed, its owned Openings are deleted with the Wall and
+ * can never become orphaned.
  */
 export function deleteWall(
   project: Project,

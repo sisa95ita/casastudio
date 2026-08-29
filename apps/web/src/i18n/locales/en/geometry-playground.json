@@ -25,15 +25,31 @@
     "fit": "Fit to view",
     "reset": "Reset viewport",
     "zoomIn": "Zoom in",
-    "zoomOut": "Zoom out"
+    "zoomOut": "Zoom out",
+    "technical": "Plan scale and measurements",
+    "scale": "Scale",
+    "zoom": "Zoom"
+  },
+  "metrics": {
+    "totalArea": "Total room area",
+    "width": "Overall width",
+    "depth": "Overall depth"
   },
   "shortcuts": {
     "title": "Shortcuts",
     "clearSelection": "Clear selection",
     "cancelInteraction": "Cancel interaction / clear selection",
-    "deleteWall": "Delete selected wall",
+    "deleteWall": "Delete selected wall or opening",
     "fitViewport": "Fit viewport",
-    "resetViewport": "Reset viewport"
+    "resetViewport": "Reset viewport",
+    "panViewport": "Pan viewport",
+    "undo": "Undo",
+    "redo": "Redo",
+    "selectTool": "Select tool",
+    "drawWallTool": "Draw Wall tool",
+    "doorTool": "Door tool",
+    "windowTool": "Window tool",
+    "measureTool": "Measure tool"
   },
   "status": {
     "engineBuildFailed": "Engine: build failed",

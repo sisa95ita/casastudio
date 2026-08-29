@@ -23,7 +23,17 @@ describe("Redux application state", () => {
         activeTool: null,
         selection: [],
         hover: undefined,
-        transient: { interaction: null }
+        transient: { interaction: null },
+        precision: { gridVisible: false, snapToGrid: false, gridSpacing: 100 },
+        presentation: {
+          scaleDenominator: 75,
+          dimensions: {
+            overallDimensions: true,
+            selectedDimensions: true,
+            roomMetrics: true
+          }
+        },
+        history: { past: [], future: [] }
       },
       viewer: { geometrySelection: { selected: [], hovered: undefined } }
     });

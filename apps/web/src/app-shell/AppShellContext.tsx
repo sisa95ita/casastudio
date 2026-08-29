@@ -11,9 +11,12 @@ import { createContext, useContext, useEffect } from "react";
 export type AppShellContent = {
   readonly title: string;
   readonly breadcrumb?: string;
+  readonly headerContextAccessory?: ReactNode;
+  readonly headerCenter?: ReactNode;
   readonly headerAccessory?: ReactNode;
   readonly inspector?: ReactNode;
   readonly status?: ReactNode;
+  readonly immersiveWorkspace?: boolean;
 };
 
 /**

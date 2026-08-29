@@ -43,6 +43,50 @@ export const geometryViewerShortcuts: readonly GeometryViewerShortcutDefinition[
     })
   ]);
 
+/** Keyboard commands available while a local Project editing session is active. */
+export const geometryEditorShortcuts = Object.freeze([
+  Object.freeze({
+    action: "SELECT_TOOL",
+    key: "V",
+    translationKey: "shortcuts.selectTool"
+  }),
+  Object.freeze({
+    action: "DRAW_WALL_TOOL",
+    key: "W",
+    translationKey: "shortcuts.drawWallTool"
+  }),
+  Object.freeze({
+    action: "DOOR_TOOL",
+    key: "D",
+    translationKey: "shortcuts.doorTool"
+  }),
+  Object.freeze({
+    action: "WINDOW_TOOL",
+    key: "N",
+    translationKey: "shortcuts.windowTool"
+  }),
+  Object.freeze({
+    action: "MEASURE_TOOL",
+    key: "M",
+    translationKey: "shortcuts.measureTool"
+  }),
+  Object.freeze({
+    action: "UNDO",
+    key: "Ctrl/Cmd + Z",
+    translationKey: "shortcuts.undo"
+  }),
+  Object.freeze({
+    action: "REDO",
+    key: "Ctrl/Cmd + Shift + Z · Ctrl/Cmd + Y",
+    translationKey: "shortcuts.redo"
+  }),
+  Object.freeze({
+    action: "TEMPORARY_PAN",
+    key: "Space + drag",
+    translationKey: "shortcuts.panViewport"
+  })
+]);
+
 /**
  * Resolves a keyboard event into a viewer shortcut action.
  */
@@ -91,8 +135,8 @@ export const isEditableShortcutTarget = (
 
   return (
     target.isContentEditable ||
-    target.tagName === "INPUT" ||
-    target.tagName === "TEXTAREA" ||
-    target.tagName === "SELECT"
+    Boolean(target.closest(
+      'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], .MuiInputBase-root'
+    ))
   );
 };

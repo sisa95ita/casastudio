@@ -245,9 +245,17 @@ Opening width
 
 This model avoids duplicating absolute Opening coordinates.
 
+Door orientation is also Wall-local. `START` and `END` identify the hinge
+endpoint within the Opening span, while `LEFT` and `RIGHT` identify the swing
+normal relative to the Wall's canonical start-to-end direction. Angled and
+orthogonal Walls use this same basis.
+
 The Geometry Engine may compute the exact start and end points of the Opening in Level or global coordinate space when generating derived geometry.
 
 Opening elevation is measured on the Y axis.
+
+For Windows, Opening elevation is the sill height. Valid Window geometry
+requires `elevation >= 0` and `elevation + height <= Wall.height`.
 
 For a Room on an elevated local floor, the effective global Opening elevation depends on the Level elevation, the relevant Room elevation when applicable, and the Opening's own elevation.
 

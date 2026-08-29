@@ -75,7 +75,7 @@ describe("Project Wall editing helpers", () => {
     ).toEqual({
       roomReferenced: false,
       start: { topology: "standalone", draggable: true },
-      end: { topology: "shared-junction", draggable: false }
+      end: { topology: "shared-junction", draggable: true }
     });
   });
 
@@ -90,8 +90,8 @@ describe("Project Wall editing helpers", () => {
     );
 
     expect(availability?.roomReferenced).toBe(true);
-    expect(availability?.start.draggable).toBe(false);
-    expect(availability?.end.draggable).toBe(false);
+    expect(availability?.start.draggable).toBe(true);
+    expect(availability?.end.draggable).toBe(true);
   });
 
   it("detects a canonical cycle only when the committed Wall has an existing alternate path", () => {

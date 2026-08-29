@@ -3,7 +3,15 @@ import {
   createSlice,
   type PayloadAction
 } from "@reduxjs/toolkit";
-import type { Project, WallEndpoint } from "@casastudio/schema";
+import {
+  architecturalScaleDenominators,
+  type ArchitecturalScaleDenominator
+} from "@casastudio/geometry";
+import type {
+  Project,
+  RoomShapeDefinition,
+  WallEndpoint
+} from "@casastudio/schema";
 import type { WorldPointXZ } from "../geometry-playground/viewport-transform-2d";
 
 import type {
@@ -13,6 +21,7 @@ import type {
 import type { RootState } from "./store";
 import type { ProjectEditorTool } from "./project-editor-tools";
 import type { DrawWallSnapCandidate } from "./project-wall-snapping";
+import type { OpeningPlacementCandidate } from "./project-opening-editing";
 
 /** Mutually exclusive interaction modes for the 2D Project workspace. */
 export type ProjectWorkspaceMode = "view" | "edit";
@@ -22,7 +31,7 @@ export type DrawWallInteraction = {
   readonly kind: "draw-wall";
   readonly startPoint: WorldPointXZ;
   readonly currentPointerPoint: WorldPointXZ;
-  readonly startConnectionWallId?: string;
+  readonly startConnectionWallIds: readonly string[];
 };
 
 /** Describes a Wall endpoint proposal that has not entered the Project draft. */
@@ -35,11 +44,105 @@ export type MoveWallEndpointInteraction = {
   readonly currentPointerPoint: WorldPointXZ;
 };
 
+/** Describes a shared junction proposal that has not entered the Project draft. */
+export type MoveJunctionInteraction = {
+  readonly kind: "move-junction";
+  readonly levelId: string;
+  readonly position: WorldPointXZ;
+  readonly incidentWallIds: readonly string[];
+  readonly pointerId: number;
+  readonly currentPointerPoint: WorldPointXZ;
+};
+
+/** Editable physical defaults owned by one transient Opening tool session. */
+export type OpeningAuthoringProperties = {
+  readonly width: number;
+  readonly height: number;
+  readonly elevation: number;
+  readonly hingeSide?: "START" | "END";
+  readonly swingSide?: "LEFT" | "RIGHT";
+};
+
+/** Opening kinds supported by transient placement authoring. */
+export type OpeningAuthoringType = "DOOR" | "WINDOW" | "OPENING";
+
+/** Describes an Opening proposal that has not entered Project history. */
+export type PlaceOpeningInteraction = {
+  readonly kind: "place-opening";
+  readonly openingType: OpeningAuthoringType;
+  readonly properties: OpeningAuthoringProperties;
+  readonly candidate?: OpeningPlacementCandidate;
+};
+
+/** Describes a point-on-Wall split proposal that has not entered history. */
+export type AddWallVertexInteraction = {
+  readonly kind: "add-wall-vertex";
+  readonly levelId: string;
+  readonly wallId: string;
+  readonly splitPoint?: WorldPointXZ;
+};
+
+/** Describes an Opening drag constrained to its owning Wall. */
+export type MoveOpeningInteraction = {
+  readonly kind: "move-opening";
+  readonly levelId: string;
+  readonly wallId: string;
+  readonly openingId: string;
+  readonly pointerId: number;
+  readonly currentOffsetFromStart: number;
+  readonly dragging: boolean;
+  readonly valid: boolean;
+};
+
+/** Describes a temporary two-point ruler that never enters the Project draft. */
+export type MeasureInteraction = {
+  readonly kind: "measure";
+  readonly startPoint: WorldPointXZ;
+  readonly currentPointerPoint: WorldPointXZ;
+  readonly completed: boolean;
+};
+
+/** Authoring-only Room footprint state that never enters the Project draft. */
+export type PlaceRoomShapeInteraction = {
+  readonly kind: "place-room-shape";
+  readonly levelId: string;
+  readonly shape: RoomShapeDefinition;
+  readonly origin?: WorldPointXZ;
+};
+
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
-    DrawWallInteraction | MoveWallEndpointInteraction | null;
+    DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
+    PlaceOpeningInteraction | AddWallVertexInteraction | MoveOpeningInteraction | MeasureInteraction |
+    PlaceRoomShapeInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
+};
+
+/** Session-local precision assistance preferences expressed in Project units. */
+export type ProjectEditorPrecisionState = {
+  readonly gridVisible: boolean;
+  readonly snapToGrid: boolean;
+  readonly gridSpacing: number;
+};
+
+/** Visibility preferences for derived architectural measurement layers. */
+export type ProjectDimensionDisplayState = {
+  readonly overallDimensions: boolean;
+  readonly selectedDimensions: boolean;
+  readonly roomMetrics: boolean;
+};
+
+/** Session-local document presentation settings independent from viewport state. */
+export type ProjectEditorPresentationState = {
+  readonly scaleDenominator: ArchitecturalScaleDenominator;
+  readonly dimensions: ProjectDimensionDisplayState;
+};
+
+/** Bounded history of meaningful complete-Project draft commits. */
+export type ProjectEditorHistoryState = {
+  readonly past: readonly Project[];
+  readonly future: readonly Project[];
 };
 
 /** Local editing session derived from one authoritative Project revision. */
@@ -54,7 +157,30 @@ export type ProjectEditorState = {
   readonly selection: readonly GeometrySelection[];
   readonly hover?: GeometrySelection;
   readonly transient: ProjectEditorTransientState;
+  readonly precision: ProjectEditorPrecisionState;
+  readonly presentation: ProjectEditorPresentationState;
+  readonly history: ProjectEditorHistoryState;
 };
+
+/** Maximum number of complete draft snapshots retained in one edit session. */
+export const projectEditorHistoryLimit = 50;
+
+/** Default precision assistance for a newly entered edit session. */
+export const defaultProjectEditorPrecision: ProjectEditorPrecisionState = Object.freeze({
+  gridVisible: false,
+  snapToGrid: false,
+  gridSpacing: 100
+});
+
+/** Default architectural presentation for a newly entered edit session. */
+export const defaultProjectEditorPresentation: ProjectEditorPresentationState = Object.freeze({
+  scaleDenominator: 75,
+  dimensions: Object.freeze({
+    overallDimensions: true,
+    selectedDimensions: true,
+    roomMetrics: true
+  })
+});
 
 /** Initial editor state before an explicit local editing session begins. */
 export const initialProjectEditorState: ProjectEditorState = {
@@ -67,7 +193,10 @@ export const initialProjectEditorState: ProjectEditorState = {
   activeTool: null,
   selection: [],
   hover: undefined,
-  transient: { interaction: null }
+  transient: { interaction: null },
+  precision: defaultProjectEditorPrecision,
+  presentation: defaultProjectEditorPresentation,
+  history: { past: [], future: [] }
 };
 
 type EnterEditingPayload = {
@@ -75,6 +204,26 @@ type EnterEditingPayload = {
   readonly baseRevision: number;
   readonly preferredLevelId?: string;
 };
+
+/** Creates deterministic, Project-unit defaults for a new Opening tool session. */
+export function createOpeningAuthoringInteraction(
+  openingType: OpeningAuthoringType
+): PlaceOpeningInteraction {
+  return {
+    kind: "place-opening",
+    openingType,
+    properties: openingType === "DOOR"
+      ? { width: 90, height: 210, elevation: 0, hingeSide: "START", swingSide: "LEFT" }
+      : openingType === "WINDOW"
+        ? { width: 120, height: 120, elevation: 90 }
+        : { width: 120, height: 210, elevation: 0 }
+  };
+}
+
+/** Maps an Opening authoring tool to its canonical Opening discriminator. */
+function getOpeningTypeForTool(tool: ProjectEditorTool | null): OpeningAuthoringType | undefined {
+  return tool === "door" ? "DOOR" : tool === "window" ? "WINDOW" : tool === "opening" ? "OPENING" : undefined;
+}
 
 const projectEditorSlice = createSlice({
   name: "projectEditor",
@@ -85,7 +234,7 @@ const projectEditorSlice = createSlice({
         return {
           payload: {
             projectId: payload.project.id,
-            draft: structuredClone(payload.project),
+            draft: cloneProject(payload.project),
             baseRevision: payload.baseRevision,
             preferredLevelId: payload.preferredLevelId
           }
@@ -121,6 +270,12 @@ const projectEditorSlice = createSlice({
         state.selection = [];
         state.hover = undefined;
         state.transient = { interaction: null };
+        state.precision = { ...defaultProjectEditorPrecision };
+        state.presentation = {
+          ...defaultProjectEditorPresentation,
+          dimensions: { ...defaultProjectEditorPresentation.dimensions }
+        };
+        state.history = { past: [], future: [] };
       }
     },
     cleanEditingSessionLeft(state) {
@@ -149,9 +304,23 @@ const projectEditorSlice = createSlice({
       ) {
         return;
       }
+      if (JSON.stringify(state.draft) === JSON.stringify(nextDraft)) {
+        return;
+      }
 
-      state.draft = structuredClone(nextDraft);
+      state.history.past = [
+        ...state.history.past,
+        cloneProject(state.draft)
+      ].slice(-projectEditorHistoryLimit);
+      state.history.future = [];
+      state.draft = cloneProject(nextDraft);
       state.dirty = true;
+      if (
+        state.transient.interaction?.kind === "place-opening" ||
+        state.transient.interaction?.kind === "place-room-shape"
+      ) {
+        state.transient = { interaction: null };
+      }
       if (
         !nextDraft.building.levels.some(
           (level) => level.id === state.activeLevelId
@@ -161,6 +330,59 @@ const projectEditorSlice = createSlice({
         state.selection = [];
         state.hover = undefined;
         state.transient = { interaction: null };
+      }
+    },
+    editorUndoRequested(state) {
+      if (state.mode !== "edit" || !state.draft || state.history.past.length === 0) return;
+      const previous = state.history.past.at(-1);
+      if (!previous) return;
+      state.history.future = [cloneProject(state.draft), ...state.history.future]
+        .slice(0, projectEditorHistoryLimit);
+      state.history.past = state.history.past.slice(0, -1);
+      state.draft = cloneProject(previous);
+      state.dirty = state.history.past.length > 0;
+      state.selection = [];
+      state.hover = undefined;
+      state.transient = { interaction: null };
+    },
+    editorRedoRequested(state) {
+      if (state.mode !== "edit" || !state.draft || state.history.future.length === 0) return;
+      const next = state.history.future[0];
+      if (!next) return;
+      state.history.past = [...state.history.past, cloneProject(state.draft)]
+        .slice(-projectEditorHistoryLimit);
+      state.history.future = state.history.future.slice(1);
+      state.draft = cloneProject(next);
+      state.dirty = true;
+      state.selection = [];
+      state.hover = undefined;
+      state.transient = { interaction: null };
+    },
+    editorGridVisibilityChanged(state, action: PayloadAction<boolean>) {
+      if (state.mode === "edit") state.precision.gridVisible = action.payload;
+    },
+    editorGridSnappingChanged(state, action: PayloadAction<boolean>) {
+      if (state.mode === "edit") state.precision.snapToGrid = action.payload;
+    },
+    editorGridSpacingChanged(state, action: PayloadAction<number>) {
+      if (state.mode === "edit" && Number.isFinite(action.payload) && action.payload > 0) {
+        state.precision.gridSpacing = action.payload;
+      }
+    },
+    editorDocumentScaleChanged(state, action: PayloadAction<ArchitecturalScaleDenominator>) {
+      if (state.mode === "edit" && architecturalScaleDenominators.includes(action.payload)) {
+        state.presentation.scaleDenominator = action.payload;
+      }
+    },
+    editorDimensionDisplayChanged(
+      state,
+      action: PayloadAction<Partial<ProjectDimensionDisplayState>>
+    ) {
+      if (state.mode === "edit") {
+        state.presentation.dimensions = {
+          ...state.presentation.dimensions,
+          ...action.payload
+        };
       }
     },
     editorActiveLevelChanged(state, action: PayloadAction<string>) {
@@ -184,7 +406,12 @@ const projectEditorSlice = createSlice({
         state.activeTool = action.payload;
         state.selection = [];
         state.hover = undefined;
-        state.transient = { interaction: null };
+        const openingType = getOpeningTypeForTool(action.payload);
+        state.transient = {
+          interaction: openingType
+            ? createOpeningAuthoringInteraction(openingType)
+            : null
+        };
       }
     },
     editorDrawWallStarted(
@@ -199,10 +426,13 @@ const projectEditorSlice = createSlice({
           kind: "draw-wall",
           startPoint: action.payload.point,
           currentPointerPoint: action.payload.point,
-          startConnectionWallId:
-            action.payload.snapCandidate?.kind === "wall-interior"
-              ? action.payload.snapCandidate.wallId
-              : undefined
+          startConnectionWallIds:
+            action.payload.snapCandidate?.kind === "wall-interior" ||
+            action.payload.snapCandidate?.kind === "wall-midpoint"
+              ? [action.payload.snapCandidate.wallId]
+              : action.payload.snapCandidate?.kind === "wall-intersection"
+                ? [...action.payload.snapCandidate.wallIds]
+                : []
         };
         state.transient.snapCandidate = action.payload.snapCandidate;
       }
@@ -228,6 +458,26 @@ const projectEditorSlice = createSlice({
         };
       }
     },
+    editorJunctionDragStarted(
+      state,
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly position: WorldPointXZ;
+        readonly incidentWallIds: readonly string[];
+        readonly pointerId: number;
+      }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-junction",
+          levelId: action.payload.levelId,
+          position: action.payload.position,
+          incidentWallIds: [...action.payload.incidentWallIds],
+          pointerId: action.payload.pointerId,
+          currentPointerPoint: action.payload.position
+        };
+      }
+    },
     editorTransientPointerMoved(
       state,
       action: PayloadAction<{
@@ -238,7 +488,7 @@ const projectEditorSlice = createSlice({
       const interaction = state.transient.interaction;
       if (
         interaction?.kind === "draw-wall" ||
-        (interaction?.kind === "move-wall-endpoint" &&
+        ((interaction?.kind === "move-wall-endpoint" || interaction?.kind === "move-junction") &&
           interaction.pointerId === action.payload.pointerId)
       ) {
         interaction.currentPointerPoint = action.payload.point;
@@ -255,6 +505,185 @@ const projectEditorSlice = createSlice({
       state.transient.snapCandidate = action.payload.snapCandidate;
       if (state.transient.interaction?.kind === "draw-wall") {
         state.transient.interaction.currentPointerPoint = action.payload.point;
+      }
+    },
+    editorMeasurementPointSet(
+      state,
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly snapCandidate?: DrawWallSnapCandidate;
+      }>
+    ) {
+      if (state.mode !== "edit" || state.activeTool !== "measure") return;
+      const interaction = state.transient.interaction;
+      state.transient.snapCandidate = action.payload.snapCandidate;
+      if (interaction?.kind === "measure" && !interaction.completed) {
+        interaction.currentPointerPoint = action.payload.point;
+        interaction.completed = true;
+      } else {
+        state.transient.interaction = {
+          kind: "measure",
+          startPoint: action.payload.point,
+          currentPointerPoint: action.payload.point,
+          completed: false
+        };
+      }
+    },
+    editorMeasurementPointerMoved(
+      state,
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly snapCandidate?: DrawWallSnapCandidate;
+      }>
+    ) {
+      if (state.mode !== "edit" || state.activeTool !== "measure") return;
+      state.transient.snapCandidate = action.payload.snapCandidate;
+      if (
+        state.transient.interaction?.kind === "measure" &&
+        !state.transient.interaction.completed
+      ) {
+        state.transient.interaction.currentPointerPoint = action.payload.point;
+      }
+    },
+    editorRoomShapePlacementStarted(
+      state,
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly shape: RoomShapeDefinition;
+      }>
+    ) {
+      if (
+        state.mode === "edit" &&
+        state.activeTool === "room" &&
+        state.activeLevelId === action.payload.levelId
+      ) {
+        state.selection = [];
+        state.hover = undefined;
+        state.transient = {
+          interaction: {
+            kind: "place-room-shape",
+            levelId: action.payload.levelId,
+            shape: action.payload.shape
+          }
+        };
+      }
+    },
+    editorRoomShapePlacementChanged(
+      state,
+      action: PayloadAction<RoomShapeDefinition>
+    ) {
+      if (state.transient.interaction?.kind === "place-room-shape") {
+        state.transient.interaction.shape = action.payload;
+      }
+    },
+    editorRoomShapePlacementPointerMoved(
+      state,
+      action: PayloadAction<WorldPointXZ>
+    ) {
+      if (state.transient.interaction?.kind === "place-room-shape") {
+        state.transient.interaction.origin = action.payload;
+      }
+    },
+    editorOpeningPlacementChanged(
+      state,
+      action: PayloadAction<{
+        readonly openingType: OpeningAuthoringType;
+        readonly properties?: OpeningAuthoringProperties;
+        readonly candidate?: OpeningPlacementCandidate;
+      }>
+    ) {
+      if (
+        state.mode === "edit" &&
+        ((state.activeTool === "door" && action.payload.openingType === "DOOR") ||
+          (state.activeTool === "window" && action.payload.openingType === "WINDOW") ||
+          (state.activeTool === "opening" && action.payload.openingType === "OPENING"))
+      ) {
+        const current = state.transient.interaction;
+        state.transient.interaction = {
+          kind: "place-opening",
+          openingType: action.payload.openingType,
+          properties: action.payload.properties ??
+            (current?.kind === "place-opening" && current.openingType === action.payload.openingType
+              ? current.properties
+              : createOpeningAuthoringInteraction(action.payload.openingType).properties),
+          candidate: action.payload.candidate
+        };
+      }
+    },
+    editorOpeningAuthoringPropertiesChanged(
+      state,
+      action: PayloadAction<Partial<OpeningAuthoringProperties>>
+    ) {
+      if (state.transient.interaction?.kind === "place-opening") {
+        state.transient.interaction.properties = {
+          ...state.transient.interaction.properties,
+          ...action.payload
+        };
+        state.transient.interaction.candidate = undefined;
+      }
+    },
+    editorWallVertexPlacementStarted(
+      state,
+      action: PayloadAction<{ readonly levelId: string; readonly wallId: string }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient = {
+          interaction: {
+            kind: "add-wall-vertex",
+            levelId: action.payload.levelId,
+            wallId: action.payload.wallId
+          }
+        };
+      }
+    },
+    editorWallVertexPlacementChanged(
+      state,
+      action: PayloadAction<WorldPointXZ | undefined>
+    ) {
+      if (state.transient.interaction?.kind === "add-wall-vertex") {
+        state.transient.interaction.splitPoint = action.payload;
+      }
+    },
+    editorOpeningDragStarted(
+      state,
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly wallId: string;
+        readonly openingId: string;
+        readonly pointerId: number;
+        readonly offsetFromStart: number;
+      }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-opening",
+          levelId: action.payload.levelId,
+          wallId: action.payload.wallId,
+          openingId: action.payload.openingId,
+          pointerId: action.payload.pointerId,
+          currentOffsetFromStart: action.payload.offsetFromStart,
+          dragging: false,
+          valid: true
+        };
+      }
+    },
+    editorOpeningDragThresholdCrossed(
+      state,
+      action: PayloadAction<{ readonly pointerId: number }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "move-opening" && interaction.pointerId === action.payload.pointerId) {
+        interaction.dragging = true;
+      }
+    },
+    editorOpeningDragPreviewChanged(
+      state,
+      action: PayloadAction<{ readonly pointerId: number; readonly offsetFromStart: number; readonly valid: boolean }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "move-opening" && interaction.pointerId === action.payload.pointerId) {
+        interaction.currentOffsetFromStart = action.payload.offsetFromStart;
+        interaction.valid = action.payload.valid;
       }
     },
     editorTransientInteractionCleared(state) {
@@ -312,6 +741,11 @@ export function hasPreservedServerFields(
   );
 }
 
+/** Copies a JSON-compatible canonical Project without retaining Immer proxies. */
+function cloneProject(project: Project): Project {
+  return JSON.parse(JSON.stringify(project)) as Project;
+}
+
 /** Focused actions for the local Project editing session. */
 export const {
   editingSessionEntered,
@@ -319,11 +753,31 @@ export const {
   editingSessionEnded,
   editingSessionMarkedDirty,
   editingDraftReplaced,
+  editorUndoRequested,
+  editorRedoRequested,
+  editorGridVisibilityChanged,
+  editorGridSnappingChanged,
+  editorGridSpacingChanged,
+  editorDocumentScaleChanged,
+  editorDimensionDisplayChanged,
   editorActiveLevelChanged,
   editorActiveToolChanged,
   editorDrawWallStarted,
   editorDrawWallPointerMoved,
+  editorMeasurementPointSet,
+  editorMeasurementPointerMoved,
+  editorRoomShapePlacementStarted,
+  editorRoomShapePlacementChanged,
+  editorRoomShapePlacementPointerMoved,
+  editorOpeningPlacementChanged,
+  editorOpeningAuthoringPropertiesChanged,
+  editorWallVertexPlacementStarted,
+  editorWallVertexPlacementChanged,
+  editorOpeningDragStarted,
+  editorOpeningDragThresholdCrossed,
+  editorOpeningDragPreviewChanged,
   editorEndpointDragStarted,
+  editorJunctionDragStarted,
   editorTransientPointerMoved,
   editorTransientInteractionCleared,
   editorSelectionChanged,
@@ -338,6 +792,14 @@ export const projectEditorReducer = projectEditorSlice.reducer;
 /** Selects the complete local Project editing session. */
 export const selectProjectEditor = (state: RootState): ProjectEditorState =>
   state.projectEditor;
+
+/** Whether the active edit session has a stable draft commit to undo. */
+export const selectCanUndoProjectEdit = (state: RootState): boolean =>
+  state.projectEditor.mode === "edit" && state.projectEditor.history.past.length > 0;
+
+/** Whether the active edit session has an undone draft commit to restore. */
+export const selectCanRedoProjectEdit = (state: RootState): boolean =>
+  state.projectEditor.mode === "edit" && state.projectEditor.history.future.length > 0;
 
 /** Selects edit-mode geometry interaction state without copying the draft. */
 export const selectEditorGeometrySelection = createSelector(

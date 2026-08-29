@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Project } from "../project/index.js";
 import { ValidationErrorCode } from "../validation/index.js";
 import type { Window } from "./opening.js";
-import { createWall, deleteWall, moveWallEndpoint } from "./wall-editing.js";
+import { createWall, deleteWall, moveWallEndpoint, setWallLength } from "./wall-editing.js";
 import type { Wall } from "./wall.js";
 
 const editableWall: Wall = {
@@ -250,6 +250,105 @@ describe("moveWallEndpoint", () => {
       errors: [{ code: ValidationErrorCode.WALL_ZERO_LENGTH }]
     });
   });
+
+  it("rejects shortening a Wall past an owned Opening", () => {
+    const project = createProject();
+    project.building.levels[0]!.walls[0]!.openings.push({
+      id: "window-near-end",
+      type: "WINDOW",
+      offsetFromStart: 60,
+      width: 30,
+      height: 120,
+      elevation: 90
+    });
+    const before = clone(project);
+    const result = moveWallEndpoint(project, {
+      levelId: "ground-floor",
+      wallId: "existing-wall",
+      endpoint: "end",
+      position: { x: 80, z: 0 }
+    });
+    expect(result).toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.OPENING_OUTSIDE_WALL }] });
+    expect(project).toEqual(before);
+  });
+});
+
+describe("setWallLength", () => {
+  it("anchors Start and moves End along the current axis", () => {
+    const result = setWallLength(createProject(), {
+      levelId: "ground-floor",
+      wallId: "existing-wall",
+      targetLength: 175,
+      anchoredEndpoint: "START"
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.building.levels[0]?.walls[0]).toMatchObject({
+      start: { x: 0, z: 0 },
+      end: { x: 175, z: 0 }
+    });
+  });
+
+  it("anchors End and moves Start along the reverse axis", () => {
+    const result = setWallLength(createProject(), {
+      levelId: "ground-floor",
+      wallId: "existing-wall",
+      targetLength: 40,
+      anchoredEndpoint: "END"
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.building.levels[0]?.walls[0]).toMatchObject({
+      start: { x: 60, z: 0 },
+      end: { x: 100, z: 0 }
+    });
+  });
+
+  it("moves every Wall incident to the resized endpoint as one junction", () => {
+    const project = createProject();
+    project.building.levels[0]!.walls.push({
+      ...editableWall,
+      id: "connected-wall",
+      start: { x: 100, z: 0 },
+      end: { x: 100, z: 80 }
+    });
+    const result = setWallLength(project, {
+      levelId: "ground-floor",
+      wallId: "existing-wall",
+      targetLength: 150,
+      anchoredEndpoint: "START"
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.building.levels[0]?.walls.find((wall) => wall.id === "connected-wall")?.start)
+      .toEqual({ x: 150, z: 0 });
+  });
+
+  it("rejects invalid lengths and Opening overflow atomically", () => {
+    const project = createProject();
+    project.building.levels[0]!.walls[0]!.openings.push({
+      id: "end-window",
+      type: "WINDOW",
+      offsetFromStart: 60,
+      width: 30,
+      height: 100,
+      elevation: 80
+    });
+    const before = clone(project);
+    expect(setWallLength(project, {
+      levelId: "ground-floor",
+      wallId: "existing-wall",
+      targetLength: 0,
+      anchoredEndpoint: "START"
+    })).toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.WALL_ZERO_LENGTH }] });
+    expect(setWallLength(project, {
+      levelId: "ground-floor",
+      wallId: "existing-wall",
+      targetLength: 80,
+      anchoredEndpoint: "START"
+    })).toMatchObject({ ok: false, errors: [{ code: ValidationErrorCode.OPENING_OUTSIDE_WALL }] });
+    expect(project).toEqual(before);
+  });
 });
 
 describe("deleteWall", () => {
@@ -314,8 +413,8 @@ function createProject(): Project {
           elevation: 0,
           rooms: [],
           walls: [
-            { ...editableWall, id: "existing-wall" },
-            { ...editableWall, id: "unreferenced-wall", start: { x: 0, z: 100 }, end: { x: 100, z: 100 } }
+            { ...editableWall, id: "existing-wall", openings: [] },
+            { ...editableWall, id: "unreferenced-wall", start: { x: 0, z: 100 }, end: { x: 100, z: 100 }, openings: [] }
           ],
           staircases: []
         },

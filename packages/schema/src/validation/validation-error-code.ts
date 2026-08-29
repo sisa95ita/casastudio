@@ -11,6 +11,81 @@ export enum ValidationErrorCode {
   ROOM_NOT_FOUND = "ROOM_NOT_FOUND",
 
   /**
+   * A caller supplied a Room boundary that does not form one closed connected cycle.
+   */
+  INVALID_ROOM_BOUNDARY = "INVALID_ROOM_BOUNDARY",
+
+  /**
+   * A Room already represents the same canonical wall boundary on the Level.
+   */
+  DUPLICATE_ROOM_BOUNDARY = "DUPLICATE_ROOM_BOUNDARY",
+
+  /**
+   * A requested Wall does not divide the target Room into exactly two regions.
+   */
+  WALL_DOES_NOT_PARTITION_ROOM = "WALL_DOES_NOT_PARTITION_ROOM",
+
+  /**
+   * Room partitioning cannot preserve a Door's existing connected-room meaning.
+   */
+  ROOM_PARTITION_OPENING_AMBIGUOUS = "ROOM_PARTITION_OPENING_AMBIGUOUS",
+
+  /**
+   * An explicit Room does not currently resolve to a valid bounded-face subdivision.
+   */
+  ROOM_SUBDIVISION_NOT_FOUND = "ROOM_SUBDIVISION_NOT_FOUND",
+
+  /**
+   * Bounded faces changed after a Room reconciliation target was selected.
+   */
+  STALE_ROOM_TOPOLOGY = "STALE_ROOM_TOPOLOGY",
+
+  /**
+   * Caller-supplied Room identities do not match the derived subdivision faces.
+   */
+  INVALID_ROOM_SUBDIVISION_INPUT = "INVALID_ROOM_SUBDIVISION_INPUT",
+
+  /**
+   * A Door's owning Wall does not identify deterministic Rooms after subdivision.
+   */
+  ROOM_SUBDIVISION_DOOR_REFERENCE_AMBIGUOUS = "ROOM_SUBDIVISION_DOOR_REFERENCE_AMBIGUOUS",
+
+  /**
+   * A Viewpoint position does not identify one resulting Room after subdivision.
+   */
+  ROOM_SUBDIVISION_VIEWPOINT_REFERENCE_AMBIGUOUS = "ROOM_SUBDIVISION_VIEWPOINT_REFERENCE_AMBIGUOUS",
+
+  /**
+   * A Staircase Room endpoint lacks a deterministic spatial assignment after subdivision.
+   */
+  ROOM_SUBDIVISION_STAIRCASE_REFERENCE_AMBIGUOUS = "ROOM_SUBDIVISION_STAIRCASE_REFERENCE_AMBIGUOUS",
+
+  /**
+   * A Room cannot be removed while non-boundary domain entities reference it.
+   */
+  ROOM_IS_REFERENCED = "ROOM_IS_REFERENCED",
+
+  /**
+   * A Room does not have exactly one adjacent explicit Room suitable for dissolution.
+   */
+  ROOM_DISSOLUTION_AMBIGUOUS = "ROOM_DISSOLUTION_AMBIGUOUS",
+
+  /**
+   * Adjacent Room boundaries cannot be combined into one exact simple outer cycle.
+   */
+  INVALID_ROOM_DISSOLUTION = "INVALID_ROOM_DISSOLUTION",
+
+  /**
+   * No shared canonical Wall endpoint exists at the requested position.
+   */
+  JUNCTION_NOT_FOUND = "JUNCTION_NOT_FOUND",
+
+  /**
+   * The Walls incident to a junction changed after an edit interaction began.
+   */
+  STALE_JUNCTION_TOPOLOGY = "STALE_JUNCTION_TOPOLOGY",
+
+  /**
    * A reference to a Wall does not resolve during cross-reference validation.
    */
   WALL_NOT_FOUND = "WALL_NOT_FOUND",
@@ -194,6 +269,18 @@ export enum ValidationErrorCode {
    * An Opening starts before the Wall or extends beyond the Wall length.
    */
   OPENING_OUTSIDE_WALL = "OPENING_OUTSIDE_WALL",
+
+  /** An Opening identifier does not resolve to an owned Opening. */
+  OPENING_NOT_FOUND = "OPENING_NOT_FOUND",
+
+  /** An Opening has non-positive or otherwise invalid dimensions. */
+  INVALID_OPENING_DIMENSIONS = "INVALID_OPENING_DIMENSIONS",
+
+  /** An Opening's vertical span falls outside its owning Wall. */
+  OPENING_OUTSIDE_WALL_HEIGHT = "OPENING_OUTSIDE_WALL_HEIGHT",
+
+  /** Two Opening intervals violate the authoritative adjacent-clearance policy. */
+  OPENING_COLLISION = "OPENING_COLLISION",
 
   /**
    * A StairFlight has identical start and end coordinates.

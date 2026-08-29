@@ -75,14 +75,60 @@
     "label": "Editing tools",
     "select": "Select",
     "draw-wall": "Draw Wall",
-    "pan": "Pan",
+    "door": "Door",
+    "window": "Window",
+    "opening": "Wall Opening",
+    "room": "Room",
+    "measure": "Measure",
     "undo": "Undo",
     "redo": "Redo",
+    "createRoom": "Create Room",
     "comingSoon": "{{tool}} — coming soon",
     "help": {
       "select": "Select elements in the plan.",
       "draw-wall": "Draw connected walls as a continuous chain.",
-      "pan": "Move around the plan without changing geometry."
+      "door": "Place a door on a wall.",
+      "window": "Place a window on a wall.",
+      "opening": "Place an unadorned opening through a wall.",
+      "room": "Create a Room from existing walls or a predefined shape.",
+      "measure": "Measure between snapped points without changing the project."
+    }
+  },
+  "roomAuthoring": {
+    "menuLabel": "Room authoring",
+    "existingSection": "Create from existing walls",
+    "detectRoom": "Detect room",
+    "shapeSection": "Start from a shape",
+    "rectangle": "Rectangle",
+    "lShape": "L-shape",
+    "emptyLevelOnly": "Room shapes are currently available only on an empty level.",
+    "dimensions": "Physical dimensions",
+    "width": "Width",
+    "depth": "Depth",
+    "notchWidth": "Notch width",
+    "notchDepth": "Notch depth",
+    "rotation": "Rotation"
+  },
+  "precision": {
+    "grid": "Grid",
+    "snapGrid": "Snap to grid",
+    "spacing": "Spacing"
+  },
+  "header": {
+    "history": "Edit history"
+  },
+  "statusBar": {
+    "label": "Project editor status bar",
+    "scale": "Scale",
+    "units": "Units",
+    "grid": "Grid",
+    "snap": "Snap to grid",
+    "snapHelp": "Align points to the current grid spacing",
+    "spacing": "Spacing",
+    "on": "On",
+    "off": "Off",
+    "unitValues": {
+      "cm": "centimeters"
     }
   },
   "shortcuts": {
@@ -107,13 +153,31 @@
     "revision": "Revision"
   },
   "levelSelector": {
-    "label": "Level"
+    "label": "Level",
+    "create": "Create level",
+    "edit": "Edit level",
+    "createTitle": "Create level",
+    "editTitle": "Edit level",
+    "name": "Level name",
+    "elevation": "Elevation ({{unit}})",
+    "cancel": "Cancel",
+    "createAction": "Create Level",
+    "saveAction": "Save Level",
+    "invalid": "Enter a name and a finite physical elevation."
   },
   "toolbar": {
     "fit": "Fit to view",
     "reset": "Reset viewport",
     "zoomIn": "Zoom in",
-    "zoomOut": "Zoom out"
+    "zoomOut": "Zoom out",
+    "technical": "Plan scale and measurements",
+    "scale": "Scale",
+    "zoom": "Zoom"
+  },
+  "metrics": {
+    "totalArea": "Total room area",
+    "width": "Overall width",
+    "depth": "Overall depth"
   },
   "revision": {
     "agreement": "Revision {{revision}}"
@@ -127,6 +191,31 @@
     "draft": "Local Project draft",
     "level": "Source level: {{level}}",
     "revision": "Source revision: {{revision}}"
+  },
+  "layers": {
+    "label": "Architectural layers",
+    "title": "Layers",
+    "description": "Control the visible plan detail",
+    "items": {
+      "walls": "Walls",
+      "rooms": "Rooms",
+      "openings": "Openings",
+      "dimensions": "Dimensions",
+      "annotations": "Annotations"
+    }
+  },
+  "planSummary": {
+    "title": "Plan information",
+    "totalArea": "Total room area",
+    "width": "Overall width",
+    "depth": "Overall depth"
+  },
+  "properties": {
+    "title": "Properties",
+    "selectObject": "Select an object to edit its available properties.",
+    "multipleUnsupported": "This selection has no safe shared property operation.",
+    "unavailable": "The selected object has no editable properties.",
+    "editModeOnly": "Enter Edit mode to change object properties."
   },
   "consistency": {
     "title": "Project geometry is inconsistent",
@@ -173,23 +262,48 @@
       "splitOpening": "This wall cannot be split here because the point crosses an opening.",
       "splitInvalid": "This wall cannot be split at that point.",
       "invalid": "The wall could not be changed."
+    },
+    "room": {
+      "none": "Select a bounded region in the plan before creating a room.",
+      "assigned": "The selected region already belongs to a room.",
+      "subdivision": "The selected room cannot be safely subdivided from the current walls.",
+      "doorReference": "A door on the selected room cannot be assigned safely after subdivision.",
+      "viewpointReference": "A saved viewpoint lies on or outside the resulting room boundaries.",
+      "staircaseReference": "A staircase endpoint cannot be assigned safely after subdivision.",
+      "stale": "The room topology changed. Select the region again and retry.",
+      "geometry": "The resulting room geometry is invalid.",
+      "referenced": "This room is used by another project entity and cannot be deleted.",
+      "dissolutionAmbiguous": "This room does not have one uniquely adjacent room to absorb its region.",
+      "dissolutionInvalid": "This room cannot be dissolved into one valid architectural boundary.",
+      "metadata": "The room name or type is invalid. The previous values were kept.",
+      "invalid": "The room could not be created from the available boundary."
+    },
+    "opening": {
+      "invalid": "The opening cannot be placed or changed because it would violate wall clearance, collision, or dimension constraints."
     }
   },
   "wall": {
     "selectionTitle": "Selection",
+    "propertiesTitle": "Wall properties",
+    "resizeFrom": "Resize from",
+    "resizeFromStart": "Start",
+    "resizeFromEnd": "End",
     "emptySelection": "Select a wall in the plan to inspect it.",
     "type": "Wall",
     "delete": "Delete Wall",
+    "addVertex": "Add vertex",
+    "removeVertex": "Remove vertex",
     "startEndpoint": "Start endpoint",
     "endEndpoint": "End endpoint",
-    "roomEndpointEditingUnavailable": "This wall belongs to a room. Its endpoints cannot be moved independently yet.",
-    "sharedEndpointEditingUnavailable": "This endpoint is connected to other walls and cannot be moved independently yet.",
+    "roomEndpointEditingUnavailable": "Room boundary junctions move all connected walls together.",
+    "sharedEndpointEditingUnavailable": "This endpoint is connected to other walls and moves as one junction.",
     "endpointStatus": "{{endpoint}}: {{status}}",
     "endpointFree": "Free",
-    "endpointConnected": "Connected — movement unavailable",
-    "endpointRoomBoundary": "Room boundary — movement unavailable",
+    "endpointConnected": "Connected junction",
+    "endpointRoomBoundary": "Room boundary junction",
     "labels": {
       "type": "Type",
+      "identity": "Identity",
       "length": "Length",
       "thickness": "Thickness",
       "height": "Height",
@@ -197,15 +311,84 @@
       "end": "End point"
     }
   },
+  "room": {
+    "selectionTitle": "Room",
+    "propertiesTitle": "Room properties",
+    "delete": "Delete Room",
+    "types": {
+      "LIVING_ROOM": "Living room",
+      "KITCHEN": "Kitchen",
+      "BEDROOM": "Bedroom",
+      "BATHROOM": "Bathroom",
+      "STUDIO": "Studio",
+      "CORRIDOR": "Corridor",
+      "STORAGE": "Storage",
+      "OTHER": "Other"
+    },
+    "labels": {
+      "name": "Name",
+      "type": "Type",
+      "area": "Area",
+      "perimeter": "Perimeter"
+    }
+  },
   "selection": {
     "title": "Selection",
     "empty": "Select geometry in the plan to inspect its details.",
     "vertex": "Vertex",
+    "multipleTitle_one": "{{count}} object selected",
+    "multipleTitle_other": "{{count}} objects selected",
+    "multipleHint": "Shared changes appear only when they are safe for every selected object.",
+    "summary": {
+      "walls_one": "{{count}} Wall",
+      "walls_other": "{{count}} Walls",
+      "rooms_one": "{{count}} Room",
+      "rooms_other": "{{count}} Rooms",
+      "doors_one": "{{count}} Door",
+      "doors_other": "{{count}} Doors",
+      "windows_one": "{{count}} Window",
+      "windows_other": "{{count}} Windows",
+      "openings_one": "{{count}} Wall Opening",
+      "openings_other": "{{count}} Wall Openings",
+      "junctions_one": "{{count}} Junction",
+      "junctions_other": "{{count}} Junctions"
+    },
+    "moveJunction": "Move junction",
+    "selectRoomRegion": "Select room region",
     "labels": {
       "type": "Type",
       "position": "Position",
       "connectedWalls": "Connected walls",
       "connectedWallIds": "Connected wall IDs"
+    }
+  },
+  "opening": {
+    "selectionTitle": "Opening",
+    "door": "Door",
+    "window": "Window",
+    "wallOpening": "Wall Opening",
+    "newDoor": "New Door",
+    "newWindow": "New Window",
+    "newWallOpening": "New Wall Opening",
+    "doorProperties": "Door properties",
+    "windowProperties": "Window properties",
+    "wallOpeningProperties": "Wall Opening properties",
+    "ownedBy": "Owned by {{wall}}",
+    "flipHinge": "Flip hinge",
+    "flipSwing": "Flip swing",
+    "delete": "Delete Opening",
+    "left": "Left",
+    "right": "Right",
+    "labels": {
+      "type": "Type",
+      "wall": "Owning wall",
+      "width": "Width",
+      "height": "Height",
+      "sillHeight": "Sill height",
+      "elevation": "Elevation",
+      "hingeSide": "Hinge side",
+      "swingSide": "Swing side",
+      "offset": "Position from wall start"
     }
   }
 }

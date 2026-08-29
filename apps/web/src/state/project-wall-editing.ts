@@ -34,6 +34,13 @@ export function createWallIdentifier(
   return IdentifierSchema.parse(`wall-${randomUuid().toLowerCase()}`);
 }
 
+/** Creates a collision-resistant Room identifier accepted by the schema. */
+export function createRoomIdentifier(
+  randomUuid: () => string = () => crypto.randomUUID()
+): string {
+  return IdentifierSchema.parse(`room-${randomUuid().toLowerCase()}`);
+}
+
 /** Creates the minimal valid standalone Wall used by the Draw Wall tool. */
 export function createDraftWall(
   start: WorldPointXZ,
@@ -122,9 +129,8 @@ export function isWallReferencedByRoom(
 /**
  * Resolves whether each canonical Wall endpoint is standalone or shared.
  *
- * Room-referenced Walls remain locked as before. Otherwise an endpoint is
- * draggable only when exactly one Wall endpoint on the Level has its exact
- * canonical coordinates.
+ * Standalone endpoints use ordinary endpoint movement. Shared exact-coordinate
+ * endpoints use the junction operation so every incident Wall moves together.
  */
 export function getWallEndpointEditingAvailability(
   project: Project | null,
@@ -153,7 +159,7 @@ export function getWallEndpointEditingAvailability(
       incidentEndpointCount > 1 ? "shared-junction" : "standalone";
     return {
       topology,
-      draggable: !roomReferenced && topology === "standalone"
+      draggable: true
     };
   };
 
@@ -162,6 +168,23 @@ export function getWallEndpointEditingAvailability(
     start: endpointState(wall.start),
     end: endpointState(wall.end)
   };
+}
+
+/** Returns stable Wall identities incident to one exact endpoint coordinate. */
+export function getIncidentWallIds(
+  project: Project,
+  levelId: string,
+  point: Wall["start"]
+): readonly string[] {
+  const level = project.building.levels.find((candidate) => candidate.id === levelId);
+  return (level?.walls ?? [])
+    .filter(
+      (wall) =>
+        hasSameCanonicalPoint(wall.start, point) ||
+        hasSameCanonicalPoint(wall.end, point)
+    )
+    .map((wall) => wall.id)
+    .sort();
 }
 
 /**

@@ -98,6 +98,8 @@ const createProject = (): Project => ({
                 width: 20,
                 height: 210,
                 elevation: 0,
+                hingeSide: "START",
+                swingSide: "LEFT",
                 connectedRoomIds: ["left-room", "right-room"]
               },
               {
@@ -312,6 +314,8 @@ describe("reverseWallDirection", () => {
       width: 20,
       height: 210,
       elevation: 0,
+      hingeSide: "END",
+      swingSide: "RIGHT",
       connectedRoomIds: ["left-room", "right-room"]
     });
     expect(openings[1]).toEqual({

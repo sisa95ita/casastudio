@@ -15,7 +15,7 @@ export function StatusBar({ children }: StatusBarProps) {
   const { t } = useCasaTranslation("common");
 
   return (
-    <Box role="status" aria-label={t("shell.statusBar.label")} className="workspace-status">
+    <Box role="status" aria-label={t("shell.statusBar.label")} className={typeof children === "string" || typeof children === "number" ? "workspace-status" : "workspace-status workspace-status--custom"}>
       <Box className="workspace-status__context">
         <CheckCircleRoundedIcon className="workspace-status__icon" />
         {typeof children === "string" || typeof children === "number" ? (

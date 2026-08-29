@@ -3,32 +3,37 @@ import {
   Alert,
   Button,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Typography
 } from "@mui/material";
-import type { Project, Wall } from "@casastudio/schema";
+import { formatArchitecturalLength, type Project, type Wall } from "@casastudio/schema";
+import { measureWall } from "@casastudio/geometry";
 import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { useCasaTranslation } from "../i18n";
 import type { WallEndpointEditingAvailability } from "../state/project-wall-editing";
+import { formatEditorMeasurement, normalizeEditorMeasurement } from "./editor-measurement";
 
-/** Displays canonical Wall details and commits supported scalar property edits. */
+/** Displays canonical Wall identity, geometry summary, and safe contextual actions. */
 export function ProjectWallSelectionDetails({
   wall,
   units,
   endpointAvailability,
   onDelete,
-  onUpdateProperties
+  onAddVertex,
+  editable = true
 }: {
   readonly wall?: Wall;
   readonly units: Project["units"];
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly onDelete: () => void;
-  readonly onUpdateProperties: (properties: {
-    readonly height?: number;
-    readonly thickness?: number;
-  }) => boolean;
+  readonly onAddVertex?: () => void;
+  readonly editable?: boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
 
@@ -43,13 +48,11 @@ export function ProjectWallSelectionDetails({
     );
   }
 
-  const length = Math.hypot(
-    wall.end.x - wall.start.x,
-    wall.end.z - wall.start.z
-  );
+  const length = measureWall(wall).length;
   const items = [
+    [t("wall.labels.identity"), wall.name ?? wall.id],
     [t("wall.labels.type"), t("wall.type")],
-    [t("wall.labels.length"), formatMeasurement(length, units.length)],
+    [t("wall.labels.length"), formatArchitecturalLength(length, units.length)],
     [t("wall.labels.start"), formatPoint(wall.start, units.length)],
     [t("wall.labels.end"), formatPoint(wall.end, units.length)]
   ] as const;
@@ -85,18 +88,6 @@ export function ProjectWallSelectionDetails({
           </Stack>
         ))}
       </Stack>
-      <WallMeasurementField
-        label={t("wall.labels.thickness")}
-        unit={units.length}
-        value={wall.thickness}
-        onCommit={(thickness) => onUpdateProperties({ thickness })}
-      />
-      <WallMeasurementField
-        label={t("wall.labels.height")}
-        unit={units.length}
-        value={wall.height}
-        onCommit={(height) => onUpdateProperties({ height })}
-      />
       {endpointAvailability ? (
         <Stack spacing={0.5}>
           <Typography variant="caption" color="text.secondary">
@@ -137,7 +128,14 @@ export function ProjectWallSelectionDetails({
           {t("wall.sharedEndpointEditingUnavailable")}
         </Alert>
       ) : null}
-      <Button
+      {editable ? <Button
+        variant="outlined"
+        size="small"
+        onClick={onAddVertex}
+      >
+        {t("wall.addVertex")}
+      </Button> : null}
+      {editable ? <Button
         color="error"
         variant="outlined"
         size="small"
@@ -145,11 +143,78 @@ export function ProjectWallSelectionDetails({
         onClick={onDelete}
       >
         {t("wall.delete")}
-      </Button>
+      </Button> : null}
     </Stack>
   );
 }
 
+/** Renders the scalar Wall values supported by semantic property operations. */
+export function ProjectWallPropertiesDetails({
+  wall,
+  units,
+  onUpdateProperties
+}: {
+  readonly wall?: Wall;
+  readonly units: Project["units"];
+  readonly onUpdateProperties: (properties: {
+    readonly length?: number;
+    readonly anchoredEndpoint?: "START" | "END";
+    readonly height?: number;
+    readonly thickness?: number;
+  }) => boolean;
+}) {
+  const { t } = useCasaTranslation("project-viewer");
+  const [anchoredEndpoint, setAnchoredEndpoint] = useState<"START" | "END">("START");
+  if (!wall) return <PropertiesUnavailable />;
+
+  return (
+    <Stack component="section" spacing={1.5}>
+      <Typography variant="subtitle2">{t("wall.propertiesTitle")}</Typography>
+      <WallMeasurementField
+        label={t("wall.labels.length")}
+        unit={units.length}
+        value={measureWall(wall).length}
+        onCommit={(length) => onUpdateProperties({ length, anchoredEndpoint })}
+      />
+      <FormControl size="small" fullWidth>
+        <InputLabel id="wall-resize-anchor-label">{t("wall.resizeFrom")}</InputLabel>
+        <Select
+          labelId="wall-resize-anchor-label"
+          label={t("wall.resizeFrom")}
+          value={anchoredEndpoint}
+          onChange={(event) => setAnchoredEndpoint(event.target.value as "START" | "END")}
+        >
+          <MenuItem value="START">{t("wall.resizeFromStart")}</MenuItem>
+          <MenuItem value="END">{t("wall.resizeFromEnd")}</MenuItem>
+        </Select>
+      </FormControl>
+      <WallMeasurementField
+        label={t("wall.labels.thickness")}
+        unit={units.length}
+        value={wall.thickness}
+        onCommit={(thickness) => onUpdateProperties({ thickness })}
+      />
+      <WallMeasurementField
+        label={t("wall.labels.height")}
+        unit={units.length}
+        value={wall.height}
+        onCommit={(height) => onUpdateProperties({ height })}
+      />
+    </Stack>
+  );
+}
+
+/** Renders the empty Wall properties state without implying unsupported edits. */
+function PropertiesUnavailable() {
+  const { t } = useCasaTranslation("project-viewer");
+  return (
+    <Typography variant="caption" color="text.secondary">
+      {t("properties.selectObject")}
+    </Typography>
+  );
+}
+
+/** Commits one normalized Wall measurement on blur or Enter. */
 function WallMeasurementField({
   label,
   unit,
@@ -161,21 +226,25 @@ function WallMeasurementField({
   readonly value: number;
   readonly onCommit: (value: number) => boolean;
 }) {
-  const [draftValue, setDraftValue] = useState(String(value));
+  const [draftValue, setDraftValue] = useState(formatEditorMeasurement(value));
 
-  useEffect(() => setDraftValue(String(value)), [value]);
+  useEffect(() => setDraftValue(formatEditorMeasurement(value)), [value]);
 
   const commit = () => {
-    const parsed = Number(draftValue);
-    if (parsed === value) return;
-    if (!onCommit(parsed)) setDraftValue(String(value));
+    const normalized = normalizeEditorMeasurement(Number(draftValue));
+    if (normalized === normalizeEditorMeasurement(value)) {
+      setDraftValue(formatEditorMeasurement(value));
+      return;
+    }
+    if (!onCommit(normalized)) setDraftValue(formatEditorMeasurement(value));
+    else setDraftValue(formatEditorMeasurement(normalized));
   };
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       commit();
       event.currentTarget.blur();
     } else if (event.key === "Escape") {
-      setDraftValue(String(value));
+      setDraftValue(formatEditorMeasurement(value));
       event.currentTarget.blur();
     }
   };
@@ -199,8 +268,5 @@ function WallMeasurementField({
   );
 }
 
-const formatMeasurement = (value: number, unit: string): string =>
-  `${Number(value.toFixed(2))} ${unit}`;
-
 const formatPoint = (point: Wall["start"], unit: string): string =>
-  `${Number(point.x.toFixed(2))}, ${Number(point.z.toFixed(2))} ${unit}`;
+  `${formatEditorMeasurement(point.x)}, ${formatEditorMeasurement(point.z)} ${unit}`;

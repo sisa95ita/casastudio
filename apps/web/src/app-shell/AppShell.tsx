@@ -41,10 +41,12 @@ export function AppShell() {
 
   return (
     <AppShellContentContext.Provider value={contextValue}>
-      <Box className="app-shell">
+      <Box className={content.immersiveWorkspace ? "app-shell app-shell--immersive" : "app-shell"}>
         <AppHeader
           title={content.title || localizedDefaultContent.title}
           breadcrumb={content.breadcrumb ?? localizedDefaultContent.breadcrumb}
+          contextAccessory={content.headerContextAccessory}
+          center={content.headerCenter}
           inspectorAvailable={Boolean(content.inspector)}
           onOpenInspector={() => setInspectorOpen(true)}
           accessory={
@@ -56,7 +58,9 @@ export function AppShell() {
         />
 
         <Box className="app-shell__layout">
-          <NavigationRail />
+          <Box className="app-shell__navigation-slot">
+            <NavigationRail />
+          </Box>
           <MainWorkspace>
             <Outlet />
           </MainWorkspace>

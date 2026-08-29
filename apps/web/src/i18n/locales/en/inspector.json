@@ -1,14 +1,18 @@
 {
   "layers": {
     "title": "Layers",
-    "label": "Geometry debug layers",
+    "label": "Geometry layers",
     "description": "Control the visible plan detail",
     "showPolygons": "Show polygons",
+    "showRoomContours": "Show room contours",
     "showBoundaryEdges": "Show boundary edges",
     "showVertices": "Show vertices",
     "showCentroids": "Show centroids",
-    "showBounds": "Show bounds",
-    "showEntityLabels": "Show geometry labels"
+    "showBoundingBoxes": "Show bounding boxes",
+    "showEntityLabels": "Show geometry labels",
+    "showOverallDimensions": "Overall dimensions",
+    "showSelectedDimensions": "Selected dimensions",
+    "showRoomMetrics": "Room metrics"
   },
   "selection": {
     "title": "Selection",

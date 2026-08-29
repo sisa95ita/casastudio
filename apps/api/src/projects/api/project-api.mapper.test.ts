@@ -66,6 +66,25 @@ describe("ProjectApiMapper", () => {
     });
   });
 
+  it("preserves explicit Door orientation in the authoritative response", () => {
+    const project = structuredClone(canonicalProject);
+    const door = project.building.levels
+      .flatMap((level) => level.walls)
+      .flatMap((wall) => wall.openings)
+      .find((opening) => opening.type === "DOOR");
+    if (!door || door.type !== "DOOR") throw new Error("Canonical fixture requires a Door.");
+    door.hingeSide = "END";
+    door.swingSide = "RIGHT";
+
+    const response = new ProjectApiMapper().toProjectResponse(ProjectSchema.parse(project));
+
+    expect(response.project.building.levels
+      .flatMap((level) => level.walls)
+      .flatMap((wall) => wall.openings)
+      .find((opening) => opening.id === door.id))
+      .toMatchObject({ type: "DOOR", hingeSide: "END", swingSide: "RIGHT" });
+  });
+
   it("does not expose persistence ownership or technical database metadata", () => {
     const responseJson = JSON.stringify(new ProjectApiMapper().toProjectResponse(canonicalProject));
 

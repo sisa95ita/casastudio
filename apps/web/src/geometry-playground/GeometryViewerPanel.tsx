@@ -5,8 +5,12 @@ import ZoomOutRoundedIcon from "@mui/icons-material/ZoomOutRounded";
 import {
   Box,
   Chip,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Tooltip,
   Typography
@@ -15,6 +19,8 @@ import type { ReactNode } from "react";
 
 import { useCasaTranslation } from "../i18n";
 import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
+import type { ArchitecturalPresentationModel2D } from "./architectural-presentation-model-2d";
+import type { ArchitecturalDimensionPresentationModel2D } from "./architectural-dimension-presentation-model-2d";
 import type { GeometrySelectionState } from "./geometry-selection-state";
 import {
   type GeometryDisplayOptions,
@@ -25,12 +31,26 @@ import {
 import type { ViewportState, WorldPointXZ } from "./viewport-transform-2d";
 import type { ProjectEditorInteraction } from "../state/project-editor-tools";
 import type { WallEndpoint } from "@casastudio/schema";
+import {
+  formatArchitecturalArea,
+  formatArchitecturalLength,
+  type Units
+} from "@casastudio/schema";
+import {
+  architecturalScaleDenominators,
+  type ArchitecturalScaleDenominator,
+  type LevelMeasurement
+} from "@casastudio/geometry";
 
 /** Props for the shared interactive 2D geometry viewer panel. */
 export type GeometryViewerPanelProps = {
+  /** Whether the surrounding Project shell owns all viewer chrome. */
+  readonly workspaceCanvas?: boolean;
   readonly title: string;
   readonly headingId: string;
   readonly presentationModel: GeometryPresentationModel2D;
+  readonly architecturalModel?: ArchitecturalPresentationModel2D;
+  readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
   readonly selectionState: GeometrySelectionState;
@@ -41,6 +61,10 @@ export type GeometryViewerPanelProps = {
   readonly onFitViewport: () => void;
   readonly onResetViewport: () => void;
   readonly onZoomViewport: (zoomFactor: number) => void;
+  readonly documentScaleDenominator?: ArchitecturalScaleDenominator;
+  readonly onDocumentScaleChange?: (denominator: ArchitecturalScaleDenominator) => void;
+  readonly levelMeasurement?: LevelMeasurement;
+  readonly units?: Pick<Units, "length">;
   readonly statusLabel?: string;
   readonly interaction?: ProjectEditorInteraction;
   readonly editorOverlay?: GeometryEditorOverlay;
@@ -58,13 +82,22 @@ export type GeometryViewerPanelProps = {
     pointerId: number
   ) => void;
   readonly onWallEndpointPointerCancel?: (pointerId: number) => void;
+  readonly onJunctionPointerDown?: (pointerId: number) => void;
+  readonly onOpeningPointerDown?: (openingId: string, wallId: string, pointerId: number) => void;
+  readonly onOpeningDragThresholdCrossed?: (pointerId: number) => void;
+  readonly onOpeningPointerUp?: (pointerId: number, dragged: boolean) => void;
+  readonly onOpeningPointerCancel?: (pointerId: number) => void;
+  readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
 };
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
 export function GeometryViewerPanel({
+  workspaceCanvas = false,
   title,
   headingId,
   presentationModel,
+  architecturalModel,
+  dimensionModel,
   options,
   viewport,
   selectionState,
@@ -73,6 +106,10 @@ export function GeometryViewerPanel({
   onFitViewport,
   onResetViewport,
   onZoomViewport,
+  documentScaleDenominator,
+  onDocumentScaleChange,
+  levelMeasurement,
+  units,
   statusLabel,
   interaction,
   editorOverlay,
@@ -80,18 +117,24 @@ export function GeometryViewerPanel({
   onEditorPointerMove,
   onWallEndpointPointerDown,
   onWallEndpointPointerUp,
-  onWallEndpointPointerCancel
+  onWallEndpointPointerCancel,
+  onJunctionPointerDown,
+  onOpeningPointerDown,
+  onOpeningDragThresholdCrossed,
+  onOpeningPointerUp,
+  onOpeningPointerCancel,
+  onRoomFaceCandidateClick
 }: GeometryViewerPanelProps) {
   const { t } = useCasaTranslation("geometry-playground");
 
   return (
     <Paper
       component="section"
-      className="geometry-viewer-panel"
+      className={workspaceCanvas ? "geometry-viewer-panel geometry-viewer-panel--workspace" : "geometry-viewer-panel"}
       aria-labelledby={headingId}
       variant="outlined"
     >
-      <Box className="geometry-viewer-panel__toolbar">
+      {!workspaceCanvas ? <Box className="geometry-viewer-panel__toolbar">
         <Stack
           direction="row"
           spacing={1}
@@ -131,10 +174,12 @@ export function GeometryViewerPanel({
             <RestartAltRoundedIcon fontSize="small" />
           </ViewportButton>
         </Stack>
-      </Box>
+      </Box> : null}
       <Box className="geometry-viewer-panel__canvas">
         <GeometrySvgViewer
           presentationModel={presentationModel}
+          architecturalModel={architecturalModel}
+          dimensionModel={dimensionModel}
           options={options}
           viewport={viewport}
           selectionState={selectionState}
@@ -147,11 +192,54 @@ export function GeometryViewerPanel({
           onWallEndpointPointerDown={onWallEndpointPointerDown}
           onWallEndpointPointerUp={onWallEndpointPointerUp}
           onWallEndpointPointerCancel={onWallEndpointPointerCancel}
+          onJunctionPointerDown={onJunctionPointerDown}
+          onOpeningPointerDown={onOpeningPointerDown}
+          onOpeningDragThresholdCrossed={onOpeningDragThresholdCrossed}
+          onOpeningPointerUp={onOpeningPointerUp}
+          onOpeningPointerCancel={onOpeningPointerCancel}
+          onRoomFaceCandidateClick={onRoomFaceCandidateClick}
         />
         <Box className="geometry-canvas-hint">
           <Typography variant="caption">{t("viewer.canvasHint")}</Typography>
         </Box>
       </Box>
+      {!workspaceCanvas ? <Box className="geometry-viewer-panel__technical-bar" role="group" aria-label={t("toolbar.technical")}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+          {documentScaleDenominator ? (
+            onDocumentScaleChange ? (
+              <FormControl size="small" className="geometry-document-scale">
+                <InputLabel id="geometry-document-scale-label">{t("toolbar.scale")}</InputLabel>
+                <Select
+                  labelId="geometry-document-scale-label"
+                  label={t("toolbar.scale")}
+                  value={documentScaleDenominator}
+                  onChange={(event) => onDocumentScaleChange(event.target.value as ArchitecturalScaleDenominator)}
+                >
+                  {architecturalScaleDenominators.map((denominator) => (
+                    <MenuItem key={denominator} value={denominator}>1:{denominator}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <Chip size="small" variant="outlined" label={`${t("toolbar.scale")}: 1:${documentScaleDenominator}`} />
+            )
+          ) : null}
+          <Chip size="small" variant="outlined" label={`${t("toolbar.zoom")}: ${Math.round(viewport.zoom * 100)}%`} />
+        </Stack>
+        {levelMeasurement && units ? (
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {levelMeasurement.rooms.length > 0 ? (
+              <Typography variant="caption">{t("metrics.totalArea")}: {formatArchitecturalArea(levelMeasurement.totalRoomArea, units.length)}</Typography>
+            ) : null}
+            {levelMeasurement.plan ? (
+              <>
+                <Typography variant="caption">{t("metrics.width")}: {formatArchitecturalLength(levelMeasurement.plan.width, units.length)}</Typography>
+                <Typography variant="caption">{t("metrics.depth")}: {formatArchitecturalLength(levelMeasurement.plan.depth, units.length)}</Typography>
+              </>
+            ) : null}
+          </Stack>
+        ) : null}
+      </Box> : null}
     </Paper>
   );
 }

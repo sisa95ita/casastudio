@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 test-results/
+playwright-report/
 .turbo/
 .jenkins/
 jenkins_home/

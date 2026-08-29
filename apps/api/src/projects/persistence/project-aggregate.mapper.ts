@@ -120,13 +120,15 @@ export class ProjectAggregateMapper {
                   return {
                     ...commonOpening,
                     type: "DOOR" as const,
+                    hingeSide: opening.hingeSide ?? undefined,
+                    swingSide: opening.swingSide ?? undefined,
                     connectedRoomIds
                   };
                 }
 
                 return {
                   ...commonOpening,
-                  type: "WINDOW" as const
+                  type: opening.type === "WINDOW" ? "WINDOW" as const : "OPENING" as const
                 };
               }
             )

@@ -20,7 +20,7 @@ describe("resolveDrawWallSnapCandidate", () => {
 
   it("projects onto a genuine Wall interior and returns canonical world coordinates", () => {
     const candidate = resolveDrawWallSnapCandidate(
-      { x: 55, y: 7 },
+      { x: 30, y: 7 },
       createModel()
     );
 
@@ -30,7 +30,7 @@ describe("resolveDrawWallSnapCandidate", () => {
       wallId: "wall-b",
       visualDistancePixels: 7
     });
-    expect(candidate?.point.x).toBeCloseTo(55);
+    expect(candidate?.point.x).toBeCloseTo(30);
     expect(candidate?.point.z).toBe(0);
   });
 
@@ -38,13 +38,13 @@ describe("resolveDrawWallSnapCandidate", () => {
     const model = createModel();
     model.vertices = [];
 
-    expect(resolveDrawWallSnapCandidate({ x: 5, y: 7 }, model)).toBeUndefined();
+    expect(resolveDrawWallSnapCandidate({ x: 5, y: 7 }, model)?.kind).toBe("wall-endpoint");
   });
 
   it("clears the candidate outside the visual tolerance", () => {
     expect(
       resolveDrawWallSnapCandidate({ x: 50, y: 11 }, createModel())
-    ).toBeUndefined();
+    ).toMatchObject({ kind: "free" });
   });
 
   it("chooses nearest candidates and uses stable identity for equal distances", () => {
@@ -74,14 +74,14 @@ describe("resolveDrawWallSnapCandidate", () => {
     zoomed.vertices = [];
     normal.vertices = [];
 
-    expect(resolveDrawWallSnapCandidate({ x: 50, y: 9 }, normal)?.kind).toBe(
+    expect(resolveDrawWallSnapCandidate({ x: 30, y: 9 }, normal)?.kind).toBe(
       "wall-interior"
     );
-    expect(resolveDrawWallSnapCandidate({ x: 50, y: 9 }, zoomed)?.kind).toBe(
+    expect(resolveDrawWallSnapCandidate({ x: 30, y: 9 }, zoomed)?.kind).toBe(
       "wall-interior"
     );
-    expect(resolveDrawWallSnapCandidate({ x: 50, y: 11 }, normal)).toBeUndefined();
-    expect(resolveDrawWallSnapCandidate({ x: 50, y: 11 }, zoomed)).toBeUndefined();
+    expect(resolveDrawWallSnapCandidate({ x: 30, y: 11 }, normal)?.kind).toBe("free");
+    expect(resolveDrawWallSnapCandidate({ x: 30, y: 11 }, zoomed)?.kind).toBe("free");
   });
 
   it("converts SVG distances into stable CSS-pixel tolerance", () => {
@@ -89,17 +89,17 @@ describe("resolveDrawWallSnapCandidate", () => {
     model.vertices = [];
 
     expect(
-      resolveDrawWallSnapCandidate({ x: 50, y: 18 }, model, 0.5)?.kind
+      resolveDrawWallSnapCandidate({ x: 30, y: 18 }, model, 0.5)?.kind
     ).toBe("wall-interior");
     expect(
-      resolveDrawWallSnapCandidate({ x: 50, y: 22 }, model, 0.5)
-    ).toBeUndefined();
+      resolveDrawWallSnapCandidate({ x: 30, y: 22 }, model, 0.5)?.kind
+    ).toBe("free");
     expect(
-      resolveDrawWallSnapCandidate({ x: 50, y: 4.5 }, model, 2)?.kind
+      resolveDrawWallSnapCandidate({ x: 30, y: 4.5 }, model, 2)?.kind
     ).toBe("wall-interior");
     expect(
-      resolveDrawWallSnapCandidate({ x: 50, y: 5.5 }, model, 2)
-    ).toBeUndefined();
+      resolveDrawWallSnapCandidate({ x: 30, y: 5.5 }, model, 2)?.kind
+    ).toBe("free");
   });
 
   it("uses transformed SVG coordinates after combined zoom and pan", () => {
@@ -110,16 +110,64 @@ describe("resolveDrawWallSnapCandidate", () => {
     ];
 
     const candidate = resolveDrawWallSnapCandidate(
-      { x: 400, y: 158 },
+      { x: 350, y: 158 },
       model,
       1.25
     );
 
     expect(candidate).toMatchObject({
       kind: "wall-interior",
-      point: { x: 50, z: 0 },
+      point: { x: 37.5, z: 0 },
       visualDistancePixels: 10
     });
+  });
+
+  it("prioritizes midpoint and proper Wall intersections before interiors", () => {
+    const model = createModel();
+    model.vertices = [];
+    expect(resolveDrawWallSnapCandidate({ x: 50, y: 7 }, model)?.kind).toBe("wall-midpoint");
+
+    model.boundaryEdges.push(edge("wall-cross", 30, -20, 30, 80, 30, 20, 30, -80));
+    expect(resolveDrawWallSnapCandidate({ x: 30, y: 0 }, model)).toMatchObject({
+      kind: "wall-intersection",
+      wallIds: ["wall-b", "wall-cross"],
+      point: { x: 30, z: 0 }
+    });
+  });
+
+  it("applies orthogonal assistance before grid and otherwise returns a free point", () => {
+    const model = createModel();
+    model.vertices = [];
+    model.boundaryEdges = [];
+    const orthogonal = resolveDrawWallSnapCandidate({ x: 80, y: 3 }, model, {
+      worldPoint: { x: 80, z: -3 },
+      drawStart: { worldPoint: { x: 0, z: 0 }, svgPoint: { x: 0, y: 0 } },
+      grid: { enabled: true, spacing: 25, worldToSvgScale: 1 }
+    });
+    expect(orthogonal).toMatchObject({ kind: "orthogonal", axis: "horizontal", point: { x: 80, z: 0 } });
+
+    expect(resolveDrawWallSnapCandidate({ x: 49, y: -49 }, model, {
+      worldPoint: { x: 49, z: 49 },
+      grid: { enabled: true, spacing: 50, worldToSvgScale: 1 }
+    })).toMatchObject({ kind: "grid", point: { x: 50, z: 50 } });
+    expect(resolveDrawWallSnapCandidate({ x: 37, y: -31 }, model, {
+      worldPoint: { x: 37, z: 31 }
+    })).toMatchObject({ kind: "free", point: { x: 37, z: 31 } });
+  });
+
+  it("keeps geometric snapping independent from the grid-enabled option", () => {
+    const model = createModel();
+    const withoutGrid = resolveDrawWallSnapCandidate({ x: 8, y: 2 }, model, {
+      worldPoint: { x: 8, z: -2 },
+      grid: { enabled: false, spacing: 25, worldToSvgScale: 1 }
+    });
+    const withGrid = resolveDrawWallSnapCandidate({ x: 8, y: 2 }, model, {
+      worldPoint: { x: 8, z: -2 },
+      grid: { enabled: true, spacing: 25, worldToSvgScale: 1 }
+    });
+
+    expect(withoutGrid.kind).toBe("vertex");
+    expect(withGrid.kind).toBe("vertex");
   });
 });
 

@@ -305,7 +305,7 @@ Every Opening belongs to exactly one Wall.
 
 An Opening may define:
 
-- its position along the Wall;
+- its `offsetFromStart` along the Wall's canonical start-to-end direction;
 - width;
 - height;
 - elevation from the relevant local floor reference;
@@ -313,6 +313,11 @@ An Opening may define:
 - functional connections.
 
 Openings belong to Walls, not directly to Rooms. A Room may be visually or functionally affected by an Opening through its association with the Wall.
+
+Opening horizontal intervals must fit within their Wall and must not overlap.
+Vertical spans use `elevation + height` and must fit within Wall height. Wall
+endpoint and junction edits reject atomically when shortening would violate
+either invariant; they never silently delete or resize an Opening.
 
 ### Door
 
@@ -324,6 +329,11 @@ A Door may connect Rooms functionally, but this relationship does not replace it
 
 Door connectivity should be understood as a functional navigation relationship. The Wall remains the physical owner of the Door.
 
+Door hinge side is `START` or `END` within the Opening span. Swing side is
+`LEFT` or `RIGHT` relative to the owning Wall's canonical forward direction.
+These semantics are reversed when Wall direction is reversed so the physical
+hinge and swing remain visually equivalent.
+
 ### Window
 
 `Window` is an Opening in a Wall.
@@ -333,6 +343,9 @@ A Window belongs to exactly one Wall.
 A Window does not belong directly to a Room, even though one or more Rooms may be visually associated with it through the Wall.
 
 Window placement, dimensions, and elevation must be compatible with the Wall on which the Window is defined.
+
+Window `elevation` is the sill height. It is non-negative, and the sill plus
+Window height must not exceed Wall height.
 
 ### Staircase
 

@@ -10,10 +10,18 @@ const controlLabels: ReadonlyArray<{
   readonly labelKey: string;
 }> = [
   { option: "polygons", labelKey: "layers.showPolygons" },
+  { option: "roomContours", labelKey: "layers.showRoomContours" },
   { option: "boundaryEdges", labelKey: "layers.showBoundaryEdges" },
   { option: "vertices", labelKey: "layers.showVertices" },
   { option: "centroids", labelKey: "layers.showCentroids" },
-  { option: "bounds", labelKey: "layers.showBounds" },
+  { option: "overallDimensions", labelKey: "layers.showOverallDimensions" },
+  { option: "selectedDimensions", labelKey: "layers.showSelectedDimensions" },
+  { option: "roomMetrics", labelKey: "layers.showRoomMetrics" }
+];
+
+/** Technical geometry controls omitted from architectural authoring surfaces. */
+const diagnosticControlLabels: typeof controlLabels = [
+  { option: "bounds", labelKey: "layers.showBoundingBoxes" },
   { option: "entityLabels", labelKey: "layers.showEntityLabels" }
 ];
 
@@ -21,10 +29,16 @@ const controlLabels: ReadonlyArray<{
 export type GeometryLayerControlsProps = {
   readonly options: GeometryDisplayOptions;
   readonly onOptionsChange: (options: GeometryDisplayOptions) => void;
+  /** Whether technical bounding boxes and runtime labels are configurable. */
+  readonly showDiagnostics?: boolean;
 };
 
 /** Renders accessible visibility switches for presentation-only SVG layers. */
-export function GeometryLayerControls({ options, onOptionsChange }: GeometryLayerControlsProps) {
+export function GeometryLayerControls({
+  options,
+  onOptionsChange,
+  showDiagnostics = true
+}: GeometryLayerControlsProps) {
   const { t } = useCasaTranslation("inspector");
   const handleChange =
     (option: keyof GeometryDisplayOptions) => (event: ChangeEvent<HTMLInputElement>) => {
@@ -47,7 +61,7 @@ export function GeometryLayerControls({ options, onOptionsChange }: GeometryLaye
         </Box>
       </Stack>
       <Box className="geometry-layer-list">
-        {controlLabels.map((control) => {
+        {[...controlLabels, ...(showDiagnostics ? diagnosticControlLabels : [])].map((control) => {
           const label = t(control.labelKey);
 
           return (

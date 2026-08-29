@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ProjectWallSelectionDetails } from "./ProjectWallSelectionDetails";
+import {
+  ProjectWallPropertiesDetails,
+  ProjectWallSelectionDetails
+} from "./ProjectWallSelectionDetails";
 
 afterEach(cleanup);
 
@@ -26,17 +29,11 @@ describe("ProjectWallSelectionDetails", () => {
           end: { topology: "standalone", draggable: true }
         }}
         onDelete={handleDelete}
-        onUpdateProperties={vi.fn(() => true)}
       />
     );
 
-    expect(screen.getByText("50 cm")).toBeTruthy();
-    expect(
-      screen.getByRole("spinbutton", { name: "Thickness (cm)" })
-    ).toHaveProperty("value", "20");
-    expect(
-      screen.getByRole("spinbutton", { name: "Height (cm)" })
-    ).toHaveProperty("value", "300");
+    expect(screen.getByText("0.50 m")).toBeTruthy();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
     expect(screen.getByText("10, 20 cm")).toBeTruthy();
     expect(screen.getByText("40, 60 cm")).toBeTruthy();
 
@@ -54,7 +51,6 @@ describe("ProjectWallSelectionDetails", () => {
           end: { topology: "standalone", draggable: true }
         }}
         onDelete={vi.fn()}
-        onUpdateProperties={vi.fn(() => true)}
       />
     );
 
@@ -67,7 +63,7 @@ describe("ProjectWallSelectionDetails", () => {
   it("commits numeric edits only on a boundary and restores rejected values", () => {
     const handleUpdate = vi.fn(() => true);
     render(
-      <ProjectWallSelectionDetails
+      <ProjectWallPropertiesDetails
         wall={{
           id: "wall-inspected",
           start: { x: 0, z: 0 },
@@ -78,12 +74,6 @@ describe("ProjectWallSelectionDetails", () => {
           openings: []
         }}
         units={{ length: "cm", angle: "deg" }}
-        endpointAvailability={{
-          roomReferenced: false,
-          start: { topology: "standalone", draggable: true },
-          end: { topology: "standalone", draggable: true }
-        }}
-        onDelete={vi.fn()}
         onUpdateProperties={handleUpdate}
       />
     );
@@ -91,17 +81,33 @@ describe("ProjectWallSelectionDetails", () => {
     const thickness = screen.getByRole("spinbutton", {
       name: "Thickness (cm)"
     });
-    fireEvent.change(thickness, { target: { value: "24" } });
+    fireEvent.change(thickness, { target: { value: "24.126" } });
     expect(handleUpdate).not.toHaveBeenCalled();
     fireEvent.blur(thickness);
-    expect(handleUpdate).toHaveBeenCalledWith({ thickness: 24 });
+    expect(handleUpdate).toHaveBeenCalledWith({ thickness: 24.13 });
+    expect(thickness).toHaveProperty("value", "24.13");
+
+    const height = screen.getByRole("spinbutton", { name: "Height (cm)" });
+    fireEvent.change(height, { target: { value: "310.126" } });
+    fireEvent.blur(height);
+    expect(handleUpdate).toHaveBeenCalledWith({ height: 310.13 });
+    expect(height).toHaveProperty("value", "310.13");
 
     handleUpdate.mockReturnValue(false);
-    const height = screen.getByRole("spinbutton", { name: "Height (cm)" });
     fireEvent.change(height, { target: { value: "0" } });
     fireEvent.blur(height);
     expect(handleUpdate).toHaveBeenCalledWith({ height: 0 });
     expect(height).toHaveProperty("value", "300");
+
+    handleUpdate.mockReturnValue(true);
+    const length = screen.getByRole("spinbutton", { name: "Length (cm)" });
+    fireEvent.change(length, { target: { value: "125.5" } });
+    fireEvent.keyDown(length, { key: "Enter" });
+    expect(handleUpdate).toHaveBeenCalledWith({ length: 125.5, anchoredEndpoint: "START" });
+
+    fireEvent.change(length, { target: { value: "42" } });
+    fireEvent.keyDown(length, { key: "Escape" });
+    expect(length).toHaveProperty("value", "100");
   });
 
   it("explains unavailable endpoint editing while retaining property controls", () => {
@@ -123,15 +129,12 @@ describe("ProjectWallSelectionDetails", () => {
           end: { topology: "standalone", draggable: false }
         }}
         onDelete={vi.fn()}
-        onUpdateProperties={vi.fn(() => true)}
       />
     );
 
     expect(
-      screen.getByText(/endpoints cannot be moved independently yet/i)
+      screen.getByText(/move all connected walls together/i)
     ).toBeTruthy();
-    expect(
-      screen.getByRole("spinbutton", { name: "Height (cm)" })
-    ).toBeTruthy();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 });
