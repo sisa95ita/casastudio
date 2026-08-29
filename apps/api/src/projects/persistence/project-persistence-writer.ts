@@ -273,7 +273,9 @@ export class ProjectPersistenceWriter {
               offsetFromStart: opening.offsetFromStart,
               width: opening.width,
               height: opening.height,
-              elevation: opening.elevation
+              elevation: opening.elevation,
+              hingeSide: opening.type === "DOOR" ? opening.hingeSide : undefined,
+              swingSide: opening.type === "DOOR" ? opening.swingSide : undefined
             }
           });
 

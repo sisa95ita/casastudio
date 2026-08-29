@@ -463,6 +463,67 @@ describe("ProjectViewerPage", () => {
     expect(screen.getByRole("button", { name: "Edit" }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("creates, edits, switches, and undoes canonical Levels as semantic commits", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Create level" }));
+    const createDialog = screen.getByRole("dialog", { name: "Create level" });
+    fireEvent.change(within(createDialog).getByLabelText("Level name"), {
+      target: { value: "First Floor" }
+    });
+    fireEvent.change(within(createDialog).getByLabelText("Elevation (cm)"), {
+      target: { value: "300" }
+    });
+    fireEvent.click(within(createDialog).getByRole("button", { name: "Create Level" }));
+
+    await waitFor(() => expect(store.getState().projectEditor.draft?.building.levels).toHaveLength(2));
+    const createdLevel = store.getState().projectEditor.draft!.building.levels[1]!;
+    expect(createdLevel).toMatchObject({
+      name: "First Floor",
+      elevation: 300,
+      rooms: [],
+      walls: [],
+      staircases: []
+    });
+    expect(store.getState().projectEditor.activeLevelId).toBe(createdLevel.id);
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Edit level" }));
+    const editDialog = screen.getByRole("dialog", { name: "Edit level" });
+    fireEvent.change(within(editDialog).getByLabelText("Level name"), {
+      target: { value: "Upper Floor" }
+    });
+    fireEvent.change(within(editDialog).getByLabelText("Elevation (cm)"), {
+      target: { value: "315" }
+    });
+    fireEvent.click(within(editDialog).getByRole("button", { name: "Save Level" }));
+
+    expect(store.getState().projectEditor.draft!.building.levels[1]).toMatchObject({
+      id: createdLevel.id,
+      name: "Upper Floor",
+      elevation: 315
+    });
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[1]).toMatchObject({
+      id: createdLevel.id,
+      name: "First Floor",
+      elevation: 300
+    });
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Level" }));
+    fireEvent.click(screen.getByRole("option", { name: "Ground Floor" }));
+    expect(store.getState().projectEditor.activeLevelId).toBe("ground-floor");
+    expect(store.getState().projectEditor.draft!.building.levels[1]).toMatchObject({
+      id: createdLevel.id,
+      name: "First Floor"
+    });
+  });
+
   it("toggles enabled editor tools through a neutral active state", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));

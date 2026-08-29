@@ -119,6 +119,12 @@ export class OpeningDto {
 
   @ApiPropertyOptional({ type: [String] })
   readonly connectedRoomIds?: readonly string[];
+
+  @ApiPropertyOptional({ enum: ["START", "END"], enumName: "DoorHingeSide" })
+  readonly hingeSide?: "START" | "END";
+
+  @ApiPropertyOptional({ enum: ["LEFT", "RIGHT"], enumName: "DoorSwingSide" })
+  readonly swingSide?: "LEFT" | "RIGHT";
 }
 
 /**

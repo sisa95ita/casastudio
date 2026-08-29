@@ -653,8 +653,18 @@ describeWithDatabase("relational Project persistence", () => {
 });
 
 function createTestProject(): Project {
+  const project = structuredClone(canonicalProject);
+  const door = project.building.levels
+    .flatMap((level) => level.walls)
+    .flatMap((wall) => wall.openings)
+    .find((opening) => opening.type === "DOOR");
+  if (!door || door.type !== "DOOR") {
+    throw new Error("Canonical fixture requires a Door.");
+  }
+  door.hingeSide = "END";
+  door.swingSide = "RIGHT";
   return ProjectSchema.parse({
-    ...canonicalProject,
+    ...project,
     id: testProjectId
   });
 }

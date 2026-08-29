@@ -120,6 +120,8 @@ export class ProjectAggregateMapper {
                   return {
                     ...commonOpening,
                     type: "DOOR" as const,
+                    hingeSide: opening.hingeSide ?? undefined,
+                    swingSide: opening.swingSide ?? undefined,
                     connectedRoomIds
                   };
                 }

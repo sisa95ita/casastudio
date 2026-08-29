@@ -1,6 +1,7 @@
 export * from "./building.js";
 export * from "./architectural-editing.js";
 export * from "./level.js";
+export * from "./level-editing.js";
 export * from "./opening.js";
 export * from "./opening-editing.js";
 export * from "./reverse-wall-direction.js";

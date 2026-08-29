@@ -179,6 +179,8 @@ export class ProjectApiMapper {
     if (opening.type === "DOOR") {
       return {
         ...commonOpening,
+        hingeSide: opening.hingeSide,
+        swingSide: opening.swingSide,
         connectedRoomIds: opening.connectedRoomIds
           ? [...opening.connectedRoomIds]
           : undefined

@@ -31,6 +31,16 @@ enum OpeningType {
   OPENING
 }
 
+enum DoorHingeSide {
+  START
+  END
+}
+
+enum DoorSwingSide {
+  LEFT
+  RIGHT
+}
+
 enum RoomBoundaryDirection {
   FORWARD
   REVERSE
@@ -229,6 +239,8 @@ model Opening {
   width           Float
   height          Float
   elevation       Float
+  hingeSide       DoorHingeSide?
+  swingSide       DoorSwingSide?
 
   project                 Project                         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wall                    Wall                            @relation(fields: [wallId], references: [id], onDelete: Cascade)

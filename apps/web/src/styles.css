@@ -1595,6 +1595,22 @@ img {
 
 /* Responsive product strategy */
 
+@media (max-width: 1399px) {
+  .app-shell--immersive .auth-controls__identity,
+  .app-shell--immersive .auth-controls__label {
+    display: none;
+  }
+
+  .app-shell--immersive .auth-controls__button {
+    min-width: 38px !important;
+    padding-inline: 7px !important;
+  }
+
+  .app-shell--immersive .auth-controls__button .MuiButton-startIcon {
+    margin: 0 !important;
+  }
+}
+
 @media (max-width: 1199px) {
   .app-shell__layout {
     grid-template-columns: 72px minmax(0, 1fr);
@@ -1614,11 +1630,6 @@ img {
 
   .app-shell--immersive .main-workspace {
     overflow: auto;
-  }
-
-  .app-shell--immersive .auth-controls__identity,
-  .project-header-actions .project-header-status {
-    display: none;
   }
 
   .app-shell--immersive .workspace-header {

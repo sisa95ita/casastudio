@@ -10,6 +10,7 @@ import {
 import {
   canCollapseWallJunction,
   collapseWallJunction,
+  createLevel,
   createConnectedWall,
   createRoomFromShape,
   classifyLevelRoomTopology,
@@ -24,6 +25,7 @@ import {
   splitWall,
   updateWallProperties,
   updateOpening,
+  updateLevelProperties,
   updateRoomProperties,
   validateRoomShapeDefinition,
   convertPhysicalLength,
@@ -47,6 +49,7 @@ import {
   Chip,
   CircularProgress,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
@@ -59,6 +62,7 @@ import {
   Stack,
   Tab,
   Tabs,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -68,12 +72,14 @@ import {
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import LinearScaleRoundedIcon from "@mui/icons-material/LinearScaleRounded";
 import LockOutlineRoundedIcon from "@mui/icons-material/LockOutlineRounded";
 import KeyboardRoundedIcon from "@mui/icons-material/KeyboardRounded";
 import NearMeRoundedIcon from "@mui/icons-material/NearMeRounded";
 import RedoRoundedIcon from "@mui/icons-material/RedoRounded";
+import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import StraightenRoundedIcon from "@mui/icons-material/StraightenRounded";
 import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
 import DoorFrontRoundedIcon from "@mui/icons-material/DoorFrontRounded";
@@ -190,6 +196,9 @@ import {
   type PlaceOpeningInteraction,
   type ProjectWorkspaceMode
 } from "../state/project-editor-slice";
+import {
+  createLevelIdentifier
+} from "../state/project-level-editing";
 import {
   getProjectEditorInteraction,
   projectEditorTools,
@@ -1735,6 +1744,38 @@ export function ProjectViewerPage() {
     [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedRoom]
   );
 
+  const handleCreateLevel = useCallback((properties: {
+    readonly name: string;
+    readonly elevation: number;
+  }): boolean => {
+    if (!editor.draft || workspaceMode !== "edit" || saveInteractionBlocked) return false;
+    const levelId = createLevelIdentifier();
+    const result = createLevel(editor.draft, { id: levelId, ...properties });
+    if (!result.ok) return false;
+    dispatch(editingDraftReplaced(result.project));
+    dispatch(editorActiveLevelChanged(levelId));
+    return true;
+  }, [dispatch, editor.draft, saveInteractionBlocked, workspaceMode]);
+
+  const handleUpdateActiveLevel = useCallback((properties: {
+    readonly name: string;
+    readonly elevation: number;
+  }): boolean => {
+    if (
+      !editor.draft ||
+      !editor.activeLevelId ||
+      workspaceMode !== "edit" ||
+      saveInteractionBlocked
+    ) return false;
+    const result = updateLevelProperties(editor.draft, {
+      levelId: editor.activeLevelId,
+      ...properties
+    });
+    if (!result.ok) return false;
+    dispatch(editingDraftReplaced(result.project));
+    return true;
+  }, [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, workspaceMode]);
+
   const handleCreateRoom = useCallback((faceKey: string) => {
     if (
       saveInteractionBlocked ||
@@ -2185,11 +2226,18 @@ export function ProjectViewerPage() {
           selectedViewLevel={selectedViewLevel}
           draftLevelIds={editor.draft?.building.levels.map((level) => ({
             id: level.id,
-            name: level.name
+            name: level.name,
+            elevation: level.elevation
           })) ?? []}
+          projectLevelNames={projectResponse.project.building.levels.map((level) => ({
+            id: level.id,
+            name: level.name
+          }))}
           activeEditLevelId={editor.activeLevelId}
           onViewLevelChange={setSelectedViewLevelId}
           onEditLevelChange={(levelId) => dispatch(editorActiveLevelChanged(levelId))}
+          onCreateLevel={handleCreateLevel}
+          onUpdateActiveLevel={handleUpdateActiveLevel}
         />
       ) : undefined,
       headerCenter: !isPhone && projectResponse && !consistencyFailure ? (
@@ -2263,6 +2311,8 @@ export function ProjectViewerPage() {
       shortcutsOpen,
       t,
       viewLevels,
+      handleCreateLevel,
+      handleUpdateActiveLevel,
       workspaceMode
     ]
   );
@@ -2747,10 +2797,14 @@ type ProjectLevelControlProps = {
   readonly draftLevelIds: readonly {
     readonly id: string;
     readonly name: string;
+    readonly elevation: number;
   }[];
+  readonly projectLevelNames: readonly { readonly id: string; readonly name: string }[];
   readonly activeEditLevelId: string | null;
   readonly onViewLevelChange: (levelId: string) => void;
   readonly onEditLevelChange: (levelId: string) => void;
+  readonly onCreateLevel: (properties: { readonly name: string; readonly elevation: number }) => boolean;
+  readonly onUpdateActiveLevel: (properties: { readonly name: string; readonly elevation: number }) => boolean;
 };
 
 function ProjectLevelControl({
@@ -2758,49 +2812,140 @@ function ProjectLevelControl({
   viewLevels,
   selectedViewLevel,
   draftLevelIds,
+  projectLevelNames,
   activeEditLevelId,
   onViewLevelChange,
-  onEditLevelChange
+  onEditLevelChange,
+  onCreateLevel,
+  onUpdateActiveLevel
 }: ProjectLevelControlProps) {
   const { t } = useCasaTranslation("project-viewer");
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
+  const [name, setName] = useState("");
+  const [elevation, setElevation] = useState("");
+  const [invalid, setInvalid] = useState(false);
   const levels =
     mode === "edit"
       ? draftLevelIds
       : viewLevels.map((level) => ({
           id: level.id,
-          name: level.sourceLevelId
+          name: projectLevelNames.find((candidate) => candidate.id === level.sourceLevelId)?.name ??
+            level.sourceLevelId,
+          elevation: level.elevation
         }));
   const value =
     mode === "edit" ? (activeEditLevelId ?? "") : (selectedViewLevel?.id ?? "");
+  const activeDraftLevel = draftLevelIds.find((level) => level.id === activeEditLevelId);
 
-  if (levels.length <= 1) {
-    return value ? (
-      <Chip label={levels[0]?.name ?? value} variant="outlined" />
-    ) : null;
-  }
+  const openDialog = (nextMode: "create" | "edit") => {
+    setDialogMode(nextMode);
+    setInvalid(false);
+    if (nextMode === "edit" && activeDraftLevel) {
+      setName(activeDraftLevel.name);
+      setElevation(String(activeDraftLevel.elevation));
+      return;
+    }
+    setName("");
+    const highestElevation = draftLevelIds.reduce(
+      (highest, level) => Math.max(highest, level.elevation),
+      0
+    );
+    setElevation(String(highestElevation + 300));
+  };
+
+  const submit = () => {
+    const parsedElevation = Number(elevation);
+    const properties = { name: name.trim(), elevation: parsedElevation };
+    if (!properties.name || !Number.isFinite(parsedElevation)) {
+      setInvalid(true);
+      return;
+    }
+    const accepted = dialogMode === "create"
+      ? onCreateLevel(properties)
+      : onUpdateActiveLevel(properties);
+    setInvalid(!accepted);
+    if (accepted) setDialogMode(null);
+  };
+
+  if (!value) return null;
 
   return (
-    <FormControl size="small" className="project-level-selector">
-      <InputLabel id="project-geometry-level-selector-label">
-        {t("levelSelector.label")}
-      </InputLabel>
-      <Select
-        labelId="project-geometry-level-selector-label"
-        label={t("levelSelector.label")}
-        value={value}
-        onChange={(event) =>
-          mode === "edit"
-            ? onEditLevelChange(event.target.value)
-            : onViewLevelChange(event.target.value)
-        }
-      >
-        {levels.map((level) => (
-          <MenuItem key={level.id} value={level.id}>
-            {level.name}
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
+    <>
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+        {levels.length <= 1 ? (
+          <Chip label={levels[0]?.name ?? value} variant="outlined" />
+        ) : (
+          <FormControl size="small" className="project-level-selector" sx={{ minWidth: 136 }}>
+            <InputLabel id="project-geometry-level-selector-label">
+              {t("levelSelector.label")}
+            </InputLabel>
+            <Select
+              labelId="project-geometry-level-selector-label"
+              label={t("levelSelector.label")}
+              value={value}
+              onChange={(event) =>
+                mode === "edit"
+                  ? onEditLevelChange(event.target.value)
+                  : onViewLevelChange(event.target.value)
+              }
+            >
+              {levels.map((level) => (
+                <MenuItem key={level.id} value={level.id}>
+                  {level.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+        {mode === "edit" ? (
+          <>
+            <Tooltip title={t("levelSelector.edit")}>
+              <IconButton size="small" aria-label={t("levelSelector.edit")} onClick={() => openDialog("edit")}>
+                <SettingsRoundedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t("levelSelector.create")}>
+              <IconButton size="small" aria-label={t("levelSelector.create")} onClick={() => openDialog("create")}>
+                <AddRoundedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </>
+        ) : null}
+      </Stack>
+      <Dialog open={dialogMode !== null} onClose={() => setDialogMode(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {t(dialogMode === "create" ? "levelSelector.createTitle" : "levelSelector.editTitle")}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <TextField
+              autoFocus
+              label={t("levelSelector.name")}
+              value={name}
+              onChange={(event) => { setName(event.target.value); setInvalid(false); }}
+              error={invalid && !name.trim()}
+              fullWidth
+            />
+            <TextField
+              label={t("levelSelector.elevation", { unit: "cm" })}
+              type="number"
+              value={elevation}
+              onChange={(event) => { setElevation(event.target.value); setInvalid(false); }}
+              error={invalid && !Number.isFinite(Number(elevation))}
+              slotProps={{ htmlInput: { step: "any" } }}
+              fullWidth
+            />
+            {invalid ? <Alert severity="error">{t("levelSelector.invalid")}</Alert> : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogMode(null)}>{t("levelSelector.cancel")}</Button>
+          <Button variant="contained" onClick={submit}>
+            {t(dialogMode === "create" ? "levelSelector.createAction" : "levelSelector.saveAction")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 
