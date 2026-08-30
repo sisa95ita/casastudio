@@ -10,7 +10,7 @@ import {
   ToggleButtonGroup,
   Typography
 } from "@mui/material";
-import { Line, OrbitControls } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import {
   Component,
@@ -22,6 +22,7 @@ import {
   type ErrorInfo,
   type ReactNode
 } from "react";
+import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
 
 import { useCasaTranslation } from "../i18n";
 import {
@@ -35,9 +36,11 @@ import {
   getLevelReferenceOrientation3D,
   getVisibleLevelReferences3D,
   type ArchitecturalScene3DModel,
+  type Floor3D,
   type LevelReference3D,
   type LevelVisibility3D,
-  type SceneBounds3D
+  type SceneBounds3D,
+  type Wall3D
 } from "./architectural-scene-3d-model";
 
 /** Inputs for the read-only architectural 3D viewport. */
@@ -106,6 +109,27 @@ export function Project3DViewer({
       data-visible-reference-orientations={visibleLevels
         .map((level) => `${level.id}:${getLevelReferenceOrientation3D(level)}`)
         .join(",")}
+      data-architectural-wall-count={visibleLevels.reduce(
+        (count, level) => count + level.walls.length,
+        0
+      )}
+      data-architectural-wall-section-count={visibleLevels.reduce(
+        (count, level) => count + level.walls.reduce(
+          (levelCount, wall) => levelCount + wall.sections.length,
+          0
+        ),
+        0
+      )}
+      data-architectural-floor-count={visibleLevels.reduce(
+        (count, level) => count + level.floors.length,
+        0
+      )}
+      data-architectural-opening-kinds={visibleLevels.flatMap((level) =>
+        level.walls.flatMap((wall) => wall.openings.map((opening) => opening.kind))
+      ).join(",")}
+      data-visible-architectural-bounds={visibleBounds
+        ? JSON.stringify({ min: visibleBounds.min, max: visibleBounds.max })
+        : ""}
     >
       <Box className="project-3d-viewer__toolbar">
         <Box>
@@ -356,19 +380,9 @@ function ArchitecturalFoundationScene({
         args={[ground.size, ground.divisions, "#c9c0b3", "#ded7cc"]}
         position={[ground.centerX, ground.y + 0.002, ground.centerZ]}
       />
-      {levels.flatMap((level, levelIndex) =>
-        level.segments.map((segment, segmentIndex) => (
-          <Line
-            key={`${level.id}:${segmentIndex}`}
-            points={[
-              [segment.start.x, level.y + 0.008, segment.start.z],
-              [segment.end.x, level.y + 0.008, segment.end.z]
-            ]}
-            color={levelIndex === 0 ? "#b15f43" : "#547b73"}
-            lineWidth={1.6}
-          />
-        ))
-      )}
+      {levels.map((level) => (
+        <ArchitecturalLevel3D key={level.id} model={level} />
+      ))}
       <CameraAndOrbitController
         bounds={bounds}
         controlsRef={controlsRef}
@@ -389,6 +403,89 @@ function ArchitecturalFoundationScene({
         onChange={reportCameraChange}
       />
     </>
+  );
+}
+
+/** Renders the already-derived architectural entities for one Level. */
+function ArchitecturalLevel3D({ model }: { readonly model: LevelReference3D }) {
+  return (
+    <group name={`architectural-level:${model.id}`}>
+      {model.floors.map((floor) => (
+        <ArchitecturalFloor3D key={floor.id} model={floor} />
+      ))}
+      {model.walls.map((wall) => (
+        <ArchitecturalWall3D key={wall.id} model={wall} />
+      ))}
+    </group>
+  );
+}
+
+/** Extrudes the immutable rectangular sections belonging to one architectural Wall. */
+function ArchitecturalWall3D({ model }: { readonly model: Wall3D }) {
+  const rotationY = Math.atan2(-model.u.z, model.u.x);
+  return (
+    <group
+      name={`architectural-wall:${model.id}`}
+      position={[model.origin.x, model.origin.y, model.origin.z]}
+      rotation={[0, rotationY, 0]}
+    >
+      {model.sections.map((section, index) => {
+        const width = section.end - section.start;
+        const height = section.top - section.bottom;
+        return (
+          <mesh
+            key={`${section.start}:${section.end}:${section.bottom}:${section.top}:${index}`}
+            name={`architectural-wall-section:${model.id}:${index}`}
+            position={[
+              section.start + width / 2,
+              section.bottom + height / 2,
+              0
+            ]}
+          >
+            <boxGeometry args={[width, height, model.thickness]} />
+            <meshStandardMaterial
+              color="#d9c8b2"
+              roughness={0.92}
+              metalness={0}
+              side={DoubleSide}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+/** Renders one triangulated exact Room contour as a neutral horizontal Floor. */
+function ArchitecturalFloor3D({ model }: { readonly model: Floor3D }) {
+  const geometry = useMemo(() => {
+    const floorGeometry = new BufferGeometry();
+    const positions = model.triangles.flatMap((triangle) =>
+      triangle.flatMap((index) => {
+        const point = model.contour[index]!;
+        return [point.x, 0, point.z];
+      })
+    );
+    floorGeometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    floorGeometry.computeVertexNormals();
+    return floorGeometry;
+  }, [model]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <mesh
+      name={`architectural-floor:${model.roomId}`}
+      geometry={geometry}
+      position={[0, model.y + 0.004, 0]}
+    >
+      <meshStandardMaterial
+        color="#b8aa94"
+        roughness={1}
+        metalness={0}
+        side={DoubleSide}
+      />
+    </mesh>
   );
 }
 

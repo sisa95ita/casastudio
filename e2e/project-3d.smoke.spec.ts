@@ -6,6 +6,7 @@ import {
   type Locator,
   type Page
 } from "@playwright/test";
+import type { Project, Wall } from "@casastudio/schema";
 
 const apiBaseUrl = process.env.CASASTUDIO_E2E_API_URL ?? "http://localhost:3000";
 
@@ -77,6 +78,9 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
       "true"
     );
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await seedArchitectural3DProject(request, authorization, projectId);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: projectName, level: 1 })).toBeVisible();
     const before3D = await getProject(request, authorization, projectId);
     await plan.screenshot({ path: test.info().outputPath("asymmetric-2d-plan.png") });
 
@@ -85,6 +89,20 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     await expect(workspace).toBeVisible();
     await expect(workspace).toHaveAttribute("data-renderer-status", "ready");
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "0,3.2");
+    await expect(workspace).toHaveAttribute("data-architectural-opening-kinds", /DOOR/);
+    await expect(workspace).toHaveAttribute("data-architectural-opening-kinds", /WINDOW/);
+    await expect(workspace).toHaveAttribute("data-architectural-opening-kinds", /OPENING/);
+    expect(Number(await workspace.getAttribute("data-architectural-wall-count")))
+      .toBeGreaterThan(0);
+    expect(Number(await workspace.getAttribute("data-architectural-wall-section-count")))
+      .toBeGreaterThan(Number(await workspace.getAttribute("data-architectural-wall-count")));
+    expect(Number(await workspace.getAttribute("data-architectural-floor-count")))
+      .toBeGreaterThanOrEqual(2);
+    const architecturalBounds = JSON.parse(
+      (await workspace.getAttribute("data-visible-architectural-bounds")) ?? "{}"
+    ) as { readonly min: { readonly y: number }; readonly max: { readonly y: number } };
+    expect(architecturalBounds.min.y).toBe(0);
+    expect(architecturalBounds.max.y).toBeGreaterThanOrEqual(6.2);
     const inspector = page.getByRole("complementary", { name: "Inspector" }).first();
     await expect(inspector.getByText("Ground Floor", { exact: true })).toBeVisible();
     await expect(inspector.getByText("Upper Level", { exact: true })).toBeVisible();
@@ -252,20 +270,106 @@ function expectDirectionToBeClose(actual: string | null, expected: string | null
 
 async function waitForCameraToSettle(page: Page, workspace: Locator) {
   await expect.poll(async () => {
-    const before = await workspace.getAttribute("data-camera-position");
-    await page.waitForTimeout(100);
-    return workspace.getAttribute("data-camera-position").then((after) => after === before);
-  }, { timeout: 5_000 }).toBe(true);
+    const before = parseCameraPosition(
+      await workspace.getAttribute("data-camera-position")
+    );
+    await page.waitForTimeout(150);
+    const after = parseCameraPosition(
+      await workspace.getAttribute("data-camera-position")
+    );
+    return Math.hypot(
+      after[0] - before[0],
+      after[1] - before[1],
+      after[2] - before[2]
+    );
+  }, { timeout: 10_000 }).toBeLessThan(0.002);
+}
+
+function parseCameraPosition(value: string | null): readonly [number, number, number] {
+  const values = value?.split(",").map(Number) ?? [];
+  if (values.length !== 3 || values.some((coordinate) => !Number.isFinite(coordinate))) {
+    throw new Error("The 3D viewport exposed invalid camera-position telemetry.");
+  }
+  return [values[0]!, values[1]!, values[2]!];
 }
 
 async function getProject(
   request: APIRequestContext,
   authorization: string,
   projectId: string
-): Promise<unknown> {
+): Promise<{ readonly project: Project; readonly sourceRevision: number }> {
   const response = await request.get(`${apiBaseUrl}/api/v1/projects/${projectId}`, {
     headers: { Authorization: authorization }
   });
   expect(response.ok()).toBe(true);
-  return response.json();
+  return response.json() as Promise<{
+    readonly project: Project;
+    readonly sourceRevision: number;
+  }>;
+}
+
+async function seedArchitectural3DProject(
+  request: APIRequestContext,
+  authorization: string,
+  projectId: string
+) {
+  const current = await getProject(request, authorization, projectId);
+  const project = structuredClone(current.project);
+  const ground = project.building.levels[0];
+  if (!ground || ground.walls.length < 2) {
+    throw new Error("The deterministic 3D Project requires at least two authored Walls.");
+  }
+  ground.walls[0]!.openings = [createOpeningForWall(ground.walls[0]!, "DOOR")];
+  ground.walls[1]!.openings = [createOpeningForWall(ground.walls[1]!, "WINDOW")];
+  const allPoints = ground.walls.flatMap((wall) => [wall.start, wall.end]);
+  const maxX = Math.max(...allPoints.map((point) => point.x));
+  const minZ = Math.min(...allPoints.map((point) => point.z));
+  ground.walls.push({
+    id: "e2e-angled-opening-wall",
+    name: "Angled Opening Wall",
+    start: { x: maxX + 100, z: minZ },
+    end: { x: maxX + 300, z: minZ + 160 },
+    height: 300,
+    thickness: 20,
+    roomIds: [],
+    openings: [{
+      id: "e2e-wall-opening",
+      type: "OPENING",
+      offsetFromStart: 50,
+      width: 100,
+      height: 220,
+      elevation: 0
+    }]
+  });
+
+  const response = await request.put(`${apiBaseUrl}/api/v1/projects/${projectId}`, {
+    headers: { Authorization: authorization },
+    data: { baseRevision: current.sourceRevision, project }
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
+function createOpeningForWall(wall: Wall, kind: "DOOR" | "WINDOW") {
+  const length = Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z);
+  const width = Math.min(100, length * 0.4);
+  const offsetFromStart = (length - width) / 2;
+  if (kind === "DOOR") {
+    return {
+      id: "e2e-door",
+      type: kind,
+      offsetFromStart,
+      width,
+      height: Math.min(210, wall.height),
+      elevation: 0
+    } as const;
+  }
+  const elevation = Math.min(90, wall.height / 3);
+  return {
+    id: "e2e-window",
+    type: kind,
+    offsetFromStart,
+    width,
+    height: Math.min(120, wall.height - elevation),
+    elevation
+  } as const;
 }

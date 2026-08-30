@@ -362,16 +362,19 @@ export function ProjectViewerPage() {
   const saveInteractionBlocked =
     replaceProjectMutation.isPending || refreshingAuthoritativeState;
   const scene3DResult = useMemo(() => {
-    if (!projectResponse) return undefined;
+    if (!projectResponse || !geometryResponse || consistencyFailure) return undefined;
     try {
       return {
         ok: true as const,
-        model: createArchitecturalScene3DModel(projectResponse.project)
+        model: createArchitecturalScene3DModel(
+          projectResponse.project,
+          geometryResponse.geometry
+        )
       };
     } catch (error) {
       return { ok: false as const, error };
     }
-  }, [projectResponse]);
+  }, [consistencyFailure, geometryResponse, projectResponse]);
 
   useEffect(() => {
     const enabled =

@@ -35,7 +35,7 @@
   },
   "threeD": {
     "title": "Architectural 3D viewer",
-    "description": "Read-only physical Level references derived from the authoritative Project.",
+    "description": "Read-only Walls and Room Floors derived from the authoritative Project.",
     "loading": "Loading the 3D workspace…",
     "fit": "Fit to building",
     "reset": "Reset camera",
@@ -47,17 +47,17 @@
       "active": "Active Level"
     },
     "empty": {
-      "title": "No architectural reference geometry",
-      "detail": "This Project has no Wall reference lines yet. The physical ground and camera workspace remain available."
+      "title": "No architectural geometry",
+      "detail": "This Project has no Walls or explicit Room Floors yet. The physical ground and camera workspace remain available."
     },
     "inspector": {
       "title": "3D viewer",
       "readOnly": "This representation is read-only and does not change Project geometry.",
       "project": "Project",
-      "referenceReady": "Physical references ready",
+      "referenceReady": "Architectural geometry ready",
       "empty": "Empty architectural geometry",
       "visibleLevels": "Visible Levels",
-      "noVisibleLevels": "No Level reference is visible."
+      "noVisibleLevels": "No architectural Level is visible."
     },
     "errors": {
       "unsupportedTitle": "3D rendering is unavailable",

@@ -50,19 +50,39 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const geometryResponse = createGeometrySnapshotFixture(
+const geometryFixture = createGeometrySnapshotFixture(
   demoProjectFixture.id,
   demoProjectFixture.revision
 );
+const geometryResponse = {
+  ...geometryFixture,
+  geometry: {
+    ...geometryFixture.geometry,
+    levels: geometryFixture.geometry.levels.map((level) => ({
+      ...level,
+      sourceLevelId: demoProjectFixture.building.levels[0]!.id
+    }))
+  }
+};
 const savedProjectFixture = {
   ...demoProjectFixture,
   revision: demoProjectFixture.revision + 1,
   updatedAt: "2026-08-15T12:00:00.000Z"
 };
-const savedGeometryResponse = createGeometrySnapshotFixture(
+const savedGeometryFixture = createGeometrySnapshotFixture(
   demoProjectFixture.id,
   savedProjectFixture.revision
 );
+const savedGeometryResponse = {
+  ...savedGeometryFixture,
+  geometry: {
+    ...savedGeometryFixture.geometry,
+    levels: savedGeometryFixture.geometry.levels.map((level) => ({
+      ...level,
+      sourceLevelId: demoProjectFixture.building.levels[0]!.id
+    }))
+  }
+};
 
 function setViewportWidth(width: number) {
   vi.stubGlobal(
@@ -192,9 +212,23 @@ function emptyProjectFetch(): typeof fetch {
     walls: [],
     staircases: []
   }];
+  const emptyGeometry = {
+    ...geometryResponse,
+    geometry: {
+      ...geometryResponse.geometry,
+      levels: geometryResponse.geometry.levels.map((level) => ({
+        ...level,
+        vertices: [],
+        boundaryEdges: [],
+        boundaryEdgeUses: [],
+        loops: [],
+        polygons: []
+      }))
+    }
+  };
   return vi.fn(async (input: RequestInfo | URL) => Response.json(
     String(input).endsWith("/geometry")
-      ? geometryResponse
+      ? emptyGeometry
       : { project, sourceRevision: project.revision }
   )) as typeof fetch;
 }
@@ -444,7 +478,11 @@ describe("ProjectViewerPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
 
-    expect(await screen.findByTestId("project-3d-workspace")).toBeTruthy();
+    const workspace = await screen.findByTestId("project-3d-workspace");
+    expect(workspace.getAttribute("data-architectural-wall-count")).toBe("7");
+    expect(workspace.getAttribute("data-architectural-wall-section-count")).toBe("7");
+    expect(workspace.getAttribute("data-architectural-floor-count")).toBe("1");
+    expect(workspace.getAttribute("data-visible-architectural-bounds")).not.toBe("");
     expect(screen.getByTestId("project-3d-canvas")).toBeTruthy();
     expect(screen.getByRole("button", { name: "3D workspace" }).getAttribute("aria-pressed"))
       .toBe("true");
@@ -490,6 +528,52 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Active Level" }));
     await waitFor(() => expect(within(inspector).queryByText("Upper Level")).toBeNull());
     expect(within(inspector).getByText("0.00 m")).toBeTruthy();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
+  });
+
+  it("exposes actual Wall solids, Room Floors, and all Opening void kinds", async () => {
+    const project = structuredClone(demoProjectFixture);
+    const [doorWall, windowWall, passageWall] = project.building.levels[0]!.walls;
+    doorWall!.openings = [{
+      id: "door-3d",
+      type: "DOOR",
+      offsetFromStart: 50,
+      width: 90,
+      height: 210,
+      elevation: 0
+    }];
+    windowWall!.openings = [{
+      id: "window-3d",
+      type: "WINDOW",
+      offsetFromStart: 50,
+      width: 100,
+      height: 120,
+      elevation: 90
+    }];
+    passageWall!.openings = [{
+      id: "opening-3d",
+      type: "OPENING",
+      offsetFromStart: 50,
+      width: 100,
+      height: 220,
+      elevation: 0
+    }];
+    const fetchImplementation = vi.fn(async (input: RequestInfo | URL) => Response.json(
+      String(input).endsWith("/geometry")
+        ? geometryResponse
+        : { project, sourceRevision: project.revision }
+    )) as typeof fetch;
+
+    const { store } = renderConnectedRoute(createApiClient(fetchImplementation));
+    fireEvent.click(await screen.findByRole("button", { name: "3D workspace" }));
+    const workspace = await screen.findByTestId("project-3d-workspace");
+
+    expect(workspace.getAttribute("data-architectural-wall-count")).toBe("7");
+    expect(workspace.getAttribute("data-architectural-wall-section-count")).toBe("14");
+    expect(workspace.getAttribute("data-architectural-floor-count")).toBe("1");
+    expect(workspace.getAttribute("data-architectural-opening-kinds"))
+      .toBe("DOOR,WINDOW,OPENING");
     expect(store.getState().projectEditor.dirty).toBe(false);
     expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
   });
