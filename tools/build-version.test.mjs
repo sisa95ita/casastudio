@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -12,6 +13,9 @@ import {
 } from "./build-version.mjs";
 
 const declaredSnapshot = "0.1.0-SNAPSHOT";
+const declaredRepositoryVersion = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+).version;
 const fixedTimestamp = "20260820.151245";
 const timestampedSnapshot = `${declaredSnapshot}-${fixedTimestamp}`;
 const buildVersionEnvironmentKey = "CASASTUDIO_BUILD_VERSION";
@@ -33,7 +37,7 @@ function withoutBuildVersionOverride(assertion) {
 }
 
 test("reads the repository snapshot version", () => {
-  assert.equal(readDeclaredVersion(), declaredSnapshot);
+  assert.equal(readDeclaredVersion(), declaredRepositoryVersion);
 });
 
 test("uses the declared snapshot when no build override exists", () => {
