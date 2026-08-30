@@ -36,11 +36,14 @@ import {
   getLevelReferenceOrientation3D,
   getVisibleLevelReferences3D,
   type ArchitecturalScene3DModel,
+  type Door3D,
   type Floor3D,
   type LevelReference3D,
   type LevelVisibility3D,
   type SceneBounds3D,
-  type Wall3D
+  type Wall3D,
+  type WallOpening3D,
+  type Window3D
 } from "./architectural-scene-3d-model";
 
 /** Inputs for the read-only architectural 3D viewport. */
@@ -127,6 +130,36 @@ export function Project3DViewer({
       data-architectural-opening-kinds={visibleLevels.flatMap((level) =>
         level.walls.flatMap((wall) => wall.openings.map((opening) => opening.kind))
       ).join(",")}
+      data-architectural-door-count={visibleLevels.reduce(
+        (count, level) => count + level.walls.reduce(
+          (levelCount, wall) => levelCount + wall.doors.length,
+          0
+        ),
+        0
+      )}
+      data-architectural-window-count={visibleLevels.reduce(
+        (count, level) => count + level.walls.reduce(
+          (levelCount, wall) => levelCount + wall.windows.length,
+          0
+        ),
+        0
+      )}
+      data-architectural-wall-opening-count={visibleLevels.reduce(
+        (count, level) => count + level.walls.reduce(
+          (levelCount, wall) => levelCount + wall.wallOpenings.length,
+          0
+        ),
+        0
+      )}
+      data-architectural-door-poses={JSON.stringify(visibleLevels.flatMap((level) =>
+        level.walls.flatMap((wall) => wall.doors.map((door) => ({
+          id: door.id,
+          hingeSide: door.hingeSide,
+          swingSide: door.swingSide,
+          hinge: door.hinge,
+          leafEnd: door.leafEnd
+        })))
+      ))}
       data-visible-architectural-bounds={visibleBounds
         ? JSON.stringify({ min: visibleBounds.min, max: visibleBounds.max })
         : ""}
@@ -424,36 +457,118 @@ function ArchitecturalLevel3D({ model }: { readonly model: LevelReference3D }) {
 function ArchitecturalWall3D({ model }: { readonly model: Wall3D }) {
   const rotationY = Math.atan2(-model.u.z, model.u.x);
   return (
-    <group
-      name={`architectural-wall:${model.id}`}
-      position={[model.origin.x, model.origin.y, model.origin.z]}
-      rotation={[0, rotationY, 0]}
-    >
-      {model.sections.map((section, index) => {
-        const width = section.end - section.start;
-        const height = section.top - section.bottom;
-        return (
-          <mesh
-            key={`${section.start}:${section.end}:${section.bottom}:${section.top}:${index}`}
-            name={`architectural-wall-section:${model.id}:${index}`}
-            position={[
-              section.start + width / 2,
-              section.bottom + height / 2,
-              0
-            ]}
-          >
-            <boxGeometry args={[width, height, model.thickness]} />
-            <meshStandardMaterial
-              color="#d9c8b2"
-              roughness={0.92}
-              metalness={0}
-              side={DoubleSide}
-            />
-          </mesh>
-        );
-      })}
+    <group name={`architectural-wall:${model.id}`}>
+      <group
+        position={[model.origin.x, model.origin.y, model.origin.z]}
+        rotation={[0, rotationY, 0]}
+      >
+        {model.sections.map((section, index) => {
+          const width = section.end - section.start;
+          const height = section.top - section.bottom;
+          return (
+            <mesh
+              key={`${section.start}:${section.end}:${section.bottom}:${section.top}:${index}`}
+              name={`architectural-wall-section:${model.id}:${index}`}
+              position={[
+                section.start + width / 2,
+                section.bottom + height / 2,
+                0
+              ]}
+            >
+              <boxGeometry args={[width, height, model.thickness]} />
+              <meshStandardMaterial
+                color="#d9c8b2"
+                roughness={0.92}
+                metalness={0}
+                side={DoubleSide}
+              />
+            </mesh>
+          );
+        })}
+      </group>
+      {model.doors.map((door) => (
+        <ArchitecturalDoor3D key={door.id} model={door} />
+      ))}
+      {model.windows.map((window) => (
+        <ArchitecturalWindow3D key={window.id} model={window} />
+      ))}
+      {model.wallOpenings.map((opening) => (
+        <ArchitecturalWallOpening3D key={opening.id} model={opening} />
+      ))}
     </group>
   );
+}
+
+/** Renders one already-posed architectural Door leaf without domain interpretation. */
+function ArchitecturalDoor3D({ model }: { readonly model: Door3D }) {
+  const rotationY = Math.atan2(-model.leaf.u.z, model.leaf.u.x);
+  return (
+    <mesh
+      name={`architectural-door:${model.id}`}
+      position={[model.leaf.center.x, model.leaf.center.y, model.leaf.center.z]}
+      rotation={[0, rotationY, 0]}
+    >
+      <boxGeometry args={[model.leaf.width, model.leaf.height, model.leaf.thickness]} />
+      <meshStandardMaterial
+        color="#7e7162"
+        roughness={0.88}
+        metalness={0}
+        side={DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+/** Renders one minimal four-bar Window frame and lightly tinted glazing panel. */
+function ArchitecturalWindow3D({ model }: { readonly model: Window3D }) {
+  const rotationY = Math.atan2(-model.frame.u.z, model.frame.u.x);
+  return (
+    <group name={`architectural-window:${model.id}`}>
+      {model.frameBars.map((bar, index) => (
+        <mesh
+          key={`${bar.center.x}:${bar.center.y}:${bar.center.z}:${index}`}
+          name={`architectural-window-frame:${model.id}:${index}`}
+          position={[bar.center.x, bar.center.y, bar.center.z]}
+          rotation={[0, rotationY, 0]}
+        >
+          <boxGeometry args={[bar.width, bar.height, bar.depth]} />
+          <meshStandardMaterial
+            color="#5f6668"
+            roughness={0.8}
+            metalness={0.05}
+            side={DoubleSide}
+          />
+        </mesh>
+      ))}
+      <mesh
+        name={`architectural-window-glazing:${model.id}`}
+        position={[
+          model.glazing.center.x,
+          model.glazing.center.y,
+          model.glazing.center.z
+        ]}
+        rotation={[0, rotationY, 0]}
+      >
+        <boxGeometry
+          args={[model.glazing.width, model.glazing.height, model.glazing.thickness]}
+        />
+        <meshStandardMaterial
+          color="#84b9c8"
+          transparent
+          opacity={0.34}
+          roughness={0.45}
+          metalness={0}
+          depthWrite={false}
+          side={DoubleSide}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/** Retains Wall ownership for an unadorned passage while rendering no fake entity. */
+function ArchitecturalWallOpening3D({ model }: { readonly model: WallOpening3D }) {
+  return <group name={`architectural-wall-opening:${model.id}`} />;
 }
 
 /** Renders one triangulated exact Room contour as a neutral horizontal Floor. */

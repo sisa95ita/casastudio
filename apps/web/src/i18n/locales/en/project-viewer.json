@@ -35,7 +35,7 @@
   },
   "threeD": {
     "title": "Architectural 3D viewer",
-    "description": "Read-only Walls and Room Floors derived from the authoritative Project.",
+    "description": "Read-only Walls, Openings, and Room Floors derived from the authoritative Project.",
     "loading": "Loading the 3D workspace…",
     "fit": "Fit to building",
     "reset": "Reset camera",

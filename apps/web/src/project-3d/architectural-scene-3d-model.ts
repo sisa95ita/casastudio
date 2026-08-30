@@ -1,6 +1,10 @@
 import { GeometryEngine } from "@casastudio/geometry";
 import {
   convertPhysicalLength,
+  getDoorHingeSide,
+  getDoorSwingSide,
+  type DoorHingeSide,
+  type DoorSwingSide,
   type MetricLengthUnit,
   type Opening,
   type Project,
@@ -14,6 +18,9 @@ export type ScenePoint3D = Readonly<{ x: number; y: number; z: number }>;
 
 /** Plain immutable horizontal vector in the renderer's XZ plane. */
 export type ScenePlanVector3D = Readonly<{ x: number; z: number }>;
+
+/** Plain immutable direction in the renderer's XYZ coordinate space. */
+export type SceneVector3D = Readonly<{ x: number; y: number; z: number }>;
 
 /** Axis-aligned bounds expressed in Three world units. */
 export type SceneBounds3D = Readonly<{
@@ -47,6 +54,70 @@ export type Opening3D = Readonly<{
   height: number;
 }>;
 
+/** World-space frame shared by every entity occupying one canonical Wall void. */
+export type OpeningWorldFrame3D = Readonly<{
+  center: ScenePoint3D;
+  u: ScenePlanVector3D;
+  n: ScenePlanVector3D;
+  v: SceneVector3D;
+  start: ScenePoint3D;
+  end: ScenePoint3D;
+  width: number;
+  height: number;
+  elevation: number;
+  wallThickness: number;
+}>;
+
+/** Thin immutable rectangular panel positioned entirely in world coordinates. */
+export type ArchitecturalPanel3D = Readonly<{
+  center: ScenePoint3D;
+  u: ScenePlanVector3D;
+  n: ScenePlanVector3D;
+  width: number;
+  height: number;
+  thickness: number;
+}>;
+
+/** Rectangular frame bar aligned with an Opening's Wall-local axes. */
+export type WindowFrameBar3D = Readonly<{
+  center: ScenePoint3D;
+  width: number;
+  height: number;
+  depth: number;
+}>;
+
+/** Immutable architectural Door entity derived from canonical orientation semantics. */
+export type Door3D = Readonly<{
+  id: string;
+  kind: "DOOR";
+  wallId: string;
+  frame: OpeningWorldFrame3D;
+  hingeSide: DoorHingeSide;
+  swingSide: DoorSwingSide;
+  openAngleRadians: number;
+  hinge: ScenePoint3D;
+  leafEnd: ScenePoint3D;
+  leaf: ArchitecturalPanel3D;
+}>;
+
+/** Immutable minimal Window assembly contained by one canonical Wall void. */
+export type Window3D = Readonly<{
+  id: string;
+  kind: "WINDOW";
+  wallId: string;
+  frame: OpeningWorldFrame3D;
+  frameBars: readonly WindowFrameBar3D[];
+  glazing: ArchitecturalPanel3D;
+}>;
+
+/** Immutable semantic marker for an unadorned canonical Wall Opening. */
+export type WallOpening3D = Readonly<{
+  id: string;
+  kind: "OPENING";
+  wallId: string;
+  frame: OpeningWorldFrame3D;
+}>;
+
 /** Remaining rectangular Wall solid expressed in Wall-local along/vertical axes. */
 export type WallSection3D = Readonly<{
   start: number;
@@ -66,6 +137,9 @@ export type Wall3D = Readonly<{
   height: number;
   openings: readonly Opening3D[];
   sections: readonly WallSection3D[];
+  doors: readonly Door3D[];
+  windows: readonly Window3D[];
+  wallOpenings: readonly WallOpening3D[];
 }>;
 
 /** One triangle indexing the canonical contour of an architectural Floor. */
@@ -140,6 +214,175 @@ export function projectPointToThree(
     y: toThreeLength(elevation, sourceUnit),
     z: planPoint.z
   });
+}
+
+/** Deterministic presentation angle used by every static architectural Door leaf. */
+export const architecturalDoorOpenAngleRadians = Math.PI / 4;
+
+/** Derives the shared world frame of one Wall-relative Opening. */
+export function createOpeningWorldFrame3D(
+  wall: Pick<Wall3D, "origin" | "u" | "n" | "thickness">,
+  opening: Opening3D
+): OpeningWorldFrame3D {
+  const centerAlong = opening.offsetFromStart + opening.width / 2;
+  const centerY = wall.origin.y + opening.elevation + opening.height / 2;
+  const center = freezeScenePoint(
+    wall.origin.x + wall.u.x * centerAlong,
+    centerY,
+    wall.origin.z + wall.u.z * centerAlong
+  );
+  const halfWidth = opening.width / 2;
+  return Object.freeze({
+    center,
+    u: wall.u,
+    n: wall.n,
+    v: Object.freeze({ x: 0, y: 1, z: 0 }),
+    start: freezeScenePoint(
+      center.x - wall.u.x * halfWidth,
+      centerY,
+      center.z - wall.u.z * halfWidth
+    ),
+    end: freezeScenePoint(
+      center.x + wall.u.x * halfWidth,
+      centerY,
+      center.z + wall.u.z * halfWidth
+    ),
+    width: opening.width,
+    height: opening.height,
+    elevation: opening.elevation,
+    wallThickness: wall.thickness
+  });
+}
+
+/** Derives a partially-open Door panel from canonical Wall-relative orientation. */
+export function createDoor3D(
+  wall: Pick<Wall3D, "id" | "origin" | "u" | "n" | "thickness">,
+  opening: Opening3D,
+  hingeSide: DoorHingeSide,
+  swingSide: DoorSwingSide
+): Door3D {
+  const frame = createOpeningWorldFrame3D(wall, opening);
+  const hinge = hingeSide === "START" ? frame.start : frame.end;
+  const closedDirection = hingeSide === "START"
+    ? frame.u
+    : Object.freeze({ x: -frame.u.x, z: -frame.u.z });
+
+  // Project-to-Three reflects the plan Z axis, so canonical 2D LEFT maps to -n.
+  const swingDirection = swingSide === "LEFT"
+    ? Object.freeze({ x: -frame.n.x, z: -frame.n.z })
+    : frame.n;
+  const cosine = Math.cos(architecturalDoorOpenAngleRadians);
+  const sine = Math.sin(architecturalDoorOpenAngleRadians);
+  const leafAxis = Object.freeze({
+    x: closedDirection.x * cosine + swingDirection.x * sine,
+    z: closedDirection.z * cosine + swingDirection.z * sine
+  });
+  const leafNormal = Object.freeze({ x: -leafAxis.z, z: leafAxis.x });
+  const leafEnd = freezeScenePoint(
+    hinge.x + leafAxis.x * opening.width,
+    hinge.y,
+    hinge.z + leafAxis.z * opening.width
+  );
+  const leafThickness = Math.min(0.04, wall.thickness * 0.25);
+  const leaf = Object.freeze({
+    center: freezeScenePoint(
+      (hinge.x + leafEnd.x) / 2,
+      frame.center.y,
+      (hinge.z + leafEnd.z) / 2
+    ),
+    u: leafAxis,
+    n: leafNormal,
+    width: opening.width,
+    height: opening.height,
+    thickness: leafThickness
+  });
+  return Object.freeze({
+    id: opening.id,
+    kind: "DOOR",
+    wallId: wall.id,
+    frame,
+    hingeSide,
+    swingSide,
+    openAngleRadians: architecturalDoorOpenAngleRadians,
+    hinge,
+    leafEnd,
+    leaf
+  });
+}
+
+/** Derives a restrained four-bar Window frame and centered glazing panel. */
+export function createWindow3D(
+  wall: Pick<Wall3D, "id" | "origin" | "u" | "n" | "thickness">,
+  opening: Opening3D
+): Window3D {
+  const frame = createOpeningWorldFrame3D(wall, opening);
+  const barThickness = Math.min(0.06, opening.width / 4, opening.height / 4);
+  const frameDepth = Math.min(wall.thickness, Math.max(0.025, wall.thickness * 0.6));
+  const horizontalWidth = opening.width - 2 * barThickness;
+  const verticalHeight = opening.height;
+  const sideOffset = opening.width / 2 - barThickness / 2;
+  const verticalOffset = opening.height / 2 - barThickness / 2;
+  const frameBars = Object.freeze([
+    createWindowFrameBar(frame, -sideOffset, 0, barThickness, verticalHeight, frameDepth),
+    createWindowFrameBar(frame, sideOffset, 0, barThickness, verticalHeight, frameDepth),
+    createWindowFrameBar(frame, 0, -verticalOffset, horizontalWidth, barThickness, frameDepth),
+    createWindowFrameBar(frame, 0, verticalOffset, horizontalWidth, barThickness, frameDepth)
+  ]);
+  const glazingThickness = Math.min(0.012, frameDepth / 4);
+  return Object.freeze({
+    id: opening.id,
+    kind: "WINDOW",
+    wallId: wall.id,
+    frame,
+    frameBars,
+    glazing: Object.freeze({
+      center: frame.center,
+      u: frame.u,
+      n: frame.n,
+      width: horizontalWidth,
+      height: opening.height - 2 * barThickness,
+      thickness: glazingThickness
+    })
+  });
+}
+
+/** Derives the semantic world frame of a clean Wall passage without adornment. */
+export function createWallOpening3D(
+  wall: Pick<Wall3D, "id" | "origin" | "u" | "n" | "thickness">,
+  opening: Opening3D
+): WallOpening3D {
+  return Object.freeze({
+    id: opening.id,
+    kind: "OPENING",
+    wallId: wall.id,
+    frame: createOpeningWorldFrame3D(wall, opening)
+  });
+}
+
+/** Creates one immutable Window bar at a Wall-local horizontal and vertical offset. */
+function createWindowFrameBar(
+  frame: OpeningWorldFrame3D,
+  alongOffset: number,
+  verticalOffset: number,
+  width: number,
+  height: number,
+  depth: number
+): WindowFrameBar3D {
+  return Object.freeze({
+    center: freezeScenePoint(
+      frame.center.x + frame.u.x * alongOffset,
+      frame.center.y + verticalOffset,
+      frame.center.z + frame.u.z * alongOffset
+    ),
+    width,
+    height,
+    depth
+  });
+}
+
+/** Freezes one finite renderer-space point without introducing renderer objects. */
+function freezeScenePoint(x: number, y: number, z: number): ScenePoint3D {
+  return Object.freeze({ x, y, z });
 }
 
 /**
@@ -286,6 +529,25 @@ export function createWall3D(
     elevation: toThreeLength(opening.elevation, sourceUnit),
     height: toThreeLength(opening.height, sourceUnit)
   }));
+  const wallFrame = Object.freeze({ id: wall.id, origin, u, n, thickness });
+  const doors: Door3D[] = [];
+  const windows: Window3D[] = [];
+  const wallOpenings: WallOpening3D[] = [];
+  wall.openings.forEach((opening, index) => {
+    const opening3D = openings[index]!;
+    if (opening.type === "DOOR") {
+      doors.push(createDoor3D(
+        wallFrame,
+        opening3D,
+        getDoorHingeSide(opening),
+        getDoorSwingSide(opening)
+      ));
+    } else if (opening.type === "WINDOW") {
+      windows.push(createWindow3D(wallFrame, opening3D));
+    } else {
+      wallOpenings.push(createWallOpening3D(wallFrame, opening3D));
+    }
+  });
   return Object.freeze({
     id: wall.id,
     origin,
@@ -295,7 +557,10 @@ export function createWall3D(
     thickness,
     height,
     openings: Object.freeze(openings),
-    sections: decomposeWallSections3D(length, height, openings, wall.id)
+    sections: decomposeWallSections3D(length, height, openings, wall.id),
+    doors: Object.freeze(doors),
+    windows: Object.freeze(windows),
+    wallOpenings: Object.freeze(wallOpenings)
   });
 }
 
@@ -433,7 +698,7 @@ export function getLevelReferenceOrientation3D(level: Level3D): LevelReferenceOr
   return doubledArea > 0 ? "counter-clockwise" : "clockwise";
 }
 
-/** Combines visible architectural solids and Floor surfaces in renderer coordinates. */
+/** Combines visible architectural solids, entities, and Floor surfaces. */
 function collectSceneBounds3D(levels: readonly Level3D[]): SceneBounds3D | undefined {
   return createBoundsFromPoints(levels.flatMap((level) => [
     ...collectWallBoundsPoints(level.walls),
@@ -459,20 +724,47 @@ function collectFloorBoundsPoints(floors: readonly Floor3D[]): ScenePoint3D[] {
   );
 }
 
-/** Expands Wall-local solid corners into world points for exact rendered bounds. */
+/** Expands Wall solids and entity corners into world points for exact rendered bounds. */
 function collectWallBoundsPoints(walls: readonly Wall3D[]): ScenePoint3D[] {
-  return walls.flatMap((wall) => wall.sections.flatMap((section) => {
-    const halfThickness = wall.thickness / 2;
-    return [section.start, section.end].flatMap((along) =>
-      [section.bottom, section.top].flatMap((vertical) =>
-        [-halfThickness, halfThickness].map((normal) => ({
-          x: wall.origin.x + wall.u.x * along + wall.n.x * normal,
-          y: wall.origin.y + vertical,
-          z: wall.origin.z + wall.u.z * along + wall.n.z * normal
-        }))
-      )
-    );
-  }));
+  return walls.flatMap((wall) => [
+    ...wall.sections.flatMap((section) => {
+      const halfThickness = wall.thickness / 2;
+      return [section.start, section.end].flatMap((along) =>
+        [section.bottom, section.top].flatMap((vertical) =>
+          [-halfThickness, halfThickness].map((normal) => ({
+            x: wall.origin.x + wall.u.x * along + wall.n.x * normal,
+            y: wall.origin.y + vertical,
+            z: wall.origin.z + wall.u.z * along + wall.n.z * normal
+          }))
+        )
+      );
+    }),
+    ...wall.doors.flatMap((door) => collectPanelBoundsPoints(door.leaf)),
+    ...wall.windows.flatMap((window) => [
+      ...window.frameBars.flatMap((bar) => collectPanelBoundsPoints({
+        center: bar.center,
+        u: window.frame.u,
+        n: window.frame.n,
+        width: bar.width,
+        height: bar.height,
+        thickness: bar.depth
+      })),
+      ...collectPanelBoundsPoints(window.glazing)
+    ])
+  ]);
+}
+
+/** Expands a world-space architectural panel into its eight physical corners. */
+function collectPanelBoundsPoints(panel: ArchitecturalPanel3D): ScenePoint3D[] {
+  return [-panel.width / 2, panel.width / 2].flatMap((along) =>
+    [-panel.height / 2, panel.height / 2].flatMap((vertical) =>
+      [-panel.thickness / 2, panel.thickness / 2].map((normal) => ({
+        x: panel.center.x + panel.u.x * along + panel.n.x * normal,
+        y: panel.center.y + vertical,
+        z: panel.center.z + panel.u.z * along + panel.n.z * normal
+      }))
+    )
+  );
 }
 
 /** Creates immutable axis-aligned bounds for a finite non-empty point set. */

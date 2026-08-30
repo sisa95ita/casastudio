@@ -541,7 +541,9 @@ describe("ProjectViewerPage", () => {
       offsetFromStart: 50,
       width: 90,
       height: 210,
-      elevation: 0
+      elevation: 0,
+      hingeSide: "START",
+      swingSide: "LEFT"
     }];
     windowWall!.openings = [{
       id: "window-3d",
@@ -574,6 +576,15 @@ describe("ProjectViewerPage", () => {
     expect(workspace.getAttribute("data-architectural-floor-count")).toBe("1");
     expect(workspace.getAttribute("data-architectural-opening-kinds"))
       .toBe("DOOR,WINDOW,OPENING");
+    expect(workspace.getAttribute("data-architectural-door-count")).toBe("1");
+    expect(workspace.getAttribute("data-architectural-window-count")).toBe("1");
+    expect(workspace.getAttribute("data-architectural-wall-opening-count")).toBe("1");
+    expect(JSON.parse(workspace.getAttribute("data-architectural-door-poses") ?? "[]"))
+      .toEqual([expect.objectContaining({
+        id: "door-3d",
+        hingeSide: "START",
+        swingSide: "LEFT"
+      })]);
     expect(store.getState().projectEditor.dirty).toBe(false);
     expect(store.getState().projectEditor.history).toEqual({ past: [], future: [] });
   });

@@ -92,6 +92,33 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     await expect(workspace).toHaveAttribute("data-architectural-opening-kinds", /DOOR/);
     await expect(workspace).toHaveAttribute("data-architectural-opening-kinds", /WINDOW/);
     await expect(workspace).toHaveAttribute("data-architectural-opening-kinds", /OPENING/);
+    await expect(workspace).toHaveAttribute("data-architectural-door-count", "2");
+    await expect(workspace).toHaveAttribute("data-architectural-window-count", "2");
+    await expect(workspace).toHaveAttribute("data-architectural-wall-opening-count", "1");
+    const doorPoses = JSON.parse(
+      (await workspace.getAttribute("data-architectural-door-poses")) ?? "[]"
+    ) as readonly {
+      readonly id: string;
+      readonly hingeSide: "START" | "END";
+      readonly swingSide: "LEFT" | "RIGHT";
+      readonly hinge: { readonly x: number; readonly z: number };
+      readonly leafEnd: { readonly x: number; readonly z: number };
+    }[];
+    expect(doorPoses).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "e2e-door-start-left",
+        hingeSide: "START",
+        swingSide: "LEFT"
+      }),
+      expect.objectContaining({
+        id: "e2e-door-end-right",
+        hingeSide: "END",
+        swingSide: "RIGHT"
+      })
+    ]));
+    expect(doorPoses.every((pose) =>
+      Math.hypot(pose.leafEnd.x - pose.hinge.x, pose.leafEnd.z - pose.hinge.z) > 0
+    )).toBe(true);
     expect(Number(await workspace.getAttribute("data-architectural-wall-count")))
       .toBeGreaterThan(0);
     expect(Number(await workspace.getAttribute("data-architectural-wall-section-count")))
@@ -156,11 +183,20 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
 
     await page.getByRole("button", { name: "Active Level" }).click();
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "0");
+    await expect(workspace).toHaveAttribute("data-architectural-door-count", "2");
+    await expect(workspace).toHaveAttribute("data-architectural-window-count", "1");
+    await expect(workspace).toHaveAttribute("data-architectural-wall-opening-count", "1");
     await page.getByRole("combobox", { name: "Level" }).click();
     await page.getByRole("option", { name: "Upper Level" }).click();
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "3.2");
+    await expect(workspace).toHaveAttribute("data-architectural-door-count", "0");
+    await expect(workspace).toHaveAttribute("data-architectural-window-count", "1");
+    await expect(workspace).toHaveAttribute("data-architectural-wall-opening-count", "0");
     await page.getByRole("button", { name: "All Levels" }).click();
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "0,3.2");
+    await expect(workspace).toHaveAttribute("data-architectural-door-count", "2");
+    await expect(workspace).toHaveAttribute("data-architectural-window-count", "2");
+    await expect(workspace).toHaveAttribute("data-architectural-wall-opening-count", "1");
 
     await page.getByRole("button", { name: "2D workspace" }).click();
     await expect(plan).toBeVisible();
@@ -319,8 +355,16 @@ async function seedArchitectural3DProject(
   if (!ground || ground.walls.length < 2) {
     throw new Error("The deterministic 3D Project requires at least two authored Walls.");
   }
-  ground.walls[0]!.openings = [createOpeningForWall(ground.walls[0]!, "DOOR")];
-  ground.walls[1]!.openings = [createOpeningForWall(ground.walls[1]!, "WINDOW")];
+  ground.walls[0]!.openings = [createOpeningForWall(
+    ground.walls[0]!,
+    "DOOR",
+    "e2e-door-start-left"
+  )];
+  ground.walls[1]!.openings = [createOpeningForWall(
+    ground.walls[1]!,
+    "WINDOW",
+    "e2e-window-ground"
+  )];
   const allPoints = ground.walls.flatMap((wall) => [wall.start, wall.end]);
   const maxX = Math.max(...allPoints.map((point) => point.x));
   const minZ = Math.min(...allPoints.map((point) => point.z));
@@ -328,19 +372,40 @@ async function seedArchitectural3DProject(
     id: "e2e-angled-opening-wall",
     name: "Angled Opening Wall",
     start: { x: maxX + 100, z: minZ },
-    end: { x: maxX + 300, z: minZ + 160 },
+    end: { x: maxX + 500, z: minZ + 300 },
     height: 300,
     thickness: 20,
     roomIds: [],
-    openings: [{
-      id: "e2e-wall-opening",
-      type: "OPENING",
-      offsetFromStart: 50,
-      width: 100,
-      height: 220,
-      elevation: 0
-    }]
+    openings: [
+      {
+        id: "e2e-door-end-right",
+        type: "DOOR",
+        offsetFromStart: 50,
+        width: 90,
+        height: 210,
+        elevation: 0,
+        hingeSide: "END",
+        swingSide: "RIGHT"
+      },
+      {
+        id: "e2e-wall-opening",
+        type: "OPENING",
+        offsetFromStart: 250,
+        width: 100,
+        height: 220,
+        elevation: 0
+      }
+    ]
   });
+  const upper = project.building.levels.find((level) => level.name === "Upper Level");
+  if (!upper?.walls[0]) {
+    throw new Error("The deterministic 3D Project requires an Upper Level Wall.");
+  }
+  upper.walls[0].openings = [createOpeningForWall(
+    upper.walls[0],
+    "WINDOW",
+    "e2e-window-upper"
+  )];
 
   const response = await request.put(`${apiBaseUrl}/api/v1/projects/${projectId}`, {
     headers: { Authorization: authorization },
@@ -349,23 +414,29 @@ async function seedArchitectural3DProject(
   expect(response.ok(), await response.text()).toBe(true);
 }
 
-function createOpeningForWall(wall: Wall, kind: "DOOR" | "WINDOW") {
+function createOpeningForWall(
+  wall: Wall,
+  kind: "DOOR" | "WINDOW",
+  id: string
+) {
   const length = Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z);
   const width = Math.min(100, length * 0.4);
   const offsetFromStart = (length - width) / 2;
   if (kind === "DOOR") {
     return {
-      id: "e2e-door",
+      id,
       type: kind,
       offsetFromStart,
       width,
       height: Math.min(210, wall.height),
-      elevation: 0
+      elevation: 0,
+      hingeSide: "START",
+      swingSide: "LEFT"
     } as const;
   }
   const elevation = Math.min(90, wall.height / 3);
   return {
-    id: "e2e-window",
+    id,
     type: kind,
     offsetFromStart,
     width,
