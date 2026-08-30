@@ -46,8 +46,11 @@
     "version:build": "node tools/build-version.mjs resolve",
     "version:test": "node --test tools/*.test.mjs",
     "build": "turbo build",
+    "build:ci": "turbo build --concurrency=1",
     "lint": "turbo lint",
-    "test": "pnpm version:test && turbo test"
+    "lint:ci": "turbo lint --concurrency=1",
+    "test": "pnpm version:test && turbo test",
+    "test:ci": "pnpm version:test && turbo test --concurrency=1"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

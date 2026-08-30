@@ -19,7 +19,6 @@ pipeline {
     PNPM_HOME = '/home/jenkins/.local/share/pnpm'
     PATH = "/home/jenkins/.local/share/pnpm:${PATH}"
     TURBO_TELEMETRY_DISABLED = '1'
-    TURBO_CONCURRENCY = '1'
     CASASTUDIO_POSTGRES_PASSWORD = 'ci-compose-placeholder-not-secret'
     CASASTUDIO_TEST_POSTGRES_PASSWORD = 'ci-test-postgres-password'
     CASASTUDIO_KEYCLOAK_ADMIN_PASSWORD = 'ci-compose-placeholder-not-secret'
@@ -133,15 +132,15 @@ pipeline {
       steps {
         sh '''
           set -eu
-          pnpm lint
+          pnpm lint:ci
         '''
         sh '''
           set -eu
-          pnpm test
+          pnpm test:ci
         '''
         sh '''
           set -eu
-          pnpm build
+          pnpm build:ci
         '''
       }
     }
