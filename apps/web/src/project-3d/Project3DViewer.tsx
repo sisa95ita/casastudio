@@ -11,20 +11,24 @@ import {
   Typography
 } from "@mui/material";
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   Component,
+  memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ErrorInfo,
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from "react";
 import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
 
 import { useCasaTranslation } from "../i18n";
+import { isEditableShortcutTarget } from "../geometry-playground/geometry-viewer-shortcuts";
 import {
   createArchitecturalCameraPose3D,
   createArchitecturalScreenParityLandmarks3D,
@@ -45,6 +49,17 @@ import {
   type WallOpening3D,
   type Window3D
 } from "./architectural-scene-3d-model";
+import {
+  collectArchitecturalSelectionTargets3D,
+  getArchitecturalEntityKey3D,
+  type ArchitecturalEntityIdentity3D
+} from "./architectural-selection-3d";
+import {
+  getArchitecturalEntityColor3D,
+  getArchitecturalEntityPresentationState3D,
+  getProject3DShortcutAction,
+  hasPointerGestureExceededSelectionThreshold3D
+} from "./architectural-viewer-interaction-3d";
 
 /** Inputs for the read-only architectural 3D viewport. */
 export type Project3DViewerProps = {
@@ -52,6 +67,8 @@ export type Project3DViewerProps = {
   readonly activeLevelId?: string;
   readonly visibility: LevelVisibility3D;
   readonly onVisibilityChange: (visibility: LevelVisibility3D) => void;
+  readonly selection?: ArchitecturalEntityIdentity3D;
+  readonly onSelectionChange: (selection?: ArchitecturalEntityIdentity3D) => void;
 };
 
 /** Renderer telemetry exposed for deterministic browser-level viewport checks. */
@@ -59,18 +76,26 @@ type ArchitecturalCameraTelemetry3D = Readonly<{
   position: string;
   viewDirection: string;
   projectedLandmarks: string;
+  projectedSelectionTargets: string;
 }>;
 
 /** Empty camera telemetry used until the Canvas applies its first framing. */
 const emptyArchitecturalCameraTelemetry3D: ArchitecturalCameraTelemetry3D =
-  Object.freeze({ position: "", viewDirection: "", projectedLandmarks: "" });
+  Object.freeze({
+    position: "",
+    viewDirection: "",
+    projectedLandmarks: "",
+    projectedSelectionTargets: ""
+  });
 
 /** Renders a resilient, read-only React Three Fiber architectural workspace. */
 export function Project3DViewer({
   model,
   activeLevelId,
   visibility,
-  onVisibilityChange
+  onVisibilityChange,
+  selection,
+  onSelectionChange
 }: Project3DViewerProps) {
   const { t } = useCasaTranslation("project-viewer");
   const [fitRequest, setFitRequest] = useState(0);
@@ -81,6 +106,9 @@ export function Project3DViewer({
   const [cameraTelemetry, setCameraTelemetry] = useState(
     emptyArchitecturalCameraTelemetry3D
   );
+  const [hoveredEntity, setHoveredEntity] = useState<ArchitecturalEntityIdentity3D>();
+  const [orbitDragging, setOrbitDragging] = useState(false);
+  const pointerGestureRef = useRef<PointerGesture3D | undefined>(undefined);
   const webGlSupported = useMemo(detectWebGLSupport, []);
   const visibleLevels = useMemo(
     () => getVisibleLevelReferences3D(model, visibility, activeLevelId),
@@ -94,6 +122,56 @@ export function Project3DViewer({
     () => createArchitecturalCameraPose3D(visibleBounds, 16 / 9),
     [visibleBounds]
   );
+  const selectedKey = getArchitecturalEntityKey3D(selection);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableShortcutTarget(event.target) || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      const action = getProject3DShortcutAction(event);
+      if (action === "clear-selection") {
+        onSelectionChange(undefined);
+        return;
+      }
+      if (action === "fit") {
+        event.preventDefault();
+        setFitRequest((request) => request + 1);
+      } else if (action === "reset") {
+        event.preventDefault();
+        setResetRequest((request) => request + 1);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onSelectionChange]);
+
+  useEffect(() => {
+    setHoveredEntity(undefined);
+  }, [activeLevelId, model.sourceProjectId, visibility]);
+
+  const handlePointerDownCapture = useCallback((event: ReactPointerEvent) => {
+    pointerGestureRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      dragged: false
+    };
+  }, []);
+  const handlePointerMoveCapture = useCallback((event: ReactPointerEvent) => {
+    const gesture = pointerGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId || gesture.dragged) return;
+    if (hasPointerGestureExceededSelectionThreshold3D(
+      gesture,
+      { x: event.clientX, y: event.clientY }
+    )) {
+      gesture.dragged = true;
+      setOrbitDragging(true);
+    }
+  }, []);
+  const handlePointerUpCapture = useCallback(() => {
+    setOrbitDragging(false);
+  }, []);
 
   return (
     <Paper
@@ -108,6 +186,7 @@ export function Project3DViewer({
       data-camera-position={cameraTelemetry.position}
       data-camera-view-direction={cameraTelemetry.viewDirection}
       data-projected-landmarks={cameraTelemetry.projectedLandmarks}
+      data-projected-selection-targets={cameraTelemetry.projectedSelectionTargets}
       data-visible-level-elevations={visibleLevels.map((level) => level.y).join(",")}
       data-visible-reference-orientations={visibleLevels
         .map((level) => `${level.id}:${getLevelReferenceOrientation3D(level)}`)
@@ -163,6 +242,9 @@ export function Project3DViewer({
       data-visible-architectural-bounds={visibleBounds
         ? JSON.stringify({ min: visibleBounds.min, max: visibleBounds.max })
         : ""}
+      data-selected-entity-kind={selection?.kind ?? ""}
+      data-selected-entity-id={selection?.id ?? ""}
+      data-selected-level-id={selection?.levelId ?? ""}
     >
       <Box className="project-3d-viewer__toolbar">
         <Box>
@@ -211,7 +293,15 @@ export function Project3DViewer({
         </Stack>
       </Box>
 
-      <Box className="project-3d-viewer__canvas" data-testid="project-3d-canvas">
+      <Box
+        className="project-3d-viewer__canvas"
+        data-testid="project-3d-canvas"
+        onPointerDownCapture={handlePointerDownCapture}
+        onPointerMoveCapture={handlePointerMoveCapture}
+        onPointerUpCapture={handlePointerUpCapture}
+        onPointerCancel={handlePointerUpCapture}
+        sx={{ cursor: orbitDragging ? "grabbing" : hoveredEntity ? "pointer" : "default" }}
+      >
         {webGlSupported ? (
           <Project3DRenderErrorBoundary
             fallback={
@@ -237,6 +327,9 @@ export function Project3DViewer({
               frameloop="demand"
               gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
               onCreated={() => setRendererStatus("ready")}
+              onPointerMissed={() => {
+                if (!pointerGestureRef.current?.dragged) onSelectionChange(undefined);
+              }}
               fallback={
                 <RendererMessage
                   severity="error"
@@ -252,6 +345,10 @@ export function Project3DViewer({
                 fitRequest={fitRequest}
                 resetRequest={resetRequest}
                 onCameraChange={setCameraTelemetry}
+                selectedKey={selectedKey}
+                pointerGestureRef={pointerGestureRef}
+                onHoverChange={setHoveredEntity}
+                onSelectionChange={onSelectionChange}
               />
             </Canvas>
           </Project3DRenderErrorBoundary>
@@ -334,6 +431,18 @@ type ArchitecturalFoundationSceneProps = {
   readonly fitRequest: number;
   readonly resetRequest: number;
   readonly onCameraChange: (telemetry: ArchitecturalCameraTelemetry3D) => void;
+  readonly selectedKey: string;
+  readonly pointerGestureRef: MutableRefObject<PointerGesture3D | undefined>;
+  readonly onHoverChange: (identity?: ArchitecturalEntityIdentity3D) => void;
+  readonly onSelectionChange: (identity?: ArchitecturalEntityIdentity3D) => void;
+};
+
+/** Screen-space pointer gesture used to distinguish selection clicks from Orbit drags. */
+type PointerGesture3D = {
+  pointerId: number;
+  x: number;
+  y: number;
+  dragged: boolean;
 };
 
 /** Renders restrained Project-derived references, lighting, and camera controls. */
@@ -342,7 +451,11 @@ function ArchitecturalFoundationScene({
   bounds,
   fitRequest,
   resetRequest,
-  onCameraChange
+  onCameraChange,
+  selectedKey,
+  pointerGestureRef,
+  onHoverChange,
+  onSelectionChange
 }: ArchitecturalFoundationSceneProps) {
   const controlsRef = useRef<React.ElementRef<typeof OrbitControls>>(null);
   const { camera, size } = useThree();
@@ -382,6 +495,18 @@ function ArchitecturalFoundationScene({
           })
         )
       : {};
+    const projectedSelectionTargets = Object.fromEntries(
+      collectArchitecturalSelectionTargets3D(levels).map((target) => {
+        const projected = projectScenePointToArchitecturalScreen3D(
+          target.point,
+          pose,
+          size.width / size.height
+        );
+        return [getArchitecturalEntityKey3D(target.identity), projected
+          ? { x: projected.x, y: projected.y, depth: projected.depth }
+          : null];
+      })
+    );
     onCameraChange({
       position: [position.x, position.y, position.z]
         .map(formatCameraTelemetryNumber)
@@ -393,9 +518,10 @@ function ArchitecturalFoundationScene({
             (position.z - target.z) / directionLength
           ].map(formatCameraTelemetryNumber).join(",")
         : "",
-      projectedLandmarks: JSON.stringify(projectedLandmarks)
+      projectedLandmarks: JSON.stringify(projectedLandmarks),
+      projectedSelectionTargets: JSON.stringify(projectedSelectionTargets)
     });
-  }, [bounds, camera, onCameraChange, size.height, size.width]);
+  }, [bounds, camera, levels, onCameraChange, size.height, size.width]);
 
   return (
     <>
@@ -405,6 +531,13 @@ function ArchitecturalFoundationScene({
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[ground.centerX, ground.y, ground.centerZ]}
+        onPointerOver={() => onHoverChange(undefined)}
+        onPointerUp={(event) => {
+          if (!pointerGestureRef.current?.dragged) {
+            event.stopPropagation();
+            onSelectionChange(undefined);
+          }
+        }}
       >
         <planeGeometry args={[ground.size, ground.size]} />
         <meshStandardMaterial color="#f2ede4" roughness={1} metalness={0} />
@@ -412,9 +545,17 @@ function ArchitecturalFoundationScene({
       <gridHelper
         args={[ground.size, ground.divisions, "#c9c0b3", "#ded7cc"]}
         position={[ground.centerX, ground.y + 0.002, ground.centerZ]}
+        raycast={() => null}
       />
       {levels.map((level) => (
-        <ArchitecturalLevel3D key={level.id} model={level} />
+        <ArchitecturalLevel3D
+          key={level.id}
+          model={level}
+          selectedKey={selectedKey}
+          pointerGestureRef={pointerGestureRef}
+          onHoverChange={onHoverChange}
+          onSelectionChange={onSelectionChange}
+        />
       ))}
       <CameraAndOrbitController
         bounds={bounds}
@@ -440,22 +581,44 @@ function ArchitecturalFoundationScene({
 }
 
 /** Renders the already-derived architectural entities for one Level. */
-function ArchitecturalLevel3D({ model }: { readonly model: LevelReference3D }) {
+const ArchitecturalLevel3D = memo(function ArchitecturalLevel3D({
+  model,
+  ...interaction
+}: { readonly model: LevelReference3D } & ArchitecturalInteractionContext3D) {
   return (
     <group name={`architectural-level:${model.id}`}>
       {model.floors.map((floor) => (
-        <ArchitecturalFloor3D key={floor.id} model={floor} />
+        <ArchitecturalFloor3D
+          key={floor.id}
+          model={floor}
+          levelId={model.id}
+          {...interaction}
+        />
       ))}
       {model.walls.map((wall) => (
-        <ArchitecturalWall3D key={wall.id} model={wall} />
+        <ArchitecturalWall3D
+          key={wall.id}
+          model={wall}
+          levelId={model.id}
+          {...interaction}
+        />
       ))}
     </group>
   );
-}
+});
 
 /** Extrudes the immutable rectangular sections belonging to one architectural Wall. */
-function ArchitecturalWall3D({ model }: { readonly model: Wall3D }) {
+function ArchitecturalWall3D({
+  model,
+  levelId,
+  ...interaction
+}: { readonly model: Wall3D; readonly levelId: string } & ArchitecturalInteractionContext3D) {
   const rotationY = Math.atan2(-model.u.z, model.u.x);
+  const identity = useMemo<ArchitecturalEntityIdentity3D>(
+    () => Object.freeze({ kind: "wall", id: model.id, levelId }),
+    [levelId, model.id]
+  );
+  const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
   return (
     <group name={`architectural-wall:${model.id}`}>
       <group
@@ -474,10 +637,11 @@ function ArchitecturalWall3D({ model }: { readonly model: Wall3D }) {
                 section.bottom + height / 2,
                 0
               ]}
+              {...handlers}
             >
               <boxGeometry args={[width, height, model.thickness]} />
               <meshStandardMaterial
-                color="#d9c8b2"
+                color={getArchitecturalEntityColor3D("#d9c8b2", state)}
                 roughness={0.92}
                 metalness={0}
                 side={DoubleSide}
@@ -487,30 +651,45 @@ function ArchitecturalWall3D({ model }: { readonly model: Wall3D }) {
         })}
       </group>
       {model.doors.map((door) => (
-        <ArchitecturalDoor3D key={door.id} model={door} />
+        <ArchitecturalDoor3D key={door.id} model={door} levelId={levelId} {...interaction} />
       ))}
       {model.windows.map((window) => (
-        <ArchitecturalWindow3D key={window.id} model={window} />
+        <ArchitecturalWindow3D key={window.id} model={window} levelId={levelId} {...interaction} />
       ))}
       {model.wallOpenings.map((opening) => (
-        <ArchitecturalWallOpening3D key={opening.id} model={opening} />
+        <ArchitecturalWallOpening3D
+          key={opening.id}
+          model={opening}
+          levelId={levelId}
+          {...interaction}
+        />
       ))}
     </group>
   );
 }
 
 /** Renders one already-posed architectural Door leaf without domain interpretation. */
-function ArchitecturalDoor3D({ model }: { readonly model: Door3D }) {
+function ArchitecturalDoor3D({
+  model,
+  levelId,
+  ...interaction
+}: { readonly model: Door3D; readonly levelId: string } & ArchitecturalInteractionContext3D) {
   const rotationY = Math.atan2(-model.leaf.u.z, model.leaf.u.x);
+  const identity = useMemo<ArchitecturalEntityIdentity3D>(
+    () => Object.freeze({ kind: "door", id: model.id, levelId }),
+    [levelId, model.id]
+  );
+  const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
   return (
     <mesh
       name={`architectural-door:${model.id}`}
       position={[model.leaf.center.x, model.leaf.center.y, model.leaf.center.z]}
       rotation={[0, rotationY, 0]}
+      {...handlers}
     >
       <boxGeometry args={[model.leaf.width, model.leaf.height, model.leaf.thickness]} />
       <meshStandardMaterial
-        color="#7e7162"
+        color={getArchitecturalEntityColor3D("#7e7162", state)}
         roughness={0.88}
         metalness={0}
         side={DoubleSide}
@@ -520,10 +699,22 @@ function ArchitecturalDoor3D({ model }: { readonly model: Door3D }) {
 }
 
 /** Renders one minimal four-bar Window frame and lightly tinted glazing panel. */
-function ArchitecturalWindow3D({ model }: { readonly model: Window3D }) {
+function ArchitecturalWindow3D({
+  model,
+  levelId,
+  ...interaction
+}: { readonly model: Window3D; readonly levelId: string } & ArchitecturalInteractionContext3D) {
   const rotationY = Math.atan2(-model.frame.u.z, model.frame.u.x);
+  const identity = useMemo<ArchitecturalEntityIdentity3D>(
+    () => Object.freeze({ kind: "window", id: model.id, levelId }),
+    [levelId, model.id]
+  );
+  const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
   return (
-    <group name={`architectural-window:${model.id}`}>
+    <group
+      name={`architectural-window:${model.id}`}
+      {...handlers}
+    >
       {model.frameBars.map((bar, index) => (
         <mesh
           key={`${bar.center.x}:${bar.center.y}:${bar.center.z}:${index}`}
@@ -533,7 +724,7 @@ function ArchitecturalWindow3D({ model }: { readonly model: Window3D }) {
         >
           <boxGeometry args={[bar.width, bar.height, bar.depth]} />
           <meshStandardMaterial
-            color="#5f6668"
+            color={getArchitecturalEntityColor3D("#5f6668", state)}
             roughness={0.8}
             metalness={0.05}
             side={DoubleSide}
@@ -553,7 +744,7 @@ function ArchitecturalWindow3D({ model }: { readonly model: Window3D }) {
           args={[model.glazing.width, model.glazing.height, model.glazing.thickness]}
         />
         <meshStandardMaterial
-          color="#84b9c8"
+          color={getArchitecturalEntityColor3D("#84b9c8", state)}
           transparent
           opacity={0.34}
           roughness={0.45}
@@ -567,12 +758,53 @@ function ArchitecturalWindow3D({ model }: { readonly model: Window3D }) {
 }
 
 /** Retains Wall ownership for an unadorned passage while rendering no fake entity. */
-function ArchitecturalWallOpening3D({ model }: { readonly model: WallOpening3D }) {
-  return <group name={`architectural-wall-opening:${model.id}`} />;
+function ArchitecturalWallOpening3D({
+  model,
+  levelId,
+  ...interaction
+}: {
+  readonly model: WallOpening3D;
+  readonly levelId: string;
+} & ArchitecturalInteractionContext3D) {
+  const rotationY = Math.atan2(-model.frame.u.z, model.frame.u.x);
+  const identity = useMemo<ArchitecturalEntityIdentity3D>(
+    () => Object.freeze({ kind: "wall-opening", id: model.id, levelId }),
+    [levelId, model.id]
+  );
+  const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
+  return (
+    <mesh
+      name={`architectural-wall-opening:${model.id}`}
+      position={[model.frame.center.x, model.frame.center.y, model.frame.center.z]}
+      rotation={[0, rotationY, 0]}
+      {...handlers}
+    >
+      <boxGeometry args={[
+        model.frame.width,
+        model.frame.height,
+        Math.max(model.frame.wallThickness * 0.7, 0.04)
+      ]} />
+      <meshBasicMaterial
+        color={getArchitecturalEntityColor3D("#b8aa94", state)}
+        transparent
+        opacity={state === "idle" ? 0.001 : state === "hovered" ? 0.16 : 0.3}
+        depthWrite={false}
+      />
+    </mesh>
+  );
 }
 
 /** Renders one triangulated exact Room contour as a neutral horizontal Floor. */
-function ArchitecturalFloor3D({ model }: { readonly model: Floor3D }) {
+function ArchitecturalFloor3D({
+  model,
+  levelId,
+  ...interaction
+}: { readonly model: Floor3D; readonly levelId: string } & ArchitecturalInteractionContext3D) {
+  const identity = useMemo<ArchitecturalEntityIdentity3D>(
+    () => Object.freeze({ kind: "room", id: model.roomId, levelId }),
+    [levelId, model.roomId]
+  );
+  const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
   const geometry = useMemo(() => {
     const floorGeometry = new BufferGeometry();
     const positions = model.triangles.flatMap((triangle) =>
@@ -593,15 +825,69 @@ function ArchitecturalFloor3D({ model }: { readonly model: Floor3D }) {
       name={`architectural-floor:${model.roomId}`}
       geometry={geometry}
       position={[0, model.y + 0.004, 0]}
+      {...handlers}
     >
       <meshStandardMaterial
-        color="#b8aa94"
+        color={getArchitecturalEntityColor3D("#b8aa94", state)}
         roughness={1}
         metalness={0}
         side={DoubleSide}
       />
     </mesh>
   );
+}
+
+/** Shared local interaction state passed only through the renderer scene graph. */
+type ArchitecturalInteractionContext3D = Readonly<{
+  selectedKey: string;
+  pointerGestureRef: MutableRefObject<PointerGesture3D | undefined>;
+  onHoverChange: (identity?: ArchitecturalEntityIdentity3D) => void;
+  onSelectionChange: (identity?: ArchitecturalEntityIdentity3D) => void;
+}>;
+
+/** Owns transient hover locally so pointer movement does not rerender unrelated entities. */
+function useArchitecturalEntityInteraction3D(
+  identity: ArchitecturalEntityIdentity3D,
+  interaction: ArchitecturalInteractionContext3D
+) {
+  const [hovered, setHovered] = useState(false);
+  return {
+    state: getArchitecturalEntityPresentationState3D(
+      identity,
+      interaction.selectedKey,
+      hovered ? getArchitecturalEntityKey3D(identity) : ""
+    ),
+    handlers: createEntityPointerHandlers3D(identity, interaction, setHovered)
+  } as const;
+}
+
+/** Creates consistent semantic pointer events for any architectural hit assembly. */
+function createEntityPointerHandlers3D(
+  identity: ArchitecturalEntityIdentity3D,
+  interaction: ArchitecturalInteractionContext3D,
+  setHovered: (hovered: boolean) => void
+) {
+  return {
+    onPointerOver: (event: ThreeEvent<PointerEvent>) => {
+      event.stopPropagation();
+      setHovered(true);
+      interaction.onHoverChange(identity);
+    },
+    onPointerOut: (event: ThreeEvent<PointerEvent>) => {
+      event.stopPropagation();
+      setHovered(false);
+      interaction.onHoverChange(undefined);
+    },
+    onPointerDown: (event: ThreeEvent<PointerEvent>) => {
+      event.stopPropagation();
+    },
+    onPointerUp: (event: ThreeEvent<PointerEvent>) => {
+      event.stopPropagation();
+      if (!interaction.pointerGestureRef.current?.dragged) {
+        interaction.onSelectionChange(identity);
+      }
+    }
+  };
 }
 
 /** Inputs for synchronizing physical framing with R3F camera objects. */

@@ -146,6 +146,11 @@ import {
 import { useCasaTranslation } from "../i18n";
 import { Project3DInspector } from "../project-3d/Project3DInspector";
 import {
+  isArchitecturalSelectionVisible3D,
+  resolveArchitecturalSelection3D,
+  type ArchitecturalEntityIdentity3D
+} from "../project-3d/architectural-selection-3d";
+import {
   createArchitecturalScene3DModel,
   getVisibleLevelReferences3D,
   type LevelVisibility3D
@@ -323,6 +328,8 @@ export function ProjectViewerPage() {
     useState<ProjectWorkspaceRepresentation>("2d");
   const [levelVisibility3D, setLevelVisibility3D] =
     useState<LevelVisibility3D>("all");
+  const [selection3D, setSelection3D] =
+    useState<ArchitecturalEntityIdentity3D>();
   const [selectedViewLevelId, setSelectedViewLevelId] = useState("");
   const [viewport, setViewport] = useState<ViewportState>(resetViewportState);
   const [selectionOwnerSnapshot, setSelectionOwnerSnapshot] =
@@ -425,6 +432,27 @@ export function ProjectViewerPage() {
     viewLevels.find((level) => level.id === selectedViewLevelId) ??
     viewLevels[0];
   const activeLevelId3D = selectedViewLevel?.sourceLevelId;
+  const resolvedSelection3D = useMemo(
+    () => scene3DResult?.ok && selection3D
+      ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
+      : undefined,
+    [scene3DResult, selection3D]
+  );
+
+  useEffect(() => {
+    if (
+      selection3D &&
+      !isArchitecturalSelectionVisible3D(
+        resolvedSelection3D,
+        levelVisibility3D,
+        activeLevelId3D
+      )
+    ) setSelection3D(undefined);
+  }, [activeLevelId3D, levelVisibility3D, resolvedSelection3D, selection3D]);
+
+  useEffect(() => {
+    setSelection3D(undefined);
+  }, [projectId]);
   const safeViewSelection =
     geometryResponse && selectionOwnerSnapshot === geometryResponse.geometry
       ? viewSelection
@@ -2027,6 +2055,7 @@ export function ProjectViewerPage() {
       (representation === "3d" && workspaceMode === "edit")
     ) return;
     setWorkspaceRepresentation(representation);
+    if (representation === "2d") setSelection3D(undefined);
   }, [saveInteractionBlocked, workspaceMode, workspaceRepresentation]);
 
   const refreshAuthoritativeState = useCallback(async () => {
@@ -2209,6 +2238,7 @@ export function ProjectViewerPage() {
           model={scene3DResult.model}
           visibility={levelVisibility3D}
           activeLevelId={activeLevelId3D}
+          selection={resolvedSelection3D}
         />
       );
     }
@@ -2285,7 +2315,8 @@ export function ProjectViewerPage() {
     workspaceRepresentation,
     scene3DResult,
     levelVisibility3D,
-    activeLevelId3D
+    activeLevelId3D,
+    resolvedSelection3D
   ]);
 
   const shellContent = useMemo(
@@ -2548,6 +2579,8 @@ export function ProjectViewerPage() {
               activeLevelId={activeLevelId3D}
               visibility={levelVisibility3D}
               onVisibilityChange={setLevelVisibility3D}
+              selection={selection3D}
+              onSelectionChange={setSelection3D}
             />
           </Suspense>
         ) : (

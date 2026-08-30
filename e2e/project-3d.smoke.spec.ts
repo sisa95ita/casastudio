@@ -146,6 +146,73 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     const initialDirection = await workspace.getAttribute("data-camera-view-direction");
     assertScreenParity(await getProjectedLandmarks(workspace));
 
+    const targets = await getProjectedSelectionTargets(workspace);
+    const wallTarget = Object.keys(targets).find((key) => key.includes(":wall:"));
+    const roomTarget = Object.keys(targets).find((key) => key.includes(":room:"));
+    if (!wallTarget || !roomTarget) {
+      throw new Error("The deterministic Project did not expose Wall and Room hit targets.");
+    }
+    await clickProjectedTarget(page, canvas, targets[wallTarget]!);
+    await expect(workspace).toHaveAttribute("data-selected-entity-kind", "wall");
+    await expect(inspector.getByText("Wall", { exact: true }).first()).toBeVisible();
+    await expect(inspector.getByText("Length", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Fit to building" }).click();
+    await expect(workspace).toHaveAttribute(
+      "data-selected-entity-id",
+      wallTarget.split(":").at(-1)!
+    );
+
+    await clickProjectedTarget(
+      page,
+      canvas,
+      getProjectedTarget(targets, "door", "e2e-door-start-left")
+    );
+    await expect(workspace).toHaveAttribute("data-selected-entity-id", "e2e-door-start-left");
+    await expect(inspector.getByText("Hinge side", { exact: true })).toBeVisible();
+    await expect(inspector.getByText("START", { exact: true })).toBeVisible();
+    await expect(inspector.getByText("LEFT", { exact: true })).toBeVisible();
+
+    await clickProjectedTarget(
+      page,
+      canvas,
+      getProjectedTarget(targets, "window", "e2e-window-ground")
+    );
+    await expect(workspace).toHaveAttribute("data-selected-entity-kind", "window");
+    await expect(inspector.getByText("Elevation", { exact: true })).toBeVisible();
+
+    await clickProjectedTarget(
+      page,
+      canvas,
+      getProjectedTarget(targets, "wall-opening", "e2e-wall-opening")
+    );
+    await expect(workspace).toHaveAttribute("data-selected-entity-id", "e2e-wall-opening");
+    await expect(inspector.getByText("Wall Opening", { exact: true }).first()).toBeVisible();
+
+    await tiltCanvasTowardTop(page, canvas);
+    await waitForCameraToSettle(page, workspace);
+    const topDownTargets = await getProjectedSelectionTargets(workspace);
+    await clickProjectedTarget(page, canvas, topDownTargets[roomTarget]!);
+    await expect(workspace).toHaveAttribute("data-selected-entity-kind", "room");
+    await expect(inspector.getByText("Area", { exact: true })).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("selected-room-3d-inspector.png")
+    });
+
+    await clickEmptyGround(page, canvas);
+    await expect(workspace).toHaveAttribute("data-selected-entity-kind", "");
+
+    await clickProjectedTarget(
+      page,
+      canvas,
+      topDownTargets[roomTarget]!
+    );
+    await expect(workspace).toHaveAttribute("data-selected-entity-kind", "room");
+    await page.keyboard.press("Escape");
+    await expect(workspace).toHaveAttribute("data-selected-entity-kind", "");
+    await page.getByRole("button", { name: "Reset camera" }).click();
+    await expect.poll(() => workspace.getAttribute("data-camera-position"))
+      .toBe(initialPosition);
+
     await page.getByRole("button", { name: "Fit to building" }).click();
     assertScreenParity(await getProjectedLandmarks(workspace));
     expect(await workspace.getAttribute("data-camera-view-direction"))
@@ -162,6 +229,9 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     const zoomedPosition = await workspace.getAttribute("data-camera-position");
     const orbitedDirection = await workspace.getAttribute("data-camera-view-direction");
 
+    const selectionBeforeDrag = await workspace.getAttribute("data-selected-entity-id");
+    expect(await workspace.getAttribute("data-selected-entity-id")).toBe(selectionBeforeDrag);
+
     await page.getByRole("button", { name: "Fit to building" }).click();
     await expect.poll(() => workspace.getAttribute("data-camera-position"))
       .not.toBe(zoomedPosition);
@@ -177,10 +247,24 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     expect(await workspace.getAttribute("data-camera-view-direction"))
       .toBe(initialDirection);
     assertScreenParity(await getProjectedLandmarks(workspace));
+    await page.keyboard.press("f");
+    assertScreenParity(await getProjectedLandmarks(workspace));
+    await page.keyboard.press("r");
+    await expect.poll(() => workspace.getAttribute("data-camera-position"))
+      .toBe(initialPosition);
     await workspace.screenshot({
       path: test.info().outputPath("asymmetric-reset-3d-viewport.png")
     });
 
+    const resetTargets = await getProjectedSelectionTargets(workspace);
+    await clickProjectedTarget(
+      page,
+      canvas,
+      getProjectedTarget(resetTargets, "window", "e2e-window-ground")
+    );
+    await expect(workspace).toHaveAttribute("data-selected-entity-id", "e2e-window-ground");
+    await page.getByRole("button", { name: "Reset camera" }).click();
+    await expect(workspace).toHaveAttribute("data-selected-entity-id", "e2e-window-ground");
     await page.getByRole("button", { name: "Active Level" }).click();
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "0");
     await expect(workspace).toHaveAttribute("data-architectural-door-count", "2");
@@ -188,6 +272,7 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     await expect(workspace).toHaveAttribute("data-architectural-wall-opening-count", "1");
     await page.getByRole("combobox", { name: "Level" }).click();
     await page.getByRole("option", { name: "Upper Level" }).click();
+    await expect(workspace).toHaveAttribute("data-selected-entity-kind", "");
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "3.2");
     await expect(workspace).toHaveAttribute("data-architectural-door-count", "0");
     await expect(workspace).toHaveAttribute("data-architectural-window-count", "1");
@@ -275,6 +360,65 @@ async function orbitCanvas(page: Page, canvas: Locator) {
   await page.mouse.up();
 }
 
+async function tiltCanvasTowardTop(page: Page, canvas: Locator) {
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("The 3D Canvas has no interactive bounds.");
+  const start = {
+    x: bounds.x + bounds.width * 0.7,
+    y: bounds.y + bounds.height * 0.45
+  };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x, start.y + bounds.height * 0.28, { steps: 10 });
+  await page.mouse.up();
+}
+
+type ProjectedSelectionTarget = Readonly<{ x: number; y: number; depth: number }>;
+
+async function getProjectedSelectionTargets(
+  workspace: Locator
+): Promise<Readonly<Record<string, ProjectedSelectionTarget>>> {
+  await expect.poll(() => workspace.getAttribute("data-projected-selection-targets"))
+    .not.toBe("");
+  return JSON.parse(
+    (await workspace.getAttribute("data-projected-selection-targets")) ?? "{}"
+  ) as Readonly<Record<string, ProjectedSelectionTarget>>;
+}
+
+async function clickProjectedTarget(
+  page: Page,
+  canvas: Locator,
+  target: ProjectedSelectionTarget | undefined
+) {
+  if (!target) throw new Error("The requested architectural hit target is unavailable.");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("The 3D Canvas has no interactive bounds.");
+  await page.mouse.click(
+    bounds.x + (target.x + 1) * bounds.width / 2,
+    bounds.y + (target.y + 1) * bounds.height / 2
+  );
+}
+
+function getProjectedTarget(
+  targets: Readonly<Record<string, ProjectedSelectionTarget>>,
+  kind: string,
+  id: string
+): ProjectedSelectionTarget | undefined {
+  const key = Object.keys(targets).find((candidate) =>
+    candidate.endsWith(`:${kind}:${id}`)
+  );
+  return key ? targets[key] : undefined;
+}
+
+async function clickEmptyGround(page: Page, canvas: Locator) {
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("The 3D Canvas has no interactive bounds.");
+  await page.mouse.click(
+    bounds.x + bounds.width * 0.92,
+    bounds.y + bounds.height * 0.88
+  );
+}
+
 type ProjectedLandmarks = Readonly<Record<
   "left" | "right" | "top" | "bottom",
   Readonly<{ x: number; y: number }>
@@ -355,16 +499,27 @@ async function seedArchitectural3DProject(
   if (!ground || ground.walls.length < 2) {
     throw new Error("The deterministic 3D Project requires at least two authored Walls.");
   }
-  ground.walls[0]!.openings = [createOpeningForWall(
-    ground.walls[0]!,
+  const frontWall = [...ground.walls].sort((left, right) =>
+    (left.start.z + left.end.z) / 2 - (right.start.z + right.end.z) / 2
+  )[0]!;
+  const frontWallLength = Math.hypot(
+    frontWall.end.x - frontWall.start.x,
+    frontWall.end.z - frontWall.start.z
+  );
+  const frontDoor = createOpeningForWall(
+    frontWall,
     "DOOR",
     "e2e-door-start-left"
-  )];
-  ground.walls[1]!.openings = [createOpeningForWall(
-    ground.walls[1]!,
+  );
+  const frontWindow = createOpeningForWall(
+    frontWall,
     "WINDOW",
     "e2e-window-ground"
-  )];
+  );
+  frontWall.openings = [
+    { ...frontDoor, offsetFromStart: frontWallLength * 0.15 },
+    { ...frontWindow, offsetFromStart: frontWallLength * 0.65 }
+  ];
   const allPoints = ground.walls.flatMap((wall) => [wall.start, wall.end]);
   const maxX = Math.max(...allPoints.map((point) => point.x));
   const minZ = Math.min(...allPoints.map((point) => point.z));

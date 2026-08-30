@@ -8,6 +8,7 @@ import {
   type ArchitecturalScene3DModel,
   type LevelVisibility3D
 } from "./architectural-scene-3d-model";
+import type { ArchitecturalSelection3D } from "./architectural-selection-3d";
 
 /** Inputs for the read-only 3D Project inspector summary. */
 export type Project3DInspectorProps = {
@@ -15,6 +16,7 @@ export type Project3DInspectorProps = {
   readonly model: ArchitecturalScene3DModel;
   readonly visibility: LevelVisibility3D;
   readonly activeLevelId?: string;
+  readonly selection?: ArchitecturalSelection3D;
 };
 
 /** Renders coherent Project and Level status without exposing 2D edit controls. */
@@ -22,7 +24,8 @@ export function Project3DInspector({
   projectName,
   model,
   visibility,
-  activeLevelId
+  activeLevelId,
+  selection
 }: Project3DInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
   const visibleLevels = getVisibleLevelReferences3D(model, visibility, activeLevelId);
@@ -38,6 +41,20 @@ export function Project3DInspector({
           {t("threeD.inspector.readOnly")}
         </Typography>
       </Box>
+      <Divider />
+      {selection ? (
+        <SelectionDetails3D selection={selection} />
+      ) : (
+        <Stack spacing={1} data-testid="project-3d-empty-selection">
+          <Typography variant="overline" color="text.secondary">
+            {t("threeD.inspector.selection")}
+          </Typography>
+          <Typography variant="body2">{t("threeD.inspector.nothingSelected")}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {t("threeD.inspector.selectionHint")}
+          </Typography>
+        </Stack>
+      )}
       <Divider />
       <Stack spacing={1}>
         <Typography variant="overline" color="text.secondary">
@@ -75,4 +92,97 @@ export function Project3DInspector({
       </Stack>
     </Stack>
   );
+}
+
+/** Renders canonical read-only metadata for the selected architectural entity. */
+function SelectionDetails3D({ selection }: { readonly selection: ArchitecturalSelection3D }) {
+  const { t } = useCasaTranslation("project-viewer");
+  const rows: readonly (readonly [string, string])[] = selection.kind === "wall"
+    ? [
+        [t("threeD.inspector.fields.type"), t("threeD.inspector.types.wall")],
+        [t("threeD.inspector.fields.length"), formatMeters(selection.wall!.length)],
+        [t("threeD.inspector.fields.thickness"), formatMeters(selection.wall!.thickness)],
+        [t("threeD.inspector.fields.height"), formatMeters(selection.wall!.height)],
+        [t("threeD.inspector.fields.level"), selection.levelName]
+      ]
+    : selection.kind === "door"
+      ? [
+          [t("threeD.inspector.fields.type"), t("threeD.inspector.types.door")],
+          [t("threeD.inspector.fields.width"), formatMeters(selection.door!.frame.width)],
+          [t("threeD.inspector.fields.height"), formatMeters(selection.door!.frame.height)],
+          [t("threeD.inspector.fields.hingeSide"), selection.door!.hingeSide],
+          [t("threeD.inspector.fields.swingSide"), selection.door!.swingSide],
+          [t("threeD.inspector.fields.wall"), selection.wallId!],
+          [t("threeD.inspector.fields.level"), selection.levelName]
+        ]
+      : selection.kind === "window"
+        ? [
+            [t("threeD.inspector.fields.type"), t("threeD.inspector.types.window")],
+            [t("threeD.inspector.fields.width"), formatMeters(selection.window!.frame.width)],
+            [t("threeD.inspector.fields.height"), formatMeters(selection.window!.frame.height)],
+            [t("threeD.inspector.fields.elevation"), formatMeters(selection.window!.frame.elevation)],
+            [t("threeD.inspector.fields.wall"), selection.wallId!],
+            [t("threeD.inspector.fields.level"), selection.levelName]
+          ]
+        : selection.kind === "wall-opening"
+          ? [
+              [t("threeD.inspector.fields.type"), t("threeD.inspector.types.wallOpening")],
+              [t("threeD.inspector.fields.width"), formatMeters(selection.wallOpening!.frame.width)],
+              [t("threeD.inspector.fields.height"), formatMeters(selection.wallOpening!.frame.height)],
+              [t("threeD.inspector.fields.elevation"), formatMeters(selection.wallOpening!.frame.elevation)],
+              [t("threeD.inspector.fields.wall"), selection.wallId!],
+              [t("threeD.inspector.fields.level"), selection.levelName]
+            ]
+          : [
+              [t("threeD.inspector.fields.type"), t("threeD.inspector.types.room")],
+              ...(selection.floor!.roomName
+                ? [[t("threeD.inspector.fields.name"), selection.floor!.roomName] as const]
+                : []),
+              ...(selection.floor!.roomType
+                ? [[
+                    t("threeD.inspector.fields.roomType"),
+                    formatRoomType(selection.floor!.roomType)
+                  ] as const]
+                : []),
+              [t("threeD.inspector.fields.area"), `${selection.floor!.area.toFixed(2)} m²`],
+              [t("threeD.inspector.fields.level"), selection.levelName]
+            ];
+
+  return (
+    <Stack spacing={1} data-testid="project-3d-selection-details" aria-live="polite">
+      <Typography variant="overline" color="text.secondary">
+        {t("threeD.inspector.selection")}
+      </Typography>
+      <Typography variant="subtitle2">{rows[0]![1]}</Typography>
+      <Box component="dl" sx={{ m: 0 }}>
+        {rows.map(([label, value]) => (
+          <Stack
+            component="div"
+            direction="row"
+            key={label}
+            sx={{ justifyContent: "space-between", gap: 2, py: 0.35 }}
+          >
+            <Typography component="dt" variant="caption" color="text.secondary">
+              {label}
+            </Typography>
+            <Typography component="dd" variant="body2" sx={{ m: 0, textAlign: "right" }}>
+              {value}
+            </Typography>
+          </Stack>
+        ))}
+      </Box>
+    </Stack>
+  );
+}
+
+/** Formats renderer-neutral meter dimensions for the read-only Inspector. */
+function formatMeters(value: number): string {
+  return `${value.toFixed(2)} m`;
+}
+
+/** Formats canonical Room enum values without reinterpreting their semantics. */
+function formatRoomType(value: string): string {
+  return value.toLowerCase().split("_").map(
+    (word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`
+  ).join(" ");
 }

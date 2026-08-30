@@ -56,8 +56,33 @@
       "project": "Project",
       "referenceReady": "Architectural geometry ready",
       "empty": "Empty architectural geometry",
+      "selection": "Selection",
+      "nothingSelected": "Nothing selected",
+      "selectionHint": "Select a Wall, Door, Window, Wall Opening, or Room Floor in the viewer.",
       "visibleLevels": "Visible Levels",
-      "noVisibleLevels": "No architectural Level is visible."
+      "noVisibleLevels": "No architectural Level is visible.",
+      "fields": {
+        "type": "Type",
+        "length": "Length",
+        "width": "Width",
+        "height": "Height",
+        "thickness": "Thickness",
+        "elevation": "Elevation",
+        "hingeSide": "Hinge side",
+        "swingSide": "Swing side",
+        "wall": "Wall",
+        "level": "Level",
+        "name": "Room name",
+        "roomType": "Room type",
+        "area": "Area"
+      },
+      "types": {
+        "wall": "Wall",
+        "door": "Door",
+        "window": "Window",
+        "wallOpening": "Wall Opening",
+        "room": "Room"
+      }
     },
     "errors": {
       "unsupportedTitle": "3D rendering is unavailable",

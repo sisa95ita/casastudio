@@ -8,6 +8,7 @@ import {
   type MetricLengthUnit,
   type Opening,
   type Project,
+  type RoomType,
   type Wall
 } from "@casastudio/schema";
 
@@ -149,6 +150,9 @@ export type FloorTriangle3D = readonly [number, number, number];
 export type Floor3D = Readonly<{
   id: string;
   roomId: string;
+  roomName?: string;
+  roomType?: RoomType;
+  area: number;
   y: number;
   contour: readonly ScenePlanVector3D[];
   triangles: readonly FloorTriangle3D[];
@@ -411,6 +415,9 @@ export function createArchitecturalScene3DModel(
       return Object.freeze({
         id: `floor:${floorSource.roomId}`,
         roomId: floorSource.roomId,
+        roomName: floorSource.roomName,
+        roomType: floorSource.roomType,
+        area: Math.abs(signedContourArea(contour)),
         y: toThreeLength(level.elevation, sourceUnit),
         contour: Object.freeze(contour),
         triangles: triangulateFloorContour3D(contour)
@@ -446,6 +453,8 @@ export function createArchitecturalScene3DModel(
 /** Plain trusted Room contour supplied by a Geometry Engine runtime or snapshot. */
 type FloorContourSource3D = Readonly<{
   roomId: string;
+  roomName?: string;
+  roomType?: RoomType;
   unit: MetricLengthUnit;
   points: readonly Readonly<{ x: number; z: number }>[];
 }>;
@@ -457,11 +466,16 @@ function collectFloorContourSources(
 ): ReadonlyMap<string, readonly FloorContourSource3D[]> {
   if (geometrySnapshot) {
     return new Map(geometrySnapshot.levels.map((level) => {
+      const projectLevel = project.building.levels.find(
+        (candidate) => candidate.id === level.sourceLevelId
+      );
+      const roomsById = new Map(projectLevel?.rooms.map((room) => [room.id, room]) ?? []);
       const loopsById = new Map(level.loops.map((loop) => [loop.id, loop]));
       const edgeUsesById = new Map(
         level.boundaryEdgeUses.map((edgeUse) => [edgeUse.id, edgeUse])
       );
       const contours = level.polygons.map<FloorContourSource3D>((polygon) => {
+        const room = roomsById.get(polygon.sourceRoomId);
         const loop = loopsById.get(polygon.outerLoopId);
         if (!loop || loop.kind !== "OUTER") {
           throw new Error(`Room "${polygon.sourceRoomId}" has no valid outer Geometry loop.`);
@@ -475,6 +489,8 @@ function collectFloorContourSources(
         });
         return Object.freeze({
           roomId: polygon.sourceRoomId,
+          roomName: room?.name,
+          roomType: room?.type,
           unit: geometrySnapshot.units.length,
           points: Object.freeze(points)
         });
@@ -490,17 +506,28 @@ function collectFloorContourSources(
       .join("; ");
     throw new Error(`Cannot derive architectural 3D Room geometry. ${detail}`);
   }
-  return new Map(geometryResult.model.levels.map((level) => [
-    level.sourceLevelId,
-    Object.freeze(level.polygons.map<FloorContourSource3D>((polygon) => Object.freeze({
-      roomId: polygon.sourceRoomId,
-      unit: project.units.length,
-      points: Object.freeze(polygon.outerLoop.vertices.map((vertex) => Object.freeze({
-        x: vertex.x,
-        z: vertex.z
-      })))
-    })))
-  ]));
+  return new Map(geometryResult.model.levels.map((level) => {
+    const projectLevel = project.building.levels.find(
+      (candidate) => candidate.id === level.sourceLevelId
+    );
+    const roomsById = new Map(projectLevel?.rooms.map((room) => [room.id, room]) ?? []);
+    return [
+      level.sourceLevelId,
+      Object.freeze(level.polygons.map<FloorContourSource3D>((polygon) => {
+        const room = roomsById.get(polygon.sourceRoomId);
+        return Object.freeze({
+          roomId: polygon.sourceRoomId,
+          roomName: room?.name,
+          roomType: room?.type,
+          unit: project.units.length,
+          points: Object.freeze(polygon.outerLoop.vertices.map((vertex) => Object.freeze({
+            x: vertex.x,
+            z: vertex.z
+          })))
+        });
+      }))
+    ] as const;
+  }));
 }
 
 /** Derives one canonical Wall's meter-scaled local frame and remaining solids. */
