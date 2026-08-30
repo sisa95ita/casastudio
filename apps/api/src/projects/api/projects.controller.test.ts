@@ -68,6 +68,7 @@ type TestAppContext = {
 };
 
 const coldControllerBootstrapTimeoutMs = 15_000;
+const activeTestApplications = new Set<INestApplication>();
 
 describe("ProjectsController", () => {
   const signingKeys = createSigningKeys();
@@ -89,7 +90,8 @@ describe("ProjectsController", () => {
     vi.doUnmock("jwks-rsa");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await closeActiveTestApplications();
     vi.unstubAllEnvs();
   });
 
@@ -807,9 +809,8 @@ describe("ProjectsController", () => {
   });
 
   it("returns sanitized geometry-specific failures", async () => {
-    const invalidContext = await createTestApp({
-      loadedProject: createLoadedProject(canonicalProject),
-      geometryBuildResult: {
+    const geometryBuilder = {
+      build: vi.fn<ProjectGeometryBuilder["build"]>(() => ({
         ok: false,
         errors: [
           {
@@ -819,18 +820,20 @@ describe("ProjectsController", () => {
             sourceId: "living-room"
           }
         ]
-      }
+      }))
+    } satisfies ProjectGeometryBuilder;
+    const context = await createTestApp({
+      loadedProject: createLoadedProject(canonicalProject),
+      geometryBuilder
     });
+    const authorization = `Bearer ${signingKeys.signToken({
+      subject: ownerSubject,
+      roles: ["casastudio-user"]
+    })}`;
 
-    const invalidResponse = await request(invalidContext.app.getHttpServer())
+    const invalidResponse = await request(context.app.getHttpServer())
       .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
-      .set(
-        "authorization",
-        `Bearer ${signingKeys.signToken({
-          subject: ownerSubject,
-          roles: ["casastudio-user"]
-        })}`
-      )
+      .set("authorization", authorization)
       .expect(500);
 
     expect(invalidResponse.body).toMatchObject({
@@ -840,28 +843,14 @@ describe("ProjectsController", () => {
     expect(JSON.stringify(invalidResponse.body)).not.toContain(
       "engine diagnostic internals"
     );
-    await invalidContext.app.close();
 
-    const buildFailureContext = await createTestApp({
-      loadedProject: createLoadedProject(canonicalProject),
-      geometryBuilder: {
-        build: vi.fn<ProjectGeometryBuilder["build"]>(() => {
-          throw new Error("engine stack internals");
-        })
-      }
+    geometryBuilder.build.mockImplementation(() => {
+      throw new Error("engine stack internals");
     });
 
-    const buildFailureResponse = await request(
-      buildFailureContext.app.getHttpServer()
-    )
+    const buildFailureResponse = await request(context.app.getHttpServer())
       .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
-      .set(
-        "authorization",
-        `Bearer ${signingKeys.signToken({
-          subject: ownerSubject,
-          roles: ["casastudio-user"]
-        })}`
-      )
+      .set("authorization", authorization)
       .expect(500);
 
     expect(buildFailureResponse.body).toMatchObject({
@@ -871,24 +860,16 @@ describe("ProjectsController", () => {
     expect(JSON.stringify(buildFailureResponse.body)).not.toContain(
       "engine stack internals"
     );
-    await buildFailureContext.app.close();
 
-    const serializationFailureContext = await createTestApp({
-      loadedProject: createLoadedProject(canonicalProject),
-      geometryBuildResult: createNonFiniteGeometryBuildResult(canonicalProject)
-    });
+    geometryBuilder.build.mockReturnValue(
+      createNonFiniteGeometryBuildResult(canonicalProject)
+    );
 
     const serializationFailureResponse = await request(
-      serializationFailureContext.app.getHttpServer()
+      context.app.getHttpServer()
     )
       .get(`/api/v1/projects/${canonicalProject.id}/geometry`)
-      .set(
-        "authorization",
-        `Bearer ${signingKeys.signToken({
-          subject: ownerSubject,
-          roles: ["casastudio-user"]
-        })}`
-      )
+      .set("authorization", authorization)
       .expect(500);
 
     expect(serializationFailureResponse.body).toMatchObject({
@@ -898,12 +879,13 @@ describe("ProjectsController", () => {
     expect(JSON.stringify(serializationFailureResponse.body)).not.toContain(
       "must be finite"
     );
-    await serializationFailureContext.app.close();
+    expect(geometryBuilder.build).toHaveBeenCalledTimes(3);
   });
 });
 
 describe("Projects OpenAPI contract", () => {
-  afterEach(() => {
+  afterEach(async () => {
+    await closeActiveTestApplications();
     vi.unstubAllEnvs();
   });
 
@@ -1111,18 +1093,39 @@ async function createTestApp(options: {
     .overrideProvider(PROJECT_GEOMETRY_BUILDER)
     .useValue(geometryBuilder)
     .compile();
-  const app = moduleReference.createNestApplication();
+  const app = trackTestApplication(moduleReference.createNestApplication());
 
-  configureApiApplication(app, {
-    enableShutdownHooks: false
-  });
-  await app.init();
+  try {
+    configureApiApplication(app, {
+      enableShutdownHooks: false
+    });
+    await app.init();
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
 
   return {
     app,
     repository,
     geometryBuilder
   };
+}
+
+function trackTestApplication(app: INestApplication): INestApplication {
+  const closeApplication = app.close.bind(app);
+
+  activeTestApplications.add(app);
+  app.close = async () => {
+    if (!activeTestApplications.delete(app)) return;
+    await closeApplication();
+  };
+
+  return app;
+}
+
+async function closeActiveTestApplications(): Promise<void> {
+  await Promise.all([...activeTestApplications].map((app) => app.close()));
 }
 
 function createRepository(input: {
