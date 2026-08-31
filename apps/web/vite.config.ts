@@ -3,7 +3,8 @@ import { defineConfig, type UserConfig } from "vite";
 
 import { createApplicationMetadataDefine } from "./build-metadata.mjs";
 
-function createViteConfig(buildVersionOverride?: string): UserConfig {
+/** Creates Web build and test configuration for the active process environment. */
+export function createViteConfig(buildVersionOverride?: string): UserConfig {
   return {
     define: createApplicationMetadataDefine(buildVersionOverride),
     envDir: "../..",
@@ -13,6 +14,7 @@ function createViteConfig(buildVersionOverride?: string): UserConfig {
     },
     test: {
       environment: "jsdom",
+      fileParallelism: process.env.CI ? false : undefined,
       setupFiles: ["./src/test/test-setup.ts"],
       testTimeout: 15_000,
       env: {

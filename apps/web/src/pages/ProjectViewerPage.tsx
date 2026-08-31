@@ -87,6 +87,8 @@ import WindowRoundedIcon from "@mui/icons-material/WindowRounded";
 import UndoRoundedIcon from "@mui/icons-material/UndoRounded";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -142,6 +144,17 @@ import {
   zoomViewportState
 } from "../geometry-playground/viewport-transform-2d";
 import { useCasaTranslation } from "../i18n";
+import { Project3DInspector } from "../project-3d/Project3DInspector";
+import {
+  isArchitecturalSelectionVisible3D,
+  resolveArchitecturalSelection3D,
+  type ArchitecturalEntityIdentity3D
+} from "../project-3d/architectural-selection-3d";
+import {
+  createArchitecturalScene3DModel,
+  getVisibleLevelReferences3D,
+  type LevelVisibility3D
+} from "../project-3d/architectural-scene-3d-model";
 import {
   geometryKeys,
   projectGeometryQueryOptions,
@@ -254,6 +267,15 @@ import {
 } from "./ProjectRoomAuthoringMenu";
 
 const emptySelectionState = createGeometrySelectionState();
+/** Lazily loaded Three.js workspace kept out of the default 2D route chunk. */
+const Project3DViewer = lazy(() =>
+  import("../project-3d/Project3DViewer").then((module) => ({
+    default: module.Project3DViewer
+  }))
+);
+
+/** Independent visual representations available for a Project workspace. */
+type ProjectWorkspaceRepresentation = "2d" | "3d";
 /** Initial editable Room shape values in canonical centimeter Project units. */
 const defaultRoomShapeDimensions: RoomShapeDimensionDraft = Object.freeze({
   width: "400",
@@ -302,6 +324,12 @@ export function ProjectViewerPage() {
   const [displayOptions, setDisplayOptions] = useState(
     projectGeometryDisplayOptions
   );
+  const [workspaceRepresentation, setWorkspaceRepresentation] =
+    useState<ProjectWorkspaceRepresentation>("2d");
+  const [levelVisibility3D, setLevelVisibility3D] =
+    useState<LevelVisibility3D>("all");
+  const [selection3D, setSelection3D] =
+    useState<ArchitecturalEntityIdentity3D>();
   const [selectedViewLevelId, setSelectedViewLevelId] = useState("");
   const [viewport, setViewport] = useState<ViewportState>(resetViewportState);
   const [selectionOwnerSnapshot, setSelectionOwnerSnapshot] =
@@ -340,6 +368,20 @@ export function ProjectViewerPage() {
     ownsEditingSession && !isPhone ? "edit" : "view";
   const saveInteractionBlocked =
     replaceProjectMutation.isPending || refreshingAuthoritativeState;
+  const scene3DResult = useMemo(() => {
+    if (!projectResponse || !geometryResponse || consistencyFailure) return undefined;
+    try {
+      return {
+        ok: true as const,
+        model: createArchitecturalScene3DModel(
+          projectResponse.project,
+          geometryResponse.geometry
+        )
+      };
+    } catch (error) {
+      return { ok: false as const, error };
+    }
+  }, [consistencyFailure, geometryResponse, projectResponse]);
 
   useEffect(() => {
     const enabled =
@@ -389,6 +431,28 @@ export function ProjectViewerPage() {
   const selectedViewLevel =
     viewLevels.find((level) => level.id === selectedViewLevelId) ??
     viewLevels[0];
+  const activeLevelId3D = selectedViewLevel?.sourceLevelId;
+  const resolvedSelection3D = useMemo(
+    () => scene3DResult?.ok && selection3D
+      ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
+      : undefined,
+    [scene3DResult, selection3D]
+  );
+
+  useEffect(() => {
+    if (
+      selection3D &&
+      !isArchitecturalSelectionVisible3D(
+        resolvedSelection3D,
+        levelVisibility3D,
+        activeLevelId3D
+      )
+    ) setSelection3D(undefined);
+  }, [activeLevelId3D, levelVisibility3D, resolvedSelection3D, selection3D]);
+
+  useEffect(() => {
+    setSelection3D(undefined);
+  }, [projectId]);
   const safeViewSelection =
     geometryResponse && selectionOwnerSnapshot === geometryResponse.geometry
       ? viewSelection
@@ -834,6 +898,8 @@ export function ProjectViewerPage() {
     dispatch(geometrySelectionReset());
     setSelectionOwnerSnapshot(undefined);
     setViewportOwnerKey("");
+    setWorkspaceRepresentation("2d");
+    setLevelVisibility3D("all");
 
     return () => {
       dispatch(projectRouteExited(projectId));
@@ -1816,6 +1882,7 @@ export function ProjectViewerPage() {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (workspaceRepresentation !== "2d") return;
       if (shortcutsOpen || saveInteractionBlocked) return;
       const target = event.target as HTMLElement | null;
       if (
@@ -1926,7 +1993,8 @@ export function ProjectViewerPage() {
     selectedRoom,
     saveInteractionBlocked,
     shortcutsOpen,
-    workspaceMode
+    workspaceMode,
+    workspaceRepresentation
   ]);
 
   const handleModeChange = useCallback(
@@ -1940,6 +2008,8 @@ export function ProjectViewerPage() {
       ) {
         return;
       }
+
+      if (nextMode === "edit" && workspaceRepresentation === "3d") return;
 
       if (nextMode === "edit") {
         dispatch(
@@ -1970,9 +2040,23 @@ export function ProjectViewerPage() {
       projectResponse,
       saveInteractionBlocked,
       selectedViewLevel,
-      workspaceMode
+      workspaceMode,
+      workspaceRepresentation
     ]
   );
+
+  const handleRepresentationChange = useCallback((
+    representation: ProjectWorkspaceRepresentation | null
+  ) => {
+    if (
+      !representation ||
+      representation === workspaceRepresentation ||
+      saveInteractionBlocked ||
+      (representation === "3d" && workspaceMode === "edit")
+    ) return;
+    setWorkspaceRepresentation(representation);
+    if (representation === "2d") setSelection3D(undefined);
+  }, [saveInteractionBlocked, workspaceMode, workspaceRepresentation]);
 
   const refreshAuthoritativeState = useCallback(async () => {
     await Promise.all([
@@ -2143,6 +2227,21 @@ export function ProjectViewerPage() {
   }, [dispatch, workspaceMode]);
 
   const inspector = useMemo(() => {
+    if (
+      workspaceRepresentation === "3d" &&
+      projectResponse &&
+      scene3DResult?.ok
+    ) {
+      return (
+        <Project3DInspector
+          projectName={projectResponse.project.name}
+          model={scene3DResult.model}
+          visibility={levelVisibility3D}
+          activeLevelId={activeLevelId3D}
+          selection={resolvedSelection3D}
+        />
+      );
+    }
     if (!presentationResult?.ok || !selectedLevel) {
       return undefined;
     }
@@ -2212,7 +2311,12 @@ export function ProjectViewerPage() {
     handleUpdateOpeningAuthoring,
     handleDeleteSelectedRoom,
     handleUpdateSelectedRoomProperties,
-    handleDisplayOptionsChange
+    handleDisplayOptionsChange,
+    workspaceRepresentation,
+    scene3DResult,
+    levelVisibility3D,
+    activeLevelId3D,
+    resolvedSelection3D
   ]);
 
   const shellContent = useMemo(
@@ -2241,11 +2345,20 @@ export function ProjectViewerPage() {
         />
       ) : undefined,
       headerCenter: !isPhone && projectResponse && !consistencyFailure ? (
-        <WorkspaceModeControl
-          mode={workspaceMode}
-          disabled={saveInteractionBlocked}
-          onChange={handleModeChange}
-        />
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <WorkspaceRepresentationControl
+            representation={workspaceRepresentation}
+            disabled={saveInteractionBlocked}
+            threeDDisabled={workspaceMode === "edit"}
+            onChange={handleRepresentationChange}
+          />
+          <WorkspaceModeControl
+            mode={workspaceMode}
+            disabled={saveInteractionBlocked}
+            editDisabled={workspaceRepresentation === "3d"}
+            onChange={handleModeChange}
+          />
+        </Stack>
       ) : undefined,
       headerAccessory: !isPhone && projectResponse && !consistencyFailure ? (
         <ProjectHeaderActions
@@ -2264,7 +2377,15 @@ export function ProjectViewerPage() {
         />
       ) : undefined,
       inspector: isTablet || isPhone ? undefined : inspector,
-      status: selectedLevel && activeProject ? (
+      status: workspaceRepresentation === "3d" && scene3DResult?.ok ? (
+        t("threeD.status", {
+          count: getVisibleLevelReferences3D(
+            scene3DResult.model,
+            levelVisibility3D,
+            activeLevelId3D
+          ).length
+        })
+      ) : selectedLevel && activeProject ? (
         <ProjectEditorStatusBar
           scale={workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75}
           units={activeProject.units}
@@ -2299,6 +2420,7 @@ export function ProjectViewerPage() {
       editor.presentation.scaleDenominator,
       handleFitViewport,
       handleModeChange,
+      handleRepresentationChange,
       handleSave,
       handleZoomViewport,
       inspector,
@@ -2313,7 +2435,11 @@ export function ProjectViewerPage() {
       viewLevels,
       handleCreateLevel,
       handleUpdateActiveLevel,
-      workspaceMode
+      workspaceMode,
+      workspaceRepresentation,
+      scene3DResult,
+      levelVisibility3D,
+      activeLevelId3D
     ]
   );
   useAppShellContent(shellContent);
@@ -2412,7 +2538,7 @@ export function ProjectViewerPage() {
         </Alert>
       </Snackbar>
 
-      {workspaceMode === "edit" ? (
+      {workspaceRepresentation === "2d" && workspaceMode === "edit" ? (
         <ProjectEditorToolbar
           activeTool={editor.activeTool}
           disabled={saveInteractionBlocked}
@@ -2422,7 +2548,11 @@ export function ProjectViewerPage() {
         />
       ) : null}
       <ProjectRoomAuthoringMenu
-        anchorEl={workspaceMode === "edit" ? roomMenuAnchor : null}
+        anchorEl={
+          workspaceRepresentation === "2d" && workspaceMode === "edit"
+            ? roomMenuAnchor
+            : null
+        }
         templateAvailable={roomShapeTemplateAvailable}
         activeShape={activeRoomShapeKind}
         dimensions={roomShapeDimensions}
@@ -2434,7 +2564,36 @@ export function ProjectViewerPage() {
         onCancel={handleCancelRoomAuthoring}
       />
 
-      {editBuildFailed ? (
+      {workspaceRepresentation === "3d" ? (
+        scene3DResult?.ok ? (
+          <Suspense
+            fallback={
+              <Stack role="status" spacing={1.5} sx={{ alignItems: "center", py: 8 }}>
+                <CircularProgress size={28} />
+                <Typography>{t("threeD.loading")}</Typography>
+              </Stack>
+            }
+          >
+            <Project3DViewer
+              model={scene3DResult.model}
+              activeLevelId={activeLevelId3D}
+              visibility={levelVisibility3D}
+              onVisibilityChange={setLevelVisibility3D}
+              selection={selection3D}
+              onSelectionChange={setSelection3D}
+            />
+          </Suspense>
+        ) : (
+          <Alert className="project-workspace__geometry-error" severity="error">
+            <Typography component="h2" variant="h3">
+              {t("threeD.errors.derivationTitle")}
+            </Typography>
+            <Typography variant="body2">
+              {t("threeD.errors.derivationDetail")}
+            </Typography>
+          </Alert>
+        )
+      ) : editBuildFailed ? (
         <Alert className="project-workspace__geometry-error" severity="error">
           <Typography component="h2" variant="h3">
             {t("errors.editGeometry.title")}
@@ -2534,6 +2693,7 @@ export function ProjectViewerPage() {
 type WorkspaceModeControlProps = {
   readonly mode: ProjectWorkspaceMode;
   readonly disabled: boolean;
+  readonly editDisabled: boolean;
   readonly onChange: (mode: ProjectWorkspaceMode | null) => void;
 };
 
@@ -2541,6 +2701,7 @@ type WorkspaceModeControlProps = {
 function WorkspaceModeControl({
   mode,
   disabled,
+  editDisabled,
   onChange
 }: WorkspaceModeControlProps) {
   const { t } = useCasaTranslation("project-viewer");
@@ -2559,9 +2720,58 @@ function WorkspaceModeControl({
         <VisibilityOutlinedIcon fontSize="small" />
         {t("workspace.view")}
       </ToggleButton>
-      <ToggleButton value="edit" aria-label={t("workspace.edit")}>
+      <ToggleButton
+        value="edit"
+        disabled={editDisabled}
+        aria-label={t("workspace.edit")}
+      >
         <EditRoundedIcon fontSize="small" />
         {t("workspace.edit")}
+      </ToggleButton>
+    </ToggleButtonGroup>
+  );
+}
+
+/** Inputs for the independent 2D/3D representation control. */
+type WorkspaceRepresentationControlProps = {
+  readonly representation: ProjectWorkspaceRepresentation;
+  readonly disabled: boolean;
+  readonly threeDDisabled: boolean;
+  readonly onChange: (
+    representation: ProjectWorkspaceRepresentation | null
+  ) => void;
+};
+
+/** Renders the Project representation choice independently from View/Edit state. */
+function WorkspaceRepresentationControl({
+  representation,
+  disabled,
+  threeDDisabled,
+  onChange
+}: WorkspaceRepresentationControlProps) {
+  const { t } = useCasaTranslation("project-viewer");
+
+  return (
+    <ToggleButtonGroup
+      exclusive
+      size="small"
+      value={representation}
+      disabled={disabled}
+      onChange={(_event, value: ProjectWorkspaceRepresentation | null) =>
+        onChange(value)
+      }
+      aria-label={t("representation.label")}
+      className="project-workspace__representation-control"
+    >
+      <ToggleButton value="2d" aria-label={t("representation.twoD")}>
+        2D
+      </ToggleButton>
+      <ToggleButton
+        value="3d"
+        disabled={threeDDisabled}
+        aria-label={t("representation.threeD")}
+      >
+        3D
       </ToggleButton>
     </ToggleButtonGroup>
   );

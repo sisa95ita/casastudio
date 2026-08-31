@@ -87,10 +87,11 @@ container builder instead of sharing the local Docker socket.
 ## Local Resource Policy
 
 This Jenkins setup is local development CI for a resource-constrained
-Docker/Colima host. Jenkins sets `TURBO_CONCURRENCY=1` so repository-wide Turbo
-tasks validate the same packages with serialized task execution. This does not
-limit normal developer monorepo commands outside Jenkins and can be revisited on
-larger CI infrastructure.
+Docker/Colima host. Jenkins uses the root `lint:ci`, `test:ci`, and `build:ci`
+scripts so repository-wide Turbo tasks validate the same packages with
+serialized task execution. The ordinary `lint`, `test`, and `build` scripts keep
+Turbo's default concurrency for developer commands outside Jenkins. The CI
+concurrency can be revisited on larger infrastructure.
 
 ## pnpm Package Store
 

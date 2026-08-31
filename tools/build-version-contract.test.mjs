@@ -5,6 +5,9 @@ import { test } from "node:test";
 import { createApplicationMetadataDefine } from "../apps/web/build-metadata.mjs";
 
 const buildVersionEnvironmentKey = "CASASTUDIO_BUILD_VERSION";
+const declaredRepositoryVersion = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+).version;
 const jenkinsfile = readFileSync(new URL("../Jenkinsfile", import.meta.url), "utf8");
 const webDockerfile = readFileSync(
   new URL("../apps/web/Dockerfile", import.meta.url),
@@ -63,7 +66,9 @@ test("the Docker frontend build receives the same resolved version as Vite", () 
 test("frontend build metadata uses the declared snapshot by default", () => {
   withoutBuildVersionOverride(() =>
     assert.deepEqual(createApplicationMetadataDefine(), {
-      __CASASTUDIO_APPLICATION_VERSION__: JSON.stringify("0.1.0-SNAPSHOT")
+      __CASASTUDIO_APPLICATION_VERSION__: JSON.stringify(
+        declaredRepositoryVersion
+      )
     })
   );
 });

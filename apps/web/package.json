@@ -18,6 +18,8 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.2.0",
     "@mui/material": "^9.2.0",
+    "@react-three/drei": "10.7.8",
+    "@react-three/fiber": "9.7.0",
     "@reduxjs/toolkit": "2.12.0",
     "@tanstack/react-query": "5.101.4",
     "@vitejs/plugin-react": "^5.0.0",
@@ -28,12 +30,14 @@
     "react-i18next": "^17.0.11",
     "react-redux": "9.3.0",
     "react-router-dom": "^7.18.2",
+    "three": "0.185.1",
     "vite": "^7.1.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/three": "0.185.4",
     "jsdom": "^30.0.1"
   }
 }
