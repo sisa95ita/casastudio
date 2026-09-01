@@ -1,6 +1,6 @@
 import { ProjectSchema } from "@casastudio/schema";
 
-import { geometryPlaygroundProject } from "../geometry-playground/geometry-playground-fixture";
+import { geometryPlaygroundProject } from "../features/geometry-playground/geometry-playground-fixture";
 
 export const demoProjectFixture = ProjectSchema.parse({
   ...geometryPlaygroundProject,

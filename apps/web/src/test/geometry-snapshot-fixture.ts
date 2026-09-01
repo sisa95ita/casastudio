@@ -1,4 +1,4 @@
-import type { ProjectGeometryResponse } from "../api/api-types";
+import type { ProjectGeometryResponse } from "../core/api/api-types";
 
 export function createGeometrySnapshotFixture(
   sourceProjectId: string,

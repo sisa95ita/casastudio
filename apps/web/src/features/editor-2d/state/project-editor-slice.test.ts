@@ -1,0 +1,635 @@
+import { describe, expect, it } from "vitest";
+
+import { selectPolygon } from "../../geometry-2d/selection/geometry-selection-state";
+import { demoProjectFixture } from "../../../test/demo-project-fixture";
+import {
+  cleanEditingSessionLeft,
+  editingDraftReplaced,
+  editingSessionEntered,
+  editingSessionMarkedDirty,
+  editorActiveLevelChanged,
+  editorActiveToolChanged,
+  editorDrawWallPointerMoved,
+  editorDrawWallStarted,
+  editorDocumentScaleChanged,
+  editorDimensionDisplayChanged,
+  editorEndpointDragStarted,
+  editorGridSnappingChanged,
+  editorGridSpacingChanged,
+  editorGridVisibilityChanged,
+  editorOpeningDragPreviewChanged,
+  editorOpeningDragStarted,
+  editorOpeningDragThresholdCrossed,
+  editorOpeningAuthoringPropertiesChanged,
+  editorMeasurementPointSet,
+  editorMeasurementPointerMoved,
+  editorRedoRequested,
+  editorSelectionChanged,
+  editorTransientInteractionCleared,
+  editorTransientPointerMoved,
+  editorUndoRequested,
+  initialProjectEditorState,
+  projectEditorHistoryLimit,
+  projectEditorReducer,
+  projectRouteChanged
+} from "./project-editor-slice";
+
+describe("Project editor state", () => {
+  it("starts in authoritative View mode", () => {
+    expect(projectEditorReducer(undefined, { type: "unknown" })).toEqual(
+      initialProjectEditorState
+    );
+  });
+
+  it("enters Edit from an independent authoritative Project clone", () => {
+    const authoritativeProject = structuredClone(demoProjectFixture);
+    const preferredLevelId = authoritativeProject.building.levels[0]!.id;
+    const state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: authoritativeProject,
+        baseRevision: authoritativeProject.revision,
+        preferredLevelId
+      })
+    );
+
+    expect(state.mode).toBe("edit");
+    expect(state.projectId).toBe(authoritativeProject.id);
+    expect(state.baseRevision).toBe(authoritativeProject.revision);
+    expect(state.draft).toEqual(authoritativeProject);
+    expect(state.draft).not.toBe(authoritativeProject);
+    expect(state.draft?.building).not.toBe(authoritativeProject.building);
+    expect(state.draft?.building.levels[0]).not.toBe(
+      authoritativeProject.building.levels[0]
+    );
+    expect(state.draft?.revision).toBe(state.baseRevision);
+    expect(state.activeLevelId).toBe(preferredLevelId);
+    expect(state.dirty).toBe(false);
+    expect(state.selection).toEqual([]);
+    expect(state.hover).toBeUndefined();
+    expect(state.transient).toEqual({ interaction: null });
+  });
+
+  it("uses the first valid Level when the preferred View level is unavailable", () => {
+    const state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision,
+        preferredLevelId: "missing-level"
+      })
+    );
+
+    expect(state.activeLevelId).toBe(demoProjectFixture.building.levels[0]!.id);
+  });
+
+  it("supports a neutral active-tool state", () => {
+    const editingState = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+
+    expect(editingState.activeTool).toBeNull();
+    expect(
+      projectEditorReducer(editingState, editorActiveToolChanged("select"))
+        .activeTool
+    ).toBe("select");
+    expect(
+      projectEditorReducer(editingState, editorActiveToolChanged(null))
+        .activeTool
+    ).toBeNull();
+  });
+
+  it("clears stale interaction state when a session is reinitialized", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    const selected = selectPolygon("polygon-one");
+    state = projectEditorReducer(
+      state,
+      editorSelectionChanged({ selected: [selected], hovered: selected })
+    );
+
+    state = projectEditorReducer(
+      state,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+
+    expect(state.selection).toEqual([]);
+    expect(state.hover).toBeUndefined();
+    expect(state.transient).toEqual({ interaction: null });
+  });
+
+  it("keeps draw and endpoint previews transient and clears them hierarchically", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("draw-wall"));
+    state = projectEditorReducer(
+      state,
+      editorDrawWallStarted({ point: { x: 10, z: 20 } })
+    );
+    const draft = state.draft;
+
+    state = projectEditorReducer(
+      state,
+      editorTransientPointerMoved({ point: { x: 30, z: 40 }, pointerId: 1 })
+    );
+    expect(state.transient.interaction).toMatchObject({
+      kind: "draw-wall",
+      startPoint: { x: 10, z: 20 },
+      currentPointerPoint: { x: 30, z: 40 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+
+    state = projectEditorReducer(state, editorTransientInteractionCleared());
+    state = projectEditorReducer(state, editorActiveToolChanged("select"));
+    state = projectEditorReducer(
+      state,
+      editorEndpointDragStarted({
+        levelId: "ground-floor",
+        wallId: "left-room-north-wall",
+        endpoint: "start",
+        pointerId: 7,
+        point: { x: 0, z: 0 }
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editorTransientPointerMoved({ point: { x: 50, z: 60 }, pointerId: 7 })
+    );
+
+    expect(state.transient.interaction).toMatchObject({
+      kind: "move-wall-endpoint",
+      currentPointerPoint: { x: 50, z: 60 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+  });
+
+  it("updates Draw Wall snap feedback without replacing or dirtying the draft", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("draw-wall"));
+    const draft = state.draft;
+    state = projectEditorReducer(
+      state,
+      editorDrawWallPointerMoved({
+        point: { x: 400, z: 0 },
+        snapCandidate: {
+          kind: "vertex",
+          geometryId: "vertex:ground-floor:400:0",
+          point: { x: 400, z: 0 },
+          visualDistancePixels: 3
+        }
+      })
+    );
+
+    expect(state.transient.snapCandidate).toMatchObject({
+      kind: "vertex",
+      point: { x: 400, z: 0 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+  });
+
+  it.each([
+    ["door", "DOOR", 90],
+    ["window", "WINDOW", 120],
+    ["opening", "OPENING", 120]
+  ] as const)("initializes %s authoring defaults without dirtying history", (tool, openingType, width) => {
+    let state = projectEditorReducer(undefined, editingSessionEntered({
+      project: demoProjectFixture,
+      baseRevision: demoProjectFixture.revision
+    }));
+    state = projectEditorReducer(state, editorActiveToolChanged(tool));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "place-opening",
+      openingType,
+      properties: { width }
+    });
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorOpeningAuthoringPropertiesChanged({ width: 70 }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "place-opening",
+      openingType,
+      properties: { width: 70 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.dirty).toBe(false);
+    expect(state.history).toEqual({ past: [], future: [] });
+  });
+
+  it("keeps valid and invalid Opening drag proposals outside draft history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("select"));
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorOpeningDragStarted({
+      levelId: state.activeLevelId!,
+      wallId: "wall",
+      openingId: "door",
+      pointerId: 21,
+      offsetFromStart: 80
+    }));
+    state = projectEditorReducer(state, editorOpeningDragThresholdCrossed({ pointerId: 21 }));
+    state = projectEditorReducer(state, editorOpeningDragPreviewChanged({
+      pointerId: 21,
+      offsetFromStart: 91.24,
+      valid: false
+    }));
+
+    expect(state.transient.interaction).toMatchObject({
+      kind: "move-opening",
+      currentOffsetFromStart: 91.24,
+      dragging: true,
+      valid: false
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
+    state = projectEditorReducer(state, editorTransientInteractionCleared());
+    expect(state.transient.interaction).toBeNull();
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
+  });
+
+  it("clears selection and transient state when the active Level changes", () => {
+    const secondLevel = {
+      ...demoProjectFixture.building.levels[0]!,
+      id: "level-upper",
+      name: "Upper"
+    };
+    const project = {
+      ...demoProjectFixture,
+      building: {
+        ...demoProjectFixture.building,
+        levels: [...demoProjectFixture.building.levels, secondLevel]
+      }
+    };
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({ project, baseRevision: project.revision })
+    );
+    const selected = selectPolygon("polygon-one");
+    state = projectEditorReducer(
+      state,
+      editorSelectionChanged({ selected: [selected], hovered: selected })
+    );
+    state = projectEditorReducer(
+      state,
+      editorActiveLevelChanged(secondLevel.id)
+    );
+
+    expect(state.activeLevelId).toBe(secondLevel.id);
+    expect(state.selection).toEqual([]);
+    expect(state.hover).toBeUndefined();
+    expect(state.transient).toEqual({ interaction: null });
+  });
+
+  it.each(["draw-wall", "door"] as const)(
+    "clears Select geometry and transient state when switching to %s",
+    (nextTool) => {
+      let state = projectEditorReducer(
+        undefined,
+        editingSessionEntered({
+          project: demoProjectFixture,
+          baseRevision: demoProjectFixture.revision
+        })
+      );
+      state = projectEditorReducer(state, editorActiveToolChanged("select"));
+      const selected = selectPolygon("polygon-one");
+      state = projectEditorReducer(
+        state,
+        editorSelectionChanged({ selected: [selected], hovered: selected })
+      );
+      state = projectEditorReducer(
+        state,
+        editorEndpointDragStarted({
+          levelId: state.activeLevelId!,
+          wallId: "standalone-wall",
+          endpoint: "start",
+          pointerId: 2,
+          point: { x: 0, z: 0 }
+        })
+      );
+
+      state = projectEditorReducer(state, editorActiveToolChanged(nextTool));
+
+      expect(state.activeTool).toBe(nextTool);
+      expect(state.selection).toEqual([]);
+      expect(state.hover).toBeUndefined();
+      if (nextTool === "door") {
+        expect(state.transient.interaction).toMatchObject({ kind: "place-opening", openingType: "DOOR" });
+      } else {
+        expect(state.transient.interaction).toBeNull();
+      }
+    }
+  );
+
+  it("leaves a clean Edit session but preserves a dirty session", () => {
+    const editingState = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+
+    expect(
+      projectEditorReducer(editingState, cleanEditingSessionLeft())
+    ).toEqual(initialProjectEditorState);
+
+    const dirtyState = projectEditorReducer(
+      editingState,
+      editingSessionMarkedDirty()
+    );
+    expect(projectEditorReducer(dirtyState, cleanEditingSessionLeft())).toEqual(
+      dirtyState
+    );
+  });
+
+  it("accepts committed draft changes while preserving server-owned fields", () => {
+    const editingState = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    const changedDraft = { ...demoProjectFixture, name: "Locally renamed" };
+    const nextState = projectEditorReducer(
+      editingState,
+      editingDraftReplaced(changedDraft)
+    );
+
+    expect(nextState.draft?.name).toBe("Locally renamed");
+    expect(nextState.dirty).toBe(true);
+    expect(nextState.draft?.id).toBe(demoProjectFixture.id);
+    expect(nextState.draft?.revision).toBe(demoProjectFixture.revision);
+    expect(nextState.draft?.createdAt).toBe(demoProjectFixture.createdAt);
+    expect(nextState.draft?.updatedAt).toBe(demoProjectFixture.updatedAt);
+    expect(nextState.history.past).toHaveLength(1);
+    expect(nextState.history.future).toEqual([]);
+  });
+
+  it("undoes and redoes meaningful commits and clears redo after a new edit", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editingDraftReplaced({ ...demoProjectFixture, name: "First" })
+    );
+    state = projectEditorReducer(
+      state,
+      editingDraftReplaced({ ...demoProjectFixture, name: "Second" })
+    );
+    expect(state.history.past).toHaveLength(2);
+
+    state = projectEditorReducer(state, editorUndoRequested());
+    expect(state.draft?.name).toBe("First");
+    expect(state.dirty).toBe(true);
+    state = projectEditorReducer(state, editorUndoRequested());
+    expect(state.draft?.name).toBe(demoProjectFixture.name);
+    expect(state.dirty).toBe(false);
+    state = projectEditorReducer(state, editorRedoRequested());
+    expect(state.draft?.name).toBe("First");
+
+    state = projectEditorReducer(
+      state,
+      editingDraftReplaced({ ...demoProjectFixture, name: "Branched" })
+    );
+    expect(state.history.future).toEqual([]);
+    expect(projectEditorReducer(state, editorRedoRequested())).toEqual(state);
+  });
+
+  it("keeps precision assistance and pointer previews out of Project history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorGridVisibilityChanged(true));
+    state = projectEditorReducer(state, editorGridSnappingChanged(true));
+    state = projectEditorReducer(state, editorGridSpacingChanged(25));
+    state = projectEditorReducer(state, editorActiveToolChanged("draw-wall"));
+    state = projectEditorReducer(
+      state,
+      editorDrawWallStarted({ point: { x: 10, z: 10 } })
+    );
+    state = projectEditorReducer(
+      state,
+      editorTransientPointerMoved({ point: { x: 20, z: 20 }, pointerId: 1 })
+    );
+
+    expect(state.precision).toEqual({
+      gridVisible: true,
+      snapToGrid: true,
+      gridSpacing: 25
+    });
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("keeps grid visibility and grid snapping as independent presentation state", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorGridVisibilityChanged(true));
+    expect(state.precision).toMatchObject({ gridVisible: true, snapToGrid: false });
+    state = projectEditorReducer(state, editorGridVisibilityChanged(false));
+    state = projectEditorReducer(state, editorGridSnappingChanged(true));
+    expect(state.precision).toMatchObject({ gridVisible: false, snapToGrid: true });
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("keeps document scale and dimension visibility out of Project geometry and history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    const originalDraft = structuredClone(state.draft);
+    const draftReference = state.draft;
+    state = projectEditorReducer(state, editorDocumentScaleChanged(100));
+    state = projectEditorReducer(state, editorDimensionDisplayChanged({
+      overallDimensions: false,
+      roomMetrics: false
+    }));
+
+    expect(state.presentation).toEqual({
+      scaleDenominator: 100,
+      dimensions: {
+        overallDimensions: false,
+        selectedDimensions: true,
+        roomMetrics: false
+      }
+    });
+    expect(state.draft).toBe(draftReference);
+    expect(state.draft).toEqual(originalDraft);
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("keeps temporary ruler points and snapping outside Project history", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    state = projectEditorReducer(state, editorActiveToolChanged("measure"));
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorMeasurementPointSet({
+      point: { x: 0, z: 0 },
+      snapCandidate: {
+        kind: "vertex",
+        geometryId: "vertex:0:0",
+        point: { x: 0, z: 0 },
+        visualDistancePixels: 2
+      }
+    }));
+    state = projectEditorReducer(state, editorMeasurementPointerMoved({
+      point: { x: 300, z: 400 },
+      snapCandidate: {
+        kind: "wall-midpoint",
+        geometryId: "wall:midpoint",
+        wallId: "wall",
+        point: { x: 300, z: 400 },
+        visualDistancePixels: 3
+      }
+    }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "measure",
+      startPoint: { x: 0, z: 0 },
+      currentPointerPoint: { x: 300, z: 400 },
+      completed: false
+    });
+    state = projectEditorReducer(state, editorMeasurementPointSet({ point: { x: 300, z: 400 } }));
+    expect(state.transient.interaction).toMatchObject({ kind: "measure", completed: true });
+    state = projectEditorReducer(state, editorMeasurementPointSet({ point: { x: 25, z: 50 } }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "measure",
+      startPoint: { x: 25, z: 50 },
+      currentPointerPoint: { x: 25, z: 50 },
+      completed: false
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
+    expect(state.dirty).toBe(false);
+  });
+
+  it("bounds complete-Project history to the session limit", () => {
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    for (let index = 0; index < projectEditorHistoryLimit + 5; index += 1) {
+      state = projectEditorReducer(
+        state,
+        editingDraftReplaced({ ...demoProjectFixture, name: `Edit ${index}` })
+      );
+    }
+    expect(state.history.past).toHaveLength(projectEditorHistoryLimit);
+    expect(state.history.past[0]?.name).toBe("Edit 4");
+  });
+
+  it("rejects a draft replacement that changes a server-owned field", () => {
+    const editingState = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    const invalidDraft = {
+      ...demoProjectFixture,
+      revision: demoProjectFixture.revision + 1
+    };
+
+    expect(
+      projectEditorReducer(editingState, editingDraftReplaced(invalidDraft))
+    ).toEqual(editingState);
+  });
+
+  it("does not record a semantically unchanged draft replacement", () => {
+    const editingState = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+    const nextState = projectEditorReducer(
+      editingState,
+      editingDraftReplaced(structuredClone(demoProjectFixture))
+    );
+    expect(nextState).toEqual(editingState);
+    expect(nextState.history).toEqual({ past: [], future: [] });
+    expect(nextState.dirty).toBe(false);
+  });
+
+  it("clears a clean stale route session but keeps dirty work available to the guard", () => {
+    const editingState = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
+
+    expect(
+      projectEditorReducer(editingState, projectRouteChanged("project-two"))
+    ).toEqual(initialProjectEditorState);
+
+    const dirtyState = projectEditorReducer(
+      editingState,
+      editingSessionMarkedDirty()
+    );
+    expect(
+      projectEditorReducer(dirtyState, projectRouteChanged("project-two"))
+    ).toEqual(dirtyState);
+  });
+});
