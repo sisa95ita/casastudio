@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
-import { casaI18n } from "./i18n";
+import { App } from "./app/App";
+import { casaI18n } from "./core/i18n";
 
 const rootElement = document.getElementById("root");
 

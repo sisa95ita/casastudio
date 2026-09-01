@@ -1,8 +1,8 @@
 import {
   collectVisibleSceneBounds3D,
   getVisibleLevelReferences3D
-} from "../project-3d/architectural-scene-3d-model";
-import type { Project3DViewerProps } from "../project-3d/Project3DViewer";
+} from "../features/project-3d/model/architectural-scene-3d-model";
+import type { Project3DViewerProps } from "../features/project-3d/Project3DViewer";
 
 /** Lightweight renderer boundary for page tests that exercise 2D and 3D mode integration. */
 export function Project3DViewerTestDouble({
