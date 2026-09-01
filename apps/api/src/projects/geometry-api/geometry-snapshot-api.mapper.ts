@@ -6,6 +6,9 @@ import type {
   LevelGeometry,
   Loop,
   Polygon,
+  StairFlightGeometry,
+  StairGeometry,
+  StairLandingGeometry,
   Vertex
 } from "@casastudio/geometry";
 import type { Project } from "@casastudio/schema";
@@ -22,7 +25,10 @@ import type {
   GeometrySnapshotDto,
   GeometryUnitsDto,
   GeometryVertexDto,
-  ProjectGeometryResponseDto
+  ProjectGeometryResponseDto,
+  StairFlightGeometryDto,
+  StairGeometryDto,
+  StairLandingGeometryDto
 } from "./dto/project-geometry-response.dto";
 
 /**
@@ -70,7 +76,8 @@ export class GeometrySnapshotApiMapper {
     return {
       id: model.id,
       units: this.toUnits(project.units),
-      levels: model.levels.map((level) => this.toLevel(level))
+      levels: model.levels.map((level) => this.toLevel(level)),
+      staircases: model.staircases.map((staircase) => this.toStaircase(staircase))
     };
   }
 
@@ -146,6 +153,7 @@ export class GeometrySnapshotApiMapper {
     return {
       id: polygon.id,
       sourceRoomId: polygon.sourceRoomId,
+      floorElevation: this.finite(polygon.floorElevation, `${polygon.id}.floorElevation`),
       outerLoopId: polygon.outerLoop.id,
       innerLoopIds: polygon.innerLoops.map((loop) => loop.id),
       loopIds: polygon.loops.map((loop) => loop.id),
@@ -153,6 +161,47 @@ export class GeometrySnapshotApiMapper {
       boundaryEdgeIds: polygon.boundaryEdges.map((edge) => edge.id),
       vertexIds: polygon.vertices.map((vertex) => vertex.id),
       metrics: this.toPolygonMetrics(polygon)
+    };
+  }
+
+  private toStaircase(staircase: StairGeometry): StairGeometryDto {
+    return {
+      id: staircase.id,
+      sourceStaircaseId: staircase.sourceStaircaseId,
+      owningLevelId: staircase.owningLevelId,
+      fromLevelId: staircase.fromLevelId,
+      toLevelId: staircase.toLevelId,
+      fromRoomId: staircase.fromRoomId,
+      toRoomId: staircase.toRoomId,
+      width: this.finite(staircase.width, `${staircase.id}.width`),
+      flights: staircase.flights.map((flight) => this.toStairFlight(flight)),
+      landings: staircase.landings.map((landing) => this.toStairLanding(landing))
+    };
+  }
+
+  private toStairFlight(flight: StairFlightGeometry): StairFlightGeometryDto {
+    return {
+      id: flight.id,
+      sourceFlightId: flight.sourceFlightId,
+      startPosition: this.toPoint(flight.startPosition, `${flight.id}.startPosition`),
+      endPosition: this.toPoint(flight.endPosition, `${flight.id}.endPosition`),
+      width: this.finite(flight.width, `${flight.id}.width`),
+      stepCount: this.finite(flight.stepCount, `${flight.id}.stepCount`),
+      startElevation: this.finite(flight.startElevation, `${flight.id}.startElevation`),
+      endElevation: this.finite(flight.endElevation, `${flight.id}.endElevation`),
+      length: this.finite(flight.length, `${flight.id}.length`),
+      rise: this.finite(flight.rise, `${flight.id}.rise`)
+    };
+  }
+
+  private toStairLanding(landing: StairLandingGeometry): StairLandingGeometryDto {
+    return {
+      id: landing.id,
+      sourceLandingId: landing.sourceLandingId,
+      position: this.toPoint(landing.position, `${landing.id}.position`),
+      width: this.finite(landing.width, `${landing.id}.width`),
+      depth: this.finite(landing.depth, `${landing.id}.depth`),
+      elevation: this.finite(landing.elevation, `${landing.id}.elevation`)
     };
   }
 

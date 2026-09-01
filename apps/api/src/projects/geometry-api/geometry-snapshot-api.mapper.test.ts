@@ -2,6 +2,7 @@ import {
   GeometryEngine,
   GeometryModel,
   LevelGeometry,
+  type Polygon,
   Vertex
 } from "@casastudio/geometry";
 import { ProjectSchema, type Project } from "@casastudio/schema";
@@ -22,6 +23,7 @@ describe("GeometrySnapshotApiMapper", () => {
     expect(response.sourceRevision).toBe(project.revision);
     expect(response.geometry.id).toBe("geometry-model:geometry-slice-project:7");
     expect(response.geometry.units).toEqual({ length: "cm", angle: "deg" });
+    expect(response.geometry.staircases).toEqual([]);
     expect(level).toMatchObject({
       id: "level:ground-level",
       sourceLevelId: "ground-level",
@@ -65,6 +67,7 @@ describe("GeometrySnapshotApiMapper", () => {
     expect(polygon).toMatchObject({
       id: "polygon:living-room",
       sourceRoomId: "living-room",
+      floorElevation: 0,
       outerLoopId: "loop:living-room:outer",
       innerLoopIds: [],
       metrics: {
@@ -86,6 +89,85 @@ describe("GeometrySnapshotApiMapper", () => {
     expect(response.geometry).not.toBe(model);
     expect(JSON.stringify(response)).not.toContain("ownerSubject");
     expect(JSON.stringify(response)).not.toContain('"projectId"');
+  });
+
+  it("serializes elevated Room floors and ordered Stair geometry as plain DTOs", () => {
+    const project = buildRectangularRoomProject();
+    const ground = project.building.levels[0]!;
+    ground.elevation = 40;
+    ground.rooms[0]!.elevation = 20;
+    project.building.levels.push({
+      id: "upper-level",
+      name: "Upper Level",
+      elevation: 300,
+      rooms: [],
+      walls: [],
+      staircases: []
+    });
+    ground.staircases.push({
+      id: "main-stair",
+      fromLevelId: "ground-level",
+      toLevelId: "upper-level",
+      fromRoomId: "living-room",
+      width: 95,
+      flights: [{
+        id: "main-flight",
+        start: { x: 20, z: 30 },
+        end: { x: 20, z: 270 },
+        width: 90,
+        stepCount: 12,
+        startElevation: 60,
+        endElevation: 300
+      }],
+      landings: [{
+        id: "upper-landing",
+        position: { x: 20, z: 270 },
+        width: 100,
+        depth: 110,
+        elevation: 300
+      }]
+    });
+
+    const response = new GeometrySnapshotApiMapper().toProjectGeometryResponse(
+      project,
+      expectModel(GeometryEngine.build(project))
+    );
+
+    expect(response.geometry.levels[0]?.polygons[0]?.floorElevation).toBe(60);
+    expect(response.geometry.staircases).toEqual([{
+      id: "stair:main-stair",
+      sourceStaircaseId: "main-stair",
+      owningLevelId: "ground-level",
+      fromLevelId: "ground-level",
+      toLevelId: "upper-level",
+      fromRoomId: "living-room",
+      toRoomId: undefined,
+      width: 95,
+      flights: [{
+        id: "stair-flight:main-flight",
+        sourceFlightId: "main-flight",
+        startPosition: { x: 20, z: 30 },
+        endPosition: { x: 20, z: 270 },
+        width: 90,
+        stepCount: 12,
+        startElevation: 60,
+        endElevation: 300,
+        length: 240,
+        rise: 240
+      }],
+      landings: [{
+        id: "stair-landing:upper-landing",
+        sourceLandingId: "upper-landing",
+        position: { x: 20, z: 270 },
+        width: 100,
+        depth: 110,
+        elevation: 300
+      }]
+    }]);
+    expect(response.geometry.staircases[0]).not.toBe(
+      expectModel(GeometryEngine.build(project)).staircases[0]
+    );
+    expect(Object.getPrototypeOf(response.geometry.staircases[0]!)).toBe(Object.prototype);
   });
 
   it("represents shared walls through one boundary edge referenced by two edge uses", () => {
@@ -138,6 +220,37 @@ describe("GeometrySnapshotApiMapper", () => {
     const vertex = new Vertex("vertex:draft-level:bad", Number.POSITIVE_INFINITY, 0, () => []);
     const level = new LevelGeometry("level:draft-level", "draft-level", 0, [vertex], [], [], [], []);
     const model = new GeometryModel("geometry-model:empty-level-project:1", project.id, project.revision, [level]);
+
+    expect(() => new GeometrySnapshotApiMapper().toProjectGeometryResponse(project, model)).toThrow(
+      GeometrySnapshotSerializationInvariantError
+    );
+  });
+
+  it("rejects a non-finite derived Room floor elevation before serialization", () => {
+    const project = buildRectangularRoomProject();
+    const sourceModel = expectModel(GeometryEngine.build(project));
+    const sourceLevel = sourceModel.levels[0]!;
+    const sourcePolygon = sourceLevel.polygons[0]!;
+    const invalidPolygon = {
+      ...sourcePolygon,
+      floorElevation: Number.POSITIVE_INFINITY
+    } as unknown as Polygon;
+    const level = new LevelGeometry(
+      sourceLevel.id,
+      sourceLevel.sourceLevelId,
+      sourceLevel.elevation,
+      sourceLevel.vertices,
+      sourceLevel.boundaryEdges,
+      sourceLevel.boundaryEdgeUses,
+      sourceLevel.loops,
+      [invalidPolygon]
+    );
+    const model = new GeometryModel(
+      sourceModel.id,
+      project.id,
+      project.revision,
+      [level]
+    );
 
     expect(() => new GeometrySnapshotApiMapper().toProjectGeometryResponse(project, model)).toThrow(
       GeometrySnapshotSerializationInvariantError

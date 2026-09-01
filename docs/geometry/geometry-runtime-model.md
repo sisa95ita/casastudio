@@ -855,6 +855,7 @@ id
 outerLoop
 innerLoops
 sourceRoomId
+floorElevation
 level
 ```
 
@@ -887,6 +888,8 @@ level()
 
 sourceRoomId()
 
+floorElevation()
+
 containsPoint(point)
 
 area()
@@ -908,6 +911,10 @@ Unless otherwise specified by a later algorithm contract:
 - the method assumes the polygon has already passed runtime geometry validation.
 
 `area()` returns the outer-loop area minus all inner-loop areas.
+
+`floorElevation` is the source Room's global floor elevation in Project length
+units. The Geometry Engine derives it as the owning Level elevation plus the
+Room's optional local elevation, treating an omitted Room elevation as zero.
 
 Future extensions may include:
 
@@ -939,10 +946,12 @@ Staircases are independent geometric elements and do not participate in room bou
 ```text
 id
 sourceStaircaseId
+owningLevelId
 fromLevelId
 toLevelId
 fromRoomId
 toRoomId
+width
 flights
 landings
 ```
@@ -954,6 +963,8 @@ landings
 ```text
 sourceStaircaseId()
 
+owningLevelId()
+
 fromLevelId()
 
 toLevelId()
@@ -961,6 +972,8 @@ toLevelId()
 fromRoomId()
 
 toRoomId()
+
+width()
 
 flights()
 

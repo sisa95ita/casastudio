@@ -112,6 +112,62 @@ const buildRectangularRoomProject = ({
     renderResults: []
   });
 
+const buildVerticalProject = (sameLevel = false, empty = false): Project => {
+  const project = buildRectangularRoomProject();
+  const ground = project.building.levels[0]!;
+  ground.rooms.push({
+    id: "raised-room",
+    name: "Raised Room",
+    type: "STUDIO",
+    elevation: 180,
+    boundary: []
+  });
+  project.building.levels.push({
+    id: "upper-level",
+    name: "Upper Level",
+    elevation: 300,
+    rooms: [],
+    walls: [],
+    staircases: []
+  });
+  ground.staircases = [{
+    id: sameLevel ? "raised-room-stair" : "level-stair",
+    fromLevelId: "ground-level",
+    toLevelId: sameLevel ? "ground-level" : "upper-level",
+    fromRoomId: "living-room",
+    toRoomId: sameLevel ? "raised-room" : undefined,
+    width: 95,
+    flights: empty ? [] : [
+      {
+        id: "lower-flight",
+        start: { x: 40, z: 60 },
+        end: { x: 40, z: 180 },
+        width: 90,
+        stepCount: 6,
+        startElevation: 0,
+        endElevation: sameLevel ? 90 : 150
+      },
+      {
+        id: "upper-flight",
+        start: { x: 130, z: 180 },
+        end: { x: 250, z: 180 },
+        width: 90,
+        stepCount: 6,
+        startElevation: sameLevel ? 90 : 150,
+        endElevation: sameLevel ? 180 : 300
+      }
+    ],
+    landings: empty ? [] : [{
+      id: "middle-landing",
+      position: { x: 40, z: 180 },
+      width: 100,
+      depth: 100,
+      elevation: sameLevel ? 90 : 150
+    }]
+  }];
+  return project;
+};
+
 const buildDegenerateRoomProject = (): Project =>
   ProjectSchema.parse({
     id: "degenerate-room-project",
@@ -483,8 +539,122 @@ describe("GeometryEngine", () => {
 
     expect(polygon.id).toBe("polygon:living-room");
     expect(polygon.sourceRoomId).toBe("living-room");
+    expect(polygon.floorElevation).toBe(0);
     expect(polygon.outerLoop).toBe(level.loops[0]);
     expect(polygon.innerLoops).toEqual([]);
+  });
+
+  it.each([
+    { levelElevation: 0, roomElevation: undefined, expected: 0 },
+    { levelElevation: 0, roomElevation: 35, expected: 35 },
+    { levelElevation: 125, roomElevation: 35, expected: 160 }
+  ])("derives Room floor elevation as $expected from Level $levelElevation and Room $roomElevation", ({
+    levelElevation,
+    roomElevation,
+    expected
+  }) => {
+    const project = buildRectangularRoomProject();
+    const level = project.building.levels[0]!;
+    level.elevation = levelElevation;
+    level.rooms[0]!.elevation = roomElevation;
+
+    const polygon = getOnlyPolygon(getRectangularLevel(expectOk(GeometryEngine.build(project))));
+
+    expect(polygon.floorElevation).toBe(expected);
+    expect(Object.isFrozen(polygon)).toBe(true);
+  });
+
+  it("builds ordered immutable multi-flight Stair geometry for a cross-Level connection", () => {
+    const project = buildVerticalProject();
+    project.building.levels[1]!.staircases.push({
+      id: "upper-draft-stair",
+      fromLevelId: "upper-level",
+      toLevelId: "upper-level",
+      width: 80,
+      flights: [],
+      landings: []
+    });
+    const model = expectOk(GeometryEngine.build(project));
+    const staircase = model.staircases[0]!;
+
+    expect(model.sourceRevision).toBe(7);
+    expect(model.staircases.map((candidate) => candidate.id)).toEqual([
+      "stair:level-stair",
+      "stair:upper-draft-stair"
+    ]);
+    expect(staircase).toMatchObject({
+      id: "stair:level-stair",
+      sourceStaircaseId: "level-stair",
+      owningLevelId: "ground-level",
+      fromLevelId: "ground-level",
+      toLevelId: "upper-level",
+      fromRoomId: "living-room",
+      width: 95
+    });
+    expect(staircase.connectedLevelIds).toEqual(["ground-level", "upper-level"]);
+    expect(staircase.flights.map((flight) => flight.id)).toEqual([
+      "stair-flight:lower-flight",
+      "stair-flight:upper-flight"
+    ]);
+    expect(staircase.flights[0]).toMatchObject({
+      sourceFlightId: "lower-flight",
+      startPosition: { x: 40, z: 60 },
+      endPosition: { x: 40, z: 180 },
+      width: 90,
+      stepCount: 6,
+      startElevation: 0,
+      endElevation: 150,
+      length: 120,
+      rise: 150
+    });
+    expect(staircase.landings[0]).toMatchObject({
+      id: "stair-landing:middle-landing",
+      sourceLandingId: "middle-landing",
+      position: { x: 40, z: 180 },
+      width: 100,
+      depth: 100,
+      elevation: 150
+    });
+    expect(Object.isFrozen(model.staircases)).toBe(true);
+    expect(Object.isFrozen(staircase)).toBe(true);
+    expect(Object.isFrozen(staircase.flights)).toBe(true);
+    expect(Object.isFrozen(staircase.flights[0]!.startPosition)).toBe(true);
+    expect(Object.isFrozen(staircase.landings)).toBe(true);
+    expect(Object.isFrozen(staircase.landings[0]!.position)).toBe(true);
+  });
+
+  it("supports same-Level circulation to an elevated Room", () => {
+    const staircase = expectOk(GeometryEngine.build(buildVerticalProject(true))).staircases[0]!;
+
+    expect(staircase.fromLevelId).toBe("ground-level");
+    expect(staircase.toLevelId).toBe("ground-level");
+    expect(staircase.fromRoomId).toBe("living-room");
+    expect(staircase.toRoomId).toBe("raised-room");
+    expect(staircase.flights.at(-1)?.endElevation).toBe(180);
+  });
+
+  it("preserves an empty Staircase as deterministic draft runtime intent", () => {
+    const staircase = expectOk(GeometryEngine.build(buildVerticalProject(false, true))).staircases[0]!;
+
+    expect(staircase.id).toBe("stair:level-stair");
+    expect(staircase.flights).toEqual([]);
+    expect(staircase.landings).toEqual([]);
+  });
+
+  it("returns precise build diagnostics for malformed completed Stair vertical continuity", () => {
+    const project = buildVerticalProject();
+    project.building.levels[0]!.staircases[0]!.flights[1]!.startElevation = 140;
+
+    const result = GeometryEngine.build(project);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toContainEqual({
+      code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+      message: 'Stair flight "upper-flight" must start at the previous flight end elevation 150.',
+      path: "building.levels[0].staircases[0].flights[1].startElevation",
+      sourceId: "upper-flight"
+    });
   });
 
   it("derives polygon metrics from counter-clockwise runtime vertex order", () => {

@@ -104,6 +104,7 @@ export type GeometryLoop = {
 export type GeometryPolygon = {
   readonly id: string;
   readonly sourceRoomId: string;
+  readonly floorElevation: number;
   readonly outerLoopId: string;
   readonly innerLoopIds: readonly string[];
   readonly loopIds: readonly string[];
@@ -117,6 +118,44 @@ export type GeometryPolygon = {
     readonly bounds: GeometryBounds;
     readonly centroid: GeometryPoint2D;
   };
+};
+
+/** Serialized renderer-neutral geometry for one stair flight. */
+export type StairFlightGeometry = {
+  readonly id: string;
+  readonly sourceFlightId: string;
+  readonly startPosition: GeometryPoint2D;
+  readonly endPosition: GeometryPoint2D;
+  readonly width: number;
+  readonly stepCount: number;
+  readonly startElevation: number;
+  readonly endElevation: number;
+  readonly length: number;
+  readonly rise: number;
+};
+
+/** Serialized renderer-neutral geometry for one stair landing. */
+export type StairLandingGeometry = {
+  readonly id: string;
+  readonly sourceLandingId: string;
+  readonly position: GeometryPoint2D;
+  readonly width: number;
+  readonly depth: number;
+  readonly elevation: number;
+};
+
+/** Serialized root-owned geometry for one architectural staircase. */
+export type StairGeometry = {
+  readonly id: string;
+  readonly sourceStaircaseId: string;
+  readonly owningLevelId: string;
+  readonly fromLevelId: string;
+  readonly toLevelId: string;
+  readonly fromRoomId?: string;
+  readonly toRoomId?: string;
+  readonly width: number;
+  readonly flights: readonly StairFlightGeometry[];
+  readonly landings: readonly StairLandingGeometry[];
 };
 
 /** Serialized geometry derived for one source level. */
@@ -136,6 +175,7 @@ export type GeometrySnapshot = {
   readonly id: string;
   readonly units: { readonly length: "cm"; readonly angle: "deg" };
   readonly levels: readonly GeometryLevel[];
+  readonly staircases: readonly StairGeometry[];
 };
 
 /** Authoritative geometry response envelope for one Project revision. */
@@ -239,6 +279,12 @@ export function parseProjectGeometryResponse(
       } satisfies GeometryLevel;
     }
   );
+  const staircases = requireArray(
+    geometry.staircases,
+    "Geometry staircases"
+  ).map((staircase, index) =>
+    parseStairGeometry(staircase, `Geometry staircase ${index}`)
+  );
 
   const sourceProjectId = requireString(
     response.sourceProjectId,
@@ -258,7 +304,8 @@ export function parseProjectGeometryResponse(
         length: requireLiteral(units.length, "cm", "Geometry length unit"),
         angle: requireLiteral(units.angle, "deg", "Geometry angle unit")
       },
-      levels
+      levels,
+      staircases
     }
   };
 }
@@ -348,6 +395,10 @@ function parseGeometryPolygon(value: unknown, label: string): GeometryPolygon {
   return {
     id: requireString(item.id, `${label} id`),
     sourceRoomId: requireString(item.sourceRoomId, `${label} sourceRoomId`),
+    floorElevation: requireNumber(
+      item.floorElevation,
+      `${label} floorElevation`
+    ),
     outerLoopId: requireString(item.outerLoopId, `${label} outerLoopId`),
     innerLoopIds: requireStringArray(
       item.innerLoopIds,
@@ -374,6 +425,60 @@ function parseGeometryPolygon(value: unknown, label: string): GeometryPolygon {
       bounds: parseGeometryBounds(metrics.bounds, `${label} bounds`),
       centroid: parseGeometryPoint(metrics.centroid, `${label} centroid`)
     }
+  };
+}
+
+function parseStairGeometry(value: unknown, label: string): StairGeometry {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceStaircaseId: requireString(
+      item.sourceStaircaseId,
+      `${label} sourceStaircaseId`
+    ),
+    owningLevelId: requireString(item.owningLevelId, `${label} owningLevelId`),
+    fromLevelId: requireString(item.fromLevelId, `${label} fromLevelId`),
+    toLevelId: requireString(item.toLevelId, `${label} toLevelId`),
+    fromRoomId: optionalString(item.fromRoomId, `${label} fromRoomId`),
+    toRoomId: optionalString(item.toRoomId, `${label} toRoomId`),
+    width: requireNumber(item.width, `${label} width`),
+    flights: requireArray(item.flights, `${label} flights`).map((flight, index) =>
+      parseStairFlightGeometry(flight, `${label} flight ${index}`)
+    ),
+    landings: requireArray(item.landings, `${label} landings`).map((landing, index) =>
+      parseStairLandingGeometry(landing, `${label} landing ${index}`)
+    )
+  };
+}
+
+function parseStairFlightGeometry(value: unknown, label: string): StairFlightGeometry {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceFlightId: requireString(item.sourceFlightId, `${label} sourceFlightId`),
+    startPosition: parseGeometryPoint(item.startPosition, `${label} startPosition`),
+    endPosition: parseGeometryPoint(item.endPosition, `${label} endPosition`),
+    width: requireNumber(item.width, `${label} width`),
+    stepCount: requireNumber(item.stepCount, `${label} stepCount`),
+    startElevation: requireNumber(item.startElevation, `${label} startElevation`),
+    endElevation: requireNumber(item.endElevation, `${label} endElevation`),
+    length: requireNumber(item.length, `${label} length`),
+    rise: requireNumber(item.rise, `${label} rise`)
+  };
+}
+
+function parseStairLandingGeometry(value: unknown, label: string): StairLandingGeometry {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceLandingId: requireString(item.sourceLandingId, `${label} sourceLandingId`),
+    position: parseGeometryPoint(item.position, `${label} position`),
+    width: requireNumber(item.width, `${label} width`),
+    depth: requireNumber(item.depth, `${label} depth`),
+    elevation: requireNumber(item.elevation, `${label} elevation`)
   };
 }
 
@@ -444,6 +549,10 @@ function requireString(value: unknown, label: string): string {
   }
 
   return value;
+}
+
+function optionalString(value: unknown, label: string): string | undefined {
+  return value === undefined ? undefined : requireString(value, label);
 }
 
 function requireNumber(value: unknown, label: string): number {

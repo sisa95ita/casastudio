@@ -427,6 +427,61 @@ export const validateProjectGeometry = (project: Project): ValidationResult => {
         }
       });
 
+      if (staircase.flights.length > 0) {
+        const fromLevel = project.building.levels.find(
+          (candidate) => candidate.id === staircase.fromLevelId
+        );
+        const toLevel = project.building.levels.find(
+          (candidate) => candidate.id === staircase.toLevelId
+        );
+        const fromRoom = staircase.fromRoomId
+          ? fromLevel?.rooms.find((room) => room.id === staircase.fromRoomId)
+          : undefined;
+        const toRoom = staircase.toRoomId
+          ? toLevel?.rooms.find((room) => room.id === staircase.toRoomId)
+          : undefined;
+        const canValidateFrom = fromLevel && (!staircase.fromRoomId || fromRoom);
+        const canValidateTo = toLevel && (!staircase.toRoomId || toRoom);
+        const firstFlight = staircase.flights[0]!;
+        const lastFlight = staircase.flights.at(-1)!;
+
+        if (canValidateFrom && firstFlight.endElevation > firstFlight.startElevation) {
+          const expectedStartElevation = fromLevel.elevation + (fromRoom?.elevation ?? 0);
+          if (firstFlight.startElevation !== expectedStartElevation) {
+            pushError(
+              errors,
+              ValidationErrorCode.STAIRCASE_START_ELEVATION_MISMATCH,
+              `${staircasePath}.flights[0].startElevation`,
+              `Staircase "${staircase.id}" first flight must start at source floor elevation ${expectedStartElevation}.`
+            );
+          }
+        }
+
+        if (canValidateTo && lastFlight.endElevation > lastFlight.startElevation) {
+          const expectedEndElevation = toLevel.elevation + (toRoom?.elevation ?? 0);
+          if (lastFlight.endElevation !== expectedEndElevation) {
+            pushError(
+              errors,
+              ValidationErrorCode.STAIRCASE_END_ELEVATION_MISMATCH,
+              `${staircasePath}.flights[${staircase.flights.length - 1}].endElevation`,
+              `Staircase "${staircase.id}" last flight must end at destination floor elevation ${expectedEndElevation}.`
+            );
+          }
+        }
+
+        staircase.flights.slice(1).forEach((flight, flightIndex) => {
+          const previousFlight = staircase.flights[flightIndex]!;
+          if (flight.startElevation !== previousFlight.endElevation) {
+            pushError(
+              errors,
+              ValidationErrorCode.STAIR_FLIGHT_ELEVATION_DISCONTINUITY,
+              `${staircasePath}.flights[${flightIndex + 1}].startElevation`,
+              `Stair flight "${flight.id}" must start at the previous flight end elevation ${previousFlight.endElevation}.`
+            );
+          }
+        });
+      }
+
       staircase.landings.forEach((landing, landingIndex) => {
         const landingPath = `${staircasePath}.landings[${landingIndex}]`;
 

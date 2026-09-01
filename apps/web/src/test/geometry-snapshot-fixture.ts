@@ -11,6 +11,7 @@ export function createGeometrySnapshotFixture(
     geometry: {
       id: `geometry:${sourceProjectId}:${sourceRevision}`,
       units: { length: "cm", angle: "deg" },
+      staircases: [],
       levels: [
         {
           id: levelId,
@@ -48,6 +49,7 @@ export function createGeometrySnapshotFixture(
             {
               id: "polygon:room-one",
               sourceRoomId: "room-one",
+              floorElevation: 0,
               outerLoopId: "loop:room-one:outer",
               innerLoopIds: [],
               loopIds: ["loop:room-one:outer"],

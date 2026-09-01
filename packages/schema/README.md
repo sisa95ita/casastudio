@@ -130,9 +130,9 @@ Responsibilities:
 Geometry Validation currently assumes `ProjectSchema` parsing has already
 succeeded and intentionally does not perform room polygon reconstruction, room
 perimeter validation, wall connectivity graphs, shared wall topology
-validation, polygon area computation, computational geometry, or staircase
-continuity validation. It is limited to local geometric consistency checks and
-serves as the architectural foundation for future Geometry Validation phases.
+  validation, polygon area computation, or computational geometry. Stair
+  validation includes exact building-space endpoint elevation and ordered Flight
+  vertical continuity, but does not infer XZ Flight-to-Landing attachment.
 
 Each validator returns a `ValidationResult`:
 
@@ -339,7 +339,7 @@ Validation:
 - Geometry Validation currently covers only first-layer local geometric
   consistency. It does not reconstruct room polygons, validate room perimeters,
   build wall connectivity graphs, validate shared wall topology, compute
-  polygon areas, run computational geometry, or validate staircase continuity.
+  polygon areas, run computational geometry, or validate staircase XZ continuity.
 - Renderability validation checks first-layer workflow prerequisites. It does
   not validate provider payloads, prompt quality, image assets, render lifecycle
   transitions, or generated output quality.

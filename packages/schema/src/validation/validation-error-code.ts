@@ -303,6 +303,21 @@ export enum ValidationErrorCode {
   STAIR_FLIGHT_NOT_ASCENDING = "STAIR_FLIGHT_NOT_ASCENDING",
 
   /**
+   * The first StairFlight does not start at the referenced source floor elevation.
+   */
+  STAIRCASE_START_ELEVATION_MISMATCH = "STAIRCASE_START_ELEVATION_MISMATCH",
+
+  /**
+   * The last StairFlight does not end at the referenced destination floor elevation.
+   */
+  STAIRCASE_END_ELEVATION_MISMATCH = "STAIRCASE_END_ELEVATION_MISMATCH",
+
+  /**
+   * Adjacent ordered StairFlights do not share one exact transition elevation.
+   */
+  STAIR_FLIGHT_ELEVATION_DISCONTINUITY = "STAIR_FLIGHT_ELEVATION_DISCONTINUITY",
+
+  /**
    * A Level contains multiple Walls with identical geometry in either orientation.
    */
   DUPLICATE_WALL_GEOMETRY = "DUPLICATE_WALL_GEOMETRY"

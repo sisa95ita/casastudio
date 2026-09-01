@@ -304,6 +304,11 @@ Staircases define their connection intent through:
 
 The Geometry Engine may use those references, together with coordinate and elevation data, to generate stair geometry.
 
+Persisted `StairFlight.startElevation`, `StairFlight.endElevation`, and
+`StairLanding.elevation` use building-space vertical elevation in Project length
+units. They therefore match Level elevation plus an optional referenced Room's
+local elevation at Staircase endpoints; they are not Level-relative offsets.
+
 ## 12. Rotation Conventions
 
 Persisted rotations are expressed in degrees.

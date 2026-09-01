@@ -1,4 +1,12 @@
-import type { Level, Project, Room, Wall } from "@casastudio/schema";
+import type {
+  Level,
+  Project,
+  Room,
+  Staircase,
+  StairFlight,
+  StairLanding,
+  Wall
+} from "@casastudio/schema";
 
 /**
  * Creates deterministic runtime identifiers for derived geometry objects.
@@ -16,7 +24,10 @@ export const runtimeId = {
   boundaryEdgeUse: (room: Room, boundaryIndex: number): string =>
     `boundary-edge-use:${room.id}:${boundaryIndex}`,
   outerLoop: (room: Room): string => `loop:${room.id}:outer`,
-  polygon: (room: Room): string => `polygon:${room.id}`
+  polygon: (room: Room): string => `polygon:${room.id}`,
+  stair: (staircase: Staircase): string => `stair:${staircase.id}`,
+  stairFlight: (flight: StairFlight): string => `stair-flight:${flight.id}`,
+  stairLanding: (landing: StairLanding): string => `stair-landing:${landing.id}`
 } as const;
 
 /**

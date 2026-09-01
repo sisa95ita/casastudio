@@ -2,6 +2,7 @@ import { reverseWallDirection, type Project, type Wall } from "@casastudio/schem
 import { describe, expect, it } from "vitest";
 
 import { demoProjectFixture } from "../../../test/demo-project-fixture";
+import { createGeometrySnapshotFixture } from "../../../test/geometry-snapshot-fixture";
 import {
   collectVisibleSceneBounds3D,
   createArchitecturalScene3DModel,
@@ -264,6 +265,54 @@ describe("architectural 3D presentation model", () => {
     ]);
     expect(floors[0]!.triangles).toHaveLength(2);
     expect(floors.every((floor) => floor.y === 0)).toBe(true);
+  });
+
+  it("places elevated Room Floors at the same derived Y for local and Snapshot geometry paths", () => {
+    const project = structuredClone(demoProjectFixture);
+    const level = project.building.levels[0]!;
+    const room = level.rooms[0]!;
+    room.elevation = 175;
+    const fixture = createGeometrySnapshotFixture(project.id, project.revision);
+    const fixtureLevel = fixture.geometry.levels[0]!;
+    const fixturePolygon = fixtureLevel.polygons[0]!;
+    const snapshot = {
+      ...fixture.geometry,
+      levels: [{
+        ...fixtureLevel,
+        sourceLevelId: level.id,
+        polygons: [{
+          ...fixturePolygon,
+          sourceRoomId: room.id,
+          floorElevation: 175
+        }]
+      }]
+    };
+
+    const localFloor = createArchitecturalScene3DModel(project).levels[0]!.floors
+      .find((floor) => floor.roomId === room.id)!;
+    const snapshotFloor = createArchitecturalScene3DModel(project, snapshot).levels[0]!.floors[0]!;
+
+    expect(localFloor.y).toBe(1.75);
+    expect(snapshotFloor.y).toBe(localFloor.y);
+  });
+
+  it("includes elevated Floor Y in scene bounds without introducing Stair render entities", () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.levels[0]!.rooms[0]!.elevation = 450;
+    project.building.levels[0]!.staircases = [{
+      id: "draft-stair",
+      fromLevelId: project.building.levels[0]!.id,
+      toLevelId: project.building.levels[0]!.id,
+      width: 90,
+      flights: [],
+      landings: []
+    }];
+
+    const model = createArchitecturalScene3DModel(project);
+
+    expect(model.bounds?.max.y).toBe(4.5);
+    expect(model).not.toHaveProperty("staircases");
+    expect(model.levels[0]).not.toHaveProperty("staircases");
   });
 
   it("triangulates irregular and concave contours to their exact polygon area", () => {

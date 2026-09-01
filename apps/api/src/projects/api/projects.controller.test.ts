@@ -582,10 +582,29 @@ describe("ProjectsController", () => {
     expect(response.body.geometry.levels[0].sourceLevelId).toBe("ground-floor");
     expect(response.body.geometry.levels[0].polygons[0]).toMatchObject({
       sourceRoomId: "living-room",
+      floorElevation: 0,
       metrics: {
         area: expect.any(Number),
         winding: expect.any(String)
       }
+    });
+    expect(response.body.geometry.staircases[0]).toMatchObject({
+      id: "stair:main-stair",
+      sourceStaircaseId: "main-stair",
+      owningLevelId: "ground-floor",
+      fromLevelId: "ground-floor",
+      toLevelId: "first-floor",
+      fromRoomId: "living-room",
+      toRoomId: "studio",
+      flights: [expect.objectContaining({
+        id: "stair-flight:main-stair-flight",
+        startElevation: 0,
+        endElevation: 320
+      })],
+      landings: [expect.objectContaining({
+        id: "stair-landing:main-stair-upper-landing",
+        elevation: 320
+      })]
     });
     expect(JSON.stringify(response.body)).not.toContain("ownerSubject");
     expect(JSON.stringify(response.body)).not.toContain("createdBySubject");
@@ -975,6 +994,9 @@ describe("Projects OpenAPI contract", () => {
     expect(documentJson).toContain(
       "#/components/schemas/GeometryPolygonMetricsDto"
     );
+    expect(documentJson).toContain("#/components/schemas/StairGeometryDto");
+    expect(documentJson).toContain("#/components/schemas/StairFlightGeometryDto");
+    expect(documentJson).toContain("#/components/schemas/StairLandingGeometryDto");
     expect(documentJson).toContain("#/components/schemas/ProjectDto");
     expect(documentJson).toContain("#/components/schemas/BuildingDto");
     expect(documentJson).toContain("#/components/schemas/RoomBoundaryEdgeDto");

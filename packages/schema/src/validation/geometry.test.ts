@@ -335,6 +335,68 @@ describe("validateProjectGeometry", () => {
     ]);
   });
 
+  it("accepts an empty draft Staircase and a same-Level Staircase to an elevated Room", () => {
+    const project = createGeometricallyValidProject();
+    const level = getGroundLevel(project);
+    const staircase = level.staircases[0]!;
+    level.rooms.push({
+      id: "raised-room",
+      name: "Raised Room",
+      type: "STUDIO",
+      elevation: 180,
+      boundary: []
+    });
+    staircase.toLevelId = level.id;
+    staircase.toRoomId = "raised-room";
+    staircase.flights[0]!.endElevation = 180;
+    staircase.landings[0]!.elevation = 180;
+
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
+
+    staircase.flights = [];
+    staircase.landings = [];
+    expect(validateProjectGeometry(project)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("validates exact building-space Stair endpoints and ordered vertical continuity", () => {
+    const project = createGeometricallyValidProject();
+    const staircase = getGroundLevel(project).staircases[0]!;
+    staircase.flights = [
+      {
+        ...staircase.flights[0]!,
+        id: "lower-flight",
+        endElevation: 140
+      },
+      {
+        ...staircase.flights[0]!,
+        id: "upper-flight",
+        startElevation: 150,
+        endElevation: 270
+      }
+    ];
+
+    const result = validateProjectGeometry(project);
+
+    expect(result.errors).toMatchObject([
+      {
+        code: ValidationErrorCode.STAIRCASE_END_ELEVATION_MISMATCH,
+        path: "building.levels[0].staircases[0].flights[1].endElevation"
+      },
+      {
+        code: ValidationErrorCode.STAIR_FLIGHT_ELEVATION_DISCONTINUITY,
+        path: "building.levels[0].staircases[0].flights[1].startElevation"
+      }
+    ]);
+
+    staircase.flights[0]!.startElevation = 10;
+    expect(validateProjectGeometry(project).errors).toContainEqual(
+      expect.objectContaining({
+        code: ValidationErrorCode.STAIRCASE_START_ELEVATION_MISMATCH,
+        path: "building.levels[0].staircases[0].flights[0].startElevation"
+      })
+    );
+  });
+
   it("reports same-direction duplicate Wall geometry in the same Level", () => {
     const project = createGeometricallyValidProject();
     const level = getGroundLevel(project);

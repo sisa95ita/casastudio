@@ -19,6 +19,35 @@ const geometryResponse = {
   geometry: {
     id: "geometry-demo",
     units: { length: "cm", angle: "deg" },
+    staircases: [{
+      id: "stair:main-stair",
+      sourceStaircaseId: "main-stair",
+      owningLevelId: "level-ground",
+      fromLevelId: "level-ground",
+      toLevelId: "level-upper",
+      fromRoomId: "room-ground",
+      width: 90,
+      flights: [{
+        id: "stair-flight:main-flight",
+        sourceFlightId: "main-flight",
+        startPosition: { x: 20, z: 40 },
+        endPosition: { x: 20, z: 280 },
+        width: 90,
+        stepCount: 12,
+        startElevation: 0,
+        endElevation: 300,
+        length: 240,
+        rise: 300
+      }],
+      landings: [{
+        id: "stair-landing:upper-landing",
+        sourceLandingId: "upper-landing",
+        position: { x: 20, z: 280 },
+        width: 100,
+        depth: 100,
+        elevation: 300
+      }]
+    }],
     levels: [
       {
         id: "geometry-level-ground",

@@ -121,6 +121,57 @@ describeWithDatabase("relational Project persistence", () => {
     });
   });
 
+  it("round-trips elevated Rooms and both cross-Level and same-Level Staircases without information loss", async () => {
+    const project = createTestProject();
+    const ground = project.building.levels[0]!;
+    const sourceRoom = ground.rooms[1]!;
+    ground.rooms.push({
+      id: "raised-room",
+      name: "Raised Room",
+      type: "STUDIO",
+      elevation: 180,
+      boundary: []
+    });
+    ground.staircases.push({
+      id: "raised-room-stair",
+      fromLevelId: ground.id,
+      toLevelId: ground.id,
+      fromRoomId: sourceRoom.id,
+      toRoomId: "raised-room",
+      width: 85,
+      flights: [{
+        id: "raised-room-flight",
+        start: { x: 50, z: 50 },
+        end: { x: 50, z: 190 },
+        width: 80,
+        stepCount: 8,
+        startElevation: 0,
+        endElevation: 180
+      }],
+      landings: [{
+        id: "raised-room-landing",
+        position: { x: 50, z: 190 },
+        width: 90,
+        depth: 100,
+        elevation: 180
+      }]
+    });
+
+    await writeProject(project);
+
+    const loadedProject = await repository.findByDomainId(project.id);
+
+    expect(loadedProject).toEqual(project);
+    expect(loadedProject?.building.levels[0]?.rooms.at(-1)?.elevation).toBe(180);
+    expect(loadedProject?.building.levels[0]?.staircases.map((staircase) => staircase.id)).toEqual([
+      "main-stair",
+      "raised-room-stair"
+    ]);
+    expect(loadedProject?.building.levels[0]?.staircases.at(-1)).toEqual(
+      ground.staircases.at(-1)
+    );
+  });
+
   it("stores owner metadata with the stable Keycloak subject", async () => {
     const project = createTestProject();
 

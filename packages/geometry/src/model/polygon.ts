@@ -56,6 +56,8 @@ export class Polygon {
   constructor(
     readonly id: GeometryId,
     readonly sourceRoomId: Room["id"],
+    /** Global floor elevation of the source Room in Project length units. */
+    readonly floorElevation: number,
     readonly outerLoop: Loop,
     innerLoops: readonly Loop[],
     metrics: PolygonMetrics & { readonly centroid: Point2D }

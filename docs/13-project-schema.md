@@ -733,6 +733,13 @@ endElevation
 }
 ```
 
+`startElevation` and `endElevation` are building-space vertical elevations in
+the Project length unit. They are not offsets relative to the owning Level.
+For a completed ordered Staircase, the first Flight starts at the source floor,
+the last Flight ends at the destination floor, and adjacent Flights share the
+same transition elevation. A referenced Room contributes its optional local
+elevation to its Level elevation when determining either endpoint.
+
 ## 13. Stair Landing
 StairLanding represents an architectural landing as part of the staircase layout stored in the Project Model. Generated geometry derived from the landing remains the responsibility of the Geometry Engine.
 
@@ -759,6 +766,10 @@ elevation
 ```
 
 The landing is modelled explicitly.
+
+`elevation` uses the same building-space vertical reference frame as StairFlight
+elevations. Its exact XZ anchor and attachment semantics remain unspecified;
+consumers must not infer orientation or Flight attachment from `position` alone.
 
 ## 14. Viewpoint
 

@@ -1,4 +1,4 @@
-import type { Level, Project, Wall } from "@casastudio/schema";
+import type { Level, Project, Staircase, Wall } from "@casastudio/schema";
 
 import {
   GeometryBuildErrorCode,
@@ -12,6 +12,9 @@ import {
   LevelGeometry,
   Loop,
   Polygon,
+  StairFlightGeometry,
+  StairGeometry,
+  StairLandingGeometry,
   Vertex
 } from "../model/index.js";
 import { calculatePolygonMetrics } from "../model/polygon-metrics.js";
@@ -45,6 +48,11 @@ export class GeometryModelBuilder {
     const levels = this.project.building.levels.map((level, levelIndex) =>
       this.buildLevelGeometry(level, levelIndex)
     );
+    const staircases = this.project.building.levels.flatMap((level, levelIndex) =>
+      level.staircases.map((staircase, staircaseIndex) =>
+        this.buildStairGeometry(staircase, level, levelIndex, staircaseIndex)
+      )
+    );
 
     if (this.errors.length > 0) {
       return {
@@ -59,7 +67,8 @@ export class GeometryModelBuilder {
         runtimeId.model(this.project),
         this.project.id,
         this.project.revision,
-        levels.filter((level): level is LevelGeometry => level !== undefined)
+        levels.filter((level): level is LevelGeometry => level !== undefined),
+        staircases.filter((staircase): staircase is StairGeometry => staircase !== undefined)
       )
     };
   }
@@ -148,6 +157,17 @@ export class GeometryModelBuilder {
       const loopCell: { value?: Loop } = {};
       const polygonCell: { value?: Polygon } = {};
       let hasRoomError = false;
+      const floorElevation = level.elevation + (room.elevation ?? 0);
+
+      if (!Number.isFinite(floorElevation)) {
+        this.addError({
+          code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+          message: `Room "${room.id}" global floor elevation must be finite.`,
+          path: `building.levels[${levelIndex}].rooms[${roomIndex}].elevation`,
+          sourceId: room.id
+        });
+        return;
+      }
 
       room.boundary.forEach((boundaryEntry, boundaryIndex) => {
         const wall = wallsById.get(boundaryEntry.wallId);
@@ -224,6 +244,7 @@ export class GeometryModelBuilder {
       polygonCell.value = new Polygon(
         runtimeId.polygon(room),
         room.id,
+        floorElevation,
         loopCell.value,
         [],
         {
@@ -256,6 +277,201 @@ export class GeometryModelBuilder {
       boundaryEdgeUses,
       loops,
       polygons
+    );
+  }
+
+  private buildStairGeometry(
+    staircase: Staircase,
+    owningLevel: Level,
+    levelIndex: number,
+    staircaseIndex: number
+  ): StairGeometry | undefined {
+    const staircasePath = `building.levels[${levelIndex}].staircases[${staircaseIndex}]`;
+    const levelsById = new Map(this.project.building.levels.map((level) => [level.id, level]));
+    const fromLevel = levelsById.get(staircase.fromLevelId);
+    const toLevel = levelsById.get(staircase.toLevelId);
+    let hasError = false;
+
+    if (!fromLevel) {
+      this.addError({
+        code: GeometryBuildErrorCode.MISSING_SOURCE_ENTITY,
+        message: `Staircase "${staircase.id}" references missing from Level "${staircase.fromLevelId}".`,
+        path: `${staircasePath}.fromLevelId`,
+        sourceId: staircase.fromLevelId
+      });
+      hasError = true;
+    }
+
+    if (!toLevel) {
+      this.addError({
+        code: GeometryBuildErrorCode.MISSING_SOURCE_ENTITY,
+        message: `Staircase "${staircase.id}" references missing to Level "${staircase.toLevelId}".`,
+        path: `${staircasePath}.toLevelId`,
+        sourceId: staircase.toLevelId
+      });
+      hasError = true;
+    }
+
+    const fromRoom = staircase.fromRoomId
+      ? fromLevel?.rooms.find((room) => room.id === staircase.fromRoomId)
+      : undefined;
+    const toRoom = staircase.toRoomId
+      ? toLevel?.rooms.find((room) => room.id === staircase.toRoomId)
+      : undefined;
+
+    if (staircase.fromRoomId && !fromRoom) {
+      this.addError({
+        code: GeometryBuildErrorCode.MISSING_SOURCE_ENTITY,
+        message: `Staircase "${staircase.id}" references from Room "${staircase.fromRoomId}" outside its from Level.`,
+        path: `${staircasePath}.fromRoomId`,
+        sourceId: staircase.fromRoomId
+      });
+      hasError = true;
+    }
+
+    if (staircase.toRoomId && !toRoom) {
+      this.addError({
+        code: GeometryBuildErrorCode.MISSING_SOURCE_ENTITY,
+        message: `Staircase "${staircase.id}" references to Room "${staircase.toRoomId}" outside its to Level.`,
+        path: `${staircasePath}.toRoomId`,
+        sourceId: staircase.toRoomId
+      });
+      hasError = true;
+    }
+
+    const flights = staircase.flights.map((flight, flightIndex) => {
+      const flightPath = `${staircasePath}.flights[${flightIndex}]`;
+      const length = Math.hypot(flight.end.x - flight.start.x, flight.end.z - flight.start.z);
+      const numericValues = [
+        flight.start.x,
+        flight.start.z,
+        flight.end.x,
+        flight.end.z,
+        flight.width,
+        flight.stepCount,
+        flight.startElevation,
+        flight.endElevation,
+        length
+      ];
+
+      if (!numericValues.every(Number.isFinite) || length <= 0 || flight.width <= 0 ||
+        !Number.isInteger(flight.stepCount) || flight.stepCount <= 0 ||
+        flight.endElevation <= flight.startElevation) {
+        this.addError({
+          code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+          message: `Stair flight "${flight.id}" contains invalid dimensions, coordinates, step count, or elevation range.`,
+          path: flightPath,
+          sourceId: flight.id
+        });
+        hasError = true;
+      }
+
+      return new StairFlightGeometry(
+        runtimeId.stairFlight(flight),
+        flight.id,
+        flight.start,
+        flight.end,
+        flight.width,
+        flight.stepCount,
+        flight.startElevation,
+        flight.endElevation
+      );
+    });
+    const landings = staircase.landings.map((landing, landingIndex) => {
+      const numericValues = [
+        landing.position.x,
+        landing.position.z,
+        landing.width,
+        landing.depth,
+        landing.elevation
+      ];
+
+      if (!numericValues.every(Number.isFinite) || landing.width <= 0 || landing.depth <= 0) {
+        this.addError({
+          code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+          message: `Stair landing "${landing.id}" contains invalid position, dimensions, or elevation.`,
+          path: `${staircasePath}.landings[${landingIndex}]`,
+          sourceId: landing.id
+        });
+        hasError = true;
+      }
+
+      return new StairLandingGeometry(
+        runtimeId.stairLanding(landing),
+        landing.id,
+        landing.position,
+        landing.width,
+        landing.depth,
+        landing.elevation
+      );
+    });
+
+    if (staircase.flights.length > 0 && fromLevel && toLevel &&
+      (!staircase.fromRoomId || fromRoom) && (!staircase.toRoomId || toRoom)) {
+      const expectedStartElevation = fromLevel.elevation + (fromRoom?.elevation ?? 0);
+      const expectedEndElevation = toLevel.elevation + (toRoom?.elevation ?? 0);
+      const firstFlight = staircase.flights[0]!;
+      const lastFlight = staircase.flights.at(-1)!;
+
+      if (!Number.isFinite(expectedStartElevation) || firstFlight.startElevation !== expectedStartElevation) {
+        this.addError({
+          code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+          message: `Staircase "${staircase.id}" first flight must start at source floor elevation ${expectedStartElevation}.`,
+          path: `${staircasePath}.flights[0].startElevation`,
+          sourceId: firstFlight.id
+        });
+        hasError = true;
+      }
+
+      if (!Number.isFinite(expectedEndElevation) || lastFlight.endElevation !== expectedEndElevation) {
+        this.addError({
+          code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+          message: `Staircase "${staircase.id}" last flight must end at destination floor elevation ${expectedEndElevation}.`,
+          path: `${staircasePath}.flights[${staircase.flights.length - 1}].endElevation`,
+          sourceId: lastFlight.id
+        });
+        hasError = true;
+      }
+
+      staircase.flights.slice(1).forEach((flight, flightIndex) => {
+        const previousFlight = staircase.flights[flightIndex]!;
+        if (flight.startElevation !== previousFlight.endElevation) {
+          this.addError({
+            code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+            message: `Stair flight "${flight.id}" must start at the previous flight end elevation ${previousFlight.endElevation}.`,
+            path: `${staircasePath}.flights[${flightIndex + 1}].startElevation`,
+            sourceId: flight.id
+          });
+          hasError = true;
+        }
+      });
+    }
+
+    if (!Number.isFinite(staircase.width) || staircase.width <= 0) {
+      this.addError({
+        code: GeometryBuildErrorCode.INVALID_PROJECT_GEOMETRY,
+        message: `Staircase "${staircase.id}" width must be finite and greater than zero.`,
+        path: `${staircasePath}.width`,
+        sourceId: staircase.id
+      });
+      hasError = true;
+    }
+
+    if (hasError) {
+      return undefined;
+    }
+
+    return new StairGeometry(
+      runtimeId.stair(staircase),
+      staircase.id,
+      owningLevel.id,
+      staircase.fromLevelId,
+      staircase.toLevelId,
+      staircase.fromRoomId,
+      staircase.toRoomId,
+      staircase.width,
+      flights,
+      landings
     );
   }
 

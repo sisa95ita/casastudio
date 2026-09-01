@@ -418,7 +418,7 @@ export function createArchitecturalScene3DModel(
         roomName: floorSource.roomName,
         roomType: floorSource.roomType,
         area: Math.abs(signedContourArea(contour)),
-        y: toThreeLength(level.elevation, sourceUnit),
+        y: toThreeLength(floorSource.floorElevation, floorSource.unit),
         contour: Object.freeze(contour),
         triangles: triangulateFloorContour3D(contour)
       });
@@ -456,6 +456,7 @@ type FloorContourSource3D = Readonly<{
   roomName?: string;
   roomType?: RoomType;
   unit: MetricLengthUnit;
+  floorElevation: number;
   points: readonly Readonly<{ x: number; z: number }>[];
 }>;
 
@@ -492,6 +493,7 @@ function collectFloorContourSources(
           roomName: room?.name,
           roomType: room?.type,
           unit: geometrySnapshot.units.length,
+          floorElevation: polygon.floorElevation,
           points: Object.freeze(points)
         });
       });
@@ -520,6 +522,7 @@ function collectFloorContourSources(
           roomName: room?.name,
           roomType: room?.type,
           unit: project.units.length,
+          floorElevation: polygon.floorElevation,
           points: Object.freeze(polygon.outerLoop.vertices.map((vertex) => Object.freeze({
             x: vertex.x,
             z: vertex.z
