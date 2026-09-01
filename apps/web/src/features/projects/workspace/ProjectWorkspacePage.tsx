@@ -182,9 +182,11 @@ import {
   useEditorSelectionActions,
   type EditingErrorKey
 } from "../../editor-2d/hooks/useEditorSelectionActions";
-import { ProjectHeaderActions } from "./components/ProjectHeaderActions";
+import {
+  ProjectEditHeaderActions,
+  ProjectViewEditAction
+} from "./components/ProjectHeaderActions";
 import { ProjectLevelControl } from "./components/ProjectLevelControl";
-import { WorkspaceModeControl } from "./components/WorkspaceModeControl";
 import {
   WorkspaceRepresentationControl,
   type ProjectWorkspaceRepresentation
@@ -1559,9 +1561,9 @@ export function ProjectWorkspacePage() {
         return;
       }
 
-      if (nextMode === "edit" && workspaceRepresentation === "3d") return;
-
       if (nextMode === "edit") {
+        setWorkspaceRepresentation("2d");
+        setSelection3D(undefined);
         dispatch(
           editingSessionEntered({
             project: projectResponse.project,
@@ -1739,7 +1741,9 @@ export function ProjectWorkspacePage() {
   const shellContent = useMemo(
     () => ({
       title: projectResponse?.project.name ?? t("shell.title"),
-      breadcrumb: t("shell.breadcrumb"),
+      breadcrumb: workspaceMode === "edit"
+        ? t("workspace.editingLevel", { level: activeProjectLevel?.name ?? "" })
+        : t("shell.breadcrumb"),
       headerContextAccessory: !isPhone && projectResponse && !consistencyFailure ? (
         <ProjectLevelControl
           mode={workspaceMode}
@@ -1761,37 +1765,34 @@ export function ProjectWorkspacePage() {
           onUpdateActiveLevel={handleUpdateActiveLevel}
         />
       ) : undefined,
-      headerCenter: !isPhone && projectResponse && !consistencyFailure ? (
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+      headerCenter: !isPhone && projectResponse && !consistencyFailure && workspaceMode === "view" ? (
           <WorkspaceRepresentationControl
             representation={workspaceRepresentation}
             disabled={saveInteractionBlocked}
-            threeDDisabled={workspaceMode === "edit"}
+            threeDDisabled={false}
             onChange={handleRepresentationChange}
           />
-          <WorkspaceModeControl
-            mode={workspaceMode}
-            disabled={saveInteractionBlocked}
-            editDisabled={workspaceRepresentation === "3d"}
-            onChange={handleModeChange}
-          />
-        </Stack>
       ) : undefined,
       headerAccessory: !isPhone && projectResponse && !consistencyFailure ? (
-        <ProjectHeaderActions
-          mode={workspaceMode}
-          dirty={editor.dirty}
-          disabled={saveInteractionBlocked}
-          canUndo={editor.history.past.length > 0}
-          canRedo={editor.history.future.length > 0}
-          shortcutsOpen={shortcutsOpen}
-          onOpenShortcuts={() => setShortcutsOpen(true)}
-          onCloseShortcuts={() => setShortcutsOpen(false)}
-          onUndo={() => dispatch(editorUndoRequested())}
-          onRedo={() => dispatch(editorRedoRequested())}
-          onDiscard={() => setPersistenceDialog("discard")}
-          onSave={handleSave}
-        />
+        workspaceMode === "view" ? (
+          <ProjectViewEditAction
+            fromThreeD={workspaceRepresentation === "3d"}
+            disabled={saveInteractionBlocked}
+            onEdit={() => handleModeChange("edit")}
+          />
+        ) : (
+          <ProjectEditHeaderActions
+            dirty={editor.dirty}
+            disabled={saveInteractionBlocked}
+            canUndo={editor.history.past.length > 0}
+            canRedo={editor.history.future.length > 0}
+            onBack={() => handleModeChange("view")}
+            onUndo={() => dispatch(editorUndoRequested())}
+            onRedo={() => dispatch(editorRedoRequested())}
+            onDiscard={() => setPersistenceDialog("discard")}
+            onSave={handleSave}
+          />
+        )
       ) : undefined,
       inspector: isTablet || isPhone ? undefined : inspector,
       status: workspaceRepresentation === "3d" && scene3DResult?.ok ? (
@@ -1823,6 +1824,7 @@ export function ProjectWorkspacePage() {
     }),
     [
       activeProject,
+      activeProjectLevel?.name,
       activeViewport.zoom,
       consistencyFailure,
       dispatch,
@@ -1962,6 +1964,9 @@ export function ProjectWorkspacePage() {
           onToolChange={(tool) => dispatch(editorActiveToolChanged(tool))}
           roomMenuOpen={Boolean(roomMenuAnchor)}
           onRoomToggle={handleRoomToggle}
+          shortcutsOpen={shortcutsOpen}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
+          onCloseShortcuts={() => setShortcutsOpen(false)}
         />
       ) : null}
       <ProjectRoomAuthoringMenu

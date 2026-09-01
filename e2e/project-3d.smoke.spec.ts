@@ -51,7 +51,7 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
       "aria-pressed",
       "true"
     );
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Edit plan" }).click();
     await createRoomShape(page, plan, "L-shape", {
       width: "600",
       depth: "420",
@@ -59,25 +59,20 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
       notchDepth: "140"
     });
 
-    await page.getByRole("button", { name: "Create level" }).click();
+    await page.getByRole("button", { name: /^Level:/ }).click();
+    await page.getByRole("menuitem", { name: "Add level" }).click();
     const levelDialog = page.getByRole("dialog", { name: "Create level" });
     await levelDialog.getByLabel("Level name").fill("Upper Level");
     await levelDialog.getByLabel("Elevation (cm)").fill("320");
     await levelDialog.getByRole("button", { name: "Create Level" }).click();
-    await expect(page.getByRole("combobox", { name: "Level" })).toContainText(
-      "Upper Level"
-    );
+    await expect(page.getByRole("button", { name: "Level: Upper Level" })).toBeVisible();
     await createRoomShape(page, plan, "Rectangle", {
       width: "480",
       depth: "360"
     });
 
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     await seedArchitectural3DProject(request, authorization, projectId);
     await page.reload();
     await expect(page.getByRole("heading", { name: projectName, level: 1 })).toBeVisible();
@@ -87,6 +82,14 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     await page.getByRole("button", { name: "3D workspace" }).click();
     const workspace = page.getByTestId("project-3d-workspace");
     await expect(workspace).toBeVisible();
+    await expect(workspace).toHaveAttribute("data-renderer-status", "ready");
+    await expect(page.getByRole("button", { name: "Edit in 2D" })).toBeVisible();
+    await page.getByRole("button", { name: "Edit in 2D" }).click();
+    await expect(page.getByRole("toolbar", { name: "Editing tools" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "3D workspace" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to project" }).click();
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
+    await page.getByRole("button", { name: "3D workspace" }).click();
     await expect(workspace).toHaveAttribute("data-renderer-status", "ready");
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "0,3.2");
     await expect(workspace).toHaveAttribute("data-architectural-opening-kinds", /DOOR/);
@@ -270,8 +273,10 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     await expect(workspace).toHaveAttribute("data-architectural-door-count", "2");
     await expect(workspace).toHaveAttribute("data-architectural-window-count", "1");
     await expect(workspace).toHaveAttribute("data-architectural-wall-opening-count", "1");
-    await page.getByRole("combobox", { name: "Level" }).click();
-    await page.getByRole("option", { name: "Upper Level" }).click();
+    await page.getByRole("button", { name: /^Level:/ }).click();
+    await expect(page.getByRole("menuitem", { name: "Add level" })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "Manage levels…" })).toHaveCount(0);
+    await page.getByRole("menuitem", { name: "Upper Level" }).click();
     await expect(workspace).toHaveAttribute("data-selected-entity-kind", "");
     await expect(workspace).toHaveAttribute("data-visible-level-elevations", "3.2");
     await expect(workspace).toHaveAttribute("data-architectural-door-count", "0");
@@ -285,7 +290,7 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
 
     await page.getByRole("button", { name: "2D workspace" }).click();
     await expect(plan).toBeVisible();
-    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     expect(await getProject(request, authorization, projectId)).toEqual(before3D);
 
     expect(pageErrors, "Unexpected uncaught browser errors").toEqual([]);

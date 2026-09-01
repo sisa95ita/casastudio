@@ -701,14 +701,14 @@ img {
   width: 1px;
 }
 
-.project-level-selector {
-  min-width: 150px !important;
-}
-
-.project-workspace__mode-control .MuiToggleButton-root {
-  gap: 6px;
-  min-width: 92px;
-  padding-block: 7px;
+.project-level-control {
+  border-color: var(--casa-border) !important;
+  color: var(--casa-ink) !important;
+  max-width: 190px;
+  min-width: 136px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-workspace__representation-control .MuiToggleButton-root {
@@ -719,11 +719,6 @@ img {
 .project-workspace__representation-control .Mui-selected {
   background: var(--casa-paper-muted) !important;
   color: var(--casa-terracotta-dark) !important;
-}
-
-.project-workspace__mode-control .Mui-selected {
-  background: var(--casa-terracotta) !important;
-  color: #fff !important;
 }
 
 .project-editor-toolbar {
@@ -737,11 +732,18 @@ img {
   min-height: 54px;
   overflow-x: auto;
   padding: 6px 18px;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: nowrap;
 }
 
+.project-editor-toolbar__group {
+  display: flex;
+  gap: 4px;
+}
+
 .project-editor-toolbar .MuiToggleButton-root {
+  border: 1px solid transparent;
+  border-radius: 7px !important;
   gap: 7px;
   min-height: 40px;
   padding-inline: 14px;
@@ -751,6 +753,19 @@ img {
 .project-editor-toolbar .MuiToggleButton-root.Mui-selected {
   background: var(--casa-paper-muted);
   color: var(--casa-terracotta-dark);
+}
+
+.project-editor-toolbar > .MuiDivider-root {
+  border-color: var(--casa-border);
+  margin-block: 7px;
+}
+
+.project-editor-toolbar__spacer {
+  flex: 1;
+}
+
+.project-editor-toolbar__shortcuts {
+  color: var(--casa-muted) !important;
 }
 
 .project-room-authoring-menu {
@@ -1714,12 +1729,16 @@ img {
     padding-inline: 16px;
   }
 
+  .app-shell--immersive .workspace-header__brand .product-brand__name {
+    display: none;
+  }
+
   .app-shell--immersive .workspace-header__context {
     min-width: 120px;
   }
 
-  .app-shell--immersive .project-level-selector {
-    min-width: 130px !important;
+  .app-shell--immersive .project-level-control {
+    min-width: 118px !important;
   }
 
   .app-shell--immersive .project-editor-status__item {
@@ -1811,6 +1830,10 @@ img {
   .project-editor-toolbar .MuiToggleButton-root span,
   .project-editor-toolbar .MuiButton-root {
     font-size: 0.74rem;
+  }
+
+  .project-editor-toolbar .MuiToggleButton-root {
+    padding-inline: 10px;
   }
 
   .app-shell--immersive .workspace-header {
@@ -2040,8 +2063,8 @@ img {
     min-height: 100%;
   }
 
-  .project-level-selector {
-    min-width: 130px !important;
+  .project-level-control {
+    min-width: 120px !important;
   }
 
   .geometry-viewer-panel {

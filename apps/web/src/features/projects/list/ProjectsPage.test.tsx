@@ -424,7 +424,7 @@ describe("Projects workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "New Casa" })
     ).toBeTruthy();
-    expect(screen.getByText("View")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit plan" })).toBeTruthy();
     await waitFor(() =>
       expect(fetchImplementation).toHaveBeenCalledWith(
         "http://api.test/api/v1/projects",

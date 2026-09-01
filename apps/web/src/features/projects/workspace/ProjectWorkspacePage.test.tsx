@@ -239,10 +239,19 @@ function createProjectWithDoor(): Project {
 
 async function renderEditingProject(project = demoProjectFixture) {
   const result = renderConnectedRoute(createApiClient(projectFetch(project)));
-  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
   const svg = screen.getByRole("img") as unknown as SVGSVGElement;
   prepareSvgPointerCoordinates(svg);
   return { ...result, svg };
+}
+
+function activateEditorTool(label: string) {
+  if (["Door", "Window", "Wall Opening"].includes(label)) {
+    fireEvent.click(screen.getByRole("button", { name: "Openings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: label }));
+    return;
+  }
+  fireEvent.click(screen.getByRole("button", { name: label }));
 }
 
 function emptyProjectFetch(): typeof fetch {
@@ -471,7 +480,9 @@ describe("ProjectViewerPage", () => {
     expect(
       await screen.findByRole("heading", { name: demoProjectFixture.name })
     ).toBeTruthy();
-    expect(screen.getByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Saved")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Edit plan" })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "Project workspace mode" })).toBeNull();
     expect(
       screen.getByRole("img", { name: /interactive 2d geometry viewer/i })
     ).toBeTruthy();
@@ -507,9 +518,8 @@ describe("ProjectViewerPage", () => {
     expect(within(statusBar).getByText(/%$/)).toBeTruthy();
     expect(within(statusBar).getByRole("button", { name: "Zoom in" })).toBeTruthy();
     expect(within(statusBar).getByRole("button", { name: "Fit to view" })).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "View" }).getAttribute("aria-pressed")
-    ).toBe("true");
+    expect(screen.getByRole("button", { name: "2D workspace" }).getAttribute("aria-pressed"))
+      .toBe("true");
   });
 
   it("keeps 2D as default and mounts the lazy read-only 3D workspace", async () => {
@@ -545,16 +555,30 @@ describe("ProjectViewerPage", () => {
     expect(screen.queryByTestId("project-3d-workspace")).toBeNull();
   });
 
+  it("enters the existing 2D edit session from the read-only 3D action", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+
+    fireEvent.click(await screen.findByRole("button", { name: "3D workspace" }));
+    expect(await screen.findByTestId("project-3d-workspace")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit in 2D" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit plan" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit in 2D" }));
+
+    expect(store.getState().projectEditor.mode).toBe("edit");
+    expect(await screen.findByRole("toolbar", { name: "Editing tools" })).toBeTruthy();
+    expect(screen.queryByTestId("project-3d-workspace")).toBeNull();
+    expect(screen.queryByRole("button", { name: "3D workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to project" })).toBeTruthy();
+  });
+
   it("keeps 3D unavailable during Edit so the local draft is never discarded", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
-    expect(screen.getByRole("button", { name: "3D workspace" })).toHaveProperty(
-      "disabled",
-      true
-    );
+    expect(screen.queryByRole("button", { name: "3D workspace" })).toBeNull();
     expect(store.getState().projectEditor.mode).toBe("edit");
     expect(store.getState().projectEditor.dirty).toBe(true);
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
@@ -670,12 +694,12 @@ describe("ProjectViewerPage", () => {
 
     renderConnectedRoute(createApiClient(fetchImplementation));
 
-    fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Level" }));
-    fireEvent.click(screen.getByRole("option", { name: "level-upper" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Level: Ground Floor" }));
+    expect(screen.queryByRole("menuitem", { name: "Add level" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Manage levels…" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "level-upper" }));
 
-    expect(
-      await screen.findByText("level-upper", { selector: ".MuiSelect-select" })
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Level: level-upper" })).toBeTruthy();
   });
 
   it("does not invoke GeometryEngine.build for authoritative route data", async () => {
@@ -691,24 +715,30 @@ describe("ProjectViewerPage", () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     expect(store.getState().projectEditor.mode).toBe("edit");
 
     const toolbar = await screen.findByRole("toolbar", { name: "Editing tools" });
     expect(within(toolbar).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
-      .toEqual(["Select", "Draw Wall", "Door", "Window", "Wall Opening", "Room", "Measure"]);
+      .toEqual(["Select", "Wall", "Openings", "Room", "Measure", "Shortcuts"]);
+    fireEvent.click(within(toolbar).getByRole("button", { name: "Openings" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent))
+      .toEqual(["Door", "Window", "Wall Opening"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(within(toolbar).queryByRole("button", { name: "Pan" })).toBeNull();
     expect(within(toolbar).queryByText(/Grid|Snap|Scale|Zoom|Save|Discard/)).toBeNull();
     expect(buildSpy).toHaveBeenCalledWith(store.getState().projectEditor.draft);
     expect(store.getState().projectEditor.draft).not.toBe(demoProjectFixture);
-    expect(screen.getByRole("button", { name: "Edit" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: "2D workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to project" })).toBeTruthy();
   });
 
   it("creates, edits, switches, and undoes canonical Levels as semantic commits", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Create level" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: Ground Floor" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Add level" }));
     const createDialog = screen.getByRole("dialog", { name: "Create level" });
     fireEvent.change(within(createDialog).getByLabelText("Level name"), {
       target: { value: "First Floor" }
@@ -731,7 +761,8 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.history.past).toHaveLength(1);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: "Edit level" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Manage levels…" }));
     const editDialog = screen.getByRole("dialog", { name: "Edit level" });
     fireEvent.change(within(editDialog).getByLabelText("Level name"), {
       target: { value: "Upper Floor" }
@@ -756,8 +787,8 @@ describe("ProjectViewerPage", () => {
       elevation: 300
     });
 
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Level" }));
-    fireEvent.click(screen.getByRole("option", { name: "Ground Floor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ground Floor" }));
     expect(store.getState().projectEditor.activeLevelId).toBe("ground-floor");
     expect(store.getState().projectEditor.draft!.building.levels[1]).toMatchObject({
       id: createdLevel.id,
@@ -767,10 +798,10 @@ describe("ProjectViewerPage", () => {
 
   it("toggles enabled editor tools through a neutral active state", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
 
     const select = screen.getByRole("button", { name: "Select" });
-    const drawWall = screen.getByRole("button", { name: "Draw Wall" });
+    const drawWall = screen.getByRole("button", { name: "Wall" });
 
     expect(store.getState().projectEditor.activeTool).toBeNull();
     expect(select.getAttribute("aria-pressed")).toBe("false");
@@ -791,16 +822,16 @@ describe("ProjectViewerPage", () => {
     expect(store.getState().projectEditor.activeTool).toBeNull();
   });
 
-  it.each(["Select", "Draw Wall", "Door", "Window", "Wall Opening", "Room", "Measure"])(
+  it.each(["Select", "Wall", "Door", "Window", "Wall Opening", "Room", "Measure"])(
     "pans empty background with %s active without starting an architectural interaction",
     async (toolLabel) => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     const svg = document.querySelector("svg.geometry-svg") as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const draftBefore = store.getState().projectEditor.draft;
     const polygonBefore = screen.getAllByTestId("geometry-polygon")[0]!.getAttribute("points");
-    fireEvent.click(screen.getByRole("button", { name: toolLabel }));
+    activateEditorTool(toolLabel);
     const background = document.querySelector(".geometry-pan-background")!;
     fireEvent.pointerDown(background, { clientX: 100, clientY: 100, pointerId: 80 });
     fireEvent.pointerMove(svg, { clientX: 115, clientY: 110, pointerId: 80 });
@@ -824,8 +855,8 @@ describe("ProjectViewerPage", () => {
 
   it("temporarily pans from rendered entities with Space while preserving the active tool", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = document.querySelector("svg.geometry-svg") as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     fireEvent.click(svg, { clientX: 120, clientY: 120 });
@@ -890,8 +921,8 @@ describe("ProjectViewerPage", () => {
 
   it("does not activate temporary pan for Space typed in an editable control", async () => {
     renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = document.querySelector("svg.geometry-svg") as SVGSVGElement;
     const input = document.createElement("input");
     document.body.append(input);
@@ -904,7 +935,7 @@ describe("ProjectViewerPage", () => {
   it("removes temporary-pan keyboard and blur listeners on unmount", async () => {
     const removeListener = vi.spyOn(window, "removeEventListener");
     const { unmount } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     removeListener.mockClear();
 
     unmount();
@@ -916,7 +947,7 @@ describe("ProjectViewerPage", () => {
 
   it("describes editor tool outcomes with accessible tooltips", async () => {
     renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
 
     const select = screen.getByRole("button", { name: "Select" });
     fireEvent.mouseOver(select);
@@ -926,16 +957,16 @@ describe("ProjectViewerPage", () => {
     fireEvent.mouseLeave(select);
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
 
-    const drawWall = screen.getByRole("button", { name: "Draw Wall" });
+    const drawWall = screen.getByRole("button", { name: "Wall" });
     fireEvent.mouseOver(drawWall);
     expect((await screen.findByRole("tooltip")).textContent).toBe(
-      "Draw connected walls as a continuous chain."
+      "Draw architectural walls."
     );
   });
 
   it("keeps document scale independent from Project geometry, history, and viewport zoom", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     const draft = store.getState().projectEditor.draft;
     const serializedDraft = JSON.stringify(draft);
     const automatic = (await screen.findAllByTestId("automatic-dimension"))[0]!;
@@ -965,7 +996,7 @@ describe("ProjectViewerPage", () => {
 
   it("controls derived dimensions without dirtying the Project", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     expect((await screen.findAllByTestId("automatic-dimension")).length).toBeGreaterThan(0);
     const inspector = screen.getByRole("complementary", { name: "Test inspector" });
     const toggle = within(inspector).getByRole("switch", { name: "Dimensions" });
@@ -978,7 +1009,7 @@ describe("ProjectViewerPage", () => {
 
   it("shows exact selected Wall and Room measurements from canonical geometry", async () => {
     renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     const wallTarget = document.querySelector(
       '.architectural-wall-hit-target[data-geometry-id="left-room-north-wall"]'
@@ -1006,7 +1037,7 @@ describe("ProjectViewerPage", () => {
 
   it("commits Room metadata and dissolution once each with semantic undo", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getAllByTestId("geometry-polygon")[0]!);
     const inspector = screen.getByRole("complementary", { name: "Test inspector" });
@@ -1079,7 +1110,7 @@ describe("ProjectViewerPage", () => {
 
   it("measures snapped Project points transiently and cancels with Escape", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.keyDown(window, { key: "m" });
     expect(store.getState().projectEditor.activeTool).toBe("measure");
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
@@ -1115,7 +1146,7 @@ describe("ProjectViewerPage", () => {
 
   it("renders Edit geometry from the draft instead of a stale authoritative snapshot", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     expect(
       (await screen.findAllByTestId("geometry-polygon")).length
     ).toBeGreaterThan(0);
@@ -1146,7 +1177,7 @@ describe("ProjectViewerPage", () => {
   it("does not rebuild draft geometry for selection-only changes", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     await screen.findAllByTestId("geometry-polygon");
     const buildCount = buildSpy.mock.calls.length;
 
@@ -1158,8 +1189,8 @@ describe("ProjectViewerPage", () => {
   it("keeps Draw Wall pointer previews out of the draft and Geometry Engine", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const draft = store.getState().projectEditor.draft;
@@ -1192,7 +1223,7 @@ describe("ProjectViewerPage", () => {
     const { store, svg } = await renderEditingProject();
     const initialDraft = store.getState().projectEditor.draft;
 
-    fireEvent.click(screen.getByRole("button", { name: "Door" }));
+    activateEditorTool("Door");
     fireEvent.pointerMove(svg, { clientX: 220, clientY: 395, pointerId: 31 });
     expect(screen.getByTestId("opening-placement-preview").getAttribute("data-valid")).toBe("true");
     expect(store.getState().projectEditor.draft).toBe(initialDraft);
@@ -1406,7 +1437,7 @@ describe("ProjectViewerPage", () => {
 
   it("opens the Room authoring menu and explains shape availability from canonical Walls", async () => {
     renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
 
     expect(await screen.findByRole("menuitem", { name: "Detect room" })).toBeTruthy();
@@ -1423,7 +1454,7 @@ describe("ProjectViewerPage", () => {
 
   it("toggles Room authoring off and clears transient state on the second toolbar click", async () => {
     const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     const roomButton = screen.getByRole("button", { name: "Room" });
     fireEvent.click(roomButton);
     expect(store.getState().projectEditor.activeTool).toBe("room");
@@ -1448,7 +1479,7 @@ describe("ProjectViewerPage", () => {
 
   it("previews and atomically commits a snapped rectangular Room on an empty Level", async () => {
     const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
 
     expect(await screen.findByRole("menuitem", { name: "Detect room" })).toBeTruthy();
@@ -1558,7 +1589,7 @@ describe("ProjectViewerPage", () => {
 
   it("previews and atomically commits an exact six-segment L-shaped Room", async () => {
     const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "L-shape" }));
 
@@ -1599,7 +1630,7 @@ describe("ProjectViewerPage", () => {
 
   it("cancels Room shape placement without dirtying or adding history", async () => {
     const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Rectangle" }));
     const svg = await screen.findByRole("img") as unknown as SVGSVGElement;
@@ -1649,7 +1680,7 @@ describe("ProjectViewerPage", () => {
       )
     ) as typeof fetch;
     const { store } = renderConnectedRoute(createApiClient(fetchImplementation));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
 
     const undo = screen.getByRole("button", { name: "Undo" });
     const redo = screen.getByRole("button", { name: "Redo" });
@@ -1702,8 +1733,8 @@ describe("ProjectViewerPage", () => {
       )
     ) as typeof fetch;
     const { store } = renderConnectedRoute(createApiClient(fetchImplementation));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = await screen.findByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const points = [
@@ -1747,7 +1778,7 @@ describe("ProjectViewerPage", () => {
 
   it("selects and reconciles a multi-Wall Room subdivision as one history commit", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingDraftReplaced(createMultiWallSubdivisionProject())));
 
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
@@ -1786,7 +1817,7 @@ describe("ProjectViewerPage", () => {
 
   it("preserves the draft when a referenced Viewpoint lies on the subdivision boundary", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     const project = createMultiWallSubdivisionProject();
     project.viewpoints[0] = {
       ...project.viewpoints[0]!,
@@ -1811,8 +1842,8 @@ describe("ProjectViewerPage", () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const authoritative = structuredClone(demoProjectFixture);
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const originalWallCount =
@@ -1862,8 +1893,8 @@ describe("ProjectViewerPage", () => {
 
   it("continues a Draw Wall chain from the exact committed endpoint until Escape", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const originalWallCount =
@@ -1897,8 +1928,8 @@ describe("ProjectViewerPage", () => {
 
   it("ends a chain after canonical cycle closure while keeping Draw Wall active", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const levelBefore =
@@ -1939,8 +1970,8 @@ describe("ProjectViewerPage", () => {
 
   it("exposes standalone and shared-junction handles on a connected Wall", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const wallCount =
@@ -1977,8 +2008,8 @@ describe("ProjectViewerPage", () => {
   it("defensively cancels a stale endpoint drag after the endpoint becomes shared", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const wallCount =
@@ -2025,8 +2056,8 @@ describe("ProjectViewerPage", () => {
 
   it("keeps equal snap offsets stable across a letterboxed SVG", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
       x: 0,
@@ -2082,8 +2113,8 @@ describe("ProjectViewerPage", () => {
 
   it("snaps a new Wall endpoint to exact existing Vertex coordinates", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const vertexElement = screen.getAllByTestId("geometry-vertex")[0]!;
@@ -2128,8 +2159,8 @@ describe("ProjectViewerPage", () => {
   it("commits a Wall-interior snap as one atomic split and connected Wall draft", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const edge = document.querySelector(
@@ -2198,8 +2229,8 @@ describe("ProjectViewerPage", () => {
   it("deleting a branch atomically removes its redundant Room-wall split", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const beforeLevel =
@@ -2283,8 +2314,8 @@ describe("ProjectViewerPage", () => {
 
   it("rejects a zero-length Wall without dirtying the draft", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     const draft = store.getState().projectEditor.draft;
@@ -2303,8 +2334,8 @@ describe("ProjectViewerPage", () => {
   it("selects a Wall, previews one endpoint, commits once, and deletes it", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     fireEvent.click(svg, { clientX: 100, clientY: 350 });
@@ -2434,7 +2465,7 @@ describe("ProjectViewerPage", () => {
   it("keeps referenced Walls and native text deletion safe", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     const wallCount =
       store.getState().projectEditor.draft!.building.levels[0]!.walls.length;
@@ -2472,7 +2503,7 @@ describe("ProjectViewerPage", () => {
 
   it("shows runtime Vertex topology in the Edit selection inspector", async () => {
     renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getAllByTestId("geometry-vertex")[0]!);
     fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
@@ -2489,7 +2520,7 @@ describe("ProjectViewerPage", () => {
 
   it("previews a selected shared Vertex and commits one junction move on pointer-up", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
@@ -2516,8 +2547,8 @@ describe("ProjectViewerPage", () => {
   it("clears selected geometry when entering Draw Wall", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     const svg = screen.getByRole("img") as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     fireEvent.click(svg, { clientX: 100, clientY: 350 });
@@ -2532,7 +2563,7 @@ describe("ProjectViewerPage", () => {
     expect(screen.getByRole("button", { name: "Start endpoint" })).toBeTruthy();
     const buildCount = buildSpy.mock.calls.length;
 
-    fireEvent.click(screen.getByRole("button", { name: "Draw Wall" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wall" }));
     expect(store.getState().projectEditor.selection).toEqual([]);
     expect(screen.queryByTestId("selected-wall-overlay")).toBeNull();
     expect(screen.queryByRole("button", { name: "Start endpoint" })).toBeNull();
@@ -2543,7 +2574,7 @@ describe("ProjectViewerPage", () => {
   it("commits Wall properties on blur and rejects invalid intermediary input", async () => {
     const buildSpy = vi.spyOn(GeometryEngine, "build");
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(document.querySelector(".geometry-edge-hit-target")!);
     fireEvent.click(screen.getByRole("tab", { name: "Properties" }));
@@ -2585,7 +2616,7 @@ describe("ProjectViewerPage", () => {
 
   it("preserves the local draft when edit geometry cannot be built", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     const draft = store.getState().projectEditor.draft!;
     const firstLevel = draft.building.levels[0]!;
     const firstWall = firstLevel.walls[0]!;
@@ -2619,10 +2650,10 @@ describe("ProjectViewerPage", () => {
 
   it("returns clean Edit sessions to View and keeps future controls disabled", async () => {
     renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
 
     expect(
-      (await screen.findByRole("button", { name: "Draw Wall" })).hasAttribute(
+      (await screen.findByRole("button", { name: "Wall" })).hasAttribute(
         "disabled"
       )
     ).toBe(false);
@@ -2638,13 +2669,14 @@ describe("ProjectViewerPage", () => {
     ).toBe(true);
     expect(screen.queryByText(/AI Assistant/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to project" }));
     expect(screen.queryByRole("toolbar", { name: "Editing tools" })).toBeNull();
     await waitFor(() => {
       const unloadEvent = new Event("beforeunload", { cancelable: true });
       expect(window.dispatchEvent(unloadEvent)).toBe(true);
     });
-    expect(screen.getByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Saved")).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit plan" })).toBeTruthy();
     const unloadEvent = new Event("beforeunload", { cancelable: true });
     expect(window.dispatchEvent(unloadEvent)).toBe(true);
   });
@@ -2652,7 +2684,7 @@ describe("ProjectViewerPage", () => {
   it("keeps Save disabled for a clean Edit session without sending PUT", async () => {
     const fetchImplementation = successFetch();
     renderConnectedRoute(createApiClient(fetchImplementation));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
 
     expect(screen.getByText("No unsaved changes")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
@@ -2699,7 +2731,7 @@ describe("ProjectViewerPage", () => {
     const { store, queryClient } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     const savedDraft = structuredClone(store.getState().projectEditor.draft!);
 
@@ -2709,7 +2741,7 @@ describe("ProjectViewerPage", () => {
       name: "Saving project…"
     });
     expect(within(savingDialog).getByRole("progressbar")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Draw Wall" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Wall" })).toBeNull();
     fireEvent.keyDown(savingDialog, { key: "Escape" });
     expect(
       screen.getByRole("dialog", { name: "Saving project…" })
@@ -2797,7 +2829,7 @@ describe("ProjectViewerPage", () => {
     const { store } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -2829,7 +2861,7 @@ describe("ProjectViewerPage", () => {
     const { store } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     const draft = store.getState().projectEditor.draft;
 
@@ -2857,7 +2889,8 @@ describe("ProjectViewerPage", () => {
         .mocked(fetchImplementation)
         .mock.calls.some(([, init]) => init?.method === "PUT")
     ).toBe(false);
-    expect(screen.getByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Saved")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Edit plan" })).toBeTruthy();
   });
 
   it("preserves the exact dirty session after authoritative validation failure", async () => {
@@ -2888,7 +2921,7 @@ describe("ProjectViewerPage", () => {
     const { store } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     const draft = store.getState().projectEditor.draft;
     const baseRevision = store.getState().projectEditor.baseRevision;
@@ -2926,7 +2959,7 @@ describe("ProjectViewerPage", () => {
     const { store } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     const draft = store.getState().projectEditor.draft;
     const baseRevision = store.getState().projectEditor.baseRevision;
@@ -2972,10 +3005,10 @@ describe("ProjectViewerPage", () => {
 
   it("uses the unified unsaved-changes decision when returning to View", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to project" }));
 
     expect(
       screen.getByRole("dialog", { name: "Unsaved changes" })
@@ -2986,7 +3019,7 @@ describe("ProjectViewerPage", () => {
 
   it("cancels pending navigation when the user keeps editing", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
     fireEvent.click(screen.getByRole("link", { name: "Open project two" }));
@@ -3011,7 +3044,7 @@ describe("ProjectViewerPage", () => {
     const { store, router } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
     fireEvent.click(screen.getByRole("link", { name: "Open destination" }));
@@ -3050,7 +3083,7 @@ describe("ProjectViewerPage", () => {
     const { store, router } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     const draft = store.getState().projectEditor.draft;
 
@@ -3078,7 +3111,7 @@ describe("ProjectViewerPage", () => {
     const { store, router } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
     fireEvent.click(screen.getByRole("link", { name: "Open destination" }));
@@ -3132,7 +3165,7 @@ describe("ProjectViewerPage", () => {
     const { store, queryClient } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     const draft = store.getState().projectEditor.draft;
     const baseRevision = store.getState().projectEditor.baseRevision;
@@ -3243,7 +3276,7 @@ describe("ProjectViewerPage", () => {
     const { store, queryClient, router } = renderConnectedRoute(
       createApiClient(fetchImplementation)
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
     fireEvent.click(screen.getByRole("link", { name: "Open destination" }));
     fireEvent.click(
@@ -3283,7 +3316,7 @@ describe("ProjectViewerPage", () => {
 
   it("protects browser unload only while a matching session is dirty", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
 
     const cleanEvent = new Event("beforeunload", { cancelable: true });
     expect(window.dispatchEvent(cleanEvent)).toBe(true);
@@ -3298,9 +3331,9 @@ describe("ProjectViewerPage", () => {
     setViewportWidth(900);
     renderConnectedRoute(createApiClient(successFetch()));
 
-    expect(await screen.findByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Edit plan" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Shortcuts" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit plan" }));
     expect(await screen.findByRole("button", { name: "Shortcuts" })).toBeTruthy();
     expect(
       await screen.findByRole("tablist", { name: "Project inspector sections" })
@@ -3316,7 +3349,7 @@ describe("ProjectViewerPage", () => {
         name: /interactive 2d geometry viewer/i
       })
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit plan" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Shortcuts" })).toBeNull();
     expect(
       screen.getByText("Advanced editing is available on larger screens.")
@@ -3410,7 +3443,7 @@ describe("ProjectViewerPage", () => {
 
   it("moves supported shortcuts out of Properties and into workspace help", async () => {
     const { container } = renderConnectedRoute(createApiClient(successFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     await screen.findAllByTestId("architectural-wall-body");
     const wall = container.querySelector<SVGLineElement>(

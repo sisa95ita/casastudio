@@ -44,7 +44,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     expect(projectId).not.toBe("");
 
     const viewport = editorViewport(page);
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Edit plan" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
     await createRoomShape(page, viewport, "L-shape", {
       width: "900",
@@ -118,7 +118,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await screenshot(page, "01-ground-floor-before-first-save.png");
 
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     const first = await getProject(request, authorization, projectId);
     expect(first.sourceRevision).toBe(2);
     assertProject(first.project, { levels: 1, rooms: [4], openings: { DOOR: 2, WINDOW: 2, OPENING: 1 } });
@@ -140,7 +140,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     const firstReload = await getProject(request, authorization, projectId);
     expect(firstReload).toEqual(first);
 
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Edit plan" }).click();
     await page.getByRole("button", { name: "Measure" }).click();
     const measureWalls = await readWalls(editorViewport(page));
     const measureStart = midpoint(measureWalls[0]!);
@@ -177,7 +177,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await height.press("Enter");
     await screenshot(page, "03-deep-structural-edit.png");
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     const second = await getProject(request, authorization, projectId);
     expect(second.sourceRevision).toBe(3);
     assertProject(second.project, { levels: 1, rooms: [4], openings: { DOOR: 2, WINDOW: 2, OPENING: 1 } });
@@ -191,13 +191,14 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await expect(editorViewport(page).locator('[data-testid="geometry-polygon"]')).toHaveCount(4);
     const secondReload = await getProject(request, authorization, projectId);
     expect(secondReload).toEqual(second);
-    await page.getByRole("button", { name: "Edit" }).click();
-    await page.getByRole("button", { name: "Create level" }).click();
+    await page.getByRole("button", { name: "Edit plan" }).click();
+    await page.getByRole("button", { name: /^Level:/ }).click();
+    await page.getByRole("menuitem", { name: "Add level" }).click();
     const levelDialog = page.getByRole("dialog", { name: "Create level" });
     await levelDialog.getByLabel("Level name").fill("First Floor");
     await levelDialog.getByLabel("Elevation (cm)").fill("300");
     await levelDialog.getByRole("button", { name: "Create Level" }).click();
-    await expect(page.getByRole("combobox", { name: "Level" })).toContainText("First Floor");
+    await expect(page.getByRole("button", { name: "Level: First Floor" })).toBeVisible();
     await expect(editorViewport(page).locator('[data-testid="geometry-polygon"]')).toHaveCount(0);
     await createRoomShape(page, editorViewport(page), "Rectangle", { width: "600", depth: "420" });
     await page.getByRole("button", { name: "Fit to view" }).click();
@@ -218,7 +219,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await switchLevel(page, "First Floor");
 
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     const finalState = await getProject(request, authorization, projectId);
     expect(finalState.sourceRevision).toBe(4);
     assertProject(finalState.project, { levels: 2, rooms: [4, 2], openings: { DOOR: 3, WINDOW: 3, OPENING: 1 } });
@@ -325,7 +326,7 @@ async function partitionOnce(page: Page, viewport: Locator) {
 }
 
 async function drawWall(page: Page, start: { x: number; y: number }, end: { x: number; y: number }) {
-  await page.getByRole("button", { name: "Draw Wall" }).click();
+  await page.getByRole("button", { name: "Wall" }).click();
   await page.mouse.click(start.x, start.y);
   await page.mouse.move(end.x, end.y);
   await expect(page.locator('[data-testid="draw-wall-preview-length"]')).toBeVisible();
@@ -387,7 +388,8 @@ async function placeOpening(
   values: { readonly width: number; readonly height: number; readonly elevation: number; readonly hinge?: "Start" | "End"; readonly swing?: "Left" | "Right" }
 ) {
   await ensureSelectTool(page);
-  await page.getByRole("button", { name: tool }).click();
+  await page.getByRole("button", { name: "Openings" }).click();
+  await page.getByRole("menuitem", { name: tool }).click();
   await page.getByRole("tab", { name: "Properties" }).click();
   await commitNumber(page, "Width (cm)", values.width);
   await commitNumber(page, "Height (cm)", values.height);
@@ -438,11 +440,11 @@ async function commitNumber(page: Page, label: string, value: number) {
 }
 
 async function switchLevel(page: Page, name: string) {
-  const selector = page.getByRole("combobox", { name: "Level" });
+  const selector = page.getByRole("button", { name: /^Level:/ });
   if ((await selector.textContent()) === name) return;
   await selector.click();
-  await page.getByRole("option", { name }).click();
-  await expect(selector).toContainText(name);
+  await page.getByRole("menuitem", { name }).click();
+  await expect(page.getByRole("button", { name: `Level: ${name}` })).toBeVisible();
 }
 
 async function readWalls(viewport: Locator): Promise<Line[]> {

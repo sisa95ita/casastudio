@@ -23,7 +23,12 @@
     "view": "View",
     "edit": "Edit",
     "editing": "Editing",
+    "editingLevel": "Editing · {{level}}",
+    "editPlan": "Edit plan",
+    "editIn2D": "Edit in 2D",
+    "backToProject": "Back to project",
     "clean": "No unsaved changes",
+    "saving": "Saving…",
     "saved": "Saved",
     "unsaved": "Unsaved changes",
     "readOnly": "Read-only"
@@ -139,7 +144,8 @@
   "tools": {
     "label": "Editing tools",
     "select": "Select",
-    "draw-wall": "Draw Wall",
+    "draw-wall": "Wall",
+    "openings": "Openings",
     "door": "Door",
     "window": "Window",
     "opening": "Wall Opening",
@@ -151,7 +157,8 @@
     "comingSoon": "{{tool}} — coming soon",
     "help": {
       "select": "Select elements in the plan.",
-      "draw-wall": "Draw connected walls as a continuous chain.",
+      "draw-wall": "Draw architectural walls.",
+      "openings": "Place a Door, Window, or Wall Opening.",
       "door": "Place a door on a wall.",
       "window": "Place a window on a wall.",
       "opening": "Place an unadorned opening through a wall.",
@@ -173,6 +180,9 @@
     "notchWidth": "Notch width",
     "notchDepth": "Notch depth",
     "rotation": "Rotation"
+  },
+  "openingAuthoring": {
+    "menuLabel": "Opening tools"
   },
   "precision": {
     "grid": "Grid",
@@ -219,6 +229,10 @@
   },
   "levelSelector": {
     "label": "Level",
+    "current": "Level: {{level}}",
+    "menuLabel": "Project levels",
+    "add": "Add level",
+    "manage": "Manage levels…",
     "create": "Create level",
     "edit": "Edit level",
     "createTitle": "Create level",

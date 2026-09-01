@@ -52,7 +52,7 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
     .first();
   await expect(polygon).toBeVisible();
   const pointsBeforeWheel = await polygon.getAttribute("points");
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit plan" }).click();
   await expect(page.getByText("No unsaved changes")).toBeVisible();
   const scaleBeforeWheel = await page
     .getByRole("combobox", { name: "Scale" })
@@ -109,7 +109,7 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
   const viewportBounds = await editorViewport.boundingBox();
   if (!viewportBounds) throw new Error("The Project editor viewport has no bounds.");
 
-  await page.getByRole("button", { name: "Draw Wall" }).click();
+  await page.getByRole("button", { name: "Wall" }).click();
   const inset = 48;
   const side = Math.min(112, viewportBounds.width / 6, viewportBounds.height / 5);
   const drawnFace = [
@@ -147,6 +147,50 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
   expect(consoleErrors, "Unexpected browser console errors").toEqual([]);
 });
 
+test("keeps the workspace hierarchy coherent on tablet and phone", async ({
+  page
+}) => {
+  const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;
+  if (!demoPassword) {
+    throw new Error(
+      "CASASTUDIO_KEYCLOAK_DEMO_PASSWORD is required in the environment or repository-root .env."
+    );
+  }
+
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/app");
+  await page.locator("#username").fill("demo");
+  await page.locator("#password").fill(demoPassword);
+  await page.locator("#kc-login").click();
+
+  const demoProject = page
+    .getByRole("article")
+    .filter({ hasText: "Demo Project" });
+  await expect(demoProject).toBeVisible();
+  await demoProject.getByRole("link", { name: "Open project" }).click();
+  await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Project representation" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit plan" }).click();
+  await expect(page.getByRole("toolbar", { name: "Editing tools" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Shortcuts" })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Inspector sections" })).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("tablet-edit-workspace.png"),
+    fullPage: true
+  });
+
+  await page.getByRole("button", { name: "Back to project" }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Edit plan" })).toHaveCount(0);
+  await expect(page.getByRole("toolbar", { name: "Editing tools" })).toHaveCount(0);
+  await expect(page.getByText(/larger screen/i)).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("phone-project-view.png"),
+    fullPage: true
+  });
+});
+
 test("creates, places, persists, and reloads a rectangular Room shape", async ({
   page
 }) => {
@@ -177,7 +221,7 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page.getByRole("heading", { name: projectName, level: 1 }))
     .toBeVisible();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit plan" }).click();
   await page.getByRole("button", { name: "Room" }).click();
   await expect(page.getByRole("menuitem", { name: "Detect room" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Rectangle" })).toBeEnabled();
@@ -246,10 +290,7 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await expect(roomLabels).toContainText("Rectangle Studio");
 
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
+  await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: projectName, level: 1 }))
     .toBeVisible();
@@ -312,9 +353,9 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
     contentType: "image/png"
   });
 
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit plan" }).click();
   const authoringToolbar = page.getByRole("toolbar", { name: "Editing tools" });
-  await expect(authoringToolbar.getByRole("button")).toHaveCount(7);
+  await expect(authoringToolbar.getByRole("button")).toHaveCount(6);
   await expect(authoringToolbar.getByRole("button", { name: "Pan" })).toHaveCount(0);
   await expect(editorViewport).toHaveClass(/geometry-svg--authoring/);
   await expect(editorViewport.locator('[data-testid="polygon-centroid"]')).toHaveCount(2);
@@ -352,7 +393,7 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
   );
   const initialRoomPoints = await trackedRoom.getAttribute("points");
   const wallCountBeforePan = await editorViewport.locator('[data-testid="boundary-edge"]').count();
-  const drawWallTool = authoringToolbar.getByRole("button", { name: "Draw Wall" });
+  const drawWallTool = authoringToolbar.getByRole("button", { name: "Wall" });
   await drawWallTool.click();
   await expect(drawWallTool).toHaveAttribute("aria-pressed", "true");
   await spacePanDrag(trackedRoom, 0.3);
@@ -448,7 +489,7 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
   await expect(roomLabels).toHaveCount(2);
   await expect(roomLabels).toContainText(["Living Room", "Kitchen"]);
 
-  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("button", { name: "Back to project" }).click();
   await expect(authoringToolbar).toHaveCount(0);
   await expect(editorViewport).toHaveClass(/geometry-svg--presentation/);
   await expect(editorViewport.locator('[data-testid="polygon-centroid"]')).toHaveCount(0);
@@ -481,12 +522,12 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   const demoProject = page.getByRole("article").filter({ hasText: "Demo Project" });
   await expect(demoProject).toBeVisible();
   await demoProject.getByRole("link", { name: "Open project" }).click();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit plan" }).click();
 
   const viewport = page.locator('svg[aria-labelledby="geometry-svg-title geometry-svg-description"]');
   const viewportBox = await viewport.boundingBox();
   if (!viewportBox) throw new Error("Expected the editor viewport.");
-  await page.getByRole("button", { name: "Draw Wall" }).click();
+  await page.getByRole("button", { name: "Wall" }).click();
   const previewStart = { x: viewportBox.x + 70, y: viewportBox.y + 70 };
   const previewEnd = { x: previewStart.x + 120, y: previewStart.y + 45 };
   await page.mouse.click(previewStart.x, previewStart.y);
@@ -546,7 +587,8 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page.getByText("No unsaved changes", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Door" }).click();
+  await page.getByRole("button", { name: "Openings" }).click();
+  await page.getByRole("menuitem", { name: "Door" }).click();
   await page.getByRole("tab", { name: "Properties" }).click();
   await expect(page.getByText("New Door", { exact: true })).toBeVisible();
   const pendingDoorWidth = page.getByRole("spinbutton", { name: "Width (cm)" });
@@ -562,7 +604,8 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   await expect(viewport.locator('[data-testid="architectural-door"]')).toHaveCount(3);
   await page.getByRole("button", { name: "Undo" }).click();
 
-  await page.getByRole("button", { name: "Wall Opening" }).click();
+  await page.getByRole("button", { name: "Openings" }).click();
+  await page.getByRole("menuitem", { name: "Wall Opening" }).click();
   await page.getByRole("tab", { name: "Properties" }).click();
   await expect(page.getByText("New Wall Opening", { exact: true })).toBeVisible();
   const pendingOpeningWidth = page.getByRole("spinbutton", { name: "Width (cm)" });
