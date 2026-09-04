@@ -143,6 +143,7 @@ describe("ProjectSelectionDetails", () => {
       <ProjectPropertiesDetails
         selectionState={selectionState}
         room={room}
+        roomLevelElevation={20}
         units={{ length: "cm", angle: "deg" }}
         onUpdateWallProperties={vi.fn(() => true)}
         onUpdateRoomProperties={onUpdateRoomProperties}
@@ -155,6 +156,13 @@ describe("ProjectSelectionDetails", () => {
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Type" }));
     fireEvent.click(screen.getByRole("option", { name: "Living room" }));
     expect(onUpdateRoomProperties).toHaveBeenCalledWith({ type: "LIVING_ROOM" });
+    const elevation = screen.getByRole("spinbutton", { name: "Elevation above Level" });
+    fireEvent.change(elevation, { target: { value: "175" } });
+    fireEvent.blur(elevation);
+    expect(onUpdateRoomProperties).toHaveBeenCalledWith({ elevation: 175 });
+    const globalElevation = screen.getByDisplayValue("20");
+    expect(globalElevation.hasAttribute("readonly")).toBe(true);
+    expect(globalElevation.parentElement?.textContent).toContain("cm");
   });
 });
 

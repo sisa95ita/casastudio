@@ -1,5 +1,5 @@
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
-import { Button, Divider, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
+import { Button, Divider, FormControl, InputAdornment, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
 import {
   formatArchitecturalArea,
   formatArchitecturalLength,
@@ -7,6 +7,9 @@ import {
   type Opening,
   type Project,
   type Room,
+  type StairFlight,
+  type StairLanding,
+  type Staircase,
   RoomTypeValues,
   type UpdateRoomProperties,
   type UpdateOpeningProperties,
@@ -29,6 +32,8 @@ import {
   ProjectOpeningSelectionDetails
 } from "./ProjectOpeningSelectionDetails";
 import type { OpeningAuthoringProperties, OpeningAuthoringType } from "../../../editor-2d/state/project-editor-slice";
+import type { StairParameterChanges } from "../../../editor-2d/tools/stair/project-stair-authoring";
+import { ProjectStairPropertiesDetails, ProjectStairSelectionDetails } from "./ProjectStairSelectionDetails";
 
 /** Dispatches Edit-mode selection details by runtime geometry kind. */
 export function ProjectSelectionDetails({
@@ -43,12 +48,14 @@ export function ProjectSelectionDetails({
   onRemoveVertex,
   opening,
   room,
+  stair,
   roomMeasurement,
   openingWall,
   openingDisplayOffsetFromStart,
   onDeleteOpening,
   onUpdateOpening,
   onDeleteRoom,
+  onDeleteStair,
   editable = true
 }: {
   readonly model: GeometryPresentationModel2D;
@@ -62,6 +69,7 @@ export function ProjectSelectionDetails({
   readonly onRemoveVertex?: () => void;
   readonly opening?: Opening;
   readonly room?: Room;
+  readonly stair?: { readonly staircase: Staircase; readonly part?: StairFlight | StairLanding };
   readonly roomMeasurement?: RoomMeasurement;
   readonly openingWall?: Wall;
   /** Transient Wall-local Opening offset used only for Inspector display. */
@@ -69,12 +77,20 @@ export function ProjectSelectionDetails({
   readonly onDeleteOpening?: () => void;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
   readonly onDeleteRoom?: () => void;
+  readonly onDeleteStair?: () => void;
   readonly editable?: boolean;
 }) {
   const selection = selectionState.selected;
 
   if (selection.length === 0) {
     return <EmptySelectionDetails />;
+  }
+  if (
+    selection.length === 1 &&
+    (selection[0]?.kind === "STAIRCASE" || selection[0]?.kind === "STAIR_FLIGHT" || selection[0]?.kind === "STAIR_LANDING") &&
+    stair
+  ) {
+    return <ProjectStairSelectionDetails selection={stair} units={units} editable={editable} onDelete={onDeleteStair ?? (() => undefined)} />;
   }
   if (
     selection.length === 1 &&
@@ -134,10 +150,13 @@ export function ProjectPropertiesDetails({
   openingWall,
   openingDisplayOffsetFromStart,
   room,
+  roomLevelElevation,
+  stair,
   units,
   onUpdateWallProperties,
   onUpdateOpening,
   onUpdateRoomProperties,
+  onUpdateStair,
   openingAuthoring,
   onUpdateOpeningAuthoring
 }: {
@@ -148,6 +167,8 @@ export function ProjectPropertiesDetails({
   /** Transient Wall-local Opening offset used only for Properties display. */
   readonly openingDisplayOffsetFromStart?: number;
   readonly room?: Room;
+  readonly roomLevelElevation?: number;
+  readonly stair?: { readonly staircase: Staircase; readonly part?: StairFlight | StairLanding };
   readonly units: Project["units"];
   readonly onUpdateWallProperties: (properties: {
     readonly length?: number;
@@ -157,6 +178,7 @@ export function ProjectPropertiesDetails({
   }) => boolean;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
   readonly onUpdateRoomProperties?: (properties: Partial<UpdateRoomProperties>) => boolean;
+  readonly onUpdateStair?: (properties: StairParameterChanges) => boolean;
   readonly openingAuthoring?: {
     readonly openingType: OpeningAuthoringType;
     readonly properties: OpeningAuthoringProperties;
@@ -206,7 +228,10 @@ export function ProjectPropertiesDetails({
     );
   }
   if (selection?.kind === "POLYGON" && room) {
-    return <ProjectRoomPropertiesDetails room={room} onUpdate={onUpdateRoomProperties ?? (() => false)} />;
+    return <ProjectRoomPropertiesDetails room={room} levelElevation={roomLevelElevation ?? 0} units={units} onUpdate={onUpdateRoomProperties ?? (() => false)} />;
+  }
+  if ((selection?.kind === "STAIRCASE" || selection?.kind === "STAIR_FLIGHT" || selection?.kind === "STAIR_LANDING") && stair) {
+    return <ProjectStairPropertiesDetails staircase={stair.staircase} units={units} onUpdate={onUpdateStair ?? (() => false)} />;
   }
   return <PropertiesMessage message={t("properties.unavailable")} />;
 }
@@ -228,8 +253,10 @@ function ProjectMultiSelectionDetails({
           ? "doors"
         : selection.kind === "WINDOW"
           ? "windows"
-          : selection.kind === "OPENING"
+      : selection.kind === "OPENING"
             ? "openings"
+            : selection.kind === "STAIRCASE" || selection.kind === "STAIR_FLIGHT" || selection.kind === "STAIR_LANDING"
+              ? "stairs"
             : "junctions";
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   }
@@ -312,9 +339,13 @@ function ProjectRoomSelectionDetails({
 /** Renders canonical Room metadata fields without exposing topology. */
 function ProjectRoomPropertiesDetails({
   room,
+  levelElevation,
+  units,
   onUpdate
 }: {
   readonly room: Room;
+  readonly levelElevation: number;
+  readonly units: Project["units"];
   readonly onUpdate: (properties: Partial<UpdateRoomProperties>) => boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
@@ -363,6 +394,34 @@ function ProjectRoomPropertiesDetails({
           ))}
         </Select>
       </FormControl>
+      <TextField
+        key={`room-elevation:${room.elevation ?? 0}`}
+        size="small"
+        type="number"
+        label={t("room.labels.floorOffset")}
+        defaultValue={room.elevation ?? 0}
+        onBlur={(event) => {
+          const previous = room.elevation ?? 0;
+          const next = Number(event.currentTarget.value);
+          if (next === previous) return;
+          if (!Number.isFinite(next) || !onUpdate({ elevation: next })) {
+            event.currentTarget.value = String(previous);
+          }
+        }}
+        slotProps={{
+          htmlInput: { step: "any", "aria-label": t("room.labels.floorOffset") },
+          input: { endAdornment: <InputAdornment position="end">{units.length}</InputAdornment> }
+        }}
+      />
+      <TextField
+        size="small"
+        label={t("room.labels.globalFloorElevation")}
+        value={levelElevation + (room.elevation ?? 0)}
+        slotProps={{
+          htmlInput: { readOnly: true },
+          input: { endAdornment: <InputAdornment position="end">{units.length}</InputAdornment> }
+        }}
+      />
     </Stack>
   );
 }

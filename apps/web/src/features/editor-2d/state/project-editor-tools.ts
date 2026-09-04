@@ -1,5 +1,5 @@
 /** Tools available to the manual 2D Project editor. */
-export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "opening" | "room" | "measure";
+export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "opening" | "room" | "stair" | "measure";
 
 /** Interaction capabilities consumed by the shared geometry viewer. */
 export type ProjectEditorInteraction = {
@@ -14,6 +14,8 @@ export type ProjectEditorInteraction = {
   readonly measurementEnabled?: boolean;
   /** Whether the canvas accepts and preserves Room shape placement input. */
   readonly roomShapePlacementEnabled?: boolean;
+  /** Whether the canvas accepts the connection-first Stair placement gesture. */
+  readonly stairPlacementEnabled?: boolean;
 };
 
 /** Durable UI and interaction contract for one editor tool. */
@@ -103,6 +105,19 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
       }
     },
     {
+      id: "stair",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: true,
+        panAnywhere: false,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false,
+        openingEditingEnabled: false,
+        stairPlacementEnabled: true
+      }
+    },
+    {
       id: "measure",
       enabled: true,
       interaction: {
@@ -138,7 +153,8 @@ export function getProjectEditorInteraction(
       wallEndpointEditingEnabled: false,
       openingEditingEnabled: false,
       measurementEnabled: false,
-      roomShapePlacementEnabled: tool === "room"
+      roomShapePlacementEnabled: tool === "room",
+      stairPlacementEnabled: tool === "stair"
     };
   }
 

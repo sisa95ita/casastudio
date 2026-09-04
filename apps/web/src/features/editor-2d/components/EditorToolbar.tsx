@@ -4,6 +4,7 @@ import LinearScaleRoundedIcon from "@mui/icons-material/LinearScaleRounded";
 import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
 import NearMeRoundedIcon from "@mui/icons-material/NearMeRounded";
 import StraightenRoundedIcon from "@mui/icons-material/StraightenRounded";
+import StairsRoundedIcon from "@mui/icons-material/StairsRounded";
 import { Box, Divider, ToggleButton, Tooltip } from "@mui/material";
 import { useState, type ReactNode } from "react";
 
@@ -18,6 +19,8 @@ type EditorToolbarProps = {
   readonly onToolChange: (tool: ProjectEditorTool | null) => void;
   readonly roomMenuOpen: boolean;
   readonly onRoomToggle: (anchor: HTMLElement) => void;
+  readonly stairMenuOpen: boolean;
+  readonly onStairToggle: (anchor: HTMLElement) => void;
   readonly shortcutsOpen: boolean;
   readonly onOpenShortcuts: () => void;
   readonly onCloseShortcuts: () => void;
@@ -36,6 +39,8 @@ export function EditorToolbar({
   onToolChange,
   roomMenuOpen,
   onRoomToggle,
+  stairMenuOpen,
+  onStairToggle,
   shortcutsOpen,
   onOpenShortcuts,
   onCloseShortcuts
@@ -95,6 +100,18 @@ export function EditorToolbar({
           expanded={roomMenuOpen}
           controls={roomMenuOpen ? "room-authoring-menu" : undefined}
           onClick={onRoomToggle}
+        />
+        <ToolButton
+          tool="stair"
+          label={t("tools.stair")}
+          help={t("tools.help.stair")}
+          icon={<StairsRoundedIcon fontSize="small" />}
+          endIcon={<ExpandMoreRoundedIcon fontSize="small" />}
+          selected={activeTool === "stair"}
+          disabled={disabled}
+          expanded={stairMenuOpen}
+          controls={stairMenuOpen ? "stair-authoring-menu" : undefined}
+          onClick={onStairToggle}
         />
       </Box>
       <Divider orientation="vertical" flexItem />
@@ -157,7 +174,7 @@ function ToolButton({
         disabled={disabled}
         aria-label={label}
         aria-haspopup={
-          tool === "openings" || tool === "room" ? "menu" : undefined
+          tool === "openings" || tool === "room" || tool === "stair" ? "menu" : undefined
               }
         aria-expanded={expanded}
         aria-controls={controls}

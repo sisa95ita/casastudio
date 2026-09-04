@@ -842,6 +842,17 @@ img {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.project-stair-authoring-menu {
+  border: 1px solid var(--casa-border);
+  margin-top: 5px;
+  width: min(300px, calc(100vw - 24px));
+}
+
+.project-stair-authoring-menu__templates .MuiToggleButton-root {
+  font-size: 0.72rem;
+  padding-inline: 8px;
+}
+
 @media (max-width: 760px) {
   .project-room-authoring-menu {
     width: min(320px, calc(100vw - 24px));
@@ -1281,6 +1292,91 @@ img {
 .architectural-opening-drag-handle__icon {
   fill: currentColor !important;
   pointer-events: none;
+}
+
+.architectural-staircase {
+  color: #55615f;
+}
+
+.architectural-stair-flight__body,
+.architectural-stair-landing {
+  fill: rgba(241, 238, 228, 0.94);
+  stroke: currentColor;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-stair-flight__body {
+  cursor: pointer;
+  pointer-events: fill;
+}
+
+.architectural-stair-flight__hit-target {
+  cursor: pointer;
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: 10;
+}
+
+.architectural-stair-tread,
+.architectural-stair-direction {
+  fill: none;
+  pointer-events: none;
+  stroke: currentColor;
+  stroke-width: 0.85;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-stair-direction {
+  stroke-width: 1.25;
+}
+
+.architectural-staircase.geometry-entity-selected,
+.architectural-staircase.geometry-entity-hovered,
+.architectural-stair-flight.geometry-entity-selected,
+.architectural-stair-flight.geometry-entity-hovered,
+.architectural-stair-landing.geometry-entity-selected,
+.architectural-stair-landing.geometry-entity-hovered {
+  color: #246caf;
+}
+
+.geometry-stair-preview {
+  color: #246caf;
+  pointer-events: none;
+}
+
+.geometry-stair-preview--invalid {
+  color: #bd3e35;
+}
+
+.geometry-stair-preview__body,
+.geometry-stair-preview__landing {
+  fill: color-mix(in srgb, currentColor 14%, transparent);
+  stroke: currentColor;
+  stroke-dasharray: 5 3;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-stair-preview__tread,
+.geometry-stair-preview__direction {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-stair-adjustment-handle__hit-target {
+  cursor: grab;
+  fill: transparent;
+  pointer-events: all;
+}
+
+.geometry-stair-adjustment-handle {
+  fill: var(--casa-paper);
+  pointer-events: none;
+  stroke: #246caf;
+  stroke-width: 2;
 }
 
 .architectural-opening .architectural-opening-drag-handle__icon path {

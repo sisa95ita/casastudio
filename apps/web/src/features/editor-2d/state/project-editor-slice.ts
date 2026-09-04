@@ -22,6 +22,11 @@ import type { RootState } from "../../../app/store/store";
 import type { ProjectEditorTool } from "./project-editor-tools";
 import type { DrawWallSnapCandidate } from "../tools/wall/project-wall-snapping";
 import type { OpeningPlacementCandidate } from "../tools/opening/project-opening-editing";
+import {
+  defaultStairAuthoringParameters,
+  type StairAuthoringParameters,
+  type StairTemplate
+} from "../tools/stair/project-stair-authoring";
 
 /** Mutually exclusive interaction modes for the 2D Project workspace. */
 export type ProjectWorkspaceMode = "view" | "edit";
@@ -110,12 +115,39 @@ export type PlaceRoomShapeInteraction = {
   readonly origin?: WorldPointXZ;
 };
 
+/** Connection-first Staircase proposal that has not entered Project history. */
+export type PlaceStairInteraction = {
+  readonly kind: "place-stair";
+  readonly owningLevelId: string;
+  readonly toLevelId?: string;
+  readonly toRoomId?: string;
+  readonly template?: StairTemplate;
+  readonly parameters: StairAuthoringParameters;
+  readonly identifiers?: {
+    readonly staircaseId: string;
+    readonly flightIds: readonly string[];
+    readonly landingIds: readonly string[];
+  };
+  readonly start?: WorldPointXZ;
+  readonly control?: WorldPointXZ;
+  readonly locked: boolean;
+};
+
+/** One root Staircase template adjustment preview committed on pointer release. */
+export type MoveStairAdjustmentInteraction = {
+  readonly kind: "move-stair-adjustment";
+  readonly owningLevelId: string;
+  readonly staircaseId: string;
+  readonly pointerId: number;
+  readonly control: WorldPointXZ;
+};
+
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
     DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
     PlaceOpeningInteraction | AddWallVertexInteraction | MoveOpeningInteraction | MeasureInteraction |
-    PlaceRoomShapeInteraction | null;
+    PlaceRoomShapeInteraction | PlaceStairInteraction | MoveStairAdjustmentInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
@@ -315,9 +347,10 @@ const projectEditorSlice = createSlice({
       state.history.future = [];
       state.draft = cloneProject(nextDraft);
       state.dirty = true;
-      if (
-        state.transient.interaction?.kind === "place-opening" ||
-        state.transient.interaction?.kind === "place-room-shape"
+        if (
+          state.transient.interaction?.kind === "place-opening" ||
+          state.transient.interaction?.kind === "place-room-shape" ||
+          state.transient.interaction?.kind === "place-stair"
       ) {
         state.transient = { interaction: null };
       }
@@ -410,7 +443,14 @@ const projectEditorSlice = createSlice({
         state.transient = {
           interaction: openingType
             ? createOpeningAuthoringInteraction(openingType)
-            : null
+            : action.payload === "stair" && state.activeLevelId
+              ? {
+                  kind: "place-stair",
+                  owningLevelId: state.activeLevelId,
+                  parameters: { ...defaultStairAuthoringParameters },
+                  locked: false
+                }
+              : null
         };
       }
     },
@@ -582,6 +622,61 @@ const projectEditorSlice = createSlice({
     ) {
       if (state.transient.interaction?.kind === "place-room-shape") {
         state.transient.interaction.origin = action.payload;
+      }
+    },
+    editorStairAuthoringChanged(
+      state,
+      action: PayloadAction<Partial<Omit<PlaceStairInteraction, "kind" | "owningLevelId">>>
+    ) {
+      const interaction = state.transient.interaction;
+      if (state.mode !== "edit" || state.activeTool !== "stair" || interaction?.kind !== "place-stair") return;
+      Object.assign(interaction, action.payload);
+      if (action.payload.toLevelId !== undefined || action.payload.toRoomId !== undefined ||
+          action.payload.template !== undefined || action.payload.parameters !== undefined) {
+        interaction.start = undefined;
+        interaction.control = undefined;
+        interaction.locked = false;
+      }
+    },
+    editorStairPlacementPointSet(state, action: PayloadAction<WorldPointXZ>) {
+      const interaction = state.transient.interaction;
+      if (state.mode !== "edit" || state.activeTool !== "stair" || interaction?.kind !== "place-stair" ||
+          !interaction.toLevelId || !interaction.template || !interaction.identifiers) return;
+      if (!interaction.start || interaction.locked) {
+        interaction.start = action.payload;
+        interaction.control = action.payload;
+        interaction.locked = false;
+      } else {
+        interaction.control = action.payload;
+        interaction.locked = true;
+      }
+    },
+    editorStairPlacementPointerMoved(state, action: PayloadAction<WorldPointXZ>) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "place-stair" && interaction.start && !interaction.locked) {
+        interaction.control = action.payload;
+      }
+    },
+    editorStairAdjustmentStarted(
+      state,
+      action: PayloadAction<{
+        readonly owningLevelId: string;
+        readonly staircaseId: string;
+        readonly pointerId: number;
+        readonly control: WorldPointXZ;
+      }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = { kind: "move-stair-adjustment", ...action.payload };
+      }
+    },
+    editorStairAdjustmentPointerMoved(
+      state,
+      action: PayloadAction<{ readonly pointerId: number; readonly control: WorldPointXZ }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "move-stair-adjustment" && interaction.pointerId === action.payload.pointerId) {
+        interaction.control = action.payload.control;
       }
     },
     editorOpeningPlacementChanged(
@@ -769,6 +864,11 @@ export const {
   editorRoomShapePlacementStarted,
   editorRoomShapePlacementChanged,
   editorRoomShapePlacementPointerMoved,
+  editorStairAuthoringChanged,
+  editorStairPlacementPointSet,
+  editorStairPlacementPointerMoved,
+  editorStairAdjustmentStarted,
+  editorStairAdjustmentPointerMoved,
   editorOpeningPlacementChanged,
   editorOpeningAuthoringPropertiesChanged,
   editorWallVertexPlacementStarted,

@@ -150,6 +150,7 @@
     "window": "Window",
     "opening": "Wall Opening",
     "room": "Room",
+    "stair": "Stair",
     "measure": "Measure",
     "undo": "Undo",
     "redo": "Redo",
@@ -163,6 +164,7 @@
       "window": "Place a window on a wall.",
       "opening": "Place an unadorned opening through a wall.",
       "room": "Create a Room from existing walls or a predefined shape.",
+      "stair": "Connect a Level or elevated Room with an assisted staircase.",
       "measure": "Measure between snapped points without changing the project."
     }
   },
@@ -180,6 +182,34 @@
     "notchWidth": "Notch width",
     "notchDepth": "Notch depth",
     "rotation": "Rotation"
+  },
+  "stairAuthoring": {
+    "title": "Stair authoring",
+    "connectionFirst": "Choose the destination, then a complete template before placing it in the plan.",
+    "targetLevel": "Target Level",
+    "targetRoom": "Target Room (optional)",
+    "noTargetRoom": "Level floor",
+    "sameLevel": "same Level",
+    "template": "Initial template",
+    "chooseTemplate": "Choose a template to continue.",
+    "continueInInspector": "Dimensions and placement are now in Properties.",
+    "connectionSummary": "From {{from}} to {{to}}",
+    "templates": {
+      "straight": "Straight",
+      "lShaped": "L-shaped",
+      "uShaped": "U-shaped"
+    },
+    "parameters": "Assisted parameters",
+    "placeHint": "Click a start point, move to define direction and run, then click again.",
+    "clickToLock": "Preview is valid. Click the canvas again to lock placement.",
+    "ready": "Placement is ready to confirm.",
+    "confirm": "Create Staircase",
+    "cancel": "Cancel",
+    "invalid": {
+      "NO_RISE": "The destination must be above the stair start. Choose a higher Level or an elevated Room.",
+      "TOO_SHORT": "The run is too short for the selected step count and tread depth. Extend the preview.",
+      "INVALID_PARAMETERS": "Width, Flight step counts, and tread depth must be positive valid values."
+    }
   },
   "openingAuthoring": {
     "menuLabel": "Opening tools"
@@ -354,11 +384,14 @@
       "referenced": "This room is used by another project entity and cannot be deleted.",
       "dissolutionAmbiguous": "This room does not have one uniquely adjacent room to absorb its region.",
       "dissolutionInvalid": "This room cannot be dissolved into one valid architectural boundary.",
-      "metadata": "The room name or type is invalid. The previous values were kept.",
+      "metadata": "The Room properties are invalid. The previous values were kept.",
       "invalid": "The room could not be created from the available boundary."
     },
     "opening": {
       "invalid": "The opening cannot be placed or changed because it would violate wall clearance, collision, or dimension constraints."
+    },
+    "stair": {
+      "invalid": "The staircase could not be created or changed because its connection or geometry is invalid."
     }
   },
   "wall": {
@@ -408,7 +441,9 @@
       "name": "Name",
       "type": "Type",
       "area": "Area",
-      "perimeter": "Perimeter"
+      "perimeter": "Perimeter",
+      "floorOffset": "Elevation above Level",
+      "globalFloorElevation": "Global floor elevation"
     }
   },
   "selection": {
@@ -429,6 +464,8 @@
       "windows_other": "{{count}} Windows",
       "openings_one": "{{count}} Wall Opening",
       "openings_other": "{{count}} Wall Openings",
+      "stairs_one": "{{count}} Stair part",
+      "stairs_other": "{{count}} Stair parts",
       "junctions_one": "{{count}} Junction",
       "junctions_other": "{{count}} Junctions"
     },
@@ -468,6 +505,39 @@
       "hingeSide": "Hinge side",
       "swingSide": "Swing side",
       "offset": "Position from wall start"
+    }
+  },
+  "stair": {
+    "selectionTitle": "Stair",
+    "propertiesTitle": "Stair properties",
+    "delete": "Delete Staircase",
+    "ownedPart": "Owned by {{staircase}}",
+    "steps": "steps",
+    "totalSteps": "{{count}} total steps",
+    "derivedHelp": "Total rise {{rise}} and riser height {{riser}} are derived from the selected destination.",
+    "types": {
+      "staircase": "Staircase",
+      "flight": "Flight",
+      "landing": "Landing"
+    },
+    "templates": {
+      "STRAIGHT": "Straight",
+      "L_SHAPED": "L-shaped",
+      "U_SHAPED": "U-shaped"
+    },
+    "labels": {
+      "type": "Type",
+      "template": "Template",
+      "width": "Width",
+      "stepCount": "Step count",
+      "flight1Steps": "Flight 1 steps",
+      "flight2Steps": "Flight 2 steps",
+      "riserHeight": "Riser height",
+      "treadDepth": "Tread depth",
+      "totalRise": "Total rise",
+      "totalRun": "Total run",
+      "startElevation": "Start elevation",
+      "endElevation": "End elevation"
     }
   }
 }

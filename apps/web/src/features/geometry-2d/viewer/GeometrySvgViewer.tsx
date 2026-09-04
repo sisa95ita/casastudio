@@ -9,7 +9,10 @@ import {
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 
 import { useCasaTranslation } from "../../../core/i18n";
-import type { ArchitecturalPresentationModel2D } from "../presentation/architectural-presentation-model-2d";
+import {
+  createStaircasePresentation2D,
+  type ArchitecturalPresentationModel2D
+} from "../presentation/architectural-presentation-model-2d";
 import type {
   ArchitecturalDimensionPresentationModel2D,
   LinearDimensionPresentation2D
@@ -27,6 +30,9 @@ import {
   selectVertex,
   selectWall,
   selectWindow,
+  selectStaircase,
+  selectStairFlight,
+  selectStairLanding,
   type GeometryHoverState,
   type GeometrySelection,
   type GeometrySelectionState,
@@ -44,6 +50,7 @@ import {
 } from "../viewport/viewport-transform-2d";
 import type { WallEndpoint } from "@casastudio/schema";
 import type { Opening, Wall } from "@casastudio/schema";
+import type { Staircase } from "@casastudio/schema";
 import {
   createDoorPlanGeometry,
   createWallOpeningPlanGeometry,
@@ -167,6 +174,9 @@ export type GeometrySvgViewerProps = {
   readonly onOpeningPointerUp?: (pointerId: number, dragged: boolean) => void;
   readonly onOpeningPointerCancel?: (pointerId: number) => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
+  readonly onStairAdjustmentPointerDown?: (staircaseId: string, pointerId: number) => void;
+  readonly onStairAdjustmentPointerUp?: (point: WorldPointXZ, pointerId: number) => void;
+  readonly onStairAdjustmentPointerCancel?: (pointerId: number) => void;
 };
 
 /** Pointer normalized into both SVG viewBox and canonical world coordinates. */
@@ -216,6 +226,17 @@ export type GeometryEditorOverlay = {
     readonly labelAnchor: WorldPointXZ;
     readonly label: string;
     readonly kind: "RECTANGLE" | "L_SHAPE";
+  };
+  /** Complete canonical Staircase proposal rendered without entering history. */
+  readonly stairPreview?: {
+    readonly staircase: Staircase;
+    readonly valid: boolean;
+    readonly locked: boolean;
+  };
+  /** Direct-manipulation handle for the selected root Staircase. */
+  readonly selectedStair?: {
+    readonly staircaseId: string;
+    readonly adjustmentPoint: WorldPointXZ;
   };
   readonly selectedWall?: {
     readonly wallId: string;
@@ -285,7 +306,10 @@ export function GeometrySvgViewer({
   onOpeningDragThresholdCrossed,
   onOpeningPointerUp,
   onOpeningPointerCancel,
-  onRoomFaceCandidateClick
+  onRoomFaceCandidateClick,
+  onStairAdjustmentPointerDown,
+  onStairAdjustmentPointerUp,
+  onStairAdjustmentPointerCancel
 }: GeometrySvgViewerProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const bounds = presentationModel.bounds;
@@ -298,6 +322,7 @@ export function GeometrySvgViewer({
   const suppressNextBackgroundClickRef = useRef(false);
   const endpointPointerIdRef = useRef<number | undefined>(undefined);
   const openingPointerInteractionRef = useRef<OpeningPointerInteraction | undefined>(undefined);
+  const stairAdjustmentPointerIdRef = useRef<number | undefined>(undefined);
 
   currentViewportRef.current = viewport;
   viewportTransformRef.current = createViewportTransform2D(viewport);
@@ -309,8 +334,8 @@ export function GeometrySvgViewer({
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
   const rendersSvgViewport = Boolean(
-    bounds || interaction.drawWallEnabled || interaction.measurementEnabled ||
-      interaction.roomShapePlacementEnabled
+    bounds || architecturalModel?.staircases.length || interaction.drawWallEnabled || interaction.measurementEnabled ||
+      interaction.roomShapePlacementEnabled || interaction.stairPlacementEnabled
   );
 
   useEffect(() => {
@@ -466,6 +491,12 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    if (stairAdjustmentPointerIdRef.current === event.pointerId) {
+      onStairAdjustmentPointerUp?.(getEventPointer(event).worldPoint, event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      stairAdjustmentPointerIdRef.current = undefined;
+      return;
+    }
     const openingInteraction = openingPointerInteractionRef.current;
     if (openingInteraction?.pointerId === event.pointerId) {
       openingInteraction.completed = true;
@@ -495,6 +526,11 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerCancel = (event: PointerEvent<SVGSVGElement>) => {
+    if (stairAdjustmentPointerIdRef.current === event.pointerId) {
+      onStairAdjustmentPointerCancel?.(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      stairAdjustmentPointerIdRef.current = undefined;
+    }
     if (openingPointerInteractionRef.current?.pointerId === event.pointerId) {
       onOpeningPointerCancel?.(event.pointerId);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -532,7 +568,8 @@ export function GeometrySvgViewer({
       interaction.drawWallEnabled ||
       interaction.openingPlacement ||
       interaction.measurementEnabled ||
-      interaction.roomShapePlacementEnabled
+      interaction.roomShapePlacementEnabled ||
+      interaction.stairPlacementEnabled
     ) {
       onEditorCanvasClick?.(getEventPointer(event));
     }
@@ -846,6 +883,63 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
+      {architecturalModel ? (
+        <g data-layer="architectural-stairs">
+          {architecturalModel.staircases.map((staircase) => (
+            <g
+              key={staircase.geometryId}
+              data-testid="architectural-staircase"
+              data-geometry-kind="STAIRCASE"
+              data-geometry-id={staircase.geometryId}
+              className={getEntityClassName("architectural-staircase", staircase)}
+            >
+              {staircase.flights.map((flight) => (
+                <g key={flight.geometryId} className={getEntityClassName("architectural-stair-flight", flight)}>
+                  <polygon
+                    className="architectural-stair-flight__body"
+                    points={flight.bodySvgPoints}
+                    onClick={(event) => handleEntityClick(event, selectStaircase(staircase.geometryId))}
+                    onMouseEnter={() => handleHoverChange(selectStaircase(staircase.geometryId))}
+                    onMouseLeave={() => handleHoverChange(undefined)}
+                  />
+                  <line
+                    className="architectural-stair-flight__hit-target"
+                    data-testid="architectural-stair-flight"
+                    data-geometry-kind="STAIR_FLIGHT"
+                    data-geometry-id={flight.geometryId}
+                    {...lineAttributes(flight.start, flight.end)}
+                    onClick={(event) => handleEntityClick(event, selectStairFlight(flight.geometryId))}
+                    onMouseEnter={() => handleHoverChange(selectStairFlight(flight.geometryId))}
+                    onMouseLeave={() => handleHoverChange(undefined)}
+                  />
+                  {flight.treadLines.map((line, index) => (
+                    <line key={index} className="architectural-stair-tread" {...lineAttributes(line.start, line.end)} />
+                  ))}
+                  <path
+                    className="architectural-stair-direction"
+                    d={flight.directionArrow}
+                  />
+                  <line className="architectural-stair-direction" {...lineAttributes(flight.directionLine.start, flight.directionLine.end)} />
+                </g>
+              ))}
+              {staircase.landings.map((landing) => (
+                <polygon
+                  key={landing.geometryId}
+                  data-testid="architectural-stair-landing"
+                  data-geometry-kind="STAIR_LANDING"
+                  data-geometry-id={landing.geometryId}
+                  className={getEntityClassName("architectural-stair-landing", landing)}
+                  points={landing.bodySvgPoints}
+                  onClick={(event) => handleEntityClick(event, selectStairLanding(landing.geometryId))}
+                  onMouseEnter={() => handleHoverChange(selectStairLanding(landing.geometryId))}
+                  onMouseLeave={() => handleHoverChange(undefined)}
+                />
+              ))}
+            </g>
+          ))}
+        </g>
+      ) : null}
+
       {options.boundaryEdges ? (
         <g data-layer="boundary-edges">
           {presentationModel.boundaryEdges.map((edge) => {
@@ -1093,6 +1187,13 @@ export function GeometrySvgViewer({
           }
           onRoomFaceCandidateClick?.(faceKey);
         }}
+        onStairAdjustmentPointerDown={(event, staircaseId) => {
+          event.preventDefault();
+          event.stopPropagation();
+          stairAdjustmentPointerIdRef.current = event.pointerId;
+          event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);
+          onStairAdjustmentPointerDown?.(staircaseId, event.pointerId);
+        }}
       />
       {dimensionModel?.temporary ? (
         <ArchitecturalDimensionLayer model={dimensionModel} includeTemporary />
@@ -1187,7 +1288,8 @@ function GeometryEditorOverlayLayer({
   onEndpointPointerDown,
   onJunctionPointerDown,
   onWallVertexPreviewClick,
-  onRoomFaceCandidateClick
+  onRoomFaceCandidateClick,
+  onStairAdjustmentPointerDown
 }: {
   readonly overlay?: GeometryEditorOverlay;
   readonly transform: ReturnType<typeof createViewportTransform2D>;
@@ -1199,6 +1301,7 @@ function GeometryEditorOverlayLayer({
   readonly onJunctionPointerDown: (event: PointerEvent<SVGCircleElement>) => void;
   readonly onWallVertexPreviewClick: () => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
+  readonly onStairAdjustmentPointerDown: (event: PointerEvent<SVGCircleElement>, staircaseId: string) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const drawStart = overlay?.drawWall
@@ -1238,9 +1341,44 @@ function GeometryEditorOverlayLayer({
         labelAnchor: transform.worldToScreen(overlay.roomShapePreview.labelAnchor)
       }
     : undefined;
+  const stairPreview = overlay?.stairPreview;
+  const stairPreviewPresentation = stairPreview
+    ? createStaircasePresentation2D(stairPreview.staircase, transform)
+    : undefined;
 
   return (
     <g data-layer="editor-overlay">
+      {stairPreview ? (
+        <g
+          data-layer="stair-preview"
+          data-testid="stair-preview"
+          data-valid={stairPreview.valid ? "true" : "false"}
+          data-locked={stairPreview.locked ? "true" : "false"}
+          className={`geometry-stair-preview${stairPreview.valid ? "" : " geometry-stair-preview--invalid"}`}
+          aria-hidden="true"
+        >
+          {stairPreviewPresentation?.flights.map((flight) => (
+            <g key={flight.geometryId}>
+              <polygon
+                className="geometry-stair-preview__body"
+                points={flight.bodySvgPoints}
+              />
+              {flight.treadLines.map((line, index) => (
+                <line
+                  key={index}
+                  className="geometry-stair-preview__tread"
+                  {...lineAttributes(line.start, line.end)}
+                />
+              ))}
+              <line className="geometry-stair-preview__direction" {...lineAttributes(flight.directionLine.start, flight.directionLine.end)} />
+              <path className="geometry-stair-preview__direction" d={flight.directionArrow} />
+            </g>
+          ))}
+          {stairPreviewPresentation?.landings.map((landing) => (
+            <polygon key={landing.geometryId} className="geometry-stair-preview__landing" points={landing.bodySvgPoints} />
+          ))}
+        </g>
+      ) : null}
       {roomShapePreview ? (
         <g
           data-layer="room-shape-preview"
@@ -1272,6 +1410,21 @@ function GeometryEditorOverlayLayer({
           </text>
         </g>
       ) : null}
+      {overlay?.selectedStair ? (() => {
+        const point = transform.worldToScreen(overlay.selectedStair.adjustmentPoint);
+        return (
+          <g data-testid="selected-stair-overlay" data-staircase-id={overlay.selectedStair.staircaseId}>
+            <circle
+              className="geometry-stair-adjustment-handle__hit-target"
+              cx={formatSvgNumber(point.x)}
+              cy={formatSvgNumber(point.y)}
+              r="13"
+              onPointerDown={(event) => onStairAdjustmentPointerDown(event, overlay.selectedStair!.staircaseId)}
+            />
+            <circle className="geometry-stair-adjustment-handle" cx={formatSvgNumber(point.x)} cy={formatSvgNumber(point.y)} r="6" />
+          </g>
+        );
+      })() : null}
       {overlay?.roomFaceCandidates?.length ? (
         <g data-layer="room-face-candidates">
           {overlay.roomFaceCandidates.map((face) => (

@@ -1,4 +1,5 @@
 import type { Opening, Room, Wall } from "@casastudio/schema";
+import type { Staircase } from "@casastudio/schema";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 
 import type { AppDispatch } from "../../../app/store/store";
@@ -28,15 +29,20 @@ type UseEditorKeyboardShortcutsOptions = {
   readonly workspaceMode: ProjectWorkspaceMode;
   readonly selectedEditOpening?: { readonly wall: Wall; readonly opening: Opening };
   readonly selectedRoom?: Room;
+  readonly selectedStair?: { readonly staircase: Staircase };
   readonly selectedEditWall?: Wall;
   readonly transient: ProjectEditorTransientState;
   readonly setRoomMenuAnchor: Dispatch<SetStateAction<HTMLElement | null>>;
+  readonly setStairMenuAnchor: Dispatch<SetStateAction<HTMLElement | null>>;
   readonly setRoomDetectionActive: Dispatch<SetStateAction<boolean>>;
   readonly handleDeleteSelectedOpening: () => void;
   readonly handleDeleteSelectedRoom: () => void;
+  readonly handleDeleteSelectedStair: () => void;
   readonly handleDeleteSelectedWall: () => void;
   readonly handleFitViewport: () => void;
   readonly handleResetViewport: () => void;
+  readonly handleConfirmStairAuthoring: () => void;
+  readonly handleCancelStairAuthoring: () => void;
 };
 
 /** Registers the Project editor keyboard interaction contract. */
@@ -49,15 +55,20 @@ export function useEditorKeyboardShortcuts({
   workspaceMode,
   selectedEditOpening,
   selectedRoom,
+  selectedStair,
   selectedEditWall,
   transient,
   setRoomMenuAnchor,
+  setStairMenuAnchor,
   setRoomDetectionActive,
   handleDeleteSelectedOpening,
   handleDeleteSelectedRoom,
+  handleDeleteSelectedStair,
   handleDeleteSelectedWall,
   handleFitViewport,
-  handleResetViewport
+  handleResetViewport,
+  handleConfirmStairAuthoring,
+  handleCancelStairAuthoring
 }: UseEditorKeyboardShortcutsOptions) {
   useEffect(() => {
     if (!selectedLevel) {
@@ -88,12 +99,24 @@ export function useEditorKeyboardShortcuts({
         }
       }
       if (workspaceMode === "edit" && !modifier && !isTextInput) {
+        if (event.key === "Enter" && transient.interaction?.kind === "place-stair" && transient.interaction.locked) {
+          event.preventDefault();
+          handleConfirmStairAuthoring();
+          return;
+        }
+        if (event.key === "Escape" && transient.interaction?.kind === "place-stair") {
+          event.preventDefault();
+          handleCancelStairAuthoring();
+          return;
+        }
         const tool = event.key.toLowerCase() === "d"
           ? "door"
           : event.key.toLowerCase() === "n"
             ? "window"
             : event.key.toLowerCase() === "m"
               ? "measure"
+            : event.key.toLowerCase() === "s"
+              ? "stair"
             : event.key.toLowerCase() === "w"
               ? "draw-wall"
               : event.key.toLowerCase() === "v"
@@ -107,6 +130,15 @@ export function useEditorKeyboardShortcuts({
       }
       const action = getGeometryViewerShortcutAction(event);
       if (!action) return;
+      if (
+        action === "DELETE_SELECTION" &&
+        workspaceMode === "edit" &&
+        selectedStair
+      ) {
+        event.preventDefault();
+        handleDeleteSelectedStair();
+        return;
+      }
       if (
         action === "DELETE_SELECTION" &&
         workspaceMode === "edit" &&
@@ -144,7 +176,11 @@ export function useEditorKeyboardShortcuts({
         ) {
           dispatch(editorTransientInteractionCleared());
           setRoomMenuAnchor(null);
+          setStairMenuAnchor(null);
           setRoomDetectionActive(false);
+          if (transient.interaction?.kind === "place-stair") {
+            dispatch(editorActiveToolChanged(null));
+          }
         } else {
           dispatch(
             workspaceMode === "edit"
@@ -167,13 +203,18 @@ export function useEditorKeyboardShortcuts({
     handleDeleteSelectedWall,
     handleDeleteSelectedOpening,
     handleDeleteSelectedRoom,
+    handleDeleteSelectedStair,
     handleResetViewport,
+    handleConfirmStairAuthoring,
+    handleCancelStairAuthoring,
     transient.interaction,
     transient.snapCandidate,
+    setStairMenuAnchor,
     selectedLevel,
     selectedEditWall,
     selectedEditOpening,
     selectedRoom,
+    selectedStair,
     saveInteractionBlocked,
     shortcutsOpen,
     workspaceMode,

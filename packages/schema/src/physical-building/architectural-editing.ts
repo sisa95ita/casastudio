@@ -111,8 +111,8 @@ export type DissolveRoomInput = {
   readonly roomId: Identifier;
 };
 
-/** Canonical Room metadata supported by semantic property editing. */
-export type UpdateRoomProperties = Pick<Room, "name" | "type">;
+/** Canonical Room properties supported by semantic property editing. */
+export type UpdateRoomProperties = Pick<Room, "name" | "type" | "elevation">;
 
 /** Input for replacing the editable metadata of one exact Room. */
 export type UpdateRoomPropertiesInput = {
@@ -120,6 +120,7 @@ export type UpdateRoomPropertiesInput = {
   readonly roomId: Identifier;
   readonly name?: Room["name"];
   readonly type?: Room["type"];
+  readonly elevation?: Room["elevation"];
 };
 
 /** Input for moving every Wall endpoint incident to one exact canonical point. */
@@ -611,7 +612,8 @@ export function updateRoomProperties(
   const parsedRoom = RoomSchema.safeParse({
     ...currentRoom,
     name: input.name ?? currentRoom.name,
-    type: input.type ?? currentRoom.type
+    type: input.type ?? currentRoom.type,
+    elevation: input.elevation ?? currentRoom.elevation
   });
   if (!parsedRoom.success) {
     return failure({
@@ -625,7 +627,12 @@ export function updateRoomProperties(
     ...current,
     rooms: current.rooms.map((room, index) =>
       index === roomIndex
-        ? { ...room, name: parsedRoom.data.name, type: parsedRoom.data.type }
+        ? {
+            ...room,
+            name: parsedRoom.data.name,
+            type: parsedRoom.data.type,
+            ...(parsedRoom.data.elevation === undefined ? {} : { elevation: parsedRoom.data.elevation })
+          }
         : room
     )
   }));

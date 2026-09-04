@@ -25,6 +25,9 @@ import {
   editorMeasurementPointerMoved,
   editorRedoRequested,
   editorSelectionChanged,
+  editorStairAuthoringChanged,
+  editorStairPlacementPointSet,
+  editorStairPlacementPointerMoved,
   editorTransientInteractionCleared,
   editorTransientPointerMoved,
   editorUndoRequested,
@@ -101,6 +104,52 @@ describe("Project editor state", () => {
       projectEditorReducer(editingState, editorActiveToolChanged(null))
         .activeTool
     ).toBeNull();
+  });
+
+  it("keeps connection-first Stair authoring and two-click placement transient", () => {
+    let state = projectEditorReducer(undefined, editingSessionEntered({
+      project: demoProjectFixture,
+      baseRevision: demoProjectFixture.revision
+    }));
+    state = projectEditorReducer(state, editorActiveToolChanged("stair"));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "place-stair",
+      owningLevelId: state.activeLevelId,
+      locked: false
+    });
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorStairAuthoringChanged({
+      toLevelId: state.activeLevelId!,
+      toRoomId: "elevated-room",
+      template: "L_SHAPED",
+      parameters: {
+        kind: "TWO_FLIGHT",
+        width: 90,
+        firstFlightStepCount: 4,
+        secondFlightStepCount: 13,
+        treadDepth: 28
+      },
+      identifiers: {
+        staircaseId: "staircase-test",
+        flightIds: ["flight-one", "flight-two"],
+        landingIds: ["landing-one"]
+      }
+    }));
+    state = projectEditorReducer(state, editorStairPlacementPointSet({ x: 0, z: 0 }));
+    state = projectEditorReducer(state, editorStairPlacementPointerMoved({ x: 300, z: 0 }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "place-stair",
+      start: { x: 0, z: 0 },
+      control: { x: 300, z: 0 },
+      locked: false
+    });
+    state = projectEditorReducer(state, editorStairPlacementPointSet({ x: 320, z: 0 }));
+    expect(state.transient.interaction).toMatchObject({ control: { x: 320, z: 0 }, locked: true });
+    expect(state.transient.interaction).toMatchObject({
+      parameters: { firstFlightStepCount: 4, secondFlightStepCount: 13 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
   });
 
   it("clears stale interaction state when a session is reinitialized", () => {

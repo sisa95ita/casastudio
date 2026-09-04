@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Level } from "@casastudio/schema";
 
-import { createGeometrySelectionState, selectDoor, selectWallOpening } from "../selection/geometry-selection-state";
+import { createGeometrySelectionState, selectDoor, selectStairFlight, selectStairLanding, selectWallOpening } from "../selection/geometry-selection-state";
 import { createArchitecturalPresentationModel2D } from "./architectural-presentation-model-2d";
 import { ViewportTransform2D } from "../viewport/viewport-transform-2d";
 
@@ -45,6 +45,41 @@ describe("architectural presentation model", () => {
     ]);
     expect(model.openings[0]).not.toHaveProperty("glazingLines");
     expect(model.openings[0]).not.toHaveProperty("arcPath");
+  });
+
+  it("presents committed Staircases with independently selectable owned parts", () => {
+    const stairLevel: Level = structuredClone(level);
+    stairLevel.staircases.push({
+      id: "stair",
+      fromLevelId: "level",
+      toLevelId: "level",
+      width: 90,
+      flights: [
+        { id: "flight-one", start: { x: 0, z: 100 }, end: { x: 300, z: 100 }, width: 90, stepCount: 8, startElevation: 0, endElevation: 90 },
+        { id: "flight-two", start: { x: 300, z: 100 }, end: { x: 300, z: 340 }, width: 90, stepCount: 8, startElevation: 90, endElevation: 180 }
+      ],
+      landings: [{ id: "landing", position: { x: 300, z: 100 }, width: 90, depth: 90, elevation: 90 }]
+    });
+    const model = createArchitecturalPresentationModel2D(
+      stairLevel,
+      new ViewportTransform2D({ scale: 1, offsetX: 0, offsetY: 500 }),
+      createGeometrySelectionState([selectStairFlight("flight-one"), selectStairLanding("landing")])
+    );
+
+    expect(model.staircases).toHaveLength(1);
+    expect(model.staircases[0]?.flights[0]).toMatchObject({ geometryId: "flight-one", selected: true });
+    expect(model.staircases[0]?.flights[0]?.treadLines).toHaveLength(8);
+    expect(model.staircases[0]?.flights[1]?.directionLine.end.y).toBeLessThan(model.staircases[0]!.flights[1]!.directionLine.start.y);
+    expect(model.staircases[0]?.flights[1]?.directionArrow).toContain("L");
+    expect(model.staircases[0]?.landings[0]).toMatchObject({ geometryId: "landing", selected: true });
+    expect(model.staircases[0]?.landings[0]?.bodySvgPoints.split(" ")).toHaveLength(4);
+
+    const unselected = createArchitecturalPresentationModel2D(
+      stairLevel,
+      new ViewportTransform2D({ scale: 1, offsetX: 0, offsetY: 500 }),
+      createGeometrySelectionState()
+    );
+    expect(unselected.staircases[0]?.flights[0]?.bodySvgPoints).toBe(model.staircases[0]?.flights[0]?.bodySvgPoints);
   });
 });
 

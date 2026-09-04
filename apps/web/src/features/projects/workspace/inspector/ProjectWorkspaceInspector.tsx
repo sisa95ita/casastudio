@@ -1,14 +1,18 @@
 import { measureLevel, type RoomMeasurement } from "@casastudio/geometry";
 import type {
   Opening,
+  Level,
   Project,
   Room,
+  StairFlight,
+  StairLanding,
+  Staircase,
   UpdateOpeningProperties,
   UpdateRoomProperties,
   Wall
 } from "@casastudio/schema";
 import { Box, Tab, Tabs, Typography } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useCasaTranslation } from "../../../../core/i18n";
 import { ProjectLayerControls } from "../../../editor-2d/components/ProjectLayerControls";
@@ -18,6 +22,7 @@ import type {
   ProjectWorkspaceMode
 } from "../../../editor-2d/state/project-editor-slice";
 import type { WallEndpointEditingAvailability } from "../../../editor-2d/tools/wall/project-wall-editing";
+import type { StairAuthoringParameters, StairParameterChanges, StairProposal, StairTemplate } from "../../../editor-2d/tools/stair/project-stair-authoring";
 import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentation/geometry-presentation-model-2d";
 import type { GeometrySelectionState } from "../../../geometry-2d/selection/geometry-selection-state";
 import type { GeometryDisplayOptions } from "../../../geometry-2d/viewer/GeometrySvgViewer";
@@ -25,6 +30,7 @@ import {
   ProjectPropertiesDetails,
   ProjectSelectionDetails
 } from "./ProjectSelectionDetails";
+import { ProjectStairAuthoringDetails } from "./ProjectStairSelectionDetails";
 
 type ProjectWorkspaceInspectorProps = {
   readonly model: GeometryPresentationModel2D;
@@ -35,6 +41,18 @@ type ProjectWorkspaceInspectorProps = {
   readonly selectedWall?: Wall;
   readonly selectedOpening?: { readonly wall: Wall; readonly opening: Opening };
   readonly selectedRoom?: Room;
+  readonly selectedRoomLevelElevation?: number;
+  readonly selectedStair?: { readonly staircase: Staircase; readonly part?: StairFlight | StairLanding };
+  readonly stairAuthoring?: {
+    readonly levels: readonly Level[];
+    readonly owningLevelId: string;
+    readonly targetLevelId: string;
+    readonly targetRoomId?: string;
+    readonly template: StairTemplate;
+    readonly parameters: StairAuthoringParameters;
+    readonly proposal?: StairProposal;
+    readonly locked: boolean;
+  };
   readonly selectedRoomMeasurement?: RoomMeasurement;
   readonly levelMeasurement?: ReturnType<typeof measureLevel>;
   /** Transient Wall-local Opening offset used only for Inspector display. */
@@ -59,6 +77,12 @@ type ProjectWorkspaceInspectorProps = {
   ) => void;
   readonly onDeleteRoom: () => void;
   readonly onUpdateRoomProperties: (properties: Partial<UpdateRoomProperties>) => boolean;
+  readonly onDeleteStair: () => void;
+  readonly onUpdateStair: (properties: StairParameterChanges) => boolean;
+  readonly onStairAuthoringTemplateChange: (template: StairTemplate) => void;
+  readonly onStairAuthoringParametersChange: (parameters: StairAuthoringParameters) => void;
+  readonly onConfirmStairAuthoring: () => void;
+  readonly onCancelStairAuthoring: () => void;
 };
 
 /** Provides the durable Layers, Selection, and Properties inspector foundation. */
@@ -71,6 +95,9 @@ export function ProjectWorkspaceInspector({
   selectedWall,
   selectedOpening,
   selectedRoom,
+  selectedRoomLevelElevation,
+  selectedStair,
+  stairAuthoring,
   selectedRoomMeasurement,
   levelMeasurement,
   selectedOpeningDisplayOffset,
@@ -86,12 +113,21 @@ export function ProjectWorkspaceInspector({
   onUpdateOpening,
   onUpdateOpeningAuthoring,
   onDeleteRoom,
-  onUpdateRoomProperties
+  onUpdateRoomProperties,
+  onDeleteStair,
+  onUpdateStair,
+  onStairAuthoringTemplateChange,
+  onStairAuthoringParametersChange,
+  onConfirmStairAuthoring,
+  onCancelStairAuthoring
 }: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
   const [tab, setTab] = useState<"layers" | "selection" | "properties">(
     "layers"
   );
+  useEffect(() => {
+    if (stairAuthoring) setTab("properties");
+  }, [stairAuthoring]);
 
   return (
     <Box className="project-inspector">
@@ -123,6 +159,7 @@ export function ProjectWorkspaceInspector({
               openingWall={selectedOpening?.wall}
               openingDisplayOffsetFromStart={selectedOpeningDisplayOffset}
               room={selectedRoom}
+              stair={selectedStair}
               roomMeasurement={selectedRoomMeasurement}
               units={units}
               endpointAvailability={endpointAvailability}
@@ -133,11 +170,21 @@ export function ProjectWorkspaceInspector({
               onDeleteOpening={onDeleteOpening}
               onUpdateOpening={onUpdateOpening}
               onDeleteRoom={onDeleteRoom}
+              onDeleteStair={onDeleteStair}
               editable={mode === "edit"}
             />
           ) : null
         ) : (
-          units && mode === "edit" ? (
+          units && mode === "edit" && stairAuthoring ? (
+            <ProjectStairAuthoringDetails
+              {...stairAuthoring}
+              units={units}
+              onTemplateChange={onStairAuthoringTemplateChange}
+              onParametersChange={onStairAuthoringParametersChange}
+              onConfirm={onConfirmStairAuthoring}
+              onCancel={onCancelStairAuthoring}
+            />
+          ) : units && mode === "edit" ? (
             <ProjectPropertiesDetails
               selectionState={selectionState}
               wall={selectedWall}
@@ -145,12 +192,15 @@ export function ProjectWorkspaceInspector({
               openingWall={selectedOpening?.wall}
               openingDisplayOffsetFromStart={selectedOpeningDisplayOffset}
               room={selectedRoom}
+              roomLevelElevation={selectedRoomLevelElevation}
+              stair={selectedStair}
               units={units}
               onUpdateWallProperties={onUpdateWallProperties}
               onUpdateOpening={onUpdateOpening}
               openingAuthoring={openingAuthoring}
               onUpdateOpeningAuthoring={onUpdateOpeningAuthoring}
               onUpdateRoomProperties={onUpdateRoomProperties}
+              onUpdateStair={onUpdateStair}
             />
           ) : (
             <Typography variant="caption" color="text.secondary">

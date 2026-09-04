@@ -88,6 +88,9 @@ export type GeometryViewerPanelProps = {
   readonly onOpeningPointerUp?: (pointerId: number, dragged: boolean) => void;
   readonly onOpeningPointerCancel?: (pointerId: number) => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
+  readonly onStairAdjustmentPointerDown?: (staircaseId: string, pointerId: number) => void;
+  readonly onStairAdjustmentPointerUp?: (point: WorldPointXZ, pointerId: number) => void;
+  readonly onStairAdjustmentPointerCancel?: (pointerId: number) => void;
 };
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
@@ -123,7 +126,10 @@ export function GeometryViewerPanel({
   onOpeningDragThresholdCrossed,
   onOpeningPointerUp,
   onOpeningPointerCancel,
-  onRoomFaceCandidateClick
+  onRoomFaceCandidateClick,
+  onStairAdjustmentPointerDown,
+  onStairAdjustmentPointerUp,
+  onStairAdjustmentPointerCancel
 }: GeometryViewerPanelProps) {
   const { t } = useCasaTranslation("geometry-playground");
 
@@ -198,6 +204,9 @@ export function GeometryViewerPanel({
           onOpeningPointerUp={onOpeningPointerUp}
           onOpeningPointerCancel={onOpeningPointerCancel}
           onRoomFaceCandidateClick={onRoomFaceCandidateClick}
+          onStairAdjustmentPointerDown={onStairAdjustmentPointerDown}
+          onStairAdjustmentPointerUp={onStairAdjustmentPointerUp}
+          onStairAdjustmentPointerCancel={onStairAdjustmentPointerCancel}
         />
         <Box className="geometry-canvas-hint">
           <Typography variant="caption">{t("viewer.canvasHint")}</Typography>

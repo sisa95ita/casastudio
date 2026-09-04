@@ -131,6 +131,7 @@ const architecturalPresentationModel: ArchitecturalPresentationModel2D = {
     selected: false,
     hovered: false
   }],
+  staircases: [],
   joins: []
 };
 

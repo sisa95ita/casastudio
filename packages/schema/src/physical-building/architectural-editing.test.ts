@@ -808,6 +808,21 @@ describe("Room deletion", () => {
 });
 
 describe("Room metadata editing", () => {
+  it("updates finite local elevation without changing Room topology", () => {
+    const project = createPartitionProject();
+    const boundary = structuredClone(project.building.levels[0]!.rooms[0]!.boundary);
+    const result = updateRoomProperties(project, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      elevation: -25.5
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.building.levels[0]!.rooms[0]?.elevation).toBe(-25.5);
+    expect(result.project.building.levels[0]!.rooms[0]?.boundary).toEqual(boundary);
+  });
+
   it("updates canonical name and type without changing boundary or Wall reciprocity", () => {
     const project = createPartitionProject();
     const before = structuredClone(project);

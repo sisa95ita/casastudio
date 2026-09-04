@@ -8,7 +8,10 @@ export type GeometrySelectionKind =
   | "WALL"
   | "DOOR"
   | "WINDOW"
-  | "OPENING";
+  | "OPENING"
+  | "STAIRCASE"
+  | "STAIR_FLIGHT"
+  | "STAIR_LANDING";
 
 /**
  * UI-only selection reference for immutable presented geometry.
@@ -83,6 +86,24 @@ export const selectWindow = (geometryId: string): GeometrySelection => ({
 /** Creates a generic Wall Opening selection reference. */
 export const selectWallOpening = (geometryId: string): GeometrySelection => ({
   kind: "OPENING",
+  geometryId
+});
+
+/** Creates a root Staircase selection reference. */
+export const selectStaircase = (geometryId: string): GeometrySelection => ({
+  kind: "STAIRCASE",
+  geometryId
+});
+
+/** Creates an owned StairFlight selection reference. */
+export const selectStairFlight = (geometryId: string): GeometrySelection => ({
+  kind: "STAIR_FLIGHT",
+  geometryId
+});
+
+/** Creates an owned StairLanding selection reference. */
+export const selectStairLanding = (geometryId: string): GeometrySelection => ({
+  kind: "STAIR_LANDING",
   geometryId
 });
 

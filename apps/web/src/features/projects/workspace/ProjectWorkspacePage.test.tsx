@@ -720,7 +720,7 @@ describe("ProjectViewerPage", () => {
 
     const toolbar = await screen.findByRole("toolbar", { name: "Editing tools" });
     expect(within(toolbar).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
-      .toEqual(["Select", "Wall", "Openings", "Room", "Measure", "Shortcuts"]);
+      .toEqual(["Select", "Wall", "Openings", "Room", "Stair", "Measure", "Shortcuts"]);
     fireEvent.click(within(toolbar).getByRole("button", { name: "Openings" }));
     expect(screen.getAllByRole("menuitem").map((item) => item.textContent))
       .toEqual(["Door", "Window", "Wall Opening"]);
@@ -1450,6 +1450,112 @@ describe("ProjectViewerPage", () => {
     );
     expect(rectangle.getAttribute("aria-describedby")).toBe(reason.id);
     expect(lShape.getAttribute("aria-describedby")).toBe(reason.id);
+  });
+
+  it("authors, selects, edits, deletes, undoes, and redoes a same-Level elevated-Room Staircase", async () => {
+    const project = structuredClone(demoProjectFixture);
+    const { store, svg } = await renderEditingProject(project);
+    const inspector = screen.getByRole("complementary", { name: "Test inspector" });
+    activateEditorTool("Select");
+    fireEvent.click(screen.getAllByTestId("geometry-polygon")[0]!);
+    await waitFor(() => expect(store.getState().projectEditor.selection[0]?.kind).toBe("POLYGON"));
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Properties" }));
+    const elevation = within(inspector).getByRole("spinbutton", { name: "Elevation above Level" });
+    fireEvent.change(elevation, { target: { value: "180" } });
+    fireEvent.blur(elevation);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]?.elevation).toBe(180);
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]?.elevation).toBeUndefined();
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]?.elevation).toBe(180);
+    const elevatedGeometry = GeometryEngine.build(store.getState().projectEditor.draft!);
+    expect(elevatedGeometry.ok).toBe(true);
+    if (!elevatedGeometry.ok) return;
+    expect(elevatedGeometry.model.levels[0]?.polygons.find((polygon) => polygon.sourceRoomId === "left-room")?.floorElevation).toBe(180);
+    activateEditorTool("Stair");
+
+    expect(store.getState().projectEditor.activeTool).toBe("stair");
+    expect(screen.getByText("Choose the destination, then a complete template before placing it in the plan.")).toBeTruthy();
+    expect(screen.queryByRole("spinbutton", { name: "Width" })).toBeNull();
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Target Level" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Ground Floor · same Level" }));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Target Room (optional)" }));
+    expect(await screen.findByRole("option", { name: "Left Room · +180 cm" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: "Left Room · +180 cm" }));
+    fireEvent.click(screen.getByRole("button", { name: "L-shaped" }));
+
+    expect(screen.queryByText("Choose the destination, then a complete template before placing it in the plan.")).toBeNull();
+    expect(within(inspector).getByTestId("stair-authoring-inspector")).toBeTruthy();
+    const firstSteps = within(inspector).getByRole("spinbutton", { name: "Flight 1 steps" });
+    const secondSteps = within(inspector).getByRole("spinbutton", { name: "Flight 2 steps" });
+    fireEvent.change(firstSteps, { target: { value: "4" } });
+    fireEvent.change(secondSteps, { target: { value: "13" } });
+    const confirm = within(inspector).getByRole("button", { name: "Create Staircase" });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(svg, { clientX: 120, clientY: 180 });
+    fireEvent.pointerMove(svg, { clientX: 180, clientY: 180, pointerId: 711 });
+    expect(screen.getByTestId("stair-preview").getAttribute("data-valid")).toBe("false");
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+    fireEvent.pointerMove(svg, { clientX: 620, clientY: 180, pointerId: 711 });
+    expect(screen.getByTestId("stair-preview").getAttribute("data-valid")).toBe("true");
+    fireEvent.click(svg, { clientX: 620, clientY: 180 });
+    expect(screen.getByTestId("stair-preview").getAttribute("data-locked")).toBe("true");
+    expect(confirm.hasAttribute("disabled")).toBe(false);
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.staircases).toHaveLength(1);
+    expect(level.staircases[0]).toMatchObject({
+      fromLevelId: "ground-floor",
+      toLevelId: "ground-floor",
+      toRoomId: "left-room"
+    });
+    expect(level.staircases[0]?.flights).toHaveLength(2);
+    expect(level.staircases[0]?.landings).toHaveLength(1);
+    expect(level.staircases[0]?.flights.map((flight) => flight.stepCount)).toEqual([4, 13]);
+    expect(level.staircases[0]?.flights[0]?.endElevation).toBe(level.staircases[0]?.landings[0]?.elevation);
+    expect(level.staircases[0]?.flights[1]?.startElevation).toBe(level.staircases[0]?.landings[0]?.elevation);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+    expect(screen.getByTestId("architectural-staircase")).toBeTruthy();
+
+    fireEvent.click(screen.getAllByTestId("architectural-stair-flight")[0]!);
+    expect(store.getState().projectEditor.selection[0]?.kind).toBe("STAIR_FLIGHT");
+    fireEvent.click(screen.getByTestId("architectural-stair-landing"));
+    expect(store.getState().projectEditor.selection[0]?.kind).toBe("STAIR_LANDING");
+    fireEvent.click(document.querySelector(".architectural-stair-flight__body")!);
+    expect(store.getState().projectEditor.selection[0]?.kind).toBe("STAIRCASE");
+    expect(screen.getByTestId("selected-stair-overlay")).toBeTruthy();
+
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Properties" }));
+    expect((within(inspector).getByRole("spinbutton", { name: "Flight 1 steps" }) as HTMLInputElement).value).toBe("4");
+    expect((within(inspector).getByRole("spinbutton", { name: "Flight 2 steps" }) as HTMLInputElement).value).toBe("13");
+    const width = within(inspector).getByRole("spinbutton", { name: "Width" });
+    fireEvent.change(width, { target: { value: "100" } });
+    fireEvent.blur(width);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.staircases[0]?.width).toBe(100);
+    expect(store.getState().projectEditor.history.past).toHaveLength(3);
+
+    const adjustmentHandle = screen.getByTestId("selected-stair-overlay")
+      .querySelector(".geometry-stair-adjustment-handle__hit-target")!;
+    fireEvent.pointerDown(adjustmentHandle, { clientX: 620, clientY: 180, pointerId: 712 });
+    fireEvent.pointerMove(svg, { clientX: 700, clientY: 220, pointerId: 712 });
+    expect(screen.getByTestId("stair-preview")).toBeTruthy();
+    fireEvent.pointerUp(svg, { clientX: 700, clientY: 220, pointerId: 712 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.staircases).toEqual([]);
+    expect(store.getState().projectEditor.history.past).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.staircases).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.staircases).toEqual([]);
+
+    activateEditorTool("Stair");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(store.getState().projectEditor.activeTool).toBeNull();
+    expect(store.getState().projectEditor.history.past).toHaveLength(5);
   });
 
   it("toggles Room authoring off and clears transient state on the second toolbar click", async () => {

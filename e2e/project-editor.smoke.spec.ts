@@ -504,6 +504,74 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
   expect(consoleErrors, "Unexpected browser console errors").toEqual([]);
 });
 
+test("persists an elevated Room and asymmetric L-shaped Staircase", async ({ page }) => {
+  const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;
+  if (!demoPassword) throw new Error("CASASTUDIO_KEYCLOAK_DEMO_PASSWORD is required.");
+
+  await page.goto("/app");
+  await page.locator("#username").fill("demo");
+  await page.locator("#password").fill(demoPassword);
+  await page.locator("#kc-login").click();
+  const projectName = `Elevated Room Stair ${Date.now()}`;
+  await page.getByRole("button", { name: "New Project" }).click();
+  await page.getByLabel("Project name").fill(projectName);
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Edit plan" }).click();
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+
+  await page.getByRole("button", { name: "Room" }).click();
+  await page.getByRole("menuitem", { name: "Rectangle" }).click();
+  const viewport = page.locator('svg[aria-labelledby="geometry-svg-title geometry-svg-description"]');
+  await expect(viewport).toBeVisible();
+  const bounds = await viewport.boundingBox();
+  if (!bounds) throw new Error("Expected the Stair authoring viewport.");
+  const roomPoint = { x: bounds.x + bounds.width * 0.22, y: bounds.y + bounds.height * 0.25 };
+  await page.mouse.move(roomPoint.x, roomPoint.y);
+  await page.mouse.click(roomPoint.x, roomPoint.y);
+  await expect(viewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(1);
+  await inspector.getByRole("tab", { name: "Properties" }).click();
+  await inspector.getByRole("spinbutton", { name: "Elevation above Level" }).fill("180");
+  await inspector.getByRole("spinbutton", { name: "Elevation above Level" }).press("Tab");
+
+  await page.getByRole("button", { name: "Stair" }).click();
+  await expect(page.getByRole("spinbutton", { name: "Width" })).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Target Level" }).click();
+  await page.getByRole("option", { name: /same Level/ }).click();
+  await page.getByRole("combobox", { name: "Target Room (optional)" }).click();
+  await page.getByRole("option", { name: /Room 1 · \+180 cm/ }).click();
+  await page.getByRole("button", { name: "L-shaped" }).click();
+  await expect(inspector.getByTestId("stair-authoring-inspector")).toBeVisible();
+  await expect(page.getByText("Choose the destination, then a complete template before placing it in the plan.")).toHaveCount(0);
+  await inspector.getByRole("spinbutton", { name: "Flight 1 steps" }).fill("4");
+  await inspector.getByRole("spinbutton", { name: "Flight 2 steps" }).fill("13");
+
+  const stairStart = { x: bounds.x + bounds.width * 0.52, y: bounds.y + bounds.height * 0.36 };
+  const stairEnd = { x: stairStart.x + Math.min(220, bounds.width * 0.28), y: stairStart.y };
+  await page.mouse.click(stairStart.x, stairStart.y);
+  await page.mouse.move(stairEnd.x, stairEnd.y);
+  await expect(viewport.locator('[data-testid="stair-preview"]')).toHaveAttribute("data-valid", "true");
+  await page.mouse.click(stairEnd.x, stairEnd.y);
+  await inspector.getByRole("button", { name: "Create Staircase" }).click();
+  await expect(viewport.locator('[data-testid="architectural-staircase"]')).toHaveCount(1);
+  await expect(inspector.getByRole("spinbutton", { name: "Flight 1 steps" })).toHaveValue("4");
+  await expect(inspector.getByRole("spinbutton", { name: "Flight 2 steps" })).toHaveValue("13");
+
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: projectName, level: 1 })).toBeVisible();
+  await expect(viewport.locator('[data-testid="architectural-staircase"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Edit plan" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await viewport.locator('[data-testid="geometry-polygon"]').click({ force: true });
+  await inspector.getByRole("tab", { name: "Properties" }).click();
+  await expect(inspector.getByRole("spinbutton", { name: "Elevation above Level" })).toHaveValue("180");
+  await viewport.locator('[data-testid="architectural-stair-flight"]').first().click({ force: true });
+  await inspector.getByRole("tab", { name: "Properties" }).click();
+  await expect(inspector.getByRole("spinbutton", { name: "Flight 1 steps" })).toHaveValue("4");
+  await expect(inspector.getByRole("spinbutton", { name: "Flight 2 steps" })).toHaveValue("13");
+});
+
 test("accepts precision Walls, vertices, pending Opening properties, and the wide Room menu", async ({ page }) => {
   test.setTimeout(120_000);
   const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;

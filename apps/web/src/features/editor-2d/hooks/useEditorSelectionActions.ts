@@ -47,7 +47,8 @@ import {
 export type EditingErrorKey =
   | WallEditingErrorKey
   | RoomEditingErrorKey
-  | "errors.opening.invalid";
+  | "errors.opening.invalid"
+  | "errors.stair.invalid";
 
 type UseEditorSelectionActionsOptions = {
   readonly dispatch: AppDispatch;
