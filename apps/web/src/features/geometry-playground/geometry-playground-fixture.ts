@@ -3,7 +3,7 @@ import { ProjectSchema, type Project } from "@casastudio/schema";
 const playgroundProject = {
   id: "geometry-playground-shared-wall",
   name: "Geometry Playground Shared Wall",
-  schemaVersion: "2.0.0",
+  schemaVersion: "3.0.0",
   revision: 1,
   createdAt: "2026-08-02T10:00:00+02:00",
   updatedAt: "2026-08-02T10:00:00+02:00",

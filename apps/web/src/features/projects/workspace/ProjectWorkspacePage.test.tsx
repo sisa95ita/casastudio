@@ -1693,6 +1693,89 @@ describe("ProjectViewerPage", () => {
       .toBe("BEDROOM");
   });
 
+  it("authors an elevated overlay as one free-boundary Room without changing the lower Room or Walls", async () => {
+    const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rectangle" }));
+    const svg = await screen.findByRole("img") as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 180, clientY: 180, pointerId: 430 });
+    fireEvent.click(svg, { clientX: 180, clientY: 180 });
+
+    const lowerLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    const lowerRoom = structuredClone(lowerLevel.rooms[0]!);
+    const lowerWalls = structuredClone(lowerLevel.walls);
+    const lowerGeometry = GeometryEngine.build(store.getState().projectEditor.draft!);
+    expect(lowerGeometry.ok).toBe(true);
+    if (!lowerGeometry.ok) return;
+    const lowerArea = lowerGeometry.model.levels[0]!.polygons[0]!.area;
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Elevated rectangle" }));
+    const elevation = screen.getByRole("spinbutton", { name: "Elevation above Level" });
+    fireEvent.change(elevation, { target: { value: "180" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "200" }
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Depth" }), {
+      target: { value: "150" }
+    });
+    fireEvent.pointerMove(svg, { clientX: 220, clientY: 200, pointerId: 431 });
+    const preview = screen.getByTestId("room-shape-preview");
+    expect(preview.getAttribute("data-elevated")).toBe("true");
+    expect(preview.getAttribute("data-elevation")).toBe("180");
+    expect(preview.textContent).toContain("+1.80 m");
+    fireEvent.click(svg, { clientX: 220, clientY: 200 });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.rooms).toHaveLength(2);
+    expect(level.rooms[0]).toEqual(lowerRoom);
+    expect(level.walls).toEqual(lowerWalls);
+    expect(level.rooms[1]).toMatchObject({ elevation: 180, type: "OTHER" });
+    expect(level.rooms[1]!.boundary).toHaveLength(4);
+    expect(level.rooms[1]!.boundary.every((edge) => "kind" in edge && edge.kind === "FREE"))
+      .toBe(true);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    const geometry = GeometryEngine.build(store.getState().projectEditor.draft!);
+    expect(geometry.ok).toBe(true);
+    if (!geometry.ok) return;
+    const polygons = geometry.model.levels[0]!.polygons;
+    expect(polygons.find((polygon) => polygon.sourceRoomId === lowerRoom.id)?.area).toBe(lowerArea);
+    expect(polygons.find((polygon) => polygon.sourceRoomId === level.rooms[1]!.id)).toMatchObject({
+      area: 30_000,
+      floorElevation: 180
+    });
+    const elevatedPolygon = document.querySelector(
+      `[data-testid="geometry-polygon"][data-source-room-id="${level.rooms[1]!.id}"]`
+    ) as SVGPolygonElement;
+    expect(elevatedPolygon.getAttribute("data-elevated")).toBe("true");
+    expect(elevatedPolygon.classList).toContain("geometry-polygon--elevated");
+    expect(screen.getByText("+1.80 m")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(elevatedPolygon);
+    expect(store.getState().projectEditor.selection).toEqual([{
+      kind: "POLYGON",
+      geometryId: `polygon:${level.rooms[1]!.id}`
+    }]);
+    const inspector = screen.getByRole("complementary", { name: "Test inspector" });
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Properties" }));
+    expect((within(inspector).getByRole("spinbutton", {
+      name: "Elevation above Level"
+    }) as HTMLInputElement).value).toBe("180");
+    expect((within(inspector).getByLabelText("Global floor elevation") as HTMLInputElement).value)
+      .toBe("180");
+    fireEvent.click(within(inspector).getByRole("tab", { name: "Selection" }));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Delete Room" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toEqual([lowerRoom]);
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.walls).toEqual(lowerWalls);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels[0]!.rooms).toEqual([lowerRoom]);
+  });
+
   it("previews and atomically commits an exact six-segment L-shaped Room", async () => {
     const { store } = renderConnectedRoute(createApiClient(emptyProjectFetch()));
     fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));

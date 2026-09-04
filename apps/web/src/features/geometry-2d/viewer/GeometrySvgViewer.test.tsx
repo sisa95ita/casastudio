@@ -209,7 +209,7 @@ describe("GeometrySvgViewer", () => {
         editorOverlay={{
           drawWall: { start: { x: 0, z: 0 }, end: { x: 25, z: 25 }, lengthLabel: "0.35 m" },
           selectedWall: {
-            wallId: edge.sourceWallId,
+            wallId: edge.sourceWallId!,
             start: edge.startVertex,
             end: { x: edge.endVertex.x + 10, z: edge.endVertex.z + 10 },
             endpointEditingAvailable: { start: true, end: true },
@@ -251,7 +251,7 @@ describe("GeometrySvgViewer", () => {
         }}
         editorOverlay={{
           selectedWall: {
-            wallId: edge.sourceWallId,
+            wallId: edge.sourceWallId!,
             start: edge.startVertex,
             end: edge.endVertex,
             endpointEditingAvailable: { start: true, end: true }

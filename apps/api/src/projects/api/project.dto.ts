@@ -49,21 +49,28 @@ export class ProjectUnitsDto {
   readonly angle!: "deg";
 }
 
-/**
- * Ordered and oriented wall reference in a Room boundary.
- */
+/** Ordered Wall-backed reference or directed free segment in a Room boundary. */
 export class RoomBoundaryEdgeDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
     description: "CasaStudio domain ID of the referenced Wall."
   })
-  readonly wallId!: string;
+  readonly wallId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: roomBoundaryDirectionValues,
     enumName: "RoomBoundaryDirection"
   })
-  readonly direction!: (typeof roomBoundaryDirectionValues)[number];
+  readonly direction?: (typeof roomBoundaryDirectionValues)[number];
+
+  @ApiPropertyOptional({ enum: ["FREE"], enumName: "FreeRoomBoundaryKind" })
+  readonly kind?: "FREE";
+
+  @ApiPropertyOptional({ type: () => Point2DDto })
+  readonly start?: Point2DDto;
+
+  @ApiPropertyOptional({ type: () => Point2DDto })
+  readonly end?: Point2DDto;
 }
 
 /**

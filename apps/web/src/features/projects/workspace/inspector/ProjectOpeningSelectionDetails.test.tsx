@@ -186,7 +186,7 @@ function createProject(): Project {
   return {
     id: "opening-inspector",
     name: "Opening inspector",
-    schemaVersion: "2.0.0",
+    schemaVersion: "3.0.0",
     revision: 1,
     createdAt: "2026-08-23T00:00:00.000Z",
     updatedAt: "2026-08-23T00:00:00.000Z",

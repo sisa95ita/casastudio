@@ -3,8 +3,10 @@ import {
   collapseWallJunction,
   createLevel,
   deleteOpening,
+  deleteRoom,
   deleteWallAndCollapseRedundantTopology,
   dissolveRoom,
+  isWallRoomBoundaryEdge,
   setWallLength,
   updateLevelProperties,
   updateOpening,
@@ -256,7 +258,10 @@ export function useEditorSelectionActions({
 
   const handleDeleteSelectedRoom = useCallback(() => {
     if (!editor.draft || !editor.activeLevelId || !selectedRoom || saveInteractionBlocked) return;
-    const result = dissolveRoom(editor.draft, {
+    const operation = selectedRoom.boundary.every(isWallRoomBoundaryEdge)
+      ? dissolveRoom
+      : deleteRoom;
+    const result = operation(editor.draft, {
       levelId: editor.activeLevelId,
       roomId: selectedRoom.id
     });

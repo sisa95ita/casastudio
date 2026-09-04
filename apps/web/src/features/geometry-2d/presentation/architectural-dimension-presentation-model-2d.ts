@@ -12,6 +12,7 @@ import {
 } from "@casastudio/geometry";
 import {
   formatArchitecturalArea,
+  formatArchitecturalLength,
   type Level,
   type Point2D,
   type Room,
@@ -49,6 +50,7 @@ export type RoomMetricPresentation2D = {
   readonly anchor: ScreenPoint;
   readonly area: number;
   readonly formattedArea: string;
+  readonly elevationLabel?: string;
 };
 
 /** Complete derived measurement model consumed by SVG presentation layers. */
@@ -130,7 +132,10 @@ export function createArchitecturalDimensionPresentationModel2D({
           roomType: room.type,
           anchor: interiorAnchor ? transform.worldToScreen(interiorAnchor) : polygon.centroid.screen,
           area: measurement.area,
-          formattedArea: formatArchitecturalArea(measurement.area, units.length)
+          formattedArea: formatArchitecturalArea(measurement.area, units.length),
+          ...(room.elevation
+            ? { elevationLabel: `+${formatArchitecturalLength(room.elevation, units.length)}` }
+            : {})
         }];
       })
     : [];

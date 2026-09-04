@@ -1,6 +1,7 @@
 import {
   IdentifierSchema,
   ValidationErrorCode,
+  isWallRoomBoundaryEdge,
   type Project,
   type ProjectEditingResult,
   type Wall
@@ -121,7 +122,9 @@ export function isWallReferencedByRoom(
     wall &&
     (wall.roomIds.length > 0 ||
       level?.rooms.some((room) =>
-        room.boundary.some((edge) => edge.wallId === wallId)
+        room.boundary.some((edge) =>
+          isWallRoomBoundaryEdge(edge) && edge.wallId === wallId
+        )
       ))
   );
 }

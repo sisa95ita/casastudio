@@ -33,11 +33,11 @@ const hasOwnPropertyDeep = (value: unknown, propertyName: string): boolean => {
 };
 
 describe("canonical project example", () => {
-  it("is canonical v2, contains boundary, and contains no legacy wallIds", () => {
+  it("is canonical v3, contains boundary, and contains no legacy wallIds", () => {
     const input = loadCanonicalProject();
     const project = ProjectSchema.parse(input);
 
-    expect(project.schemaVersion).toBe("2.0.0");
+    expect(project.schemaVersion).toBe("3.0.0");
     expect(hasOwnPropertyDeep(input, "wallIds")).toBe(false);
     expect(project.building.levels.flatMap((level) => level.rooms).every((room) => Array.isArray(room.boundary))).toBe(
       true
@@ -76,7 +76,7 @@ describe("legacy wallIds project example", () => {
     expect(ProjectSchema.safeParse(input).success).toBe(false);
   });
 
-  it("migrates to canonical v2 while preserving metadata and removing wallIds", () => {
+  it("migrates to canonical v3 while preserving metadata and removing wallIds", () => {
     const input = loadLegacyProject() as {
       revision?: unknown;
       createdAt?: unknown;
@@ -87,7 +87,7 @@ describe("legacy wallIds project example", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.project.schemaVersion).toBe("2.0.0");
+    expect(result.project.schemaVersion).toBe("3.0.0");
     expect(result.project.revision).toBe(input.revision);
     expect(result.project.createdAt).toBe(input.createdAt);
     expect(result.project.updatedAt).toBe(input.updatedAt);

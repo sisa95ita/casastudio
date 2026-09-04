@@ -68,8 +68,13 @@ export function resolveDrawWallSnapCandidate(
   const cssScale = options.cssPixelsPerSvgUnit ?? 1;
   const tolerance = options.tolerancePixels ?? drawWallSnapConfiguration.tolerancePixels;
   const withinTolerance = (distance: number) => distance * cssScale <= tolerance;
+  const wallEdges = model.boundaryEdges.filter(
+    (edge): edge is typeof edge & { readonly sourceWallId: string } =>
+      edge.sourceKind !== "FREE" && edge.sourceWallId !== undefined
+  );
 
   const vertex = chooseNearest(model.vertices.flatMap((candidate) => {
+    if (candidate.wallBacked === false) return [];
     const distance = svgDistance(pointer, candidate.point);
     return withinTolerance(distance) ? [{
       kind: "vertex" as const,
@@ -80,7 +85,7 @@ export function resolveDrawWallSnapCandidate(
   }));
   if (vertex) return vertex;
 
-  const endpoint = chooseNearest(model.boundaryEdges.flatMap((edge) =>
+  const endpoint = chooseNearest(wallEdges.flatMap((edge) =>
     ([{ label: "start", value: edge.start }, { label: "end", value: edge.end }] as const)
       .flatMap(({ label, value }) => {
         const distance = svgDistance(pointer, value.screen);
@@ -95,7 +100,7 @@ export function resolveDrawWallSnapCandidate(
   ));
   if (endpoint) return endpoint;
 
-  const midpoint = chooseNearest(model.boundaryEdges.flatMap((edge) => {
+  const midpoint = chooseNearest(wallEdges.flatMap((edge) => {
     const distance = svgDistance(pointer, edge.midpoint);
     return withinTolerance(distance) ? [{
       kind: "wall-midpoint" as const,
@@ -108,8 +113,8 @@ export function resolveDrawWallSnapCandidate(
   if (midpoint) return midpoint;
 
   const intersections: DrawWallSnapCandidate[] = [];
-  model.boundaryEdges.forEach((first, firstIndex) => {
-    model.boundaryEdges.slice(firstIndex + 1).forEach((second) => {
+  wallEdges.forEach((first, firstIndex) => {
+    wallEdges.slice(firstIndex + 1).forEach((second) => {
       const found = segmentIntersection(first.start.screen, first.end.screen, second.start.screen, second.end.screen);
       if (!found) return;
       const distance = svgDistance(pointer, found.point);
@@ -126,7 +131,7 @@ export function resolveDrawWallSnapCandidate(
   const intersection = chooseNearest(intersections);
   if (intersection) return intersection;
 
-  const wallInterior = chooseNearest(model.boundaryEdges.flatMap((edge) => {
+  const wallInterior = chooseNearest(wallEdges.flatMap((edge) => {
     const projection = projectOntoSegment(pointer, edge.start.screen, edge.end.screen);
     if (!projection || !withinTolerance(projection.distance) || projection.parameter <= 0 || projection.parameter >= 1) return [];
     return [{

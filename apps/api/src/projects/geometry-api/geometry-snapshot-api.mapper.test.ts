@@ -272,7 +272,7 @@ function buildRectangularRoomProject(): Project {
   return ProjectSchema.parse({
     id: "geometry-slice-project",
     name: "Geometry Slice Project",
-    schemaVersion: "2.0.0",
+    schemaVersion: "3.0.0",
     revision: 7,
     createdAt: "2026-07-20T10:00:00+02:00",
     updatedAt: "2026-07-20T10:00:00+02:00",

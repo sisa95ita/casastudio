@@ -81,7 +81,17 @@ function createEdge(
   start: Point,
   end: Point
 ) {
-  return { id, sourceWallId, startVertexId, endVertexId, start, end, thickness: 10, height: 280 };
+  return {
+    id,
+    sourceWallId,
+    sourceKind: "WALL" as const,
+    startVertexId,
+    endVertexId,
+    start,
+    end,
+    thickness: 10,
+    height: 280
+  };
 }
 
 function createEdgeUse(

@@ -8,7 +8,7 @@ import {
   type ValidationError
 } from "../validation/index.js";
 import type { Opening } from "./opening.js";
-import type { RoomBoundaryDirection } from "./room.js";
+import { isWallRoomBoundaryEdge, type RoomBoundaryDirection } from "./room.js";
 import type { Wall } from "./wall.js";
 
 /**
@@ -166,7 +166,7 @@ export const reverseWallDirection = (
         rooms: level.rooms.map((room) => ({
           ...room,
           boundary: room.boundary.map((boundaryEdge) =>
-            boundaryEdge.wallId === wallId
+            isWallRoomBoundaryEdge(boundaryEdge) && boundaryEdge.wallId === wallId
               ? {
                   ...boundaryEdge,
                   direction: invertBoundaryDirection(boundaryEdge.direction)

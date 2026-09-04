@@ -1,4 +1,10 @@
-import type { Level, Project, Staircase, Wall } from "@casastudio/schema";
+import {
+  isWallRoomBoundaryEdge,
+  type Level,
+  type Project,
+  type Staircase,
+  type Wall
+} from "@casastudio/schema";
 
 import {
   GeometryBuildErrorCode,
@@ -78,7 +84,7 @@ export class GeometryModelBuilder {
     levelIndex: number
   ): LevelGeometry | undefined {
     const vertexEntriesByCoordinate = new Map<string, MutableVertexEntry>();
-    const boundaryEdgesByWallId = new Map<string, BoundaryEdge>();
+    const boundaryEdgesById = new Map<string, BoundaryEdge>();
     const boundaryEdgeUses: BoundaryEdgeUse[] = [];
     const loops: Loop[] = [];
     const polygons: Polygon[] = [];
@@ -111,7 +117,7 @@ export class GeometryModelBuilder {
     };
 
     const getOrCreateBoundaryEdge = (wall: Wall): BoundaryEdge => {
-      const existingEdge = boundaryEdgesByWallId.get(wall.id);
+      const existingEdge = boundaryEdgesById.get(runtimeId.boundaryEdge(wall));
 
       if (existingEdge) {
         return existingEdge;
@@ -128,7 +134,7 @@ export class GeometryModelBuilder {
         wall.height
       );
 
-      boundaryEdgesByWallId.set(wall.id, edge);
+      boundaryEdgesById.set(edge.id, edge);
       startVertexEntry.incidentEdges.push(edge);
       endVertexEntry.incidentEdges.push(edge);
       return edge;
@@ -170,6 +176,30 @@ export class GeometryModelBuilder {
       }
 
       room.boundary.forEach((boundaryEntry, boundaryIndex) => {
+        if (!isWallRoomBoundaryEdge(boundaryEntry)) {
+          const startVertexEntry = getOrCreateVertex(boundaryEntry.start.x, boundaryEntry.start.z);
+          const endVertexEntry = getOrCreateVertex(boundaryEntry.end.x, boundaryEntry.end.z);
+          const edge = new BoundaryEdge(
+            runtimeId.freeBoundaryEdge(room, boundaryIndex),
+            undefined,
+            startVertexEntry.vertex,
+            endVertexEntry.vertex,
+            0,
+            0,
+            "FREE"
+          );
+          boundaryEdgesById.set(edge.id, edge);
+          startVertexEntry.incidentEdges.push(edge);
+          endVertexEntry.incidentEdges.push(edge);
+          roomEdgeUses.push(new BoundaryEdgeUse(
+            runtimeId.boundaryEdgeUse(room, boundaryIndex),
+            edge,
+            "FORWARD",
+            boundaryIndex,
+            () => this.requireBuilt(loopCell.value, "BoundaryEdgeUse.loop")
+          ));
+          return;
+        }
         const wall = wallsById.get(boundaryEntry.wallId);
 
         if (!wall) {
@@ -273,7 +303,7 @@ export class GeometryModelBuilder {
       level.id,
       level.elevation,
       [...vertexEntriesByCoordinate.values()].map((entry) => entry.vertex),
-      [...boundaryEdgesByWallId.values()],
+      [...boundaryEdgesById.values()],
       boundaryEdgeUses,
       loops,
       polygons
@@ -506,20 +536,25 @@ export class GeometryModelBuilder {
     wallIndexesById: ReadonlyMap<string, number>,
     levelIndex: number
   ): void {
-    const useCountsByWallId = new Map<string, number>();
+    const useCountsByWallAndElevation = new Map<string, number>();
 
     boundaryEdgeUses.forEach((edgeUse) => {
       const sourceWallId = edgeUse.boundaryEdge.sourceWallId;
-      useCountsByWallId.set(
-        sourceWallId,
-        (useCountsByWallId.get(sourceWallId) ?? 0) + 1
+      if (!sourceWallId) return;
+      const key = `${sourceWallId}:${edgeUse.loop.polygon.floorElevation}`;
+      useCountsByWallAndElevation.set(
+        key,
+        (useCountsByWallAndElevation.get(key) ?? 0) + 1
       );
     });
 
-    useCountsByWallId.forEach((useCount, sourceWallId) => {
+    useCountsByWallAndElevation.forEach((useCount, key) => {
       if (useCount <= 2) {
         return;
       }
+
+      const separatorIndex = key.lastIndexOf(":");
+      const sourceWallId = key.slice(0, separatorIndex);
 
       const wallIndex = wallIndexesById.get(sourceWallId);
       this.addError({

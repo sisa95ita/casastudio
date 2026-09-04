@@ -675,6 +675,46 @@ describe("Room deletion", () => {
     }
   });
 
+  it("ignores Wall-sharing Rooms in other floor-elevation strata when dissolving", () => {
+    const original = createMultiWallPartitionProject();
+    const subdivision = classifyLevelRoomTopology(original, "ground-level").subdivisions[0]!;
+    const reconciled = reconcileRoomSubdivision(original, {
+      levelId: "ground-level",
+      roomId: "whole-room",
+      expectedFaceKeys: subdivision.faces.map((face) => face.key),
+      newRoomAssignments: assignNewRooms(subdivision, [
+        { id: "new-room", name: "New Room", type: "OTHER" }
+      ])
+    });
+    expect(reconciled.ok).toBe(true);
+    if (!reconciled.ok) return;
+    const withUpperRoom = structuredClone(reconciled.project);
+    const level = withUpperRoom.building.levels[0]!;
+    const source = level.rooms.find((room) => room.id === "new-room")!;
+    level.rooms.push({
+      ...structuredClone(source),
+      id: "upper-room",
+      name: "Upper Room",
+      elevation: 180
+    });
+    for (const edge of source.boundary) {
+      if (!("wallId" in edge)) continue;
+      level.walls.find((wall) => wall.id === edge.wallId)!.roomIds.push("upper-room");
+    }
+
+    const result = dissolveRoom(withUpperRoom, {
+      levelId: "ground-level",
+      roomId: "new-room"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.building.levels[0]!.rooms.map((room) => room.id)).toEqual([
+      "whole-room", "upper-room"
+    ]);
+    expect(result.project.building.levels[0]!.rooms[1]).toEqual(level.rooms.at(-1));
+  });
+
   it("reassigns supported Room references to the absorbing Room", () => {
     const project = createMultiWallPartitionProject();
     const subdivision = classifyLevelRoomTopology(project, "ground-level").subdivisions[0]!;
@@ -1053,7 +1093,7 @@ function assignNewRooms(
 function measureBoundary(room: Room, walls: readonly Wall[]) {
   const wallsById = new Map(walls.map((item) => [item.id, item]));
   const vertices = room.boundary.map((edge) => {
-    const ownedWall = wallsById.get(edge.wallId)!;
+    const ownedWall = wallsById.get(edge.wallId!)!;
     return edge.direction === "FORWARD" ? ownedWall.start : ownedWall.end;
   });
   const twiceArea = vertices.reduce((sum, point, index) => {
@@ -1081,7 +1121,7 @@ function createProject(walls: Wall[], rooms: Room[] = []): Project {
   return {
     id: "authoring-project",
     name: "Authoring Project",
-    schemaVersion: "2.0.0",
+    schemaVersion: "3.0.0",
     revision: 1,
     createdAt: "2026-08-21T10:00:00+02:00",
     updatedAt: "2026-08-21T10:00:00+02:00",

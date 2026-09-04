@@ -169,6 +169,23 @@ describe("resolveDrawWallSnapCandidate", () => {
     expect(withoutGrid.kind).toBe("vertex");
     expect(withGrid.kind).toBe("vertex");
   });
+
+  it("does not expose free-only Room boundary vertices or edges as Wall topology", () => {
+    const model = createModel();
+    model.boundaryEdges = [{
+      ...edge("free-edge", 200, 200, 300, 200, 200, -200, 300, -200),
+      sourceWallId: undefined,
+      sourceKind: "FREE"
+    }];
+    model.vertices = [{
+      ...vertex("free-vertex", 200, -200, 200, 200),
+      wallBacked: false
+    }];
+
+    expect(resolveDrawWallSnapCandidate({ x: 200, y: -200 }, model, {
+      worldPoint: { x: 200, z: 200 }
+    })).toMatchObject({ kind: "free", point: { x: 200, z: 200 } });
+  });
 });
 
 function createModel({ vertexOrder = ["vertex-a", "vertex-b"] } = {}) {
@@ -224,6 +241,7 @@ function edge(
     kind: "BOUNDARY_EDGE" as const,
     geometryId: `boundary-edge:${wallId}`,
     sourceWallId: wallId,
+    sourceKind: "WALL" as const,
     startVertexId: "start",
     endVertexId: "end",
     start: {

@@ -1,5 +1,11 @@
 import type { Point2D } from "../primitives/index.js";
-import type { Level, RoomBoundaryEdge, Wall } from "../physical-building/index.js";
+import {
+  isWallRoomBoundaryEdge,
+  type Level,
+  type RoomBoundaryEdge,
+  type Wall,
+  type WallRoomBoundaryEdge
+} from "../physical-building/index.js";
 import type { Project } from "../project/index.js";
 import {
   getOpeningInterval,
@@ -37,10 +43,10 @@ const getUndirectedWallGeometryKey = (wall: Wall): string => {
   return startKey < endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`;
 };
 
-const getTraversalStart = (boundaryEdge: RoomBoundaryEdge, wall: Wall): Point2D =>
+const getTraversalStart = (boundaryEdge: WallRoomBoundaryEdge, wall: Wall): Point2D =>
   boundaryEdge.direction === "FORWARD" ? wall.start : wall.end;
 
-const getTraversalEnd = (boundaryEdge: RoomBoundaryEdge, wall: Wall): Point2D =>
+const getTraversalEnd = (boundaryEdge: WallRoomBoundaryEdge, wall: Wall): Point2D =>
   boundaryEdge.direction === "FORWARD" ? wall.end : wall.start;
 
 // Positive signed area corresponds to counter-clockwise winding in level-local XZ.
@@ -104,12 +110,11 @@ const segmentsIntersect = (aStart: Point2D, aEnd: Point2D, bStart: Point2D, bEnd
 
 type TraversedRoomBoundaryEdge = {
   boundaryEdge: RoomBoundaryEdge;
-  wall: Wall;
   start: Point2D;
   end: Point2D;
 };
 
-const invertBoundaryDirection = (direction: RoomBoundaryEdge["direction"]): RoomBoundaryEdge["direction"] =>
+const invertBoundaryDirection = (direction: WallRoomBoundaryEdge["direction"]): WallRoomBoundaryEdge["direction"] =>
   direction === "FORWARD" ? "REVERSE" : "FORWARD";
 
 const getTraversedBoundary = (
@@ -119,6 +124,14 @@ const getTraversedBoundary = (
   const traversedBoundary: TraversedRoomBoundaryEdge[] = [];
 
   for (const boundaryEdge of boundary) {
+    if (!isWallRoomBoundaryEdge(boundaryEdge)) {
+      traversedBoundary.push({
+        boundaryEdge,
+        start: boundaryEdge.start,
+        end: boundaryEdge.end
+      });
+      continue;
+    }
     const wall = wallsById.get(boundaryEdge.wallId);
 
     if (!wall) {
@@ -127,7 +140,6 @@ const getTraversedBoundary = (
 
     traversedBoundary.push({
       boundaryEdge,
-      wall,
       start: getTraversalStart(boundaryEdge, wall),
       end: getTraversalEnd(boundaryEdge, wall)
     });
@@ -152,8 +164,11 @@ const getSingleFlippedContinuityFixIndex = (
   // This is diagnostic classification only; canonical boundaries are never
   // repaired or normalized by persisted geometry validation.
   boundary.forEach((boundaryEdge, boundaryIndex) => {
+    if (!isWallRoomBoundaryEdge(boundaryEdge)) return;
     const flippedBoundary = boundary.map((edge, edgeIndex) =>
-      edgeIndex === boundaryIndex ? { ...edge, direction: invertBoundaryDirection(edge.direction) } : edge
+      edgeIndex === boundaryIndex && isWallRoomBoundaryEdge(edge)
+        ? { ...edge, direction: invertBoundaryDirection(edge.direction) }
+        : edge
     );
     const traversedBoundary = getTraversedBoundary(flippedBoundary, wallsById);
 

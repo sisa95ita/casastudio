@@ -121,7 +121,7 @@ describeWithDatabase("relational Project persistence", () => {
     });
   });
 
-  it("round-trips elevated Rooms and both cross-Level and same-Level Staircases without information loss", async () => {
+  it("round-trips Wall-only, elevated free, and mixed Room boundaries without information loss", async () => {
     const project = createTestProject();
     const ground = project.building.levels[0]!;
     const sourceRoom = ground.rooms[1]!;
@@ -130,8 +130,27 @@ describeWithDatabase("relational Project persistence", () => {
       name: "Raised Room",
       type: "STUDIO",
       elevation: 180,
-      boundary: []
+      boundary: freeBoundary([
+        { x: 100, z: 100 },
+        { x: 300, z: 100 },
+        { x: 300, z: 250 },
+        { x: 100, z: 250 }
+      ])
+    }, {
+      id: "mixed-room",
+      name: "Mixed Room",
+      type: "OTHER",
+      elevation: 220,
+      boundary: [
+        { wallId: "ground-north-wall", direction: "FORWARD" },
+        { kind: "FREE", start: { x: 600, z: 0 }, end: { x: 600, z: 400 } },
+        { wallId: "living-kitchen-partition", direction: "FORWARD" },
+        { wallId: "living-west-wall", direction: "FORWARD" }
+      ]
     });
+    for (const wallId of ["ground-north-wall", "living-kitchen-partition", "living-west-wall"]) {
+      ground.walls.find((wall) => wall.id === wallId)!.roomIds.push("mixed-room");
+    }
     ground.staircases.push({
       id: "raised-room-stair",
       fromLevelId: ground.id,
@@ -162,7 +181,16 @@ describeWithDatabase("relational Project persistence", () => {
     const loadedProject = await repository.findByDomainId(project.id);
 
     expect(loadedProject).toEqual(project);
-    expect(loadedProject?.building.levels[0]?.rooms.at(-1)?.elevation).toBe(180);
+    expect(loadedProject?.building.levels[0]?.rooms.at(-2)).toMatchObject({
+      id: "raised-room",
+      elevation: 180,
+      boundary: ground.rooms.at(-2)!.boundary
+    });
+    expect(loadedProject?.building.levels[0]?.rooms.at(-1)).toMatchObject({
+      id: "mixed-room",
+      elevation: 220,
+      boundary: ground.rooms.at(-1)!.boundary
+    });
     expect(loadedProject?.building.levels[0]?.staircases.map((staircase) => staircase.id)).toEqual([
       "main-stair",
       "raised-room-stair"
@@ -739,4 +767,12 @@ function withWriterWall(project: Project, wallId: string): Project {
   });
 
   return ProjectSchema.parse(candidate);
+}
+
+function freeBoundary(points: readonly { readonly x: number; readonly z: number }[]) {
+  return points.map((start, index) => ({
+    kind: "FREE" as const,
+    start,
+    end: points[(index + 1) % points.length]!
+  }));
 }

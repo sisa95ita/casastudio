@@ -226,6 +226,8 @@ export type GeometryEditorOverlay = {
     readonly labelAnchor: WorldPointXZ;
     readonly label: string;
     readonly kind: "RECTANGLE" | "L_SHAPE";
+    readonly elevated?: boolean;
+    readonly elevation?: number;
   };
   /** Complete canonical Staircase proposal rendered without entering history. */
   readonly stairPreview?: {
@@ -793,7 +795,9 @@ export function GeometrySvgViewer({
       {options.polygons ? (
         <g data-layer="polygons">
           {presentationModel.polygons.map((polygon) => {
-            const className = getEntityClassName("geometry-polygon", polygon);
+            const className = `${getEntityClassName("geometry-polygon", polygon)}${
+              polygon.elevated ? " geometry-polygon--elevated" : ""
+            }`;
 
             return (
               <g key={polygon.geometryId}>
@@ -801,6 +805,9 @@ export function GeometrySvgViewer({
                   data-testid="geometry-polygon"
                   data-geometry-kind={polygon.kind}
                   data-geometry-id={polygon.geometryId}
+                  data-source-room-id={polygon.sourceRoomId}
+                  data-floor-elevation={polygon.floorElevation}
+                  data-elevated={polygon.elevated ? "true" : "false"}
                   points={polygon.svgPoints}
                   className={className}
                   onClick={(event) =>
@@ -1240,7 +1247,10 @@ function ArchitecturalDimensionLayer({
             textAnchor="middle"
           >
             <tspan className="architectural-room-label__name" x={formatSvgNumber(metric.anchor.x)}>{metric.roomName}</tspan>
-            <tspan className="architectural-room-label__area" x={formatSvgNumber(metric.anchor.x)} dy="14">{metric.formattedArea}</tspan>
+            {metric.elevationLabel ? (
+              <tspan className="architectural-room-label__elevation" x={formatSvgNumber(metric.anchor.x)} dy="13">{metric.elevationLabel}</tspan>
+            ) : null}
+            <tspan className="architectural-room-label__area" x={formatSvgNumber(metric.anchor.x)} dy={metric.elevationLabel ? "12" : "14"}>{metric.formattedArea}</tspan>
           </text>
         ))}
       </g>
@@ -1385,6 +1395,9 @@ function GeometryEditorOverlayLayer({
           data-testid="room-shape-preview"
           data-shape-kind={roomShapePreview.kind}
           data-segment-count={roomShapePreview.vertices.length}
+          data-elevated={roomShapePreview.elevated ? "true" : "false"}
+          data-elevation={roomShapePreview.elevation}
+          className={roomShapePreview.elevated ? "geometry-room-shape-preview--elevated" : undefined}
           aria-hidden="true"
         >
           <polygon

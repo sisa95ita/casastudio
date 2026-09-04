@@ -1,8 +1,6 @@
 import { z } from "zod";
 
-import { RoomBoundaryEdgeSchema } from "../physical-building/index.js";
-import { ProjectSchema } from "../project/index.js";
-import { CURRENT_PROJECT_SCHEMA_VERSION } from "../project/schema-version.js";
+import { WallRoomBoundaryEdgeSchema } from "../physical-building/index.js";
 import {
   LegacyRoomBoundaryMigrationFailureReason,
   MigrationErrorCode,
@@ -10,6 +8,7 @@ import {
 } from "./migration-error.js";
 import { resolveLegacyRoomBoundary } from "./legacy-room-boundary-resolver.js";
 import type { ProjectMigrationResult } from "./migrate-project.js";
+import { migrateV2ToV3 } from "./v2-to-v3.js";
 
 type MutableRecord = Record<string, unknown>;
 
@@ -19,7 +18,7 @@ type LegacyWall = {
   end: { x: number; z: number };
 };
 
-const BoundaryArraySchema = z.array(RoomBoundaryEdgeSchema);
+const BoundaryArraySchema = z.array(WallRoomBoundaryEdgeSchema);
 
 const isRecord = (input: unknown): input is MutableRecord =>
   typeof input === "object" && input !== null && !Array.isArray(input);
@@ -41,25 +40,6 @@ const invalidLegacyShape = (
   levelId,
   reason: LegacyRoomBoundaryMigrationFailureReason.INVALID_LEGACY_SHAPE
 });
-
-const getCanonicalValidationErrors = (input: unknown): readonly ProjectMigrationError[] => {
-  const parsed = ProjectSchema.safeParse(input);
-
-  if (parsed.success) {
-    return [];
-  }
-
-  return parsed.error.issues.map((issue): ProjectMigrationError => {
-    const path = issue.path.join(".");
-
-    return {
-      code: MigrationErrorCode.CANONICAL_VALIDATION_FAILED,
-      message: issue.message,
-      path: path.length > 0 ? path : undefined,
-      sourceVersion: "1.0.0"
-    };
-  });
-};
 
 const getStringArray = (input: unknown): string[] | undefined =>
   Array.isArray(input) && input.every((item) => typeof item === "string") ? input : undefined;
@@ -131,30 +111,18 @@ const isPoint = (input: unknown): input is { x: number; z: number } =>
   isRecord(input) && typeof input.x === "number" && typeof input.z === "number";
 
 const parseCanonicalProject = (input: unknown): ProjectMigrationResult => {
-  const parsed = ProjectSchema.safeParse(input);
-
-  if (!parsed.success) {
-    return {
-      ok: false,
-      errors: getCanonicalValidationErrors(input)
-    };
-  }
-
-  return {
-    ok: true,
-    project: parsed.data,
-    sourceVersion: "1.0.0",
-    targetVersion: CURRENT_PROJECT_SCHEMA_VERSION
-  };
+  const result = migrateV2ToV3(input);
+  return result.ok ? { ...result, sourceVersion: "1.0.0" } : result;
 };
 
 /**
- * Migrates a raw schema version `1.0.0` Project document to canonical `2.0.0`.
+ * Migrates a raw schema version `1.0.0` Project through the Wall-boundary
+ * transformation and into the current canonical schema.
  *
  * The migration clones the source input, replaces legacy Room `wallIds` with
- * canonical ordered and oriented `boundary` entries, removes `wallIds`, and
- * leaves revision and timestamps unchanged. Expected legacy-shape and topology
- * failures are returned as migration errors.
+ * The migration clones the input, replaces `wallIds` with ordered and oriented
+ * Wall boundary entries, removes `wallIds`, then applies subsequent schema
+ * migrations. Revision and timestamps remain unchanged.
  */
 export const migrateV1ToV2 = (input: unknown): ProjectMigrationResult => {
   const clonedInput = cloneInput(input);
@@ -276,7 +244,7 @@ export const migrateV1ToV2 = (input: unknown): ProjectMigrationResult => {
     };
   }
 
-  clonedInput.schemaVersion = CURRENT_PROJECT_SCHEMA_VERSION;
+  clonedInput.schemaVersion = "2.0.0";
 
   return parseCanonicalProject(clonedInput);
 };

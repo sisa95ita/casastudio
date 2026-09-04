@@ -209,9 +209,9 @@ This direction is important for:
 - future side-specific metadata;
 - deterministic 2D and 3D generation.
 
-Walls are the authoritative source describing room boundaries.
+Walls are authoritative for physical wall-backed boundary segments.
 
-Room outlines are derived from the Room's persisted ordered and oriented boundary references and the referenced Level-scoped Walls.
+Room outlines are derived from the Room's persisted ordered boundary: oriented references resolve through Level-scoped Walls, while free segments contribute their explicit directed X/Z endpoints.
 
 ## 10. Opening Coordinate Space
 
@@ -335,9 +335,13 @@ For example:
 
 - a Wall's orientation is derived from its start and end points;
 - an Opening's orientation is derived from its Wall;
-- a Room boundary is derived from ordered and oriented references to Walls.
+- a Room boundary is reconstructed from ordered Wall references and/or directed free geometric segments.
 
 Persist rotation only when the domain concept requires independent orientation, such as a Viewpoint camera orientation or future object placement.
+
+A Room footprint remains level-local X/Z geometry. Its global floor elevation is
+`Level.elevation + (Room.elevation ?? 0)`. Footprints at different global floor
+elevations may overlap without subtraction or planar-topology conflict.
 
 ## 13. Precision Rules
 

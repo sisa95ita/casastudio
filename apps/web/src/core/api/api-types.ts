@@ -67,7 +67,8 @@ export type GeometryVertex = GeometryPoint2D & {
 /** Serialized physical boundary edge. */
 export type GeometryBoundaryEdge = {
   readonly id: string;
-  readonly sourceWallId: string;
+  readonly sourceWallId?: string;
+  readonly sourceKind: "WALL" | "FREE";
   readonly startVertexId: string;
   readonly endVertexId: string;
   readonly start: GeometryPoint2D;
@@ -80,7 +81,7 @@ export type GeometryBoundaryEdge = {
 export type GeometryBoundaryEdgeUse = {
   readonly id: string;
   readonly boundaryEdgeId: string;
-  readonly sourceWallId: string;
+  readonly sourceWallId?: string;
   readonly direction: "FORWARD" | "REVERSE";
   readonly index: number;
   readonly loopId: string;
@@ -332,7 +333,12 @@ function parseGeometryBoundaryEdge(
 
   return {
     id: requireString(item.id, `${label} id`),
-    sourceWallId: requireString(item.sourceWallId, `${label} sourceWallId`),
+    sourceWallId: optionalString(item.sourceWallId, `${label} sourceWallId`),
+    sourceKind: requireOneOf(
+      item.sourceKind,
+      ["WALL", "FREE"] as const,
+      `${label} sourceKind`
+    ),
     startVertexId: requireString(item.startVertexId, `${label} startVertexId`),
     endVertexId: requireString(item.endVertexId, `${label} endVertexId`),
     start: parseGeometryPoint(item.start, `${label} start`),
@@ -354,7 +360,7 @@ function parseGeometryBoundaryEdgeUse(
       item.boundaryEdgeId,
       `${label} boundaryEdgeId`
     ),
-    sourceWallId: requireString(item.sourceWallId, `${label} sourceWallId`),
+    sourceWallId: optionalString(item.sourceWallId, `${label} sourceWallId`),
     direction: requireOneOf(
       item.direction,
       ["FORWARD", "REVERSE"] as const,

@@ -76,4 +76,32 @@ describe("RoomSchema", () => {
       }).success
     ).toBe(false);
   });
+
+  it("accepts free and mixed directed boundary segments", () => {
+    const free = {
+      kind: "FREE" as const,
+      start: { x: 0, z: 0 },
+      end: { x: 0, z: -100 }
+    };
+    expect(RoomSchema.safeParse({
+      ...validRoom,
+      boundary: [
+        northBoundaryEdge,
+        free,
+        { kind: "FREE", start: free.end, end: { x: 100, z: 0 } }
+      ]
+    }).success).toBe(true);
+  });
+
+  it("rejects degenerate and duplicate free segments", () => {
+    const free = { kind: "FREE" as const, start: { x: 0, z: 0 }, end: { x: 0, z: -100 } };
+    expect(RoomSchema.safeParse({
+      ...validRoom,
+      boundary: [free, { ...free }, { kind: "FREE", start: free.end, end: free.start }]
+    }).success).toBe(false);
+    expect(RoomSchema.safeParse({
+      ...validRoom,
+      boundary: [free, { kind: "FREE", start: free.end, end: free.end }, southBoundaryEdge]
+    }).success).toBe(false);
+  });
 });

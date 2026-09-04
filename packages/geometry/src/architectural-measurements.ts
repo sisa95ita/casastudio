@@ -1,4 +1,11 @@
-import type { Level, Point2D, Room, Units, Wall } from "@casastudio/schema";
+import {
+  isWallRoomBoundaryEdge,
+  type Level,
+  type Point2D,
+  type Room,
+  type Units,
+  type Wall
+} from "@casastudio/schema";
 
 import type { BoundingBox } from "./model/index.js";
 
@@ -34,7 +41,7 @@ export function measureWall(wall: Pick<Wall, "start" | "end">): WallMeasurement 
   return { length: pointDistance(wall.start, wall.end) };
 }
 
-/** Returns the ordered polygon points represented by a Room's oriented Wall boundary. */
+/** Returns the ordered polygon points represented by a Room's directed boundary. */
 export function deriveRoomBoundaryPoints(
   level: Pick<Level, "walls">,
   room: Pick<Room, "boundary">
@@ -42,6 +49,7 @@ export function deriveRoomBoundaryPoints(
   if (room.boundary.length < 3) return undefined;
   const walls = new Map(level.walls.map((wall) => [wall.id, wall]));
   const traversals = room.boundary.map((edge) => {
+    if (!isWallRoomBoundaryEdge(edge)) return { start: edge.start, end: edge.end };
     const wall = walls.get(edge.wallId);
     if (!wall) return undefined;
     return edge.direction === "FORWARD"

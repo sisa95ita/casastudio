@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Latest canonical persisted Project schema version accepted by `ProjectSchema`.
  */
-export const CURRENT_PROJECT_SCHEMA_VERSION = "2.0.0";
+export const CURRENT_PROJECT_SCHEMA_VERSION = "3.0.0";
 
 /**
  * Canonical Project schema versions supported without migration.
@@ -11,7 +11,7 @@ export const CURRENT_PROJECT_SCHEMA_VERSION = "2.0.0";
  * Legacy versions are intentionally handled by explicit schema-owned migration
  * entry points rather than by ordinary canonical parsing.
  */
-export const SUPPORTED_PROJECT_SCHEMA_VERSIONS = ["2.0.0"] as const;
+export const SUPPORTED_PROJECT_SCHEMA_VERSIONS = ["3.0.0"] as const;
 
 /**
  * String literal union for canonical Project schema versions.

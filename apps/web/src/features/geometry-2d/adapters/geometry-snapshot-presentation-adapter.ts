@@ -50,6 +50,7 @@ export function createGeometrySnapshotPresentationModel2D({
   const selected = selectionState?.selected ?? [];
   const hovered = selectionState?.hovered ?? hover;
   const edgeUsesById = new Map(level.boundaryEdgeUses.map((edgeUse) => [edgeUse.id, edgeUse]));
+  const edgesById = new Map(level.boundaryEdges.map((edge) => [edge.id, edge]));
   const loopsById = new Map(level.loops.map((loop) => [loop.id, loop]));
   const sharedUsageCounts = countSnapshotBoundaryEdgeUses(level.boundaryEdgeUses);
 
@@ -61,6 +62,7 @@ export function createGeometrySnapshotPresentationModel2D({
       level.polygons.map((polygon) =>
         createSnapshotPolygon(
           polygon,
+          level.elevation,
           edgeUsesById,
           loopsById,
           transform,
@@ -83,6 +85,9 @@ export function createGeometrySnapshotPresentationModel2D({
           geometryId: vertex.id,
           coordinates,
           point: transform.worldToScreen(coordinates),
+          wallBacked: vertex.incidentBoundaryEdgeIds.some(
+            (edgeId) => edgesById.get(edgeId)?.sourceKind === "WALL"
+          ),
           selected: isGeometrySelectionMatch(selected, "VERTEX", vertex.id),
           hovered: isGeometrySelectionMatch(hovered, "VERTEX", vertex.id)
         }) satisfies GeometryPresentationVertex2D;
@@ -113,6 +118,7 @@ export function collectGeometrySnapshotLevelBounds(
 
 const createSnapshotPolygon = (
   polygon: GeometryPolygon,
+  levelElevation: number,
   edgeUsesById: ReadonlyMap<string, GeometryBoundaryEdgeUse>,
   loopsById: ReadonlyMap<string, GeometryLevel["loops"][number]>,
   transform: ViewportTransform2D,
@@ -142,6 +148,8 @@ const createSnapshotPolygon = (
     kind: "POLYGON",
     geometryId: polygon.id,
     sourceRoomId: polygon.sourceRoomId,
+    floorElevation: polygon.floorElevation,
+    elevated: polygon.floorElevation !== levelElevation,
     points: Object.freeze(points),
     svgPoints: points
       .map((point) => `${formatSvgNumber(point.screen.x)},${formatSvgNumber(point.screen.y)}`)
@@ -170,6 +178,7 @@ const createSnapshotBoundaryEdge = (
     kind: "BOUNDARY_EDGE",
     geometryId: edge.id,
     sourceWallId: edge.sourceWallId,
+    sourceKind: edge.sourceKind,
     startVertexId: edge.startVertexId,
     endVertexId: edge.endVertexId,
     start,

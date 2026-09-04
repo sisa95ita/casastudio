@@ -77,7 +77,8 @@ export function parseRoomShapeDefinition(
 /** Formats compact physical dimensions for the transient Room preview. */
 export function formatRoomShapePreviewLabel(
   shape: RoomShapeDefinition,
-  unit: Project["units"]["length"]
+  unit: Project["units"]["length"],
+  elevation?: number
 ): string {
   const format = (value: number) => formatDisplayValue(
     convertPhysicalLength(value, unit, "m"),
@@ -85,9 +86,10 @@ export function formatRoomShapePreviewLabel(
     true
   );
   const outer = `${format(shape.dimensions.width)} × ${format(shape.dimensions.depth)} m`;
-  return shape.kind === "RECTANGLE"
+  const shapeLabel = shape.kind === "RECTANGLE"
     ? outer
     : `L ${outer} · ${format(shape.dimensions.notchWidth)} × ${format(shape.dimensions.notchDepth)} m`;
+  return elevation === undefined ? shapeLabel : `${shapeLabel} · +${format(elevation)} m`;
 }
 
 /** Maps Room-authoring validation codes to localized presentation messages. */

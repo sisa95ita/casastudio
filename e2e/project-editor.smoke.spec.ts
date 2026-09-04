@@ -224,9 +224,9 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await page.getByRole("button", { name: "Edit plan" }).click();
   await page.getByRole("button", { name: "Room" }).click();
   await expect(page.getByRole("menuitem", { name: "Detect room" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Rectangle" })).toBeEnabled();
-  await expect(page.getByRole("menuitem", { name: "L-shape" })).toBeEnabled();
-  await page.getByRole("menuitem", { name: "Rectangle" }).click();
+  await expect(page.getByRole("menuitem", { name: "Rectangle", exact: true })).toBeEnabled();
+  await expect(page.getByRole("menuitem", { name: "L-shape", exact: true })).toBeEnabled();
+  await page.getByRole("menuitem", { name: "Rectangle", exact: true }).click();
   await page.getByRole("spinbutton", { name: "Width" }).fill("400");
   await page.getByRole("spinbutton", { name: "Depth" }).fill("300");
 
@@ -266,8 +266,8 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await expect(roomLabels).toContainText("12.00 m²");
   await expect(editorViewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(1);
   await expect(editorViewport.locator('[data-testid="architectural-wall-body"]')).toHaveCount(4);
-  await expect(page.getByRole("menuitem", { name: "Rectangle" })).toBeDisabled();
-  await expect(page.getByRole("menuitem", { name: "L-shape" })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "Rectangle", exact: true })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "L-shape", exact: true })).toBeDisabled();
   await expect(
     page.getByText("Room shapes are currently available only on an empty level.")
   ).toBeVisible();
@@ -355,7 +355,10 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
 
   await page.getByRole("button", { name: "Edit plan" }).click();
   const authoringToolbar = page.getByRole("toolbar", { name: "Editing tools" });
-  await expect(authoringToolbar.getByRole("button")).toHaveCount(6);
+  for (const tool of ["Select", "Wall", "Openings", "Room", "Stair", "Measure"]) {
+    await expect(authoringToolbar.getByRole("button", { name: tool, exact: true })).toBeVisible();
+  }
+  await expect(authoringToolbar.getByRole("button", { name: /Mezzanine/i })).toHaveCount(0);
   await expect(authoringToolbar.getByRole("button", { name: "Pan" })).toHaveCount(0);
   await expect(editorViewport).toHaveClass(/geometry-svg--authoring/);
   await expect(editorViewport.locator('[data-testid="polygon-centroid"]')).toHaveCount(2);
@@ -504,7 +507,7 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
   expect(consoleErrors, "Unexpected browser console errors").toEqual([]);
 });
 
-test("persists an elevated Room and asymmetric L-shaped Staircase", async ({ page }) => {
+test("persists an elevated Room overlay and asymmetric L-shaped Staircase", async ({ page }) => {
   const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;
   if (!demoPassword) throw new Error("CASASTUDIO_KEYCLOAK_DEMO_PASSWORD is required.");
 
@@ -520,7 +523,7 @@ test("persists an elevated Room and asymmetric L-shaped Staircase", async ({ pag
   const inspector = page.getByRole("complementary", { name: "Inspector" });
 
   await page.getByRole("button", { name: "Room" }).click();
-  await page.getByRole("menuitem", { name: "Rectangle" }).click();
+  await page.getByRole("menuitem", { name: "Rectangle", exact: true }).click();
   const viewport = page.locator('svg[aria-labelledby="geometry-svg-title geometry-svg-description"]');
   await expect(viewport).toBeVisible();
   const bounds = await viewport.boundingBox();
@@ -529,16 +532,38 @@ test("persists an elevated Room and asymmetric L-shaped Staircase", async ({ pag
   await page.mouse.move(roomPoint.x, roomPoint.y);
   await page.mouse.click(roomPoint.x, roomPoint.y);
   await expect(viewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(1);
+  const lowerPolygon = viewport.locator('[data-testid="geometry-polygon"]').first();
+  const lowerPoints = await lowerPolygon.getAttribute("points");
+  await expect(viewport.locator('[data-testid="room-metric"]').first()).toContainText("12.00 m²");
+  const wallCount = await viewport.locator('[data-testid="architectural-wall-body"]').count();
+
+  await page.getByRole("menuitem", { name: "Elevated rectangle" }).click();
+  await page.getByRole("spinbutton", { name: "Elevation above Level" }).fill("180");
+  await page.getByRole("spinbutton", { name: "Width" }).fill("200");
+  await page.getByRole("spinbutton", { name: "Depth" }).fill("150");
+  await page.mouse.move(roomPoint.x, roomPoint.y);
+  const elevatedPreview = viewport.locator('[data-testid="room-shape-preview"]');
+  await expect(elevatedPreview).toHaveAttribute("data-elevated", "true");
+  await expect(elevatedPreview).toContainText("+1.80 m");
+  await page.mouse.click(roomPoint.x, roomPoint.y);
+  await expect(viewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(2);
+  await expect(lowerPolygon).toHaveAttribute("points", lowerPoints ?? "");
+  await expect(viewport.locator('[data-testid="room-metric"]').first()).toContainText("12.00 m²");
+  const elevatedPolygon = viewport.locator('[data-testid="geometry-polygon"][data-elevated="true"]');
+  await expect(elevatedPolygon).toHaveClass(/geometry-polygon--elevated/);
+  await expect(viewport.locator('[data-testid="room-metric"]').last()).toContainText("3.00 m²");
+  await expect(viewport.locator('[data-testid="room-metric"]').last()).toContainText("+1.80 m");
+  await expect(viewport.locator('[data-testid="architectural-wall-body"]')).toHaveCount(wallCount);
   await inspector.getByRole("tab", { name: "Properties" }).click();
-  await inspector.getByRole("spinbutton", { name: "Elevation above Level" }).fill("180");
-  await inspector.getByRole("spinbutton", { name: "Elevation above Level" }).press("Tab");
+  await expect(inspector.getByRole("spinbutton", { name: "Elevation above Level" })).toHaveValue("180");
+  await expect(inspector.getByLabel("Global floor elevation")).toHaveValue("180");
 
   await page.getByRole("button", { name: "Stair" }).click();
   await expect(page.getByRole("spinbutton", { name: "Width" })).toHaveCount(0);
   await page.getByRole("combobox", { name: "Target Level" }).click();
   await page.getByRole("option", { name: /same Level/ }).click();
   await page.getByRole("combobox", { name: "Target Room (optional)" }).click();
-  await page.getByRole("option", { name: /Room 1 · \+180 cm/ }).click();
+  await page.getByRole("option", { name: /Room 2 · \+180 cm/ }).click();
   await page.getByRole("button", { name: "L-shaped" }).click();
   await expect(inspector.getByTestId("stair-authoring-inspector")).toBeVisible();
   await expect(page.getByText("Choose the destination, then a complete template before placing it in the plan.")).toHaveCount(0);
@@ -561,9 +586,13 @@ test("persists an elevated Room and asymmetric L-shaped Staircase", async ({ pag
   await page.reload();
   await expect(page.getByRole("heading", { name: projectName, level: 1 })).toBeVisible();
   await expect(viewport.locator('[data-testid="architectural-staircase"]')).toHaveCount(1);
+  await expect(viewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(2);
+  await expect(viewport.locator('[data-testid="geometry-polygon"][data-elevated="true"]'))
+    .toHaveClass(/geometry-polygon--elevated/);
+  await expect(viewport.locator('[data-testid="room-metric"]').first()).toContainText("12.00 m²");
   await page.getByRole("button", { name: "Edit plan" }).click();
   await page.getByRole("button", { name: "Select" }).click();
-  await viewport.locator('[data-testid="geometry-polygon"]').click({ force: true });
+  await viewport.locator('[data-testid="geometry-polygon"][data-elevated="true"]').click({ force: true });
   await inspector.getByRole("tab", { name: "Properties" }).click();
   await expect(inspector.getByRole("spinbutton", { name: "Elevation above Level" })).toHaveValue("180");
   await viewport.locator('[data-testid="architectural-stair-flight"]').first().click({ force: true });

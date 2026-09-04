@@ -244,7 +244,7 @@ Examples include:
 
 Each Room belongs to exactly one Level.
 
-A Room is not the authoritative source for physical wall geometry. Walls are the authoritative source describing wall segments. A Room persists an ordered and oriented boundary that references Walls owned by the same Level.
+A Room is not the authoritative source for physical wall geometry. Walls are the authoritative source describing wall segments. A Room persists an ordered boundary composed of oriented same-Level Wall references and/or directed free geometric segments.
 
 A Room may define functional metadata and an optional local elevation relative to its parent Level.
 
@@ -269,17 +269,17 @@ Ground Level
 
 This keeps the model aligned with the functional nature of the mezzanine as a usable and designable space.
 
-CasaStudio does not introduce `Slab` or `Platform` as domain entities for the MVP. The Geometry Engine may later generate supporting physical geometry, such as mezzanine slabs or platforms, from elevated Rooms and their wall relationships. Those generated shapes are derived geometry, not independent domain entities.
+CasaStudio does not introduce `Slab` or `Platform` as domain entities for the MVP. An elevated Room supplies an independent floor surface only; support and guard construction are not implied by its boundary.
 
 ### Wall
 
 `Wall` represents a physical wall segment.
 
-Walls are the authoritative source describing room boundaries.
+Walls are authoritative for the physical wall segments used by Room boundaries. A free Room edge is explicit floor-footprint geometry and is not a Wall.
 
 A Wall belongs to exactly one Level.
 
-A Wall may be associated with zero, one, or two Rooms in the MVP:
+A Wall may be associated with zero, one, or two Rooms at one global floor elevation:
 
 - an unassigned Wall may temporarily reference no Rooms;
 - an external Wall may delimit one Room;
@@ -600,16 +600,19 @@ Bidirectional navigation may be useful in derived models, but the conceptual dom
 - A Room represents a functional architectural space.
 - A Room may define an optional local elevation.
 - A Room may persist an empty draft boundary or a geometry-buildable ordered and oriented boundary.
-- A geometry-buildable Room boundary references Walls owned by the same Level.
-- A mezzanine is represented as a Room with optional elevation.
+- A geometry-buildable Room boundary may combine Wall references owned by the same Level with directed free geometric segments.
+- A free Room boundary segment closes the floor footprint without implying a Wall, Opening, railing, or structural support.
+- Rooms at different global floor elevations may overlap in X/Z; each retains its complete floor surface and area.
+- Same-elevation Wall-derived topology retains the ordinary planar Room partition rules.
+- A mezzanine is represented as an elevated Room, not as a separate entity.
 - A mezzanine is not represented as a Level.
 
 ### Wall invariants
 
 - A Wall belongs to exactly one Level.
-- A Wall is associated with zero, one, or two Rooms in the MVP.
+- A Wall is associated with at most two Rooms in each global floor-elevation stratum.
 - A shared Wall must be represented once and referenced by two Rooms in the MVP.
-- Walls are the authoritative source describing room boundaries.
+- Walls are authoritative for Wall-backed Room boundary segments; free boundary segments remain explicit Room geometry.
 - A Wall is defined by a start point and an end point in Level coordinate space.
 - Openings belong to Walls, not directly to Rooms.
 
@@ -990,7 +993,7 @@ Rooms represent functional architectural spaces.
 
 A mezzanine is a Room, not a Level.
 
-Walls are the authoritative source describing room boundaries.
+Walls are authoritative for physical wall segments; free Room boundary segments do not imply Walls.
 
 Openings belong to Walls.
 

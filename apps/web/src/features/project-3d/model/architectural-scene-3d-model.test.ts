@@ -296,6 +296,41 @@ describe("architectural 3D presentation model", () => {
     expect(snapshotFloor.y).toBe(localFloor.y);
   });
 
+  it("keeps overlapping lower and elevated floor surfaces at independent Y elevations", () => {
+    const project = structuredClone(demoProjectFixture);
+    const level = project.building.levels[0]!;
+    const lowerRoom = level.rooms[0]!;
+    level.rooms.push({
+      id: "elevated-overlay",
+      name: "Elevated Overlay",
+      type: "STUDIO",
+      elevation: 450,
+      boundary: [
+        { kind: "FREE", start: { x: 100, z: 50 }, end: { x: 300, z: 50 } },
+        { kind: "FREE", start: { x: 300, z: 50 }, end: { x: 300, z: 250 } },
+        { kind: "FREE", start: { x: 300, z: 250 }, end: { x: 100, z: 250 } },
+        { kind: "FREE", start: { x: 100, z: 250 }, end: { x: 100, z: 50 } }
+      ]
+    });
+
+    const model = createArchitecturalScene3DModel(project);
+    const lowerFloor = model.levels[0]!.floors.find((floor) => floor.roomId === lowerRoom.id)!;
+    const elevatedFloor = model.levels[0]!.floors.find((floor) => floor.roomId === "elevated-overlay")!;
+
+    expect(lowerFloor.y).toBe(0);
+    expect(elevatedFloor.y).toBe(4.5);
+    expect(lowerFloor.contour).toEqual([
+      { x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: -3 }, { x: 0, z: -3 }
+    ]);
+    expect(elevatedFloor.contour).toEqual([
+      { x: 1, z: -0.5 }, { x: 3, z: -0.5 }, { x: 3, z: -2.5 }, { x: 1, z: -2.5 }
+    ]);
+    expect(model.bounds?.max.y).toBe(4.5);
+    expect(model).not.toHaveProperty("supports");
+    expect(model).not.toHaveProperty("railings");
+    expect(model.levels[0]).not.toHaveProperty("slabs");
+  });
+
   it("includes elevated Floor Y in scene bounds without introducing Stair render entities", () => {
     const project = structuredClone(demoProjectFixture);
     project.building.levels[0]!.rooms[0]!.elevation = 450;

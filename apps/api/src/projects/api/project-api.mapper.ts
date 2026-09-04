@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { isWallRoomBoundaryEdge } from "@casastudio/schema";
 import type {
   BaseImage,
   Building,
@@ -144,10 +145,13 @@ export class ProjectApiMapper {
   }
 
   private toRoomBoundaryEdgeDto(edge: RoomBoundaryEdge): RoomBoundaryEdgeDto {
-    return {
-      wallId: edge.wallId,
-      direction: edge.direction
-    };
+    return isWallRoomBoundaryEdge(edge)
+      ? { wallId: edge.wallId, direction: edge.direction }
+      : {
+          kind: "FREE",
+          start: this.toPoint2DDto(edge.start),
+          end: this.toPoint2DDto(edge.end)
+        };
   }
 
   private toWallDto(wall: Wall): WallDto {

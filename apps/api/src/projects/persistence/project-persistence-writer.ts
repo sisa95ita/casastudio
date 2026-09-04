@@ -1,4 +1,5 @@
 import { normalizeProjectName, type Project } from "@casastudio/schema";
+import { isWallRoomBoundaryEdge } from "@casastudio/schema";
 import type { Prisma } from "@prisma/client";
 
 import { validateProjectForPersistence } from "./project-aggregate.mapper";
@@ -235,13 +236,25 @@ export class ProjectPersistenceWriter {
           boundaryEdge
         ] of room.boundary.entries()) {
           await tx.roomBoundaryEdge.create({
-            data: {
-              projectId: persistenceProjectId,
-              roomId: dbRoom.id,
-              wallId: getRequired(walls, boundaryEdge.wallId, "Wall").id,
-              position: boundaryPosition,
-              direction: boundaryEdge.direction
-            }
+            data: isWallRoomBoundaryEdge(boundaryEdge)
+              ? {
+                  projectId: persistenceProjectId,
+                  roomId: dbRoom.id,
+                  wallId: getRequired(walls, boundaryEdge.wallId, "Wall").id,
+                  position: boundaryPosition,
+                  kind: "WALL",
+                  direction: boundaryEdge.direction
+                }
+              : {
+                  projectId: persistenceProjectId,
+                  roomId: dbRoom.id,
+                  position: boundaryPosition,
+                  kind: "FREE",
+                  startX: boundaryEdge.start.x,
+                  startZ: boundaryEdge.start.z,
+                  endX: boundaryEdge.end.x,
+                  endZ: boundaryEdge.end.z
+                }
           });
         }
       }

@@ -11,6 +11,7 @@ import {
   createConnectedWall,
   createStaircase,
   createRoomFromShape,
+  createFreeBoundaryRoomFromShape,
   classifyLevelRoomTopology,
   deriveRoomShapeVertices,
   moveOpening,
@@ -114,6 +115,7 @@ import {
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
   editorRoomShapePlacementChanged,
+  editorRoomShapeElevationChanged,
   editorRoomShapePlacementPointerMoved,
   editorRoomShapePlacementStarted,
   editorStairAuthoringChanged,
@@ -285,6 +287,7 @@ export function ProjectWorkspacePage() {
   const [roomDetectionActive, setRoomDetectionActive] = useState(false);
   const [roomShapeDimensions, setRoomShapeDimensions] =
     useState<RoomShapeDimensionDraft>(defaultRoomShapeDimensions);
+  const [roomElevationDraft, setRoomElevationDraft] = useState("200");
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
@@ -450,6 +453,11 @@ export function ProjectWorkspacePage() {
     });
   }, [activeProject, activeProjectLevel?.staircases.length, stairPlacement]);
   const activeRoomShapeKind = roomShapePlacement?.shape.kind;
+  const activeRoomBoundaryKind = roomShapePlacement?.boundaryKind;
+  const parsedRoomElevation = Number(roomElevationDraft);
+  const validRoomElevation = Number.isFinite(parsedRoomElevation) && parsedRoomElevation > 0
+    ? parsedRoomElevation
+    : undefined;
   const validatedRoomShape = useMemo(
     () => activeRoomShapeKind
       ? parseRoomShapeDefinition(activeRoomShapeKind, roomShapeDimensions)
@@ -714,8 +722,11 @@ export function ProjectWorkspacePage() {
     setRoomMenuAnchor(null);
   }, [dispatch]);
 
-  const handleSelectRoomShape = useCallback((kind: "RECTANGLE" | "L_SHAPE") => {
-    if (!editor.activeLevelId || !roomShapeTemplateAvailable) return;
+  const handleSelectRoomShape = useCallback((
+    kind: "RECTANGLE" | "L_SHAPE",
+    boundaryKind: "WALLS" | "FREE"
+  ) => {
+    if (!editor.activeLevelId || (boundaryKind === "WALLS" && !roomShapeTemplateAvailable)) return;
     const dimensions = getDefaultRoomShapeDimensions(kind);
     const shape = parseRoomShapeDefinition(kind, dimensions);
     if (!shape) return;
@@ -724,9 +735,19 @@ export function ProjectWorkspacePage() {
     dispatch(editorActiveToolChanged("room"));
     dispatch(editorRoomShapePlacementStarted({
       levelId: editor.activeLevelId,
-      shape
+      shape,
+      boundaryKind,
+      elevation: boundaryKind === "FREE" ? (validRoomElevation ?? 200) : 0
     }));
-  }, [dispatch, editor.activeLevelId, roomShapeTemplateAvailable]);
+  }, [dispatch, editor.activeLevelId, roomShapeTemplateAvailable, validRoomElevation]);
+
+  const handleRoomElevationChange = useCallback((value: string) => {
+    setRoomElevationDraft(value);
+    const elevation = Number(value);
+    if (Number.isFinite(elevation) && elevation > 0) {
+      dispatch(editorRoomShapeElevationChanged(elevation));
+    }
+  }, [dispatch]);
 
   const handleRoomShapeDimensionChange = useCallback((
     field: keyof RoomShapeDimensionDraft,
@@ -857,7 +878,8 @@ export function ProjectWorkspacePage() {
     const draggedOpening = transient?.kind === "move-opening" && transient.dragging && selectedEditOpening
       ? { ...selectedEditOpening.opening, offsetFromStart: transient.currentOffsetFromStart } as Opening
       : undefined;
-    const previewShape = transient?.kind === "place-room-shape"
+    const previewShape = transient?.kind === "place-room-shape" &&
+        (transient.boundaryKind === "WALLS" || validRoomElevation !== undefined)
       ? transient.shape
       : undefined;
     const shapeVertices =
@@ -899,12 +921,18 @@ export function ProjectWorkspacePage() {
             }))
           : undefined,
       roomShapePreview:
-        shapeVertices && shapeLabelAnchor && activeProject && previewShape
+        shapeVertices && shapeLabelAnchor && activeProject && previewShape && roomShapePlacement
           ? {
               vertices: shapeVertices,
               labelAnchor: shapeLabelAnchor,
-              label: formatRoomShapePreviewLabel(previewShape, activeProject.units.length),
-              kind: previewShape.kind
+              label: formatRoomShapePreviewLabel(
+                previewShape,
+                activeProject.units.length,
+                roomShapePlacement.boundaryKind === "FREE" ? roomShapePlacement.elevation : undefined
+              ),
+              kind: previewShape.kind,
+              elevated: roomShapePlacement.boundaryKind === "FREE",
+              elevation: roomShapePlacement.elevation
             }
           : undefined,
       drawWall:
@@ -974,6 +1002,7 @@ export function ProjectWorkspacePage() {
     selectionState.selected,
     t,
     validatedRoomShape,
+    validRoomElevation,
     workspaceMode
   ]);
 
@@ -1125,7 +1154,8 @@ export function ProjectWorkspacePage() {
       if (editor.activeTool === "room") {
         const placement = editor.transient.interaction;
         if (placement?.kind !== "place-room-shape") return;
-        if (!validatedRoomShape) {
+        if (!validatedRoomShape ||
+            (placement.boundaryKind === "FREE" && validRoomElevation === undefined)) {
           setEditingError("errors.room.geometry");
           return;
         }
@@ -1141,19 +1171,28 @@ export function ProjectWorkspacePage() {
         const level = editor.draft.building.levels.find(
           (candidate) => candidate.id === editor.activeLevelId
         );
-        const result = createRoomFromShape(editor.draft, {
-          levelId: editor.activeLevelId,
-          origin,
-          shape: validatedRoomShape,
-          room: {
-            id: roomId,
-            name: `Room ${(level?.rooms.length ?? 0) + 1}`,
-            type: "OTHER"
-          },
-          wallIds: Array.from({ length: wallCount }, () => createWallIdentifier()),
-          wallHeight: newWallDefaults.height,
-          wallThickness: newWallDefaults.thickness
-        });
+        const room = {
+          id: roomId,
+          name: `Room ${(level?.rooms.length ?? 0) + 1}`,
+          type: "OTHER" as const,
+          ...(placement.boundaryKind === "FREE" ? { elevation: placement.elevation } : {})
+        };
+        const result = placement.boundaryKind === "FREE"
+          ? createFreeBoundaryRoomFromShape(editor.draft, {
+              levelId: editor.activeLevelId,
+              origin,
+              shape: validatedRoomShape,
+              room
+            })
+          : createRoomFromShape(editor.draft, {
+              levelId: editor.activeLevelId,
+              origin,
+              shape: validatedRoomShape,
+              room,
+              wallIds: Array.from({ length: wallCount }, () => createWallIdentifier()),
+              wallHeight: newWallDefaults.height,
+              wallThickness: newWallDefaults.thickness
+            });
         if (!result.ok) {
           setEditingError(getRoomEditingErrorKey(result.errors[0]?.code));
           return;
@@ -1297,6 +1336,7 @@ export function ProjectWorkspacePage() {
       editor.precision,
       editor.transient.interaction,
       validatedRoomShape,
+      validRoomElevation,
       activeViewport,
       presentationResult,
       saveInteractionBlocked,
@@ -2357,11 +2397,14 @@ export function ProjectWorkspacePage() {
         }
         templateAvailable={roomShapeTemplateAvailable}
         activeShape={activeRoomShapeKind}
+        activeBoundaryKind={activeRoomBoundaryKind}
+        elevation={roomElevationDraft}
         dimensions={roomShapeDimensions}
         unit={activeProject?.units.length ?? "cm"}
         onDetectRoom={handleDetectRoom}
         onSelectShape={handleSelectRoomShape}
         onDimensionChange={handleRoomShapeDimensionChange}
+        onElevationChange={handleRoomElevationChange}
         onSpacePanChange={setViewportPanModifierActive}
         onCancel={handleCancelRoomAuthoring}
       />

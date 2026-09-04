@@ -264,7 +264,7 @@ function wall(
 
 function project(): Project {
   return {
-    id: "opening-interaction", name: "Opening interaction", schemaVersion: "2.0.0", revision: 1,
+    id: "opening-interaction", name: "Opening interaction", schemaVersion: "3.0.0", revision: 1,
     createdAt: "2026-08-23T00:00:00.000Z", updatedAt: "2026-08-23T00:00:00.000Z",
     units: { length: "cm", angle: "deg" },
     building: { id: "building", name: "Building", type: "HOUSE", levels: [{

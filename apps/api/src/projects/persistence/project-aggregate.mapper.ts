@@ -68,10 +68,16 @@ export class ProjectAggregateMapper {
             boundary: mapPositioned(
               room.boundaryEdges,
               `building.levels.${level.domainId}.rooms.${room.domainId}.boundary`,
-              (edge) => ({
-                wallId: edge.wall.domainId,
-                direction: edge.direction
-              })
+              (edge) => edge.kind === "WALL"
+                ? {
+                    wallId: edge.wall?.domainId,
+                    direction: edge.direction
+                  }
+                : {
+                    kind: "FREE" as const,
+                    start: { x: edge.startX, z: edge.startZ },
+                    end: { x: edge.endX, z: edge.endZ }
+                  }
             )
           })),
           walls: mapPositioned(level.walls, `building.levels.${level.domainId}.walls`, (wall) => ({

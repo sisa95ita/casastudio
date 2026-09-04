@@ -114,6 +114,7 @@ export class GeometrySnapshotApiMapper {
     return {
       id: edge.id,
       sourceWallId: edge.sourceWallId,
+      sourceKind: edge.sourceKind,
       startVertexId: edge.startVertex.id,
       endVertexId: edge.endVertex.id,
       start: this.toPoint(edge.startVertex, `${edge.id}.start`),

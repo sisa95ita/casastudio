@@ -10,6 +10,7 @@ import {
 import type { Room } from "./room.js";
 import type { ProjectEditingResult } from "./wall-editing.js";
 import type { Wall } from "./wall.js";
+import { createStandaloneRoom } from "./architectural-editing.js";
 
 /** Room footprint kinds supported by deterministic shape authoring. */
 export type RoomShapeKind = "RECTANGLE" | "L_SHAPE";
@@ -49,6 +50,14 @@ export type CreateRoomFromShapeInput = {
   readonly wallIds: readonly Identifier[];
   readonly wallHeight: number;
   readonly wallThickness: number;
+};
+
+/** Input for creating one explicit free-boundary Room footprint from a shape. */
+export type CreateFreeBoundaryRoomFromShapeInput = {
+  readonly levelId: Identifier;
+  readonly origin: Point2D;
+  readonly shape: RoomShapeDefinition;
+  readonly room: Omit<Room, "boundary">;
 };
 
 /** Returns the exact counter-clockwise footprint vertices for a Room shape. */
@@ -163,6 +172,32 @@ export function createRoomFromShape(
   };
 
   return validateCanonicalResult(candidate);
+}
+
+/**
+ * Atomically creates a Room shape whose directed perimeter contains no Walls.
+ *
+ * The operation is elevation-neutral: product flows may use it for elevated
+ * floor surfaces, while the canonical result remains an ordinary Room. Existing
+ * Rooms and every Wall on the Level are preserved exactly.
+ */
+export function createFreeBoundaryRoomFromShape(
+  project: Project,
+  input: CreateFreeBoundaryRoomFromShapeInput
+): ProjectEditingResult {
+  const vertices = deriveRoomShapeVertices(input.origin, input.shape);
+  if (!vertices) return failure(invalidShapeError());
+  return createStandaloneRoom(project, {
+    levelId: input.levelId,
+    room: {
+      ...input.room,
+      boundary: vertices.map((start, index) => ({
+        kind: "FREE" as const,
+        start,
+        end: vertices[(index + 1) % vertices.length]!
+      }))
+    }
+  });
 }
 
 function validateCanonicalResult(project: Project): ProjectEditingResult {

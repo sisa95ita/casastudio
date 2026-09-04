@@ -21,6 +21,8 @@ export const runtimeId = {
   level: (level: Level): string => `level:${level.id}`,
   vertex: (level: Level, x: number, z: number): string => `vertex:${level.id}:${coordinateKey(x, z)}`,
   boundaryEdge: (wall: Wall): string => `boundary-edge:${wall.id}`,
+  freeBoundaryEdge: (room: Room, boundaryIndex: number): string =>
+    `boundary-edge:${room.id}:free:${boundaryIndex}`,
   boundaryEdgeUse: (room: Room, boundaryIndex: number): string =>
     `boundary-edge-use:${room.id}:${boundaryIndex}`,
   outerLoop: (room: Room): string => `loop:${room.id}:outer`,

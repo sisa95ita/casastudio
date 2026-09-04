@@ -1,4 +1,5 @@
 import type { Project } from "../project/index.js";
+import { isWallRoomBoundaryEdge } from "../physical-building/index.js";
 import { ValidationErrorCode } from "./validation-error-code.js";
 import type { ValidationError, ValidationResult } from "./validation-result.js";
 
@@ -43,6 +44,7 @@ export const validateProjectCrossReferences = (project: Project): ValidationResu
 
     level.rooms.forEach((room, roomIndex) => {
       room.boundary.forEach((boundaryEdge, boundaryEdgeIndex) => {
+        if (!isWallRoomBoundaryEdge(boundaryEdge)) return;
         if (!levelWallIds.has(boundaryEdge.wallId)) {
           const wallLevelId = wallLevelIds.get(boundaryEdge.wallId);
           const isCrossLevelBoundary = wallLevelId !== undefined && wallLevelId !== level.id;

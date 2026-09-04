@@ -3,6 +3,7 @@ import { ProjectSchema } from "../project/index.js";
 import { CURRENT_PROJECT_SCHEMA_VERSION } from "../project/schema-version.js";
 import { MigrationErrorCode, type ProjectMigrationError } from "./migration-error.js";
 import { migrateV1ToV2 } from "./v1-to-v2.js";
+import { migrateV2ToV3 } from "./v2-to-v3.js";
 
 /**
  * Result returned by schema-owned Project migration.
@@ -56,11 +57,10 @@ const canonicalValidationErrors = (input: unknown, sourceVersion: string): Proje
 /**
  * Parses or migrates raw Project input into the canonical Project schema.
  *
- * Canonical `2.0.0` input is validated with `ProjectSchema`. Legacy `1.0.0`
- * input is migrated to `2.0.0`, preserving revision and timestamps while
- * emitting a new immutable output object. Unsupported versions and invalid
- * documents return `ok: false` instead of throwing; exceptions are reserved for
- * unexpected internal faults.
+ * Current input is validated with `ProjectSchema`. Legacy `1.0.0` and `2.0.0`
+ * input is migrated deterministically to the current version while preserving
+ * revision and timestamps and emitting a new immutable output object.
+ * Unsupported versions and invalid documents return `ok: false`.
  *
  * @param input - Raw Project-like data from persistence or import.
  * @returns A discriminated migration result containing either a canonical
@@ -99,6 +99,10 @@ export function migrateProject(input: unknown): ProjectMigrationResult {
 
   if (schemaVersion === "1.0.0") {
     return migrateV1ToV2(input);
+  }
+
+  if (schemaVersion === "2.0.0") {
+    return migrateV2ToV3(input);
   }
 
   return {

@@ -55,7 +55,7 @@ const validRenderResult = {
 const validMinimalProject = {
   id: "casa-simone",
   name: "Casa Simone",
-  schemaVersion: "2.0.0",
+  schemaVersion: "3.0.0",
   revision: 1,
   createdAt: "2026-07-11T15:30:00+02:00",
   updatedAt: "2026-07-11T15:30:00+02:00",
@@ -99,8 +99,8 @@ describe("ProjectSchema", () => {
   });
 
   it("accepts only the current schema version", () => {
-    expect(ProjectSchemaVersionSchema.parse("2.0.0")).toBe("2.0.0");
-    expect(ProjectSchema.parse(validMinimalProject).schemaVersion).toBe("2.0.0");
+    expect(ProjectSchemaVersionSchema.parse("3.0.0")).toBe("3.0.0");
+    expect(ProjectSchema.parse(validMinimalProject).schemaVersion).toBe("3.0.0");
   });
 
   it.each(["1.0.0", "2.0.1", "", "not-a-version"])("rejects unsupported schema version %s", (schemaVersion) => {

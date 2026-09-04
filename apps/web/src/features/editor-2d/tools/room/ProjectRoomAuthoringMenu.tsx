@@ -32,25 +32,31 @@ export function ProjectRoomAuthoringMenu({
   anchorEl,
   templateAvailable,
   activeShape,
+  activeBoundaryKind,
+  elevation,
   dimensions,
   unit,
   onDetectRoom,
   onSelectShape,
   onDimensionChange,
+  onElevationChange,
   onSpacePanChange,
   onCancel
 }: {
   readonly anchorEl: HTMLElement | null;
   readonly templateAvailable: boolean;
   readonly activeShape?: "RECTANGLE" | "L_SHAPE";
+  readonly activeBoundaryKind?: "WALLS" | "FREE";
+  readonly elevation: string;
   readonly dimensions: RoomShapeDimensionDraft;
   readonly unit: string;
   readonly onDetectRoom: () => void;
-  readonly onSelectShape: (kind: "RECTANGLE" | "L_SHAPE") => void;
+  readonly onSelectShape: (kind: "RECTANGLE" | "L_SHAPE", boundaryKind: "WALLS" | "FREE") => void;
   readonly onDimensionChange: (
     field: keyof RoomShapeDimensionDraft,
     value: string
   ) => void;
+  readonly onElevationChange: (value: string) => void;
   readonly onSpacePanChange: (active: boolean) => void;
   readonly onCancel: () => void;
 }) {
@@ -90,8 +96,8 @@ export function ProjectRoomAuthoringMenu({
           <Box component="li" role="none" className="project-room-authoring-menu__shapes">
             <ListSubheader component="div" disableSticky>{t("roomAuthoring.shapeSection")}</ListSubheader>
             <Stack direction="row">
-              <RoomShapeMenuItem kind="RECTANGLE" label={t("roomAuthoring.rectangle")} disabled={!templateAvailable} describedBy={!templateAvailable ? helpId : undefined} selected={activeShape === "RECTANGLE"} onClick={() => onSelectShape("RECTANGLE")} />
-              <RoomShapeMenuItem kind="L_SHAPE" label={t("roomAuthoring.lShape")} disabled={!templateAvailable} describedBy={!templateAvailable ? helpId : undefined} selected={activeShape === "L_SHAPE"} onClick={() => onSelectShape("L_SHAPE")} />
+              <RoomShapeMenuItem kind="RECTANGLE" label={t("roomAuthoring.rectangle")} disabled={!templateAvailable} describedBy={!templateAvailable ? helpId : undefined} selected={activeBoundaryKind === "WALLS" && activeShape === "RECTANGLE"} onClick={() => onSelectShape("RECTANGLE", "WALLS")} />
+              <RoomShapeMenuItem kind="L_SHAPE" label={t("roomAuthoring.lShape")} disabled={!templateAvailable} describedBy={!templateAvailable ? helpId : undefined} selected={activeBoundaryKind === "WALLS" && activeShape === "L_SHAPE"} onClick={() => onSelectShape("L_SHAPE", "WALLS")} />
             </Stack>
             {!templateAvailable ? (
               <Typography id={helpId} className="project-room-authoring-menu__help" component="p" variant="caption" color="text.secondary">
@@ -151,6 +157,24 @@ export function ProjectRoomAuthoringMenu({
                   </Select>
                 </FormControl>
               </Box>
+              </Box>
+            ) : null}
+          </Box>
+          <Box component="li" role="none" className="project-room-authoring-menu__shapes">
+            <ListSubheader component="div" disableSticky>{t("roomAuthoring.elevatedSection")}</ListSubheader>
+            <Stack direction="row">
+              <RoomShapeMenuItem kind="RECTANGLE" label={t("roomAuthoring.elevatedRectangle")} disabled={false} selected={activeBoundaryKind === "FREE" && activeShape === "RECTANGLE"} onClick={() => onSelectShape("RECTANGLE", "FREE")} />
+              <RoomShapeMenuItem kind="L_SHAPE" label={t("roomAuthoring.elevatedLShape")} disabled={false} selected={activeBoundaryKind === "FREE" && activeShape === "L_SHAPE"} onClick={() => onSelectShape("L_SHAPE", "FREE")} />
+            </Stack>
+            {activeBoundaryKind === "FREE" && activeShape ? (
+              <Box className="project-room-authoring-menu__dimensions" component="div" role="none" sx={{ mt: 1 }}>
+                <DimensionField
+                  label={t("roomAuthoring.elevation")}
+                  value={elevation}
+                  unit={unit}
+                  onChange={onElevationChange}
+                  onSpacePanChange={onSpacePanChange}
+                />
               </Box>
             ) : null}
           </Box>

@@ -76,17 +76,20 @@ export class GeometryVertexDto {
 }
 
 /**
- * Physical wall-like runtime boundary edge derived from one source Wall.
+ * Runtime boundary edge derived from a Wall or a directed free Room segment.
  *
- * The edge preserves the source Wall's canonical start-to-end direction.
- * Room-specific traversal direction is represented by `GeometryBoundaryEdgeUseDto`.
+ * `sourceKind` distinguishes the variants and `sourceWallId` is present only
+ * for Wall-backed geometry. Room traversal belongs to the edge-use DTO.
  */
 export class GeometryBoundaryEdgeDto {
   @ApiProperty({ type: String })
   readonly id!: string;
 
-  @ApiProperty({ type: String })
-  readonly sourceWallId!: string;
+  @ApiPropertyOptional({ type: String })
+  readonly sourceWallId?: string;
+
+  @ApiProperty({ enum: ["WALL", "FREE"], enumName: "GeometryBoundaryEdgeSourceKind" })
+  readonly sourceKind!: "WALL" | "FREE";
 
   @ApiProperty({ type: String })
   readonly startVertexId!: string;
@@ -120,8 +123,8 @@ export class GeometryBoundaryEdgeUseDto {
   @ApiProperty({ type: String })
   readonly boundaryEdgeId!: string;
 
-  @ApiProperty({ type: String })
-  readonly sourceWallId!: string;
+  @ApiPropertyOptional({ type: String })
+  readonly sourceWallId?: string;
 
   @ApiProperty({ enum: boundaryEdgeUseDirectionValues, enumName: "GeometryBoundaryEdgeUseDirection" })
   readonly direction!: (typeof boundaryEdgeUseDirectionValues)[number];

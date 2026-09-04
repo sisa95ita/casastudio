@@ -111,6 +111,8 @@ export type MeasureInteraction = {
 export type PlaceRoomShapeInteraction = {
   readonly kind: "place-room-shape";
   readonly levelId: string;
+  readonly boundaryKind: "WALLS" | "FREE";
+  readonly elevation: number;
   readonly shape: RoomShapeDefinition;
   readonly origin?: WorldPointXZ;
 };
@@ -590,6 +592,8 @@ const projectEditorSlice = createSlice({
       action: PayloadAction<{
         readonly levelId: string;
         readonly shape: RoomShapeDefinition;
+        readonly boundaryKind?: "WALLS" | "FREE";
+        readonly elevation?: number;
       }>
     ) {
       if (
@@ -603,6 +607,8 @@ const projectEditorSlice = createSlice({
           interaction: {
             kind: "place-room-shape",
             levelId: action.payload.levelId,
+            boundaryKind: action.payload.boundaryKind ?? "WALLS",
+            elevation: action.payload.elevation ?? 0,
             shape: action.payload.shape
           }
         };
@@ -614,6 +620,12 @@ const projectEditorSlice = createSlice({
     ) {
       if (state.transient.interaction?.kind === "place-room-shape") {
         state.transient.interaction.shape = action.payload;
+      }
+    },
+    editorRoomShapeElevationChanged(state, action: PayloadAction<number>) {
+      if (state.transient.interaction?.kind === "place-room-shape" &&
+          Number.isFinite(action.payload)) {
+        state.transient.interaction.elevation = action.payload;
       }
     },
     editorRoomShapePlacementPointerMoved(
@@ -863,6 +875,7 @@ export const {
   editorMeasurementPointerMoved,
   editorRoomShapePlacementStarted,
   editorRoomShapePlacementChanged,
+  editorRoomShapeElevationChanged,
   editorRoomShapePlacementPointerMoved,
   editorStairAuthoringChanged,
   editorStairPlacementPointSet,

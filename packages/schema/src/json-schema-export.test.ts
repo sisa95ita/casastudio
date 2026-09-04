@@ -92,7 +92,7 @@ describe("ProjectSchema JSON Schema export", () => {
     expect(jsonSchema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
     expect(jsonSchema.type).toBe("object");
     expect(jsonSchema.required).toContain("building");
-    expect(jsonSchema.properties?.schemaVersion?.const).toBe("2.0.0");
+    expect(jsonSchema.properties?.schemaVersion?.const).toBe("3.0.0");
   });
 
   it("matches the current ProjectSchema JSON Schema output", () => {
@@ -105,7 +105,7 @@ describe("ProjectSchema JSON Schema export", () => {
     expect(artifactSchema).toEqual(generatedSchema);
   });
 
-  it("exports the canonical v2 room boundary contract", () => {
+  it("exports the canonical v3 room boundary contract", () => {
     const jsonSchema = JSON.parse(readFileSync(generatedSchemaPath, "utf8"));
     const roomSchemas = collectObjectsWithProperty(jsonSchema, "boundary");
     const boundaryJson = JSON.stringify(jsonSchema);
@@ -116,10 +116,13 @@ describe("ProjectSchema JSON Schema export", () => {
     );
     expect(boundaryJson).toContain('"FORWARD"');
     expect(boundaryJson).toContain('"REVERSE"');
+    expect(boundaryJson).toContain('"FREE"');
+    expect(boundaryJson).toContain('"start"');
+    expect(boundaryJson).toContain('"end"');
     expect(hasPropertyDefinition(jsonSchema, "wallIds")).toBe(false);
   });
 
-  it("represents Wall roomIds cardinality when supported by the generator", () => {
+  it("does not impose a cross-elevation cardinality limit on Wall roomIds", () => {
     const jsonSchema = JSON.parse(readFileSync(generatedSchemaPath, "utf8")) as JsonObject;
     const roomIdsSchemas = collectObjectsWithProperty(jsonSchema, "roomIds");
     const roomIdsRefs = roomIdsSchemas
@@ -128,6 +131,6 @@ describe("ProjectSchema JSON Schema export", () => {
       .map((roomIdsProperty) => resolveLocalRef(jsonSchema, roomIdsProperty.$ref));
 
     expect(roomIdsSchemas.length).toBeGreaterThan(0);
-    expect(roomIdsRefs.some((schema) => isJsonObject(schema) && schema.maxItems === 2)).toBe(true);
+    expect(roomIdsRefs.some((schema) => isJsonObject(schema) && "maxItems" in schema)).toBe(false);
   });
 });

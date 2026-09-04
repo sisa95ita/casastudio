@@ -9,10 +9,12 @@ import {
 } from "../validation/index.js";
 import {
   createRoomFromShape,
+  createFreeBoundaryRoomFromShape,
   deriveRoomShapeVertices,
   validateRoomShapeDefinition,
   type RoomShapeDefinition
 } from "./room-shape-authoring.js";
+import { isFreeRoomBoundaryEdge } from "./room.js";
 
 describe("Room shape authoring", () => {
   it("creates one exact reciprocal rectangular Room without mutating its source", () => {
@@ -148,6 +150,55 @@ describe("Room shape authoring", () => {
     expect(JSON.stringify(result.project)).not.toContain("rotation");
     expectCanonicalProject(result.project);
   });
+
+  it("adds an overlapping elevated free-boundary Room without changing lower Room Walls", () => {
+    const lower = commit(createEmptyProject(), {
+      kind: "RECTANGLE",
+      dimensions: { width: 400, depth: 300 }
+    });
+    expect(lower.ok).toBe(true);
+    if (!lower.ok) return;
+    const lowerBefore = structuredClone(lower.project.building.levels[0]!.rooms[0]);
+    const wallsBefore = structuredClone(lower.project.building.levels[0]!.walls);
+    const result = createFreeBoundaryRoomFromShape(lower.project, {
+      levelId: "ground-level",
+      origin: { x: 200, z: 0 },
+      shape: { kind: "RECTANGLE", dimensions: { width: 200, depth: 250 } },
+      room: { id: "elevated-room", name: "Studio", type: "STUDIO", elevation: 180 }
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const level = result.project.building.levels[0]!;
+    expect(level.rooms[0]).toEqual(lowerBefore);
+    expect(level.walls).toEqual(wallsBefore);
+    expect(level.rooms[1]).toMatchObject({ id: "elevated-room", elevation: 180 });
+    expect(level.rooms[1]!.boundary).toHaveLength(4);
+    expect(level.rooms[1]!.boundary.every(isFreeRoomBoundaryEdge)).toBe(true);
+    expectCanonicalProject(result.project);
+  });
+
+  it("creates an exact elevated free-boundary L-shaped footprint without fake Walls", () => {
+    const result = createFreeBoundaryRoomFromShape(createEmptyProject(), {
+      levelId: "ground-level",
+      origin: { x: 25, z: 475 },
+      shape: {
+        kind: "L_SHAPE",
+        dimensions: { width: 500, depth: 400, notchWidth: 200, notchDepth: 150 }
+      },
+      room: { id: "elevated-l-room", name: "Upper Studio", type: "STUDIO", elevation: 220 }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const level = result.project.building.levels[0]!;
+    expect(level.walls).toEqual([]);
+    expect(level.rooms[0]!.boundary).toHaveLength(6);
+    expect(measure(level.rooms[0]!.boundary.map((edge) => {
+      if (!("kind" in edge)) throw new Error("Expected a free boundary edge.");
+      return edge.start;
+    }))).toEqual({ area: 170_000, perimeter: 1_800 });
+    expectCanonicalProject(result.project);
+  });
 });
 
 function commit(project: Project, shape: RoomShapeDefinition) {
@@ -184,7 +235,7 @@ function createEmptyProject(): Project {
   return {
     id: "shape-authoring-project",
     name: "Shape Authoring Project",
-    schemaVersion: "2.0.0",
+    schemaVersion: "3.0.0",
     revision: 1,
     createdAt: "2026-08-26T10:00:00+02:00",
     updatedAt: "2026-08-26T10:00:00+02:00",

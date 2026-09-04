@@ -627,7 +627,7 @@ function createProject(walls: Wall[], rooms: Room[] = []): Project {
   return {
     id: "topology-project",
     name: "Topology Project",
-    schemaVersion: "2.0.0",
+    schemaVersion: "3.0.0",
     revision: 7,
     createdAt: "2026-08-13T08:00:00.000Z",
     updatedAt: "2026-08-13T08:30:00.000Z",
@@ -664,7 +664,7 @@ function expectCanonicalValidity(project: Project): void {
 function polygonArea(room: Room, walls: readonly Wall[]): number {
   const byId = new Map(walls.map((wall) => [wall.id, wall]));
   const points = room.boundary.map((edge) => {
-    const wall = byId.get(edge.wallId)!;
+    const wall = byId.get(edge.wallId!)!;
     return edge.direction === "FORWARD" ? wall.start : wall.end;
   });
   return Math.abs(

@@ -85,6 +85,29 @@ describe("ProjectApiMapper", () => {
       .toMatchObject({ type: "DOOR", hingeSide: "END", swingSide: "RIGHT" });
   });
 
+  it("preserves free Room boundary geometry without inventing Wall references", () => {
+    const project = structuredClone(canonicalProject);
+    project.building.levels[0]!.rooms.push({
+      id: "elevated-room",
+      name: "Elevated Room",
+      type: "STUDIO",
+      elevation: 180,
+      boundary: [
+        { kind: "FREE", start: { x: 100, z: 100 }, end: { x: 300, z: 100 } },
+        { kind: "FREE", start: { x: 300, z: 100 }, end: { x: 300, z: 250 } },
+        { kind: "FREE", start: { x: 300, z: 250 }, end: { x: 100, z: 250 } },
+        { kind: "FREE", start: { x: 100, z: 250 }, end: { x: 100, z: 100 } }
+      ]
+    });
+
+    const response = new ProjectApiMapper().toProjectResponse(ProjectSchema.parse(project));
+    const room = response.project.building.levels[0]!.rooms.at(-1)!;
+
+    expect(room.elevation).toBe(180);
+    expect(room.boundary).toEqual(project.building.levels[0]!.rooms.at(-1)!.boundary);
+    expect(room.boundary.every((edge) => edge.wallId === undefined)).toBe(true);
+  });
+
   it("does not expose persistence ownership or technical database metadata", () => {
     const responseJson = JSON.stringify(new ProjectApiMapper().toProjectResponse(canonicalProject));
 
