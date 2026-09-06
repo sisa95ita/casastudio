@@ -52,6 +52,12 @@ export class ProjectAggregateMapper {
         angle: aggregate.unitAngle
       },
       building: {
+        furniture: mapPositioned(aggregate.furniture, "building.furniture", (item) => ({
+          id: item.domainId, roomId: item.room.domainId, definitionId: item.definitionId,
+          position: { x: item.pointX, z: item.pointZ }, rotation: item.rotation,
+          width: item.width, depth: item.depth, height: item.height,
+          name: item.name ?? undefined, description: item.description ?? undefined
+        })),
         id: building.domainId,
         name: building.name,
         type: building.type,

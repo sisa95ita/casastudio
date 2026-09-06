@@ -30,6 +30,7 @@ export function createInitialProject(input: InitialProjectInput): Project {
       angle: "deg"
     },
     building: {
+      furniture: [],
       id: input.buildingId,
       name: input.name,
       type: "OTHER",

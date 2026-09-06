@@ -399,12 +399,13 @@ function createProject(walls: Wall[], rooms: Room[] = []): Project {
   return {
     id: "geometry-topology-project",
     name: "Geometry Topology Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 3,
     createdAt: "2026-08-13T08:00:00.000Z",
     updatedAt: "2026-08-13T08:30:00.000Z",
     units: { length: "cm", angle: "deg" },
     building: {
+      furniture: [],
       id: "building",
       name: "Building",
       type: "HOUSE",

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { ProjectSchema, type Project } from "@casastudio/schema";
+import { createInitialProject, ProjectSchema, type Project } from "@casastudio/schema";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -96,6 +96,48 @@ describeWithDatabase("relational Project persistence", () => {
       }
     });
     await prisma.$disconnect();
+  });
+
+  it("round-trips normalized Furniture, replacements, same-Project Room FKs and cascades", async () => {
+    const project = createInitialProject({ projectId: testProjectId, buildingId: "furniture-building", levelId: "ground",
+      name: "Generic Furniture test", createdAt: "2026-09-06T00:00:00Z" });
+    const ground = project.building.levels[0]!;
+    ground.rooms.push({ id: "living-room", name: "Living Room", type: "LIVING_ROOM", boundary: [] });
+    ground.rooms.push({ id: "raised-study", name: "Raised Study", type: "STUDIO", elevation: 200, boundary: [] });
+    const sofa = { id: "generic-sofa-instance", roomId: ground.rooms[0]!.id, definitionId: "generic-sofa",
+      position: { x: 100, z: 100 }, rotation: 27.5, width: 200, depth: 90, height: 85, name: "Sofa", description: "Generic example" };
+    project.building.furniture = [sofa, { ...sofa, id: "desk-instance", roomId: "raised-study", definitionId: "custom-provider:desk", width: 120, depth: 60, height: 75 }, { ...sofa, id: "second-sofa" }];
+    await repository.createProject(project, testOwnerSubject);
+    expect(await repository.findByDomainId(project.id)).toEqual(project);
+    const root = await prisma.project.findUniqueOrThrow({ where: { domainId: project.id } });
+    const stored = await prisma.furnitureItem.findMany({ where: { projectId: root.id }, orderBy: { position: "asc" } });
+    expect(stored.map((item) => item.domainId)).toEqual(project.building.furniture.map((item) => item.id));
+    expect(stored[1]).toMatchObject({ definitionId: "custom-provider:desk", width: 120, pointX: 100, pointZ: 100 });
+    await expect(prisma.furnitureItem.update({ where: { id: stored[0]!.id }, data: { roomId: "00000000-0000-0000-0000-000000000000" } })).rejects.toMatchObject({ code: "P2003" });
+    const foreign = { ...structuredClone(project), id: "furniture-foreign-project", name: "Furniture foreign Project" };
+    try {
+      await repository.createProject(foreign, testOwnerSubject);
+      const foreignRoom = await prisma.room.findFirstOrThrow({ where: { project: { domainId: foreign.id } } });
+      await expect(prisma.furnitureItem.update({ where: { id: stored[0]!.id }, data: { roomId: foreignRoom.id } })).rejects.toMatchObject({ code: "P2003" });
+    } finally {
+      await prisma.project.deleteMany({ where: { domainId: foreign.id } });
+    }
+    const proposed = structuredClone(project);
+    proposed.building.furniture = [
+      { ...project.building.furniture[1]!, rotation: -725.5, position: { x: 120, z: 80 }, width: 155, description: "Updated desk" },
+      { ...sofa, roomId: "raised-study" }
+    ];
+    const updated = await repository.replaceProject({ projectId: project.id, baseRevision: project.revision, project: proposed, actorSubject: testOwnerSubject, requiredOwnerSubject: testOwnerSubject });
+    expect(updated.status).toBe("updated");
+    expect((await repository.findByDomainId(project.id))?.building.furniture).toEqual(proposed.building.furniture);
+    const raised = await prisma.room.findFirstOrThrow({ where: { projectId: root.id, domainId: "raised-study" } });
+    await prisma.room.delete({ where: { id: raised.id } });
+    expect(await prisma.furnitureItem.count({ where: { projectId: root.id } })).toBe(0);
+    // Aggregate replacement recreates Room/Furniture rows before checking Project cascade.
+    await writeProject(project);
+    expect(await prisma.furnitureItem.count({ where: { project: { domainId: project.id } } })).toBe(3);
+    await prisma.project.delete({ where: { domainId: project.id } });
+    expect(await prisma.furnitureItem.count({ where: { domainId: { in: project.building.furniture.map((item) => item.id) } } })).toBe(0);
   });
 
   it("returns null for a missing project domain ID", async () => {

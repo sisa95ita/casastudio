@@ -116,6 +116,7 @@ export class ProjectApiMapper {
       id: building.id,
       name: building.name,
       type: building.type,
+      furniture: building.furniture.map((item) => ({ ...item, position: { ...item.position } })),
       levels: building.levels.map((level) => this.toLevelDto(level))
     };
   }

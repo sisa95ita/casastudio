@@ -22,7 +22,7 @@ describe("migrateV2ToV3", () => {
     expect(result).toMatchObject({
       ok: true,
       sourceVersion: "2.0.0",
-      targetVersion: "3.0.0"
+      targetVersion: "4.0.0"
     });
     expect(input.schemaVersion).toBe("2.0.0");
     expect(input.building).toEqual(originalBuilding);

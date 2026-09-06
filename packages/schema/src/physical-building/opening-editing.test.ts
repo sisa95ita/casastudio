@@ -119,12 +119,13 @@ function createProject(): Project {
   return {
     id: "opening-editing",
     name: "Opening editing",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 1,
     createdAt: "2026-08-23T00:00:00.000Z",
     updatedAt: "2026-08-23T00:00:00.000Z",
     units: { length: "cm", angle: "deg" },
     building: {
+      furniture: [],
       id: "building",
       name: "Building",
       type: "HOUSE",

@@ -517,3 +517,7 @@ Keep generated geometry derived and reproducible.
 Avoid storing duplicate coordinates that can drift from their authoritative source.
 
 Use `docs/11-domain-model.md` for conceptual entity meaning and this document for spatial conventions.
+
+## Furniture placement
+
+Furniture position is the center of its width-by-depth footprint in Project X/Z centimeters. At zero rotation, width follows local X and depth follows local Z. Arbitrary finite degrees rotate the footprint about positive Y using the right-hand rule; angles are not normalized. Height extends upward from `Level.elevation + (Room.elevation ?? 0)`. No Furniture Y/elevation or direct Level ownership is persisted. Vertically stacked Room-owned items may share X/Z. Anchor and footprint containment are not canonical geometry constraints. See [Furniture domain and persistence](furniture-domain.md).

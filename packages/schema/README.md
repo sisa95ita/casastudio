@@ -347,3 +347,7 @@ Validation:
   geometry layer, not proof of full geometric correctness.
 - The generated JSON Schema is structural and does not replace the TypeScript
   domain validators.
+
+## Furniture
+
+Canonical v4 Projects require `building.furniture: []` or a collection of Room-owned instances. The package exports Furniture item/definition contracts, an optional deterministic generic catalog outside Project composition, pure editing operations, Room/Level/elevation resolution, and deterministic migration from v3. Unknown definition IDs remain parseable; instances persist effective dimensions. See [Furniture domain and persistence](../../docs/furniture-domain.md).

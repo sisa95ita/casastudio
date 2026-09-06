@@ -272,7 +272,7 @@ function buildRectangularRoomProject(): Project {
   return ProjectSchema.parse({
     id: "geometry-slice-project",
     name: "Geometry Slice Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 7,
     createdAt: "2026-07-20T10:00:00+02:00",
     updatedAt: "2026-07-20T10:00:00+02:00",
@@ -281,6 +281,7 @@ function buildRectangularRoomProject(): Project {
       angle: "deg"
     },
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",
@@ -359,6 +360,7 @@ function buildSharedWallProject(): Project {
     name: "Shared Wall Project",
     revision: 3,
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",
@@ -469,6 +471,7 @@ function buildEmptyLevelProject(): Project {
     id: "empty-level-project",
     revision: 1,
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",

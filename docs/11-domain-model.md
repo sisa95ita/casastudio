@@ -1016,3 +1016,7 @@ AI-generated images are derived design interpretations.
 The Geometry Engine consumes the domain model but does not define it.
 
 The Project model remains the single source of truth.
+
+## Furniture
+
+A FurnitureItem is one actual furnishing owned by exactly one Room within a Project. Its Level and floor elevation follow that Room, including elevated Rooms. A separate FurnitureDefinition supplies semantic category, display identity and creation defaults from product catalog data outside the Project. Effective instance dimensions remain authoritative when catalog defaults evolve, and unknown definition identities do not invalidate the Project. Furniture contains no renderer, selection, asset, or AI-specific state. See [Furniture domain and persistence](furniture-domain.md) for ownership and editing contracts.

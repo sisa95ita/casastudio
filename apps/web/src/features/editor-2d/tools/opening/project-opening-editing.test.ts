@@ -264,10 +264,10 @@ function wall(
 
 function project(): Project {
   return {
-    id: "opening-interaction", name: "Opening interaction", schemaVersion: "3.0.0", revision: 1,
+    id: "opening-interaction", name: "Opening interaction", schemaVersion: "4.0.0", revision: 1,
     createdAt: "2026-08-23T00:00:00.000Z", updatedAt: "2026-08-23T00:00:00.000Z",
     units: { length: "cm", angle: "deg" },
-    building: { id: "building", name: "Building", type: "HOUSE", levels: [{
+    building: { furniture: [], id: "building", name: "Building", type: "HOUSE", levels: [{
       id: "level", name: "Level", elevation: 0, rooms: [], staircases: [],
       walls: [{ id: "angled", start: { x: 0, z: 0 }, end: { x: 300, z: 300 }, height: 280, thickness: 20, roomIds: [], openings: [] }]
     }] },

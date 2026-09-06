@@ -52,7 +52,7 @@ describe("package barrel exports", () => {
     expect(IdentifierSchema.parse("casa-simone")).toBe("casa-simone");
     expect(Point2DSchema.parse({ x: 0, z: 0 })).toEqual({ x: 0, z: 0 });
     expect(UnitsSchema.parse({ length: "cm", angle: "deg" })).toEqual({ length: "cm", angle: "deg" });
-    expect(BuildingSchema.parse({ id: "main-building", name: "Main Building", type: "HOUSE", levels: [] }).id).toBe(
+    expect(BuildingSchema.parse({ furniture: [], id: "main-building", name: "Main Building", type: "HOUSE", levels: [] }).id).toBe(
       "main-building"
     );
     expect(RoomSchema.parse({ id: "living-room", name: "Living Room", type: "LIVING_ROOM", boundary: [] }).id).toBe(
@@ -156,7 +156,7 @@ describe("package barrel exports", () => {
     const project: Project = {
       id: "casa-simone",
       name: "Casa Simone",
-      schemaVersion: "3.0.0",
+      schemaVersion: "4.0.0",
       revision: 1,
       createdAt: "2026-07-11T15:30:00+02:00",
       updatedAt: "2026-07-11T15:30:00+02:00",
@@ -165,6 +165,7 @@ describe("package barrel exports", () => {
         angle: "deg"
       },
       building: {
+        furniture: [],
         id: "main-building",
         name: "Main Building",
         type: "HOUSE",
@@ -181,7 +182,7 @@ describe("package barrel exports", () => {
   });
 
   it("exports schema version and room boundary contracts from the package entry point", () => {
-    const schemaVersion: SupportedProjectSchemaVersion = "3.0.0";
+    const schemaVersion: SupportedProjectSchemaVersion = "4.0.0";
     const direction: RoomBoundaryDirection = "FORWARD";
     const edge: RoomBoundaryEdge = {
       wallId: "living-wall-tv",
@@ -189,8 +190,8 @@ describe("package barrel exports", () => {
     };
 
     expect(CURRENT_PROJECT_SCHEMA_VERSION).toBe(schemaVersion);
-    expect(SUPPORTED_PROJECT_SCHEMA_VERSIONS).toEqual(["3.0.0"]);
-    expect(ProjectSchemaVersionSchema.parse("3.0.0")).toBe("3.0.0");
+    expect(SUPPORTED_PROJECT_SCHEMA_VERSIONS).toEqual(["4.0.0"]);
+    expect(ProjectSchemaVersionSchema.parse("4.0.0")).toBe("4.0.0");
     expect(RoomBoundaryDirectionSchema.parse(direction)).toBe(direction);
     expect(RoomBoundaryEdgeSchema.parse(edge)).toEqual(edge);
   });
@@ -219,7 +220,7 @@ describe("package barrel exports", () => {
     const project: Project = {
       id: "casa-simone",
       name: "Casa Simone",
-      schemaVersion: "3.0.0",
+      schemaVersion: "4.0.0",
       revision: 1,
       createdAt: "2026-07-11T15:30:00+02:00",
       updatedAt: "2026-07-11T15:30:00+02:00",
@@ -228,6 +229,7 @@ describe("package barrel exports", () => {
         angle: "deg"
       },
       building: {
+        furniture: [],
         id: "main-building",
         name: "Main Building",
         type: "HOUSE",
@@ -270,7 +272,7 @@ describe("package barrel exports", () => {
     const project: Project = {
       id: "casa-simone",
       name: "Casa Simone",
-      schemaVersion: "3.0.0",
+      schemaVersion: "4.0.0",
       revision: 1,
       createdAt: "2026-07-11T15:30:00+02:00",
       updatedAt: "2026-07-11T15:30:00+02:00",
@@ -279,6 +281,7 @@ describe("package barrel exports", () => {
         angle: "deg"
       },
       building: {
+        furniture: [],
         id: "main-building",
         name: "Main Building",
         type: "HOUSE",

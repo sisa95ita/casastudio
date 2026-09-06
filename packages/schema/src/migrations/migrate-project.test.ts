@@ -32,18 +32,18 @@ describe("migrateProject", () => {
     });
   });
 
-  it("accepts valid canonical v3 input", () => {
+  it("accepts valid canonical v4 input", () => {
     const input = loadJson(canonicalProjectUrl);
     const result = migrateProject(input);
 
     expect(result).toMatchObject({
       ok: true,
-      sourceVersion: "3.0.0",
-      targetVersion: "3.0.0"
+      sourceVersion: "4.0.0",
+      targetVersion: "4.0.0"
     });
   });
 
-  it("returns canonical validation errors for invalid canonical v3 input", () => {
+  it("returns canonical validation errors for invalid canonical v4 input", () => {
     const input = loadJson(canonicalProjectUrl);
 
     input.name = "";
@@ -54,7 +54,7 @@ describe("migrateProject", () => {
 
     if (!result.ok) {
       expect(result.errors[0]?.code).toBe(MigrationErrorCode.CANONICAL_VALIDATION_FAILED);
-      expect(result.errors[0]?.sourceVersion).toBe("3.0.0");
+      expect(result.errors[0]?.sourceVersion).toBe("4.0.0");
     }
   });
 
@@ -64,11 +64,11 @@ describe("migrateProject", () => {
     expect(result).toMatchObject({
       ok: true,
       sourceVersion: "1.0.0",
-      targetVersion: "3.0.0"
+      targetVersion: "4.0.0"
     });
 
     if (result.ok) {
-      expect(result.project.schemaVersion).toBe("3.0.0");
+      expect(result.project.schemaVersion).toBe("4.0.0");
     }
   });
 

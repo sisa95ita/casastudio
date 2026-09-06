@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client";
  * one aggregate graph. Callers must not mutate the returned records.
  */
 export const projectPersistenceInclude = {
+  furniture: { orderBy: { position: "asc" }, include: { room: true } },
   building: {
     include: {
       levels: {

@@ -26,7 +26,7 @@ const buildRectangularRoomProject = ({
   ProjectSchema.parse({
     id: "geometry-slice-project",
     name: "Geometry Slice Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 7,
     createdAt: "2026-07-20T10:00:00+02:00",
     updatedAt: "2026-07-20T10:00:00+02:00",
@@ -35,6 +35,7 @@ const buildRectangularRoomProject = ({
       angle: "deg"
     },
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",
@@ -172,7 +173,7 @@ const buildDegenerateRoomProject = (): Project =>
   ProjectSchema.parse({
     id: "degenerate-room-project",
     name: "Degenerate Room Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 2,
     createdAt: "2026-07-20T10:00:00+02:00",
     updatedAt: "2026-07-20T10:00:00+02:00",
@@ -181,6 +182,7 @@ const buildDegenerateRoomProject = (): Project =>
       angle: "deg"
     },
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",
@@ -255,7 +257,7 @@ const buildEmptyLevelProject = (): Project =>
   ProjectSchema.parse({
     id: "empty-level-project",
     name: "Empty Level Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 1,
     createdAt: "2026-07-20T10:00:00+02:00",
     updatedAt: "2026-07-20T10:00:00+02:00",
@@ -264,6 +266,7 @@ const buildEmptyLevelProject = (): Project =>
       angle: "deg"
     },
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",
@@ -289,7 +292,7 @@ const buildSharedWallProject = (): Project =>
   ProjectSchema.parse({
     id: "shared-wall-project",
     name: "Shared Wall Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 3,
     createdAt: "2026-07-20T10:00:00+02:00",
     updatedAt: "2026-07-20T10:00:00+02:00",
@@ -298,6 +301,7 @@ const buildSharedWallProject = (): Project =>
       angle: "deg"
     },
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",

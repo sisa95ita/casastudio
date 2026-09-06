@@ -37,7 +37,7 @@ describe("canonical project example", () => {
     const input = loadCanonicalProject();
     const project = ProjectSchema.parse(input);
 
-    expect(project.schemaVersion).toBe("3.0.0");
+    expect(project.schemaVersion).toBe("4.0.0");
     expect(hasOwnPropertyDeep(input, "wallIds")).toBe(false);
     expect(project.building.levels.flatMap((level) => level.rooms).every((room) => Array.isArray(room.boundary))).toBe(
       true
@@ -87,7 +87,7 @@ describe("legacy wallIds project example", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.project.schemaVersion).toBe("3.0.0");
+    expect(result.project.schemaVersion).toBe("4.0.0");
     expect(result.project.revision).toBe(input.revision);
     expect(result.project.createdAt).toBe(input.createdAt);
     expect(result.project.updatedAt).toBe(input.updatedAt);

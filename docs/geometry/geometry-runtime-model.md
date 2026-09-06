@@ -1708,3 +1708,7 @@ The following invariants must hold for a valid Geometry Model:
 23. Rebuilding a `GeometryModel` invalidates all runtime object references from the previous model.
 24. Debug serialization of the runtime graph is explicit and ID-based.
 25. Geometry construction must not silently alter persisted coordinates or topology.
+
+## Canonical Furniture boundary
+
+Furniture remains Room-owned Project data and is not part of GeometryModel or Geometry Snapshot. Its global floor elevation and Level are derived by the schema-owned `resolveFurnitureRoom` helper. No current geometry consumer requires a Furniture runtime object, so runtime topology and snapshot contracts remain unchanged. See [Furniture domain and persistence](../furniture-domain.md).

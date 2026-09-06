@@ -132,12 +132,16 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       ]
     });
 
+    proposed.building.furniture = [{ id: "saved-desk", roomId: "saved-room", definitionId: "custom-provider:desk",
+      position: { x: 50, z: 50 }, rotation: 27.5, width: 60, depth: 40, height: 75, name: "Desk", description: "Generic desk" }];
+
     const saved = await request(app.getHttpServer())
       .put(`/api/v1/projects/${projectId}`)
       .set("authorization", authorization)
       .send({ baseRevision: 1, project: proposed })
       .expect(200);
 
+    expect(saved.body.project.building.furniture).toEqual(proposed.building.furniture);
     expect(saved.body.sourceRevision).toBe(2);
     expect(saved.body.project).toMatchObject({
       id: projectId,

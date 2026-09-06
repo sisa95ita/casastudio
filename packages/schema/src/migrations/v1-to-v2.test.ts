@@ -40,7 +40,7 @@ describe("migrateV1ToV2", () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.project.schemaVersion).toBe("3.0.0");
+      expect(result.project.schemaVersion).toBe("4.0.0");
       expect(result.project.revision).toBe(7);
       expect(result.project.createdAt).toBe("2026-07-18T10:00:00+02:00");
       expect(result.project.updatedAt).toBe("2026-07-19T12:30:00+02:00");

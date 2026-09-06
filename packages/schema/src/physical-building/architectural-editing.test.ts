@@ -19,6 +19,8 @@ import {
 import type { Room } from "./room.js";
 import type { Wall } from "./wall.js";
 
+const furnishing = { id: "test-desk", roomId: "whole-room", definitionId: "generic-desk", position: { x: 25, z: 25 }, rotation: 0, width: 60, depth: 40, height: 75 };
+
 describe("explicit Room authoring", () => {
   it("discovers a rectangle without persisting it and creates a canonical reciprocal Room", () => {
     const project = createProject(rectangleWalls());
@@ -146,6 +148,7 @@ describe("explicit Room authoring", () => {
 describe("Room partitioning", () => {
   it("splits a Room with deterministic identity fallback and updates reciprocity", () => {
     const project = createPartitionProject();
+    project.building.furniture = [structuredClone(furnishing)];
     const before = structuredClone(project);
     const result = partitionRoom(project, {
       levelId: "ground-level",
@@ -157,6 +160,7 @@ describe("Room partitioning", () => {
     expect(result.ok).toBe(true);
     expect(project).toEqual(before);
     if (!result.ok) return;
+    expect(result.project.building.furniture).toEqual(project.building.furniture);
     const level = result.project.building.levels[0]!;
     expect(level.rooms.map((room) => room.id)).toEqual(["whole-room", "new-room"]);
     expect(level.walls.find((item) => item.id === "partition")?.roomIds).toEqual([
@@ -260,6 +264,7 @@ describe("Room partitioning", () => {
 
   it("reconciles a multi-Wall path atomically and preserves the centroid-containing identity", () => {
     const project = createMultiWallPartitionProject();
+    project.building.furniture = [structuredClone(furnishing)];
     const before = structuredClone(project);
     const subdivision = classifyLevelRoomTopology(project, "ground-level").subdivisions[0]!;
     const result = reconcileRoomSubdivision(project, {
@@ -274,6 +279,7 @@ describe("Room partitioning", () => {
     expect(result.ok).toBe(true);
     expect(project).toEqual(before);
     if (!result.ok) return;
+    expect(result.project.building.furniture).toEqual(project.building.furniture);
     const level = result.project.building.levels[0]!;
     const preserved = level.rooms.find((room) => room.id === "whole-room")!;
     const additional = level.rooms.find((room) => room.id === "new-room")!;
@@ -643,6 +649,8 @@ describe("Room deletion", () => {
     expect(reconciled.ok).toBe(true);
     if (!reconciled.ok) return;
 
+    reconciled.project.building.furniture = [{ ...furnishing, roomId: "new-room" }, { ...furnishing, id: "existing-desk" }];
+    const beforeDissolution = structuredClone(reconciled.project);
     const deleted = dissolveRoom(reconciled.project, {
       levelId: "ground-level",
       roomId: "new-room"
@@ -650,6 +658,8 @@ describe("Room deletion", () => {
 
     expect(deleted.ok).toBe(true);
     if (!deleted.ok) return;
+    expect(deleted.project.building.furniture).toEqual([furnishing, { ...furnishing, id: "existing-desk" }]);
+    expect(reconciled.project).toEqual(beforeDissolution);
     const level = deleted.project.building.levels[0]!;
     expect(level.rooms).toEqual([originalRoom]);
     expect(measureBoundary(level.rooms[0]!, level.walls)).toEqual(originalMetrics);
@@ -1121,12 +1131,13 @@ function createProject(walls: Wall[], rooms: Room[] = []): Project {
   return {
     id: "authoring-project",
     name: "Authoring Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 1,
     createdAt: "2026-08-21T10:00:00+02:00",
     updatedAt: "2026-08-21T10:00:00+02:00",
     units: { length: "cm", angle: "deg" },
     building: {
+      furniture: [],
       id: "building",
       name: "Building",
       type: "HOUSE",

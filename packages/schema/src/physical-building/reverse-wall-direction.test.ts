@@ -12,7 +12,7 @@ import { reverseWallDirection } from "./reverse-wall-direction.js";
 const createProject = (): Project => ({
   id: "reverse-wall-fixture",
   name: "Reverse Wall Fixture",
-  schemaVersion: "3.0.0",
+  schemaVersion: "4.0.0",
   revision: 7,
   createdAt: "2026-07-29T10:00:00+02:00",
   updatedAt: "2026-07-29T10:30:00+02:00",
@@ -21,6 +21,7 @@ const createProject = (): Project => ({
     angle: "deg"
   },
   building: {
+    furniture: [],
     id: "main-building",
     name: "Main Building",
     type: "HOUSE",

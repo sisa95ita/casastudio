@@ -282,10 +282,27 @@ export class LevelDto {
   readonly staircases!: readonly StaircaseDto[];
 }
 
+/** Canonical Room-owned furnishing transported with the complete Project aggregate. */
+export class FurnitureItemDto {
+  @ApiProperty({ type: String }) readonly id!: string;
+  @ApiProperty({ type: String }) readonly roomId!: string;
+  @ApiProperty({ type: String }) readonly definitionId!: string;
+  @ApiProperty({ type: () => Point2DDto }) readonly position!: Point2DDto;
+  @ApiProperty({ type: Number, description: "Degrees about positive Y using the right-hand rule." }) readonly rotation!: number;
+  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 }) readonly width!: number;
+  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 }) readonly depth!: number;
+  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 }) readonly height!: number;
+  @ApiPropertyOptional({ type: String }) readonly name?: string;
+  @ApiPropertyOptional({ type: String }) readonly description?: string;
+}
+
 /**
  * Physical property aggregate contained by a Project.
  */
 export class BuildingDto {
+  @ApiProperty({ type: () => [FurnitureItemDto] })
+  readonly furniture!: readonly FurnitureItemDto[];
+
   @ApiProperty({ type: String })
   readonly id!: string;
 

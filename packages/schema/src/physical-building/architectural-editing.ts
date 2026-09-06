@@ -743,6 +743,7 @@ export function deleteRoom(project: Project, input: DeleteRoomInput): ProjectEdi
     rooms,
     walls: rebuildWallRoomIds(current.walls, rooms)
   }));
+  candidate.building.furniture = project.building.furniture.filter((item) => item.roomId !== input.roomId);
   return validateCanonicalResult(candidate, "Room deletion");
 }
 
@@ -751,7 +752,7 @@ export function deleteRoom(project: Project, input: DeleteRoomInput): ProjectEdi
  *
  * The shared boundary must cancel into one exact simple outer cycle whose area
  * equals both source regions. All current Room-scoped Door, Viewpoint, and
- * Staircase references are reassigned to the surviving Room because the full
+ * Staircase and Furniture references are reassigned to the surviving Room because the full
  * dissolved region is incorporated into it. Ambiguous adjacency or invalid
  * union topology is rejected before any Project state is returned.
  */
@@ -827,6 +828,8 @@ export function dissolveRoom(project: Project, input: DissolveRoomInput): Projec
     ...project,
     building: {
       ...project.building,
+      furniture: project.building.furniture.map((item) => item.roomId === dissolvedRoom.id
+        ? { ...item, roomId: survivingRoom.id } : item),
       levels: project.building.levels.map((current, index) => {
         const wallsWithReferences = replaceDoorRoomReference(
           current.walls,

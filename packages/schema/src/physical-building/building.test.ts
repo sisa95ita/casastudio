@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { BuildingSchema } from "./building.js";
 
 const validBuilding = {
+  furniture: [],
   id: "main-building",
   name: "Main Building",
   type: "HOUSE",

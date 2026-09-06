@@ -235,12 +235,13 @@ function createEmptyProject(): Project {
   return {
     id: "shape-authoring-project",
     name: "Shape Authoring Project",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 1,
     createdAt: "2026-08-26T10:00:00+02:00",
     updatedAt: "2026-08-26T10:00:00+02:00",
     units: { length: "cm", angle: "deg" },
     building: {
+      furniture: [],
       id: "building",
       name: "Building",
       type: "HOUSE",

@@ -397,12 +397,13 @@ function createProject(): Project {
   return {
     id: "editing-fixture",
     name: "Editing Fixture",
-    schemaVersion: "3.0.0",
+    schemaVersion: "4.0.0",
     revision: 4,
     createdAt: "2026-08-13T08:00:00.000Z",
     updatedAt: "2026-08-13T08:30:00.000Z",
     units: { length: "cm", angle: "deg" },
     building: {
+      furniture: [],
       id: "main-building",
       name: "Main Building",
       type: "HOUSE",

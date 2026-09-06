@@ -11,7 +11,7 @@
     },
     "schemaVersion": {
       "type": "string",
-      "const": "3.0.0"
+      "const": "4.0.0"
     },
     "revision": {
       "$ref": "#/$defs/__schema1"
@@ -286,13 +286,78 @@
             ],
             "additionalProperties": false
           }
+        },
+        "furniture": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "name": {
+                "$ref": "#/$defs/__schema20"
+              },
+              "description": {
+                "$ref": "#/$defs/__schema21"
+              },
+              "roomId": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "definitionId": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S+$"
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "$ref": "#/$defs/__schema13"
+                  },
+                  "z": {
+                    "$ref": "#/$defs/__schema13"
+                  }
+                },
+                "required": [
+                  "x",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "rotation": {
+                "type": "number"
+              },
+              "width": {
+                "$ref": "#/$defs/__schema15"
+              },
+              "depth": {
+                "$ref": "#/$defs/__schema15"
+              },
+              "height": {
+                "$ref": "#/$defs/__schema15"
+              }
+            },
+            "required": [
+              "id",
+              "roomId",
+              "definitionId",
+              "position",
+              "rotation",
+              "width",
+              "depth",
+              "height"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
         "id",
         "name",
         "type",
-        "levels"
+        "levels",
+        "furniture"
       ],
       "additionalProperties": false
     },

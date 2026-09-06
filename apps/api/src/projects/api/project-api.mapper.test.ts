@@ -8,6 +8,14 @@ const canonicalProjectUrl = new URL("../../../../../packages/schema/examples/pro
 const canonicalProject = ProjectSchema.parse(JSON.parse(readFileSync(canonicalProjectUrl, "utf8")));
 
 describe("ProjectApiMapper", () => {
+  it("round-trips ordered Furniture with unknown definitions and detached positions", () => {
+    const project = structuredClone(canonicalProject);
+    project.building.furniture = [{ id: "desk", roomId: project.building.levels[0]!.rooms[0]!.id,
+      definitionId: "custom-provider:item-123", position: { x: 50, z: 50 }, rotation: -390.5, width: 120, depth: 60, height: 75, name: "Desk", description: "Generic test" }];
+    const response = new ProjectApiMapper().toProjectResponse(project);
+    expect(ProjectSchema.parse(JSON.parse(JSON.stringify(response.project)))).toEqual(project);
+    expect(response.project.building.furniture[0]?.position).not.toBe(project.building.furniture[0]?.position);
+  });
   it("derives ownership flags without exposing persistence identity", () => {
     const response = new ProjectApiMapper().toProjectListResponse(
       [

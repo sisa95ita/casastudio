@@ -92,7 +92,7 @@ describe("ProjectSchema JSON Schema export", () => {
     expect(jsonSchema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
     expect(jsonSchema.type).toBe("object");
     expect(jsonSchema.required).toContain("building");
-    expect(jsonSchema.properties?.schemaVersion?.const).toBe("3.0.0");
+    expect(jsonSchema.properties?.schemaVersion?.const).toBe("4.0.0");
   });
 
   it("matches the current ProjectSchema JSON Schema output", () => {

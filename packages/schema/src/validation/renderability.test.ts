@@ -7,7 +7,7 @@ import { ValidationErrorCode } from "./validation-error-code.js";
 const createRenderableProject = (): Project => ({
   id: "casa-simone",
   name: "Casa Simone",
-  schemaVersion: "3.0.0",
+  schemaVersion: "4.0.0",
   revision: 1,
   createdAt: "2026-07-11T15:30:00+02:00",
   updatedAt: "2026-07-11T15:30:00+02:00",
@@ -16,6 +16,7 @@ const createRenderableProject = (): Project => ({
     angle: "deg"
   },
   building: {
+    furniture: [],
     id: "main-building",
     name: "Main Building",
     type: "HOUSE",

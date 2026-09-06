@@ -5,6 +5,10 @@
  * translate, or act on validation failures without parsing human messages.
  */
 export enum ValidationErrorCode {
+  /** A requested furnishing does not exist in this Project. */
+  FURNITURE_NOT_FOUND = "FURNITURE_NOT_FOUND",
+  /** Furniture properties violate the canonical instance contract. */
+  INVALID_FURNITURE = "INVALID_FURNITURE",
   /**
    * A reference to a Room does not resolve during cross-reference validation.
    */

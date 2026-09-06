@@ -38,6 +38,21 @@ import {
 } from "./project-editor-slice";
 
 describe("Project editor state", () => {
+  it("retains canonical Furniture through clone, replacement, undo and redo snapshots", () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture = [{ id: "test-desk", roomId: project.building.levels[0]!.rooms[0]!.id,
+      definitionId: "custom:desk", position: { x: 50, z: 50 }, rotation: 27.5, width: 120, depth: 60, height: 75, name: "Desk" }];
+    const entered = projectEditorReducer(undefined, editingSessionEntered({ project, baseRevision: project.revision }));
+    expect(entered.draft?.building.furniture).toEqual(project.building.furniture);
+    expect(entered.draft?.building.furniture[0]?.position).not.toBe(project.building.furniture[0]?.position);
+    const changed = structuredClone(project);
+    changed.building.furniture[0]!.width = 150;
+    const edited = projectEditorReducer(entered, editingDraftReplaced(changed));
+    const undone = projectEditorReducer(edited, editorUndoRequested());
+    expect(undone.draft?.building.furniture).toEqual(project.building.furniture);
+    const redone = projectEditorReducer(undone, editorRedoRequested());
+    expect(redone.draft?.building.furniture).toEqual(changed.building.furniture);
+  });
   it("starts in authoritative View mode", () => {
     expect(projectEditorReducer(undefined, { type: "unknown" })).toEqual(
       initialProjectEditorState

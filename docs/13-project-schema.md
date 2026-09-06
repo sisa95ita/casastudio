@@ -42,8 +42,9 @@ The JSON document is the Project.
 {
   "id": "casa-simone",
   "name": "Casa Simone",
-  "schemaVersion": "3.0.0",
-  "building": {}
+  "schemaVersion": "4.0.0",
+  "building": {
+    "furniture": [],}
 }
 ```
 
@@ -312,7 +313,7 @@ renderResults
 {
   "id": "casa-simone",
   "name": "Casa Simone",
-  "schemaVersion": "3.0.0",
+  "schemaVersion": "4.0.0",
   "revision": 1,
   "createdAt": "2026-07-11T15:30:00+02:00",
   "updatedAt": "2026-07-11T15:30:00+02:00",
@@ -320,7 +321,8 @@ renderResults
     "length": "cm",
     "angle": "deg"
   },
-  "building": {},
+  "building": {
+    "furniture": [],},
   "viewpoints": [],
   "baseImages": [],
   "designBriefs": [],
@@ -333,7 +335,7 @@ renderResults
 
 - The JSON document represents exactly one Project.
 - A Project contains exactly one Building in the MVP.
-- `schemaVersion` is required and the canonical version is `3.0.0`.
+- `schemaVersion` is required and the canonical version is `4.0.0`.
 - Legacy `1.0.0` projects require explicit migration before canonical parsing.
 - `revision` is required.
 - identifiers must be unique across the entire Project.
@@ -341,9 +343,9 @@ renderResults
 
 ### 5.4 Schema version and migration
 
-`ProjectSchema` accepts only canonical version `3.0.0`.
+`ProjectSchema` accepts only canonical version `4.0.0`.
 
-Legacy version `1.0.0` used `Room.wallIds`; version `2.0.0` used Wall-only ordered Room boundaries. Both are accepted only through the explicit migration entry point. Migration reconstructs or preserves deterministic ordered and oriented Wall boundary entries, then upgrades to the generalized boundary contract.
+Legacy version `1.0.0` used `Room.wallIds`; version `2.0.0` used Wall-only ordered Room boundaries; version `3.0.0` introduced generalized boundaries without Furniture. All require the explicit migration entry point. Migration reconstructs or preserves deterministic boundaries and initializes an empty Building Furniture collection.
 
 Migration preserves `revision`, `createdAt`, and `updatedAt`. Expected migration failures are returned as structured results rather than thrown exceptions.
 
@@ -356,6 +358,7 @@ id
 name
 type
 levels
+furniture
 ```
 
 ### 6.2 Building type
@@ -489,7 +492,7 @@ Building → Level → Room
 
 ### 8.6 Persisted room boundary
 
-The canonical schema version `3.0.0` represents a Room boundary as an ordered sequence of Wall-backed or free segments.
+The canonical schema version `4.0.0` represents a Room boundary as an ordered sequence of Wall-backed or free segments.
 
 ```ts
 type RoomBoundaryDirection = "FORWARD" | "REVERSE";
@@ -1226,3 +1229,7 @@ It must be:
 - independent from persistence and rendering technologies.
 
 The Project Schema translates the conceptual Domain Model into a concrete data contract without allowing implementation details to redefine the domain.
+
+## Furniture contract
+
+The Building requires an ordered `furniture` array. Each item persists a stable `id`, mandatory same-Project `roomId`, opaque `definitionId`, centered `{ x, z }` position, finite degree `rotation`, positive finite `width`, `depth`, `height`, and optional common `name`/`description` metadata. Cross-reference and identifier validators enforce sole Room ownership and per-Project identity uniqueness. There is no direct `levelId` or Y/elevation. Unknown catalog IDs remain acceptable. Catalog definitions are separate product data; effective dimensions belong to the instance. Migration from v3 initializes an empty collection without altering existing architectural content and older migrations chain to v4. See [Furniture domain and persistence](furniture-domain.md).
