@@ -176,16 +176,14 @@ import {
   type ProjectPersistenceDialog
 } from "./components/ProjectPersistenceDialogs";
 import { normalizeEditorMeasurement } from "../../editor-2d/tools/measure/editor-measurement";
-import {
-  ProjectRoomAuthoringMenu,
-  type RoomShapeDimensionDraft
-} from "../../editor-2d/tools/room/ProjectRoomAuthoringMenu";
+import { ProjectRoomAuthoringMenu } from "../../editor-2d/tools/room/ProjectRoomAuthoringMenu";
 import {
   defaultRoomShapeDimensions,
   formatRoomShapePreviewLabel,
   getDefaultRoomShapeDimensions,
   getRoomEditingErrorKey,
-  parseRoomShapeDefinition
+  parseRoomShapeDefinition,
+  type RoomShapeDimensionDraft
 } from "../../editor-2d/tools/room/room-shape-authoring";
 import { EditorToolbar } from "../../editor-2d/components/EditorToolbar";
 import { ProjectStairAuthoringMenu } from "../../editor-2d/tools/stair/ProjectStairAuthoringMenu";
@@ -333,7 +331,7 @@ export function ProjectWorkspacePage() {
       const roomDimensionInput =
         typeof target?.matches === "function" &&
         target.matches('input[type="number"]') &&
-        target.closest(".project-room-authoring-menu__dimensions") !== null;
+        target.closest('[data-room-authoring-parameters="true"]') !== null;
       if (
         (event.key !== " " && event.code !== "Space") ||
         event.altKey ||
@@ -739,6 +737,7 @@ export function ProjectWorkspacePage() {
       boundaryKind,
       elevation: boundaryKind === "FREE" ? (validRoomElevation ?? 200) : 0
     }));
+    setRoomMenuAnchor(null);
   }, [dispatch, editor.activeLevelId, roomShapeTemplateAvailable, validRoomElevation]);
 
   const handleRoomElevationChange = useCallback((value: string) => {
@@ -1200,6 +1199,7 @@ export function ProjectWorkspacePage() {
         setEditingError(undefined);
         setRoomDetectionActive(false);
         dispatch(editingDraftReplaced(result.project));
+        dispatch(editorActiveToolChanged("select"));
         dispatch(editorSelectionChanged(createGeometrySelectionState([
           selectPolygon(`polygon:${roomId}`)
         ])));
@@ -2063,13 +2063,29 @@ export function ProjectWorkspacePage() {
         options={resolvedDisplayOptions}
         onOptionsChange={handleDisplayOptionsChange}
         mode={workspaceMode}
+        activeTool={editor.activeTool}
         selectedWall={selectedEditWall}
         selectedOpening={selectedEditOpening}
         selectedOpeningDisplayOffset={transientOpeningOffset}
         openingAuthoring={
-          selectionState.selected.length === 0 &&
           editor.transient.interaction?.kind === "place-opening"
             ? editor.transient.interaction
+            : undefined
+        }
+        roomAuthoring={
+          editor.activeTool === "room"
+            ? {
+                ...(activeRoomShapeKind ? { activeShape: activeRoomShapeKind } : {}),
+                ...(activeRoomBoundaryKind ? { boundaryKind: activeRoomBoundaryKind } : {}),
+                detectionActive: roomDetectionActive,
+                elevation: roomElevationDraft,
+                levelElevation: activeProjectLevel?.elevation ?? 0,
+                dimensions: roomShapeDimensions,
+                valid: Boolean(
+                  validatedRoomShape &&
+                  (activeRoomBoundaryKind !== "FREE" || validRoomElevation !== undefined)
+                )
+              }
             : undefined
         }
         selectedRoom={selectedRoom}
@@ -2101,6 +2117,10 @@ export function ProjectWorkspacePage() {
         onDeleteOpening={handleDeleteSelectedOpening}
         onUpdateOpening={handleUpdateSelectedOpening}
         onUpdateOpeningAuthoring={handleUpdateOpeningAuthoring}
+        onUpdateRoomAuthoringDimension={handleRoomShapeDimensionChange}
+        onUpdateRoomAuthoringElevation={handleRoomElevationChange}
+        onRoomAuthoringSpacePanChange={setViewportPanModifierActive}
+        onCancelRoomAuthoring={handleCancelRoomAuthoring}
         onDeleteRoom={handleDeleteSelectedRoom}
         onUpdateRoomProperties={handleUpdateSelectedRoomProperties}
         onDeleteStair={handleDeleteSelectedStair}
@@ -2128,6 +2148,14 @@ export function ProjectWorkspacePage() {
     selectedRoomMeasurement,
     activeLevelMeasurement,
     editor.transient.interaction,
+    editor.activeTool,
+    roomDetectionActive,
+    roomElevationDraft,
+    roomShapeDimensions,
+    validatedRoomShape,
+    activeRoomShapeKind,
+    activeRoomBoundaryKind,
+    validRoomElevation,
     selectedWallEndpointAvailability,
     selectedVertexRemovable,
     selectionState,
@@ -2140,6 +2168,9 @@ export function ProjectWorkspacePage() {
     handleDeleteSelectedOpening,
     handleUpdateSelectedOpening,
     handleUpdateOpeningAuthoring,
+    handleRoomShapeDimensionChange,
+    handleRoomElevationChange,
+    handleCancelRoomAuthoring,
     handleDeleteSelectedRoom,
     handleUpdateSelectedRoomProperties,
     handleDeleteSelectedStair,
@@ -2396,16 +2427,8 @@ export function ProjectWorkspacePage() {
             : null
         }
         templateAvailable={roomShapeTemplateAvailable}
-        activeShape={activeRoomShapeKind}
-        activeBoundaryKind={activeRoomBoundaryKind}
-        elevation={roomElevationDraft}
-        dimensions={roomShapeDimensions}
-        unit={activeProject?.units.length ?? "cm"}
         onDetectRoom={handleDetectRoom}
         onSelectShape={handleSelectRoomShape}
-        onDimensionChange={handleRoomShapeDimensionChange}
-        onElevationChange={handleRoomElevationChange}
-        onSpacePanChange={setViewportPanModifierActive}
         onCancel={handleCancelRoomAuthoring}
       />
       <ProjectStairAuthoringMenu

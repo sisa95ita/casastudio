@@ -143,10 +143,17 @@ describe("ProjectSelectionDetails", () => {
       <ProjectPropertiesDetails
         selectionState={selectionState}
         room={room}
+        roomMeasurement={{
+          roomId: room.id,
+          area: 98_000,
+          perimeter: 1_300,
+          boundaryPoints: []
+        }}
         roomLevelElevation={20}
         units={{ length: "cm", angle: "deg" }}
         onUpdateWallProperties={vi.fn(() => true)}
         onUpdateRoomProperties={onUpdateRoomProperties}
+        onDeleteRoom={onDeleteRoom}
       />
     );
     const name = screen.getByLabelText("Name");
@@ -163,6 +170,8 @@ describe("ProjectSelectionDetails", () => {
     const globalElevation = screen.getByDisplayValue("20");
     expect(globalElevation.hasAttribute("readonly")).toBe(true);
     expect(globalElevation.parentElement?.textContent).toContain("cm");
+    expect(screen.getByText("9.80 m²")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete Room" })).toBeTruthy();
   });
 });
 

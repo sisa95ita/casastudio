@@ -79,7 +79,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     expect(await viewport.locator('[data-testid="automatic-dimension"]').count()).toBeGreaterThan(0);
 
     const vertexWall = (await readWalls(viewport)).find((wall) => wall.id === exactWall.id)!;
-    await page.getByRole("tab", { name: "Selection" }).click();
+    await page.getByRole("tab", { name: "Properties" }).click();
     const wallCountBeforeVertex = await viewport.locator('[data-testid="boundary-edge"]').count();
     await page.getByRole("button", { name: "Add vertex" }).click();
     const vertexPoint = midpoint(vertexWall);
@@ -287,7 +287,7 @@ async function createRoomShape(page: Page, viewport: Locator, shape: "Rectangle"
   await page.mouse.click(point.x, point.y);
 }
 
-async function selectWall(page: Page, viewport: Locator, wallId: string, tab: "Selection" | "Properties" = "Properties") {
+async function selectWall(page: Page, viewport: Locator, wallId: string, tab: "Properties" = "Properties") {
   await ensureSelectTool(page);
   await viewport.locator(`.architectural-wall-hit-target[data-geometry-id="${wallId}"]`).dispatchEvent("click", {
     bubbles: true
@@ -363,7 +363,7 @@ async function exerciseRoomDissolution(page: Page, viewport: Locator) {
   await ensureSelectTool(page);
   await viewport.locator('[data-testid="geometry-polygon"]').first().dispatchEvent("click", { bubbles: true });
   const inspector = page.getByRole("complementary", { name: "Inspector" });
-  await inspector.getByRole("tab", { name: "Selection" }).click();
+  await inspector.getByRole("tab", { name: "Properties" }).click();
   await expect(inspector.getByText("Area", { exact: true })).toBeVisible();
   await expect(inspector.getByText("Perimeter", { exact: true })).toBeVisible();
   await inspector.getByRole("button", { name: "Delete Room" }).click();

@@ -410,10 +410,13 @@ describe("ProjectsController", () => {
       roles: ["casastudio-user"]
     })}`;
 
-    await request(context.app.getHttpServer())
+    const deleted = await request(context.app.getHttpServer())
       .delete(`/api/v1/projects/${canonicalProject.id}`)
+      .set("origin", "http://localhost:5173")
       .set("authorization", authorization)
       .expect(204);
+
+    expect(deleted.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
 
     expect(context.repository.deleteProject).toHaveBeenCalledWith({
       projectId: canonicalProject.id,

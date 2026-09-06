@@ -170,6 +170,13 @@
   },
   "roomAuthoring": {
     "menuLabel": "Room authoring",
+    "propertiesTitle": "Room authoring",
+    "chooseMode": "Choose a Room mode",
+    "chooseModeHint": "Choose a compact Room mode from the toolbar menu.",
+    "detectHint": "Select a highlighted bounded region in the plan.",
+    "placeHint": "Move the preview in the plan, then click to create the Room.",
+    "invalidParameters": "Enter valid positive dimensions before placing the Room.",
+    "cancel": "Cancel",
     "existingSection": "Create from existing walls",
     "detectRoom": "Detect room",
     "shapeSection": "Start from a shape",
@@ -325,6 +332,7 @@
   },
   "properties": {
     "title": "Properties",
+    "activeTool": "Active tool",
     "selectObject": "Select an object to edit its available properties.",
     "multipleUnsupported": "This selection has no safe shared property operation.",
     "unavailable": "The selected object has no editable properties.",

@@ -22,6 +22,7 @@ import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentat
 import type { GeometrySelectionState } from "../../../geometry-2d/selection/geometry-selection-state";
 import { useCasaTranslation } from "../../../../core/i18n";
 import type { WallEndpointEditingAvailability } from "../../../editor-2d/tools/wall/project-wall-editing";
+import type { ProjectEditorTool } from "../../../editor-2d/state/project-editor-tools";
 import {
   ProjectWallPropertiesDetails,
   ProjectWallSelectionDetails
@@ -43,7 +44,7 @@ export function ProjectSelectionDetails({
   units,
   endpointAvailability,
   selectedVertexRemovable = false,
-  onDeleteWall,
+  onDeleteWall = () => undefined,
   onAddWallVertex,
   onRemoveVertex,
   opening,
@@ -64,7 +65,7 @@ export function ProjectSelectionDetails({
   readonly units: Project["units"];
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly selectedVertexRemovable?: boolean;
-  readonly onDeleteWall: () => void;
+  readonly onDeleteWall?: () => void;
   readonly onAddWallVertex?: () => void;
   readonly onRemoveVertex?: () => void;
   readonly opening?: Opening;
@@ -144,6 +145,7 @@ export function ProjectSelectionDetails({
 
 /** Routes the selected entity to the supported editable property surface. */
 export function ProjectPropertiesDetails({
+  model,
   selectionState,
   wall,
   opening,
@@ -152,14 +154,26 @@ export function ProjectPropertiesDetails({
   room,
   roomLevelElevation,
   stair,
+  roomMeasurement,
+  endpointAvailability,
+  selectedVertexRemovable = false,
   units,
+  activeTool,
+  editable = true,
+  onDeleteWall = () => undefined,
+  onAddWallVertex,
+  onRemoveVertex,
   onUpdateWallProperties,
+  onDeleteOpening,
   onUpdateOpening,
+  onDeleteRoom,
   onUpdateRoomProperties,
+  onDeleteStair,
   onUpdateStair,
   openingAuthoring,
   onUpdateOpeningAuthoring
 }: {
+  readonly model?: GeometryPresentationModel2D;
   readonly selectionState: GeometrySelectionState;
   readonly wall?: Wall;
   readonly opening?: Opening;
@@ -169,15 +183,26 @@ export function ProjectPropertiesDetails({
   readonly room?: Room;
   readonly roomLevelElevation?: number;
   readonly stair?: { readonly staircase: Staircase; readonly part?: StairFlight | StairLanding };
+  readonly roomMeasurement?: RoomMeasurement;
+  readonly endpointAvailability?: WallEndpointEditingAvailability;
+  readonly selectedVertexRemovable?: boolean;
   readonly units: Project["units"];
+  readonly activeTool?: ProjectEditorTool | null;
+  readonly editable?: boolean;
+  readonly onDeleteWall?: () => void;
+  readonly onAddWallVertex?: () => void;
+  readonly onRemoveVertex?: () => void;
   readonly onUpdateWallProperties: (properties: {
     readonly length?: number;
     readonly anchoredEndpoint?: "START" | "END";
     readonly height?: number;
     readonly thickness?: number;
   }) => boolean;
+  readonly onDeleteOpening?: () => void;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
+  readonly onDeleteRoom?: () => void;
   readonly onUpdateRoomProperties?: (properties: Partial<UpdateRoomProperties>) => boolean;
+  readonly onDeleteStair?: () => void;
   readonly onUpdateStair?: (properties: StairParameterChanges) => boolean;
   readonly openingAuthoring?: {
     readonly openingType: OpeningAuthoringType;
@@ -197,19 +222,33 @@ export function ProjectPropertiesDetails({
     );
   }
   if (selectionState.selected.length === 0) {
-    return <PropertiesMessage message={t("properties.selectObject")} />;
+    return activeTool && activeTool !== "select"
+      ? <ActiveToolProperties tool={activeTool} />
+      : <PropertiesMessage message={t("properties.selectObject")} />;
   }
   if (selectionState.selected.length > 1) {
-    return <PropertiesMessage message={t("properties.multipleUnsupported")} />;
+    return <ProjectMultiSelectionDetails selectionState={selectionState} />;
   }
   const selection = selectionState.selected[0];
   if ((selection?.kind === "BOUNDARY_EDGE" || selection?.kind === "WALL") && wall) {
     return (
-      <ProjectWallPropertiesDetails
-        wall={wall}
-        units={units}
-        onUpdateProperties={onUpdateWallProperties}
-      />
+      <Stack spacing={2}>
+        {editable ? (
+          <ProjectWallPropertiesDetails
+            wall={wall}
+            units={units}
+            onUpdateProperties={onUpdateWallProperties}
+          />
+        ) : null}
+        <ProjectWallSelectionDetails
+          wall={wall}
+          units={units}
+          endpointAvailability={endpointAvailability}
+          onDelete={onDeleteWall}
+          onAddVertex={onAddWallVertex}
+          editable={editable}
+        />
+      </Stack>
     );
   }
   if (
@@ -218,22 +257,105 @@ export function ProjectPropertiesDetails({
     openingWall
   ) {
     return (
-      <ProjectOpeningPropertiesDetails
-        wall={openingWall}
-        opening={opening}
-        displayOffsetFromStart={openingDisplayOffsetFromStart}
+      <Stack spacing={2}>
+        {editable ? (
+          <ProjectOpeningPropertiesDetails
+            wall={openingWall}
+            opening={opening}
+            displayOffsetFromStart={openingDisplayOffsetFromStart}
+            units={units}
+            onUpdate={onUpdateOpening ?? (() => false)}
+          />
+        ) : null}
+        <ProjectOpeningSelectionDetails
+          wall={openingWall}
+          opening={opening}
+          displayOffsetFromStart={openingDisplayOffsetFromStart}
+          units={units}
+          onUpdate={onUpdateOpening ?? (() => false)}
+          onDelete={onDeleteOpening ?? (() => undefined)}
+          editable={editable}
+        />
+      </Stack>
+    );
+  }
+  if (selection?.kind === "POLYGON" && room && roomMeasurement) {
+    return (
+      <Stack spacing={2}>
+        {editable ? (
+          <ProjectRoomPropertiesDetails room={room} levelElevation={roomLevelElevation ?? 0} units={units} onUpdate={onUpdateRoomProperties ?? (() => false)} />
+        ) : null}
+        <ProjectRoomSelectionDetails
+          room={room}
+          measurement={roomMeasurement}
+          units={units}
+          onDelete={onDeleteRoom}
+          editable={editable}
+        />
+      </Stack>
+    );
+  }
+  if ((selection?.kind === "STAIRCASE" || selection?.kind === "STAIR_FLIGHT" || selection?.kind === "STAIR_LANDING") && stair) {
+    return (
+      <Stack spacing={2}>
+        {editable ? (
+          <ProjectStairPropertiesDetails staircase={stair.staircase} units={units} onUpdate={onUpdateStair ?? (() => false)} />
+        ) : null}
+        <ProjectStairSelectionDetails selection={stair} units={units} editable={editable} onDelete={onDeleteStair ?? (() => undefined)} />
+      </Stack>
+    );
+  }
+  if (selection?.kind === "VERTEX" && model) {
+    return (
+      <ProjectSelectionDetails
+        model={model}
+        selectionState={selectionState}
         units={units}
-        onUpdate={onUpdateOpening ?? (() => false)}
+        endpointAvailability={endpointAvailability}
+        selectedVertexRemovable={selectedVertexRemovable}
+        onDeleteWall={onDeleteWall}
+        onRemoveVertex={onRemoveVertex}
+        editable={editable}
       />
     );
   }
-  if (selection?.kind === "POLYGON" && room) {
-    return <ProjectRoomPropertiesDetails room={room} levelElevation={roomLevelElevation ?? 0} units={units} onUpdate={onUpdateRoomProperties ?? (() => false)} />;
-  }
-  if ((selection?.kind === "STAIRCASE" || selection?.kind === "STAIR_FLIGHT" || selection?.kind === "STAIR_LANDING") && stair) {
-    return <ProjectStairPropertiesDetails staircase={stair.staircase} units={units} onUpdate={onUpdateStair ?? (() => false)} />;
-  }
-  return <PropertiesMessage message={t("properties.unavailable")} />;
+  return model ? (
+    <ProjectSelectionDetails
+      model={model}
+      selectionState={selectionState}
+      wall={wall}
+      opening={opening}
+      openingWall={openingWall}
+      openingDisplayOffsetFromStart={openingDisplayOffsetFromStart}
+      room={room}
+      stair={stair}
+      roomMeasurement={roomMeasurement}
+      units={units}
+      endpointAvailability={endpointAvailability}
+      selectedVertexRemovable={selectedVertexRemovable}
+      onDeleteWall={onDeleteWall}
+      onAddWallVertex={onAddWallVertex}
+      onRemoveVertex={onRemoveVertex}
+      onDeleteOpening={onDeleteOpening}
+      onUpdateOpening={onUpdateOpening}
+      onDeleteRoom={onDeleteRoom}
+      onDeleteStair={onDeleteStair}
+      editable={editable}
+    />
+  ) : <PropertiesMessage message={t("properties.unavailable")} />;
+}
+
+function ActiveToolProperties({ tool }: { readonly tool: ProjectEditorTool }) {
+  const { t } = useCasaTranslation("project-viewer");
+  return (
+    <Stack component="section" spacing={1}>
+      <Typography variant="subtitle2">{t("properties.activeTool")}</Typography>
+      <Typography variant="body2">{t(`tools.${tool}`)}</Typography>
+      <Typography variant="caption" color="text.secondary">
+        {t(`tools.help.${tool}`)}
+      </Typography>
+    </Stack>
+  );
 }
 
 /** Displays a product-oriented summary for heterogeneous or homogeneous selections. */

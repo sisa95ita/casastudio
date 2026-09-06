@@ -248,6 +248,32 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     expect(await prisma.wall.count({ where: { project: { domainId: projectId } } })).toBe(0);
   });
 
+  it("deletes an authenticated disposable Project aggregate and keeps listing functional", async () => {
+    const authorization = userAuthorization(ownerSubject);
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/projects")
+      .set("authorization", authorization)
+      .send({ name: "Disposable deletion apartment" })
+      .expect(201);
+    const projectId = created.body.project.id as string;
+
+    const deleted = await request(app.getHttpServer())
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("origin", "http://localhost:5173")
+      .set("authorization", authorization)
+      .expect(204);
+
+    expect(deleted.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(await prisma.project.findUnique({ where: { domainId: projectId } })).toBeNull();
+    const listed = await request(app.getHttpServer())
+      .get("/api/v1/projects")
+      .set("authorization", authorization)
+      .expect(200);
+    expect(listed.body.projects).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: projectId })])
+    );
+  });
+
   it("enforces ownership, admin override, authentication, and owner assignment", async () => {
     const ownerAuthorization = userAuthorization(ownerSubject);
     const created = await request(app.getHttpServer())

@@ -8,7 +8,14 @@ import {
   type RoomShapeRotation
 } from "@casastudio/schema";
 
-import type { RoomShapeDimensionDraft } from "./ProjectRoomAuthoringMenu";
+/** Editable physical parameters held for transient Room shape placement. */
+export type RoomShapeDimensionDraft = {
+  readonly width: string;
+  readonly depth: string;
+  readonly notchWidth: string;
+  readonly notchDepth: string;
+  readonly rotation: string;
+};
 
 /** Initial editable Room shape values in canonical centimeter Project units. */
 export const defaultRoomShapeDimensions: RoomShapeDimensionDraft = Object.freeze({

@@ -1,5 +1,49 @@
 import { expect, test, type ConsoleMessage } from "@playwright/test";
 
+test("deletes a disposable Project through authenticated browser CORS", async ({ page }) => {
+  const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;
+  if (!demoPassword) throw new Error("CASASTUDIO_KEYCLOAK_DEMO_PASSWORD is required.");
+  const corsErrors: string[] = [];
+  page.on("console", (message: ConsoleMessage) => {
+    if (message.type() === "error" && /cors/i.test(message.text())) {
+      corsErrors.push(message.text());
+    }
+  });
+
+  await page.goto("/app");
+  await page.locator("#username").fill("demo");
+  await page.locator("#password").fill(demoPassword);
+  await page.locator("#kc-login").click();
+
+  const projectName = `Delete CORS E2E ${Date.now()}`;
+  await page.getByRole("button", { name: "New Project" }).click();
+  await page.getByLabel("Project name").fill(projectName);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page.getByRole("heading", { name: projectName, level: 1 })).toBeVisible();
+
+  await page.goto("/app");
+  const project = page.getByRole("article").filter({ hasText: projectName });
+  await expect(project).toBeVisible();
+  await project.getByRole("button", { name: `Actions for ${projectName}` }).click();
+  await page.getByRole("menuitem", { name: "Delete project" }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete project?" });
+  await expect(dialog).toBeVisible();
+
+  const [deleteResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "DELETE" &&
+      response.url().includes("/api/v1/projects/")
+    ),
+    dialog.getByRole("button", { name: "Delete project" }).click()
+  ]);
+
+  expect(deleteResponse.status()).toBe(204);
+  await expect(dialog).toHaveCount(0);
+  await expect(project).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Projects", level: 1 })).toBeVisible();
+  expect(corsErrors).toEqual([]);
+});
+
 test("authenticates and exercises the Demo Project editor in Chromium", async ({
   page
 }) => {
@@ -54,6 +98,11 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
   const pointsBeforeWheel = await polygon.getAttribute("points");
   await page.getByRole("button", { name: "Edit plan" }).click();
   await expect(page.getByText("No unsaved changes")).toBeVisible();
+  const inspectorTabs = page.getByRole("tablist", {
+    name: "Project inspector sections"
+  });
+  await expect(inspectorTabs.getByRole("tab")).toHaveText(["Layers", "Properties"]);
+  await expect(inspectorTabs.getByRole("tab", { name: "Selection" })).toHaveCount(0);
   const scaleBeforeWheel = await page
     .getByRole("combobox", { name: "Scale" })
     .textContent();
@@ -123,7 +172,7 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
   await expect.poll(() => wallEdges.count()).toBeGreaterThan(wallCountBeforeDrawing);
   const wallCountAfterDrawing = await wallEdges.count();
 
-  await page.getByRole("button", { name: "Room" }).click();
+  await page.getByRole("button", { name: "Room", exact: true }).click();
   await page.getByRole("menuitem", { name: "Detect room" }).click();
   const roomCandidate = editorViewport
     .locator('[data-testid="room-face-candidate"]')
@@ -222,11 +271,14 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await expect(page.getByRole("heading", { name: projectName, level: 1 }))
     .toBeVisible();
   await page.getByRole("button", { name: "Edit plan" }).click();
-  await page.getByRole("button", { name: "Room" }).click();
+  await page.getByRole("button", { name: "Room", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "Detect room" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Rectangle", exact: true })).toBeEnabled();
   await expect(page.getByRole("menuitem", { name: "L-shape", exact: true })).toBeEnabled();
   await page.getByRole("menuitem", { name: "Rectangle", exact: true }).click();
+  await expect(page.locator("#room-authoring-menu")).toHaveCount(0);
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  await expect(inspector.getByTestId("room-authoring-inspector")).toBeVisible();
   await page.getByRole("spinbutton", { name: "Width" }).fill("400");
   await page.getByRole("spinbutton", { name: "Depth" }).fill("300");
 
@@ -266,14 +318,10 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await expect(roomLabels).toContainText("12.00 m²");
   await expect(editorViewport.locator('[data-testid="geometry-polygon"]')).toHaveCount(1);
   await expect(editorViewport.locator('[data-testid="architectural-wall-body"]')).toHaveCount(4);
-  await expect(page.getByRole("menuitem", { name: "Rectangle", exact: true })).toBeDisabled();
-  await expect(page.getByRole("menuitem", { name: "L-shape", exact: true })).toBeDisabled();
-  await expect(
-    page.getByText("Room shapes are currently available only on an empty level.")
-  ).toBeVisible();
+  await expect(page.locator("#room-authoring-menu")).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Properties" }).click();
-  const roomName = page.getByLabel("Name");
+  const roomName = inspector.getByLabel("Name");
   await roomName.fill("Rectangle Studio");
   await roomName.press("Enter");
   await expect(roomLabels).toContainText("Rectangle Studio");
@@ -453,17 +501,18 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
   await editorViewport.locator(
     '.architectural-wall-hit-target[data-geometry-id="living-east-wall"]'
   ).click({ force: true });
-  await page.getByRole("tab", { name: "Selection" }).click();
+  await page.getByRole("tab", { name: "Properties" }).click();
   await expect(page.getByRole("button", { name: "Delete Wall" })).toBeVisible();
 
   await editorViewport.locator('[data-testid="geometry-polygon"]').first().click({ force: true });
   await expect(page.getByRole("button", { name: "Delete Room" })).toBeVisible();
   await page.getByRole("tab", { name: "Properties" }).click();
-  await expect(page.getByLabel("Name")).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Type" })).toBeVisible();
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  await expect(inspector.getByLabel("Name")).toBeVisible();
+  await expect(inspector.getByRole("combobox", { name: "Type" })).toBeVisible();
 
   await editorViewport.locator('[data-testid="architectural-door"]').first().dispatchEvent("click");
-  await page.getByRole("tab", { name: "Selection" }).click();
+  await page.getByRole("tab", { name: "Properties" }).click();
   await expect(page.getByRole("button", { name: "Delete Opening" })).toBeVisible();
   await expect(page.getByText("Door", { exact: true }).first()).toBeVisible();
 
@@ -475,7 +524,7 @@ test("presents the architectural plan cleanly across View and Edit", async ({ pa
   });
 
   await trackedRoom.click({ force: true });
-  await page.getByRole("tab", { name: "Selection" }).click();
+  await page.getByRole("tab", { name: "Properties" }).click();
   await page.getByRole("button", { name: "Delete Room" }).click();
   await expect(roomLabels).toHaveCount(1);
   await expect(roomLabels).toContainText("42.00 m²");
@@ -522,7 +571,7 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await page.getByRole("button", { name: "Edit plan" }).click();
   const inspector = page.getByRole("complementary", { name: "Inspector" });
 
-  await page.getByRole("button", { name: "Room" }).click();
+  await page.getByRole("button", { name: "Room", exact: true }).click();
   await page.getByRole("menuitem", { name: "Rectangle", exact: true }).click();
   const viewport = page.locator('svg[aria-labelledby="geometry-svg-title geometry-svg-description"]');
   await expect(viewport).toBeVisible();
@@ -537,6 +586,7 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await expect(viewport.locator('[data-testid="room-metric"]').first()).toContainText("12.00 m²");
   const wallCount = await viewport.locator('[data-testid="architectural-wall-body"]').count();
 
+  await page.getByRole("button", { name: "Room", exact: true }).click();
   await page.getByRole("menuitem", { name: "Elevated rectangle" }).click();
   await page.getByRole("spinbutton", { name: "Elevation above Level" }).fill("180");
   await page.getByRole("spinbutton", { name: "Width" }).fill("200");
@@ -599,9 +649,10 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await inspector.getByRole("tab", { name: "Properties" }).click();
   await expect(inspector.getByRole("spinbutton", { name: "Flight 1 steps" })).toHaveValue("4");
   await expect(inspector.getByRole("spinbutton", { name: "Flight 2 steps" })).toHaveValue("13");
+  await expect(inspector.getByRole("button", { name: "Delete Staircase" })).toBeVisible();
 });
 
-test("accepts precision Walls, vertices, pending Opening properties, and the wide Room menu", async ({ page }) => {
+test("accepts precision Walls, vertices, pending Opening properties, and the compact Room menu", async ({ page }) => {
   test.setTimeout(120_000);
   const demoPassword = process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD;
   if (!demoPassword) throw new Error("CASASTUDIO_KEYCLOAK_DEMO_PASSWORD is required.");
@@ -620,6 +671,7 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   await expect(demoProject).toBeVisible();
   await demoProject.getByRole("link", { name: "Open project" }).click();
   await page.getByRole("button", { name: "Edit plan" }).click();
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
 
   const viewport = page.locator('svg[aria-labelledby="geometry-svg-title geometry-svg-description"]');
   const viewportBox = await viewport.boundingBox();
@@ -652,7 +704,7 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   await page.getByRole("button", { name: "Undo" }).click();
 
   await eastWall.click({ force: true });
-  await page.getByRole("tab", { name: "Selection" }).click();
+  await page.getByRole("tab", { name: "Properties" }).click();
   const wallCountBeforeSplit = await viewport.locator('[data-testid="boundary-edge"]').count();
   await page.getByRole("button", { name: "Add vertex" }).click();
   const wallBox = await eastWall.boundingBox();
@@ -687,7 +739,7 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   await page.getByRole("button", { name: "Openings" }).click();
   await page.getByRole("menuitem", { name: "Door" }).click();
   await page.getByRole("tab", { name: "Properties" }).click();
-  await expect(page.getByText("New Door", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("New Door", { exact: true })).toBeVisible();
   const pendingDoorWidth = page.getByRole("spinbutton", { name: "Width (cm)" });
   await pendingDoorWidth.fill("70");
   await pendingDoorWidth.press("Enter");
@@ -704,7 +756,7 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   await page.getByRole("button", { name: "Openings" }).click();
   await page.getByRole("menuitem", { name: "Wall Opening" }).click();
   await page.getByRole("tab", { name: "Properties" }).click();
-  await expect(page.getByText("New Wall Opening", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("New Wall Opening", { exact: true })).toBeVisible();
   const pendingOpeningWidth = page.getByRole("spinbutton", { name: "Width (cm)" });
   await pendingOpeningWidth.fill("180");
   await pendingOpeningWidth.press("Enter");
@@ -719,13 +771,10 @@ test("accepts precision Walls, vertices, pending Opening properties, and the wid
   await expect(wallOpening.locator(".architectural-door-leaf")).toHaveCount(0);
   await expect(wallOpening.locator(".architectural-window-line")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Room" }).click();
+  await page.getByRole("button", { name: "Room", exact: true }).click();
   const roomMenu = page.locator("#room-authoring-menu");
   await expect(roomMenu).toBeVisible();
-  expect(await roomMenu.evaluate((element) => getComputedStyle(element).display)).toBe("grid");
-  const roomMenuBox = await roomMenu.boundingBox();
-  if (!roomMenuBox) throw new Error("Expected the Room authoring menu.");
-  expect(roomMenuBox.width).toBeGreaterThan(roomMenuBox.height);
+  await expect(roomMenu.getByRole("spinbutton")).toHaveCount(0);
   await expect(page.getByRole("menuitem", { name: "Detect room" })).toBeVisible();
 
   await test.info().attach("precision-browser-console-errors", {

@@ -123,20 +123,49 @@ describe("CORS", () => {
     await context.app.close();
   });
 
-  it("allows authenticated Project creation and replacement methods", async () => {
+  it("allows authenticated Project create, replace, and delete methods", async () => {
     const context = await createTestApp();
 
-    const response = await request(context.app.getHttpServer())
+    const replaceResponse = await request(context.app.getHttpServer())
       .options("/api/v1/projects/demo-project")
       .set("origin", "http://localhost:5173")
       .set("access-control-request-method", "PUT")
       .set("access-control-request-headers", "authorization,content-type")
       .expect(204);
 
-    expect(response.headers["access-control-allow-methods"]).toContain("POST");
-    expect(response.headers["access-control-allow-methods"]).toContain("PUT");
-    expect(response.headers["access-control-allow-headers"]).toContain("Authorization");
-    expect(response.headers["access-control-allow-headers"]).toContain("Content-Type");
+    expect(replaceResponse.headers["access-control-allow-methods"]).toContain("POST");
+    expect(replaceResponse.headers["access-control-allow-methods"]).toContain("PUT");
+    expect(replaceResponse.headers["access-control-allow-headers"]).toContain("Authorization");
+    expect(replaceResponse.headers["access-control-allow-headers"]).toContain("Content-Type");
+
+    const deleteResponse = await request(context.app.getHttpServer())
+      .options("/api/v1/projects/demo-project")
+      .set("origin", "http://localhost:5173")
+      .set("access-control-request-method", "DELETE")
+      .set("access-control-request-headers", "authorization")
+      .expect(204);
+
+    expect(deleteResponse.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(deleteResponse.headers["access-control-allow-methods"]).toContain("DELETE");
+    expect(deleteResponse.headers["access-control-allow-headers"]).toContain("Authorization");
+
+    await context.app.close();
+  });
+
+  it("adds CORS headers to an actual error response for an allowed origin", async () => {
+    const context = await createTestApp();
+
+    const response = await request(context.app.getHttpServer())
+      .delete("/api/v1/projects/demo-project")
+      .set("origin", "http://localhost:5173")
+      .set("authorization", "Bearer invalid-token")
+      .expect(401);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(response.body).toMatchObject({
+      code: ApiErrorCode.Unauthorized,
+      status: 401
+    });
 
     await context.app.close();
   });
