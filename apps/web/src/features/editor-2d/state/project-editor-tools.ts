@@ -1,5 +1,5 @@
 /** Tools available to the manual 2D Project editor. */
-export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "opening" | "room" | "stair" | "furniture" | "measure";
+export type ProjectEditorTool = "select" | "draw-wall" | "openings" | "room" | "stair" | "furniture" | "measure";
 
 /** Interaction capabilities consumed by the shared geometry viewer. */
 export type ProjectEditorInteraction = {
@@ -55,7 +55,7 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
       }
     },
     {
-      id: "door",
+      id: "openings",
       enabled: true,
       interaction: {
         selectionEnabled: false,
@@ -64,32 +64,6 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         drawWallEnabled: false,
         wallEndpointEditingEnabled: false,
         openingPlacement: "DOOR",
-        openingEditingEnabled: false
-      }
-    },
-    {
-      id: "window",
-      enabled: true,
-      interaction: {
-        selectionEnabled: false,
-        panEnabled: true,
-        panAnywhere: false,
-        drawWallEnabled: false,
-        wallEndpointEditingEnabled: false,
-        openingPlacement: "WINDOW",
-        openingEditingEnabled: false
-      }
-    },
-    {
-      id: "opening",
-      enabled: true,
-      interaction: {
-        selectionEnabled: false,
-        panEnabled: true,
-        panAnywhere: false,
-        drawWallEnabled: false,
-        wallEndpointEditingEnabled: false,
-        openingPlacement: "OPENING",
         openingEditingEnabled: false
       }
     },

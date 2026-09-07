@@ -768,30 +768,6 @@ img {
   color: var(--casa-muted) !important;
 }
 
-.project-room-authoring-menu {
-  border: 1px solid var(--casa-border);
-  margin-top: 5px;
-  width: min(320px, calc(100vw - 24px));
-  overflow: hidden;
-}
-
-.project-room-authoring-menu__layout {
-  padding: 8px !important;
-}
-
-.project-room-authoring-menu__existing {
-  border-bottom: 1px solid var(--casa-border);
-  padding-bottom: 6px;
-}
-
-.project-room-authoring-menu__shapes {
-  padding-top: 4px;
-}
-
-.project-room-authoring-menu__shapes .MuiMenuItem-root {
-  flex: 1;
-}
-
 .geometry-wall-preview-length {
   pointer-events: none;
 }
@@ -805,50 +781,6 @@ img {
   fill: var(--casa-ink);
   font-size: 11px;
   font-weight: 700;
-}
-
-.project-room-authoring-menu .MuiListSubheader-root {
-  background: transparent;
-  color: var(--casa-ink-muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 30px;
-  text-transform: uppercase;
-}
-
-.project-room-authoring-menu__thumbnail {
-  fill: rgba(36, 108, 175, 0.08);
-  margin-right: 10px;
-  stroke: #246caf;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.project-room-authoring-menu__help {
-  margin: 6px 16px 10px;
-  max-width: 238px;
-}
-
-.project-stair-authoring-menu {
-  border: 1px solid var(--casa-border);
-  margin-top: 5px;
-  width: min(300px, calc(100vw - 24px));
-}
-
-.project-stair-authoring-menu__templates .MuiToggleButton-root {
-  font-size: 0.72rem;
-  padding-inline: 8px;
-}
-
-@media (max-width: 760px) {
-  .project-room-authoring-menu {
-    width: min(320px, calc(100vw - 24px));
-  }
-
-  .project-room-authoring-menu__existing {
-    padding-bottom: 6px;
-  }
 }
 
 .project-workspace > .MuiAlert-root {
@@ -1602,6 +1534,14 @@ img {
 .geometry-room-shape-preview--elevated .geometry-room-shape-preview__walls {
   stroke-dasharray: 9 7;
   stroke-width: 2;
+}
+
+.geometry-room-shape-preview--invalid .geometry-room-shape-preview__fill {
+  fill: rgba(189, 62, 53, 0.12);
+}
+
+.geometry-room-shape-preview--invalid .geometry-room-shape-preview__walls {
+  stroke: #bd3e35;
 }
 
 .geometry-room-shape-preview__label {

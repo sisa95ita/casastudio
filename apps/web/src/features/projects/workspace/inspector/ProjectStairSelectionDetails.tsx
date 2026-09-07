@@ -132,10 +132,12 @@ export function ProjectStairAuthoringDetails({
   targetLevelId,
   targetRoomId,
   template,
+  turnDirection,
   parameters,
   proposal,
-  locked,
   units,
+  onDestinationChange,
+  onTurnDirectionChange,
   onTemplateChange,
   onParametersChange,
   onConfirm,
@@ -146,10 +148,12 @@ export function ProjectStairAuthoringDetails({
   readonly targetLevelId: string;
   readonly targetRoomId?: string;
   readonly template: StairTemplate;
+  readonly turnDirection: "LEFT" | "RIGHT";
   readonly parameters: StairAuthoringParameters;
   readonly proposal?: StairProposal;
-  readonly locked: boolean;
   readonly units: Project["units"];
+  readonly onDestinationChange: (levelId: string, roomId?: string) => void;
+  readonly onTurnDirectionChange: (turn: "LEFT" | "RIGHT") => void;
   readonly onTemplateChange: (template: StairTemplate) => void;
   readonly onParametersChange: (parameters: StairAuthoringParameters) => void;
   readonly onConfirm: () => void;
@@ -179,6 +183,19 @@ export function ProjectStairAuthoringDetails({
           to: toRoom ? `${toLevel?.name} · ${toRoom.name}` : toLevel?.name ?? targetLevelId
         })}
       </Typography>
+      <FormControl size="small" fullWidth>
+        <InputLabel id="stair-inspector-level-label">{t("stairAuthoring.targetLevel")}</InputLabel>
+        <Select labelId="stair-inspector-level-label" label={t("stairAuthoring.targetLevel")} value={targetLevelId} onChange={(event) => onDestinationChange(String(event.target.value))}>
+          {levels.map((level) => <MenuItem key={level.id} value={level.id}>{level.name}{level.id === owningLevelId ? ` · ${t("stairAuthoring.sameLevel")}` : ""}</MenuItem>)}
+        </Select>
+      </FormControl>
+      <FormControl size="small" fullWidth disabled={!toLevel}>
+        <InputLabel id="stair-inspector-room-label">{t("stairAuthoring.targetRoom")}</InputLabel>
+        <Select labelId="stair-inspector-room-label" label={t("stairAuthoring.targetRoom")} value={targetRoomId ?? ""} onChange={(event) => onDestinationChange(targetLevelId, String(event.target.value) || undefined)}>
+          <MenuItem value="">{t("stairAuthoring.noTargetRoom")}</MenuItem>
+          {toLevel?.rooms.map((room) => <MenuItem key={room.id} value={room.id}>{room.name}</MenuItem>)}
+        </Select>
+      </FormControl>
       <FormControl size="small">
         <InputLabel id="stair-inspector-template-label">{t("stairAuthoring.template")}</InputLabel>
         <Select
@@ -192,6 +209,15 @@ export function ProjectStairAuthoringDetails({
           <MenuItem value="U_SHAPED">{t("stairAuthoring.templates.uShaped")}</MenuItem>
         </Select>
       </FormControl>
+      {template === "L_SHAPED" ? (
+        <FormControl size="small" fullWidth>
+          <InputLabel id="stair-turn-label">{t("stairAuthoring.turn")}</InputLabel>
+          <Select labelId="stair-turn-label" label={t("stairAuthoring.turn")} value={turnDirection} onChange={(event) => onTurnDirectionChange(event.target.value as "LEFT" | "RIGHT")}>
+            <MenuItem value="LEFT">{t("stairAuthoring.left")}</MenuItem>
+            <MenuItem value="RIGHT">{t("stairAuthoring.right")}</MenuItem>
+          </Select>
+        </FormControl>
+      ) : null}
       <StairLiveNumberField label={t("stair.labels.width")} value={parameters.width} unit={units.length} onChange={(value) => setNumber("width", value)} />
       <StairLiveNumberField label={t("stair.labels.treadDepth")} value={parameters.treadDepth} unit={units.length} onChange={(value) => setNumber("treadDepth", value)} />
       {parameters.kind === "STRAIGHT" ? (
@@ -215,13 +241,13 @@ export function ProjectStairAuthoringDetails({
       <Alert severity={proposal?.valid ? "success" : proposal ? "warning" : "info"}>
         {proposal
           ? proposal.valid
-            ? locked ? t("stairAuthoring.ready") : t("stairAuthoring.clickToLock")
+            ? t("stairAuthoring.ready")
             : t(`stairAuthoring.invalid.${proposal.invalidReason ?? "INVALID_PARAMETERS"}`)
           : t("stairAuthoring.placeHint")}
       </Alert>
       <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
         <Button size="small" onClick={onCancel}>{t("stairAuthoring.cancel")}</Button>
-        <Button size="small" variant="contained" disabled={!locked || !proposal?.valid} onClick={onConfirm}>
+        <Button size="small" variant="contained" disabled={!proposal?.valid} onClick={onConfirm}>
           {t("stairAuthoring.confirm")}
         </Button>
       </Stack>

@@ -8,6 +8,7 @@ import {
   getSuggestedStairParameters,
   inferStairTemplate,
   measureStaircase,
+  translateStaircase,
   updateStaircaseParameters
 } from "./project-stair-authoring";
 
@@ -157,5 +158,52 @@ describe("stair template authoring", () => {
     expect(proposal.staircase.flights[0]?.endElevation).toBe(transition);
     expect(proposal.staircase.flights[1]?.startElevation).toBe(transition);
     expect(proposal.staircase.landings[0]?.elevation).toBe(transition);
+  });
+
+  it("mirrors an L-shaped proposal without changing its vertical connection", () => {
+    const options = {
+      project,
+      owningLevelId: "ground",
+      destination: { toLevelId: "upper" },
+      template: "L_SHAPED" as const,
+      parameters: { kind: "TWO_FLIGHT" as const, width: 90, firstFlightStepCount: 8, secondFlightStepCount: 8, treadDepth: 28 },
+      start: { x: 50, z: 20 },
+      control: { x: 274, z: 20 },
+      identifiers: identifiers("L_SHAPED")
+    };
+    const left = createStairProposal({ ...options, turnDirection: "LEFT" })!;
+    const right = createStairProposal({ ...options, turnDirection: "RIGHT" })!;
+    expect(left.staircase.flights[1]!.end.z - 20).toBe(-(right.staircase.flights[1]!.end.z - 20));
+    expect(left.staircase.flights.map((flight) => flight.stepCount)).toEqual(
+      right.staircase.flights.map((flight) => flight.stepCount)
+    );
+    expect(left.staircase.width).toBe(right.staircase.width);
+    expect(left.staircase.flights.map((flight) => [flight.startElevation, flight.endElevation])).toEqual(
+      right.staircase.flights.map((flight) => [flight.startElevation, flight.endElevation])
+    );
+    expect(left.staircase.toLevelId).toBe(right.staircase.toLevelId);
+  });
+
+  it("translates every Flight and Landing rigidly while preserving elevation", () => {
+    const proposal = createStairProposal({
+      project,
+      owningLevelId: "ground",
+      destination: { toLevelId: "upper" },
+      template: "U_SHAPED",
+      parameters: { kind: "TWO_FLIGHT", width: 90, firstFlightStepCount: 8, secondFlightStepCount: 8, treadDepth: 28 },
+      start: { x: 0, z: 0 },
+      control: { x: 224, z: 0 },
+      identifiers: identifiers("U_SHAPED")
+    })!;
+    const moved = translateStaircase(proposal.staircase, { x: 125, z: -40 });
+    expect(moved.flights.map((flight) => flight.start)).toEqual(
+      proposal.staircase.flights.map((flight) => ({ x: flight.start.x + 125, z: flight.start.z - 40 }))
+    );
+    expect(moved.landings.map((landing) => landing.position)).toEqual(
+      proposal.staircase.landings.map((landing) => ({ x: landing.position.x + 125, z: landing.position.z - 40 }))
+    );
+    expect(moved.flights.map((flight) => [flight.startElevation, flight.endElevation])).toEqual(
+      proposal.staircase.flights.map((flight) => [flight.startElevation, flight.endElevation])
+    );
   });
 });

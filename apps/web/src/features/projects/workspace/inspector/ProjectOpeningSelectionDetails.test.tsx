@@ -27,10 +27,44 @@ describe("ProjectOpeningSelectionDetails", () => {
       />
     );
     expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByText("Move the pointer over a Wall to preview the Opening.")).toBeTruthy();
     const width = screen.getByRole("spinbutton", { name: "Width (cm)" });
     fireEvent.change(width, { target: { value: "65" } });
     fireEvent.blur(width);
     expect(handleChange).toHaveBeenCalledWith({ width: 65 });
+  });
+
+  it("reports the current Wall candidate and delegates subtype selection", async () => {
+    const onTypeChange = vi.fn();
+    render(
+      <ProjectNewOpeningPropertiesDetails
+        openingType="DOOR"
+        properties={{ width: 90, height: 210, elevation: 0, hingeSide: "START", swingSide: "LEFT" }}
+        candidate={{
+          wallId: "wall-north",
+          wallStateKey: "wall-state",
+          projectedPoint: { x: 200, z: 0 },
+          valid: true,
+          opening: {
+            id: "opening-preview",
+            type: "DOOR",
+            offsetFromStart: 200,
+            width: 90,
+            height: 210,
+            elevation: 0,
+            hingeSide: "START",
+            swingSide: "LEFT"
+          }
+        }}
+        units={{ length: "cm", angle: "deg" }}
+        onTypeChange={onTypeChange}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText("Wall candidate: wall-north. Click to create the Opening.")).toBeTruthy();
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Type" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Window" }));
+    expect(onTypeChange).toHaveBeenCalledWith("WINDOW");
   });
   it("edits every individual Door measurement without changing another Door", () => {
     const onProjectChange = vi.fn();

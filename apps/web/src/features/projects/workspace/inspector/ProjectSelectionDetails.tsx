@@ -22,6 +22,7 @@ import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentat
 import type { GeometrySelectionState } from "../../../geometry-2d/selection/geometry-selection-state";
 import { useCasaTranslation } from "../../../../core/i18n";
 import type { WallEndpointEditingAvailability } from "../../../editor-2d/tools/wall/project-wall-editing";
+import type { OpeningPlacementCandidate } from "../../../editor-2d/tools/opening/project-opening-editing";
 import type { ProjectEditorTool } from "../../../editor-2d/state/project-editor-tools";
 import {
   ProjectWallPropertiesDetails,
@@ -171,6 +172,7 @@ export function ProjectPropertiesDetails({
   onDeleteStair,
   onUpdateStair,
   openingAuthoring,
+  onUpdateOpeningAuthoringType,
   onUpdateOpeningAuthoring
 }: {
   readonly model?: GeometryPresentationModel2D;
@@ -207,8 +209,10 @@ export function ProjectPropertiesDetails({
   readonly openingAuthoring?: {
     readonly openingType: OpeningAuthoringType;
     readonly properties: OpeningAuthoringProperties;
+    readonly candidate?: OpeningPlacementCandidate;
   };
   readonly onUpdateOpeningAuthoring?: (properties: Partial<OpeningAuthoringProperties>) => void;
+  readonly onUpdateOpeningAuthoringType?: (openingType: OpeningAuthoringType) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   if (openingAuthoring) {
@@ -216,7 +220,9 @@ export function ProjectPropertiesDetails({
       <ProjectNewOpeningPropertiesDetails
         openingType={openingAuthoring.openingType}
         properties={openingAuthoring.properties}
+        candidate={openingAuthoring.candidate}
         units={units}
+        onTypeChange={onUpdateOpeningAuthoringType ?? (() => undefined)}
         onChange={onUpdateOpeningAuthoring ?? (() => undefined)}
       />
     );

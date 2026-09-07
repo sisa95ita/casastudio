@@ -21,13 +21,16 @@ import {
   editorOpeningDragStarted,
   editorOpeningDragThresholdCrossed,
   editorOpeningAuthoringPropertiesChanged,
+  editorOpeningAuthoringTypeChanged,
+  editorToolToggled,
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
   editorRedoRequested,
   editorSelectionChanged,
   editorStairAuthoringChanged,
-  editorStairPlacementPointSet,
   editorStairPlacementPointerMoved,
+  editorStairTranslationPointerMoved,
+  editorStairTranslationStarted,
   editorTransientInteractionCleared,
   editorTransientPointerMoved,
   editorUndoRequested,
@@ -101,7 +104,7 @@ describe("Project editor state", () => {
     expect(state.activeLevelId).toBe(demoProjectFixture.building.levels[0]!.id);
   });
 
-  it("supports a neutral active-tool state", () => {
+  it("enters editing in Select and keeps direct tool changes available", () => {
     const editingState = projectEditorReducer(
       undefined,
       editingSessionEntered({
@@ -110,7 +113,7 @@ describe("Project editor state", () => {
       })
     );
 
-    expect(editingState.activeTool).toBeNull();
+    expect(editingState.activeTool).toBe("select");
     expect(
       projectEditorReducer(editingState, editorActiveToolChanged("select"))
         .activeTool
@@ -121,7 +124,7 @@ describe("Project editor state", () => {
     ).toBeNull();
   });
 
-  it("keeps connection-first Stair authoring and two-click placement transient", () => {
+  it("keeps pointer-following Stair authoring transient", () => {
     let state = projectEditorReducer(undefined, editingSessionEntered({
       project: demoProjectFixture,
       baseRevision: demoProjectFixture.revision
@@ -130,7 +133,7 @@ describe("Project editor state", () => {
     expect(state.transient.interaction).toMatchObject({
       kind: "place-stair",
       owningLevelId: state.activeLevelId,
-      locked: false
+      turnDirection: "LEFT"
     });
     const draft = state.draft;
     state = projectEditorReducer(state, editorStairAuthoringChanged({
@@ -150,19 +153,62 @@ describe("Project editor state", () => {
         landingIds: ["landing-one"]
       }
     }));
-    state = projectEditorReducer(state, editorStairPlacementPointSet({ x: 0, z: 0 }));
     state = projectEditorReducer(state, editorStairPlacementPointerMoved({ x: 300, z: 0 }));
     expect(state.transient.interaction).toMatchObject({
       kind: "place-stair",
-      start: { x: 0, z: 0 },
-      control: { x: 300, z: 0 },
-      locked: false
+      start: { x: 300, z: 0 },
+      control: { x: 300, z: 0 }
     });
-    state = projectEditorReducer(state, editorStairPlacementPointSet({ x: 320, z: 0 }));
-    expect(state.transient.interaction).toMatchObject({ control: { x: 320, z: 0 }, locked: true });
     expect(state.transient.interaction).toMatchObject({
       parameters: { firstFlightStepCount: 4, secondFlightStepCount: 13 }
     });
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
+  });
+
+  it("toggles every authoring tool back to Select without draft or history mutation", () => {
+    for (const tool of ["draw-wall", "openings", "room", "stair", "furniture", "measure"] as const) {
+      let state = projectEditorReducer(undefined, editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      }));
+      state = projectEditorReducer(state, editorToolToggled(tool));
+      expect(state.activeTool).toBe(tool);
+      const draft = state.draft;
+      const history = state.history;
+      state = projectEditorReducer(state, editorToolToggled(tool));
+      expect(state.activeTool).toBe("select");
+      expect(state.transient.interaction).toBeNull();
+      expect(state.draft).toBe(draft);
+      expect(state.history).toBe(history);
+    }
+  });
+
+  it("keeps Stair aggregate translation transient so cancellation restores the draft", () => {
+    let state = projectEditorReducer(undefined, editingSessionEntered({
+      project: demoProjectFixture,
+      baseRevision: demoProjectFixture.revision
+    }));
+    const draft = state.draft;
+    state = projectEditorReducer(state, editorStairTranslationStarted({
+      owningLevelId: state.activeLevelId!,
+      staircaseId: "staircase-test",
+      pointerId: 17,
+      startPointer: { x: 10, z: 20 }
+    }));
+    state = projectEditorReducer(state, editorStairTranslationPointerMoved({
+      pointerId: 17,
+      point: { x: 70, z: -15 }
+    }));
+    expect(state.transient.interaction).toMatchObject({
+      kind: "move-stair-translation",
+      currentPointer: { x: 70, z: -15 }
+    });
+    expect(state.draft).toBe(draft);
+    expect(state.history).toEqual({ past: [], future: [] });
+
+    state = projectEditorReducer(state, editorTransientInteractionCleared());
+    expect(state.transient.interaction).toBeNull();
     expect(state.draft).toBe(draft);
     expect(state.history).toEqual({ past: [], future: [] });
   });
@@ -278,15 +324,16 @@ describe("Project editor state", () => {
   });
 
   it.each([
-    ["door", "DOOR", 90],
-    ["window", "WINDOW", 120],
-    ["opening", "OPENING", 120]
-  ] as const)("initializes %s authoring defaults without dirtying history", (tool, openingType, width) => {
+    ["DOOR", 90],
+    ["WINDOW", 120],
+    ["OPENING", 120]
+  ] as const)("initializes %s authoring defaults without dirtying history", (openingType, width) => {
     let state = projectEditorReducer(undefined, editingSessionEntered({
       project: demoProjectFixture,
       baseRevision: demoProjectFixture.revision
     }));
-    state = projectEditorReducer(state, editorActiveToolChanged(tool));
+    state = projectEditorReducer(state, editorActiveToolChanged("openings"));
+    state = projectEditorReducer(state, editorOpeningAuthoringTypeChanged(openingType));
     expect(state.transient.interaction).toMatchObject({
       kind: "place-opening",
       openingType,
@@ -375,7 +422,7 @@ describe("Project editor state", () => {
     expect(state.transient).toEqual({ interaction: null });
   });
 
-  it.each(["draw-wall", "door"] as const)(
+  it.each(["draw-wall", "openings"] as const)(
     "clears Select geometry and transient state when switching to %s",
     (nextTool) => {
       let state = projectEditorReducer(
@@ -407,7 +454,7 @@ describe("Project editor state", () => {
       expect(state.activeTool).toBe(nextTool);
       expect(state.selection).toEqual([]);
       expect(state.hover).toBeUndefined();
-      if (nextTool === "door") {
+      if (nextTool === "openings") {
         expect(state.transient.interaction).toMatchObject({ kind: "place-opening", openingType: "DOOR" });
       } else {
         expect(state.transient.interaction).toBeNull();

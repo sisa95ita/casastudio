@@ -125,6 +125,7 @@ export function createStairProposal(options: {
   readonly parameters: StairAuthoringParameters;
   readonly start: Point2D;
   readonly control: Point2D;
+  readonly turnDirection?: "LEFT" | "RIGHT";
   readonly identifiers: StairIdentifiers;
   readonly name?: string;
 }): StairProposal | undefined {
@@ -155,7 +156,8 @@ export function createStairProposal(options: {
   const direction = controlLength > 0
     ? { x: delta.x / controlLength, z: delta.z / controlLength }
     : { x: 1, z: 0 };
-  const side = { x: -direction.z, z: direction.x };
+  const turnSign = options.turnDirection === "RIGHT" ? -1 : 1;
+  const side = { x: -direction.z * turnSign, z: direction.x * turnSign };
   const firstSteps = stepCounts[0] ?? 1;
   const secondSteps = stepCounts[1] ?? 0;
   const transitionElevation = elevations.startElevation +
@@ -387,6 +389,25 @@ export function findProjectStaircase(
     if (landing) return { staircase, part: landing };
   }
   return undefined;
+}
+
+/** Translates every plan-space part of a canonical Staircase by one rigid delta. */
+export function translateStaircase(
+  staircase: Staircase,
+  delta: Point2D
+): Staircase {
+  return {
+    ...staircase,
+    flights: staircase.flights.map((flight) => ({
+      ...flight,
+      start: add(flight.start, delta),
+      end: add(flight.end, delta)
+    })),
+    landings: staircase.landings.map((landing) => ({
+      ...landing,
+      position: add(landing.position, delta)
+    }))
+  };
 }
 
 function createFlight(

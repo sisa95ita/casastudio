@@ -4,7 +4,9 @@ import {
   validateRoomShapeDefinition,
   ValidationErrorCode,
   type Project,
+  type RoomType,
   type RoomShapeDefinition,
+  type RoomShapeKind,
   type RoomShapeRotation
 } from "@casastudio/schema";
 
@@ -14,6 +16,10 @@ export type RoomShapeDimensionDraft = {
   readonly depth: string;
   readonly notchWidth: string;
   readonly notchDepth: string;
+  readonly leftWingWidth: string;
+  readonly rightWingWidth: string;
+  readonly stemWidth: string;
+  readonly stemDepth: string;
   readonly rotation: string;
 };
 
@@ -23,8 +29,38 @@ export const defaultRoomShapeDimensions: RoomShapeDimensionDraft = Object.freeze
   depth: "300",
   notchWidth: "150",
   notchDepth: "120",
+  leftWingWidth: "120",
+  rightWingWidth: "120",
+  stemWidth: "160",
+  stemDepth: "220",
   rotation: "0"
 });
+
+/** Product-level Room suggestions that compile to ordinary canonical Rooms. */
+export type RoomAuthoringPreset = "CUSTOM" | "BEDROOM" | "BATHROOM" | "KITCHEN" | "LIVING_ROOM";
+
+/** Deterministic, non-persisted values supplied by one Room authoring preset. */
+export type RoomAuthoringPresetValues = {
+  readonly roomType: RoomType;
+  readonly shape: RoomShapeKind;
+  readonly dimensions: RoomShapeDimensionDraft;
+};
+
+/** Resolves one transient Room preset without introducing canonical metadata. */
+export function getRoomAuthoringPresetValues(preset: RoomAuthoringPreset): RoomAuthoringPresetValues {
+  switch (preset) {
+    case "BEDROOM":
+      return { roomType: "BEDROOM", shape: "RECTANGLE", dimensions: dimensions(360, 320) };
+    case "BATHROOM":
+      return { roomType: "BATHROOM", shape: "RECTANGLE", dimensions: dimensions(240, 200) };
+    case "KITCHEN":
+      return { roomType: "KITCHEN", shape: "L_SHAPE", dimensions: { ...dimensions(420, 340), notchWidth: "140", notchDepth: "120" } };
+    case "LIVING_ROOM":
+      return { roomType: "LIVING_ROOM", shape: "RECTANGLE", dimensions: dimensions(500, 400) };
+    default:
+      return { roomType: "OTHER", shape: "RECTANGLE", dimensions: getDefaultRoomShapeDimensions("RECTANGLE") };
+  }
+}
 
 /** Localized feedback categories for explicit Room authoring actions. */
 export type RoomEditingErrorKey =
@@ -44,31 +80,43 @@ export type RoomEditingErrorKey =
 
 /** Returns sensible editable defaults expressed in canonical Project units. */
 export function getDefaultRoomShapeDimensions(
-  kind: "RECTANGLE" | "L_SHAPE"
+  kind: RoomShapeKind
 ): RoomShapeDimensionDraft {
-  return kind === "RECTANGLE"
-    ? { ...defaultRoomShapeDimensions }
-    : {
+  if (kind === "RECTANGLE") return { ...defaultRoomShapeDimensions };
+  if (kind === "L_SHAPE") return {
         width: "500",
         depth: "400",
         notchWidth: "200",
         notchDepth: "150",
+        leftWingWidth: "120",
+        rightWingWidth: "120",
+        stemWidth: "160",
+        stemDepth: "220",
         rotation: "0"
       };
+  if (kind === "U_SHAPE") return {
+    ...defaultRoomShapeDimensions,
+    width: "520", depth: "420", leftWingWidth: "140", rightWingWidth: "140", notchDepth: "260"
+  };
+  return {
+    ...defaultRoomShapeDimensions,
+    width: "500", depth: "420", stemWidth: "180", stemDepth: "260"
+  };
 }
 
 /** Parses locally editable fields into one validated authoring-only shape. */
 export function parseRoomShapeDefinition(
-  kind: "RECTANGLE" | "L_SHAPE",
+  kind: RoomShapeKind,
   draft: RoomShapeDimensionDraft
 ): RoomShapeDefinition | undefined {
+  const rotation = Number(draft.rotation) as RoomShapeRotation;
   const shape: RoomShapeDefinition = kind === "RECTANGLE"
     ? {
         kind,
         dimensions: { width: Number(draft.width), depth: Number(draft.depth) },
-        rotation: Number(draft.rotation) as RoomShapeRotation
+        rotation
       }
-    : {
+    : kind === "L_SHAPE" ? {
         kind,
         dimensions: {
           width: Number(draft.width),
@@ -76,7 +124,25 @@ export function parseRoomShapeDefinition(
           notchWidth: Number(draft.notchWidth),
           notchDepth: Number(draft.notchDepth)
         },
-        rotation: Number(draft.rotation) as RoomShapeRotation
+        rotation
+      }
+    : kind === "U_SHAPE" ? {
+        kind,
+        dimensions: {
+          width: Number(draft.width), depth: Number(draft.depth),
+          leftWingWidth: Number(draft.leftWingWidth),
+          rightWingWidth: Number(draft.rightWingWidth),
+          notchDepth: Number(draft.notchDepth)
+        },
+        rotation
+      }
+    : {
+        kind,
+        dimensions: {
+          width: Number(draft.width), depth: Number(draft.depth),
+          stemWidth: Number(draft.stemWidth), stemDepth: Number(draft.stemDepth)
+        },
+        rotation
       };
   return validateRoomShapeDefinition(shape) ? shape : undefined;
 }
@@ -93,10 +159,17 @@ export function formatRoomShapePreviewLabel(
     true
   );
   const outer = `${format(shape.dimensions.width)} × ${format(shape.dimensions.depth)} m`;
-  const shapeLabel = shape.kind === "RECTANGLE"
-    ? outer
-    : `L ${outer} · ${format(shape.dimensions.notchWidth)} × ${format(shape.dimensions.notchDepth)} m`;
+  const shapeLabel = shape.kind === "RECTANGLE" ? outer
+    : shape.kind === "L_SHAPE"
+      ? `L ${outer} · ${format(shape.dimensions.notchWidth)} × ${format(shape.dimensions.notchDepth)} m`
+      : shape.kind === "U_SHAPE"
+        ? `U ${outer} · ${format(shape.dimensions.leftWingWidth)} / ${format(shape.dimensions.rightWingWidth)} m`
+        : `T ${outer} · ${format(shape.dimensions.stemWidth)} × ${format(shape.dimensions.stemDepth)} m`;
   return elevation === undefined ? shapeLabel : `${shapeLabel} · +${format(elevation)} m`;
+}
+
+function dimensions(width: number, depth: number): RoomShapeDimensionDraft {
+  return { ...defaultRoomShapeDimensions, width: String(width), depth: String(depth) };
 }
 
 /** Maps Room-authoring validation codes to localized presentation messages. */

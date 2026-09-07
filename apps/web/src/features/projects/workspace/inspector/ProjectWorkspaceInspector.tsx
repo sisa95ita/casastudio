@@ -6,6 +6,8 @@ import type {
   Level,
   Project,
   Room,
+  RoomShapeKind,
+  RoomType,
   StairFlight,
   StairLanding,
   Staircase,
@@ -21,11 +23,13 @@ import { ProjectLayerControls } from "../../../editor-2d/components/ProjectLayer
 import type { ProjectEditorTool } from "../../../editor-2d/state/project-editor-tools";
 import type {
   OpeningAuthoringProperties,
+  OpeningAuthoringType,
   PlaceOpeningInteraction,
   ProjectWorkspaceMode
 } from "../../../editor-2d/state/project-editor-slice";
 import { ProjectRoomAuthoringDetails } from "../../../editor-2d/tools/room/ProjectRoomAuthoringDetails";
 import type { RoomShapeDimensionDraft } from "../../../editor-2d/tools/room/room-shape-authoring";
+import type { RoomAuthoringPreset } from "../../../editor-2d/tools/room/room-shape-authoring";
 import type { WallEndpointEditingAvailability } from "../../../editor-2d/tools/wall/project-wall-editing";
 import type { StairAuthoringParameters, StairParameterChanges, StairProposal, StairTemplate } from "../../../editor-2d/tools/stair/project-stair-authoring";
 import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentation/geometry-presentation-model-2d";
@@ -55,7 +59,7 @@ type ProjectWorkspaceInspectorProps = {
     readonly template: StairTemplate;
     readonly parameters: StairAuthoringParameters;
     readonly proposal?: StairProposal;
-    readonly locked: boolean;
+    readonly turnDirection: "LEFT" | "RIGHT";
   };
   readonly selectedRoomMeasurement?: RoomMeasurement;
   readonly levelMeasurement?: ReturnType<typeof measureLevel>;
@@ -63,13 +67,16 @@ type ProjectWorkspaceInspectorProps = {
   readonly selectedOpeningDisplayOffset?: number;
   readonly openingAuthoring?: PlaceOpeningInteraction;
   readonly roomAuthoring?: {
-    readonly activeShape?: "RECTANGLE" | "L_SHAPE";
+    readonly activeShape?: RoomShapeKind;
     readonly boundaryKind?: "WALLS" | "FREE";
     readonly detectionActive: boolean;
+    readonly preset: RoomAuthoringPreset;
+    readonly roomType: RoomType;
     readonly elevation: string;
     readonly levelElevation: number;
     readonly dimensions: RoomShapeDimensionDraft;
     readonly valid: boolean;
+    readonly validationIssue?: "PARAMETERS" | "TOPOLOGY";
   };
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly selectedVertexRemovable: boolean;
@@ -88,10 +95,14 @@ type ProjectWorkspaceInspectorProps = {
   readonly onUpdateOpeningAuthoring: (
     properties: Partial<OpeningAuthoringProperties>
   ) => void;
+  readonly onUpdateOpeningAuthoringType: (openingType: OpeningAuthoringType) => void;
   readonly onUpdateRoomAuthoringDimension: (
     field: keyof RoomShapeDimensionDraft,
     value: string
   ) => void;
+  readonly onRoomAuthoringMethodChange: (method: "DETECT" | "SHAPE") => void;
+  readonly onRoomAuthoringShapeChange: (shape: RoomShapeKind) => void;
+  readonly onRoomAuthoringPresetChange: (preset: RoomAuthoringPreset) => void;
   readonly onUpdateRoomAuthoringElevation: (value: string) => void;
   readonly onRoomAuthoringSpacePanChange: (active: boolean) => void;
   readonly onCancelRoomAuthoring: () => void;
@@ -100,6 +111,8 @@ type ProjectWorkspaceInspectorProps = {
   readonly onDeleteStair: () => void;
   readonly onUpdateStair: (properties: StairParameterChanges) => boolean;
   readonly onStairAuthoringTemplateChange: (template: StairTemplate) => void;
+  readonly onStairAuthoringDestinationChange: (levelId: string, roomId?: string) => void;
+  readonly onStairAuthoringTurnChange: (turn: "LEFT" | "RIGHT") => void;
   readonly onStairAuthoringParametersChange: (parameters: StairAuthoringParameters) => void;
   readonly onConfirmStairAuthoring: () => void;
   readonly onCancelStairAuthoring: () => void;
@@ -135,7 +148,11 @@ export function ProjectWorkspaceInspector({
   onDeleteOpening,
   onUpdateOpening,
   onUpdateOpeningAuthoring,
+  onUpdateOpeningAuthoringType,
   onUpdateRoomAuthoringDimension,
+  onRoomAuthoringMethodChange,
+  onRoomAuthoringShapeChange,
+  onRoomAuthoringPresetChange,
   onUpdateRoomAuthoringElevation,
   onRoomAuthoringSpacePanChange,
   onCancelRoomAuthoring,
@@ -144,6 +161,8 @@ export function ProjectWorkspaceInspector({
   onDeleteStair,
   onUpdateStair,
   onStairAuthoringTemplateChange,
+  onStairAuthoringDestinationChange,
+  onStairAuthoringTurnChange,
   onStairAuthoringParametersChange,
   onConfirmStairAuthoring,
   onCancelStairAuthoring
@@ -195,6 +214,8 @@ export function ProjectWorkspaceInspector({
             <ProjectStairAuthoringDetails
               {...stairAuthoring}
               units={units}
+              onDestinationChange={onStairAuthoringDestinationChange}
+              onTurnDirectionChange={onStairAuthoringTurnChange}
               onTemplateChange={onStairAuthoringTemplateChange}
               onParametersChange={onStairAuthoringParametersChange}
               onConfirm={onConfirmStairAuthoring}
@@ -205,6 +226,9 @@ export function ProjectWorkspaceInspector({
               {...roomAuthoring}
               unit={units.length}
               onDimensionChange={onUpdateRoomAuthoringDimension}
+              onMethodChange={onRoomAuthoringMethodChange}
+              onShapeChange={onRoomAuthoringShapeChange}
+              onPresetChange={onRoomAuthoringPresetChange}
               onElevationChange={onUpdateRoomAuthoringElevation}
               onSpacePanChange={onRoomAuthoringSpacePanChange}
               onCancel={onCancelRoomAuthoring}
@@ -233,6 +257,7 @@ export function ProjectWorkspaceInspector({
               onDeleteOpening={onDeleteOpening}
               onUpdateOpening={onUpdateOpening}
               openingAuthoring={openingAuthoring}
+              onUpdateOpeningAuthoringType={onUpdateOpeningAuthoringType}
               onUpdateOpeningAuthoring={onUpdateOpeningAuthoring}
               onDeleteRoom={onDeleteRoom}
               onUpdateRoomProperties={onUpdateRoomProperties}

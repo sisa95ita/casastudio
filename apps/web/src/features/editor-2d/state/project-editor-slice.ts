@@ -10,6 +10,7 @@ import {
 } from "@casastudio/geometry";
 import type {
   Project,
+  RoomType,
   RoomShapeDefinition,
   WallEndpoint
 } from "@casastudio/schema";
@@ -114,11 +115,12 @@ export type PlaceRoomShapeInteraction = {
   readonly levelId: string;
   readonly boundaryKind: "WALLS" | "FREE";
   readonly elevation: number;
+  readonly roomType: RoomType;
   readonly shape: RoomShapeDefinition;
   readonly origin?: WorldPointXZ;
 };
 
-/** Connection-first Staircase proposal that has not entered Project history. */
+/** Complete pointer-following Staircase proposal that has not entered Project history. */
 export type PlaceStairInteraction = {
   readonly kind: "place-stair";
   readonly owningLevelId: string;
@@ -133,7 +135,7 @@ export type PlaceStairInteraction = {
   };
   readonly start?: WorldPointXZ;
   readonly control?: WorldPointXZ;
-  readonly locked: boolean;
+  readonly turnDirection: "LEFT" | "RIGHT";
 };
 
 /** One root Staircase template adjustment preview committed on pointer release. */
@@ -145,12 +147,23 @@ export type MoveStairAdjustmentInteraction = {
   readonly control: WorldPointXZ;
 };
 
+/** Rigid plan translation preview for one committed Staircase aggregate. */
+export type MoveStairTranslationInteraction = {
+  readonly kind: "move-stair-translation";
+  readonly owningLevelId: string;
+  readonly staircaseId: string;
+  readonly pointerId: number;
+  readonly startPointer: WorldPointXZ;
+  readonly currentPointer: WorldPointXZ;
+};
+
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
     DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
     PlaceOpeningInteraction | AddWallVertexInteraction | MoveOpeningInteraction | MeasureInteraction |
-    PlaceRoomShapeInteraction | PlaceStairInteraction | MoveStairAdjustmentInteraction | FurnitureInteraction | null;
+    PlaceRoomShapeInteraction | PlaceStairInteraction | MoveStairAdjustmentInteraction |
+    MoveStairTranslationInteraction | FurnitureInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
@@ -255,11 +268,6 @@ export function createOpeningAuthoringInteraction(
   };
 }
 
-/** Maps an Opening authoring tool to its canonical Opening discriminator. */
-function getOpeningTypeForTool(tool: ProjectEditorTool | null): OpeningAuthoringType | undefined {
-  return tool === "door" ? "DOOR" : tool === "window" ? "WINDOW" : tool === "opening" ? "OPENING" : undefined;
-}
-
 const projectEditorSlice = createSlice({
   name: "projectEditor",
   initialState: initialProjectEditorState,
@@ -301,7 +309,7 @@ const projectEditorSlice = createSlice({
         state.baseRevision = action.payload.baseRevision;
         state.dirty = false;
         state.activeLevelId = activeLevelId;
-        state.activeTool = null;
+        state.activeTool = "select";
         state.selection = [];
         state.hover = undefined;
         state.transient = { interaction: null };
@@ -450,7 +458,7 @@ const projectEditorSlice = createSlice({
         state.activeTool = action.payload;
         state.selection = [];
         state.hover = undefined;
-        const openingType = getOpeningTypeForTool(action.payload);
+        const openingType = action.payload === "openings" ? "DOOR" : undefined;
         state.transient = {
           interaction: openingType
             ? createOpeningAuthoringInteraction(openingType)
@@ -459,11 +467,41 @@ const projectEditorSlice = createSlice({
                   kind: "place-stair",
                   owningLevelId: state.activeLevelId,
                   parameters: { ...defaultStairAuthoringParameters },
-                  locked: false
+                  turnDirection: "LEFT"
                 }
               : null
         };
       }
+    },
+    editorToolToggled(state, action: PayloadAction<ProjectEditorTool>) {
+      if (state.mode !== "edit") return;
+      const requested = action.payload;
+      if (requested === "select") {
+        state.activeTool = "select";
+        state.transient = { interaction: null };
+        return;
+      }
+      if (state.activeTool === requested) {
+        state.activeTool = "select";
+        state.hover = undefined;
+        state.transient = { interaction: null };
+        return;
+      }
+      state.activeTool = requested;
+      state.selection = [];
+      state.hover = undefined;
+      state.transient = {
+        interaction: requested === "openings"
+          ? createOpeningAuthoringInteraction("DOOR")
+          : requested === "stair" && state.activeLevelId
+            ? {
+                kind: "place-stair",
+                owningLevelId: state.activeLevelId,
+                parameters: { ...defaultStairAuthoringParameters },
+                turnDirection: "LEFT"
+              }
+            : null
+      };
     },
     editorFurnitureChanged(state, action: PayloadAction<FurnitureInteraction>) {
       if (state.mode === "edit") state.transient = { interaction: action.payload };
@@ -606,6 +644,7 @@ const projectEditorSlice = createSlice({
         readonly shape: RoomShapeDefinition;
         readonly boundaryKind?: "WALLS" | "FREE";
         readonly elevation?: number;
+        readonly roomType?: RoomType;
       }>
     ) {
       if (
@@ -621,6 +660,7 @@ const projectEditorSlice = createSlice({
             levelId: action.payload.levelId,
             boundaryKind: action.payload.boundaryKind ?? "WALLS",
             elevation: action.payload.elevation ?? 0,
+            roomType: action.payload.roomType ?? "OTHER",
             shape: action.payload.shape
           }
         };
@@ -638,6 +678,7 @@ const projectEditorSlice = createSlice({
       if (state.transient.interaction?.kind === "place-room-shape" &&
           Number.isFinite(action.payload)) {
         state.transient.interaction.elevation = action.payload;
+        state.transient.interaction.boundaryKind = action.payload === 0 ? "WALLS" : "FREE";
       }
     },
     editorRoomShapePlacementPointerMoved(
@@ -655,29 +696,18 @@ const projectEditorSlice = createSlice({
       const interaction = state.transient.interaction;
       if (state.mode !== "edit" || state.activeTool !== "stair" || interaction?.kind !== "place-stair") return;
       Object.assign(interaction, action.payload);
-      if (action.payload.toLevelId !== undefined || action.payload.toRoomId !== undefined ||
-          action.payload.template !== undefined || action.payload.parameters !== undefined) {
-        interaction.start = undefined;
-        interaction.control = undefined;
-        interaction.locked = false;
-      }
     },
     editorStairPlacementPointSet(state, action: PayloadAction<WorldPointXZ>) {
       const interaction = state.transient.interaction;
       if (state.mode !== "edit" || state.activeTool !== "stair" || interaction?.kind !== "place-stair" ||
           !interaction.toLevelId || !interaction.template || !interaction.identifiers) return;
-      if (!interaction.start || interaction.locked) {
-        interaction.start = action.payload;
-        interaction.control = action.payload;
-        interaction.locked = false;
-      } else {
-        interaction.control = action.payload;
-        interaction.locked = true;
-      }
+      interaction.start = action.payload;
+      interaction.control = action.payload;
     },
     editorStairPlacementPointerMoved(state, action: PayloadAction<WorldPointXZ>) {
       const interaction = state.transient.interaction;
-      if (interaction?.kind === "place-stair" && interaction.start && !interaction.locked) {
+      if (interaction?.kind === "place-stair") {
+        interaction.start = action.payload;
         interaction.control = action.payload;
       }
     },
@@ -703,6 +733,27 @@ const projectEditorSlice = createSlice({
         interaction.control = action.payload.control;
       }
     },
+    editorStairTranslationStarted(
+      state,
+      action: PayloadAction<Omit<MoveStairTranslationInteraction, "kind" | "currentPointer">>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-stair-translation",
+          ...action.payload,
+          currentPointer: action.payload.startPointer
+        };
+      }
+    },
+    editorStairTranslationPointerMoved(
+      state,
+      action: PayloadAction<{ readonly pointerId: number; readonly point: WorldPointXZ }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "move-stair-translation" && interaction.pointerId === action.payload.pointerId) {
+        interaction.currentPointer = action.payload.point;
+      }
+    },
     editorOpeningPlacementChanged(
       state,
       action: PayloadAction<{
@@ -713,9 +764,7 @@ const projectEditorSlice = createSlice({
     ) {
       if (
         state.mode === "edit" &&
-        ((state.activeTool === "door" && action.payload.openingType === "DOOR") ||
-          (state.activeTool === "window" && action.payload.openingType === "WINDOW") ||
-          (state.activeTool === "opening" && action.payload.openingType === "OPENING"))
+        state.activeTool === "openings"
       ) {
         const current = state.transient.interaction;
         state.transient.interaction = {
@@ -727,6 +776,15 @@ const projectEditorSlice = createSlice({
               : createOpeningAuthoringInteraction(action.payload.openingType).properties),
           candidate: action.payload.candidate
         };
+      }
+    },
+    editorOpeningAuthoringTypeChanged(state, action: PayloadAction<OpeningAuthoringType>) {
+      if (state.mode !== "edit" || state.activeTool !== "openings") return;
+      state.transient = { interaction: createOpeningAuthoringInteraction(action.payload) };
+    },
+    editorRoomAuthoringTypeChanged(state, action: PayloadAction<RoomType>) {
+      if (state.transient.interaction?.kind === "place-room-shape") {
+        state.transient.interaction.roomType = action.payload;
       }
     },
     editorOpeningAuthoringPropertiesChanged(
@@ -882,6 +940,7 @@ export const {
   editorDimensionDisplayChanged,
   editorActiveLevelChanged,
   editorActiveToolChanged,
+  editorToolToggled,
   editorDrawWallStarted,
   editorDrawWallPointerMoved,
   editorMeasurementPointSet,
@@ -895,8 +954,12 @@ export const {
   editorStairPlacementPointerMoved,
   editorStairAdjustmentStarted,
   editorStairAdjustmentPointerMoved,
+  editorStairTranslationStarted,
+  editorStairTranslationPointerMoved,
   editorOpeningPlacementChanged,
+  editorOpeningAuthoringTypeChanged,
   editorOpeningAuthoringPropertiesChanged,
+  editorRoomAuthoringTypeChanged,
   editorWallVertexPlacementStarted,
   editorWallVertexPlacementChanged,
   editorOpeningDragStarted,

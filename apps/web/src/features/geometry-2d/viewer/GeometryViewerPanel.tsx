@@ -92,6 +92,9 @@ export type GeometryViewerPanelProps = Pick<GeometrySvgViewerProps, "furnitureMo
   readonly onStairAdjustmentPointerDown?: (staircaseId: string, pointerId: number) => void;
   readonly onStairAdjustmentPointerUp?: (point: WorldPointXZ, pointerId: number) => void;
   readonly onStairAdjustmentPointerCancel?: (pointerId: number) => void;
+  readonly onStairTranslationPointerDown?: (staircaseId: string, point: WorldPointXZ, pointerId: number) => void;
+  readonly onStairTranslationPointerUp?: (pointerId: number) => void;
+  readonly onStairTranslationPointerCancel?: (pointerId: number) => void;
 };
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
@@ -131,7 +134,10 @@ export function GeometryViewerPanel({
   onRoomFaceCandidateClick,
   onStairAdjustmentPointerDown,
   onStairAdjustmentPointerUp,
-  onStairAdjustmentPointerCancel
+  onStairAdjustmentPointerCancel,
+  onStairTranslationPointerDown,
+  onStairTranslationPointerUp,
+  onStairTranslationPointerCancel
 }: GeometryViewerPanelProps) {
   const { t } = useCasaTranslation("geometry-playground");
 
@@ -210,6 +216,9 @@ export function GeometryViewerPanel({
           onStairAdjustmentPointerDown={onStairAdjustmentPointerDown}
           onStairAdjustmentPointerUp={onStairAdjustmentPointerUp}
           onStairAdjustmentPointerCancel={onStairAdjustmentPointerCancel}
+          onStairTranslationPointerDown={onStairTranslationPointerDown}
+          onStairTranslationPointerUp={onStairTranslationPointerUp}
+          onStairTranslationPointerCancel={onStairTranslationPointerCancel}
         />
         <Box className="geometry-canvas-hint">
           <Typography variant="caption">{t("viewer.canvasHint")}</Typography>
