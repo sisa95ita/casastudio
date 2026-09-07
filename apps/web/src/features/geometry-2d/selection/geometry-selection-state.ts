@@ -2,6 +2,7 @@
  * Geometry entity kinds supported by the interactive viewer.
  */
 export type GeometrySelectionKind =
+  | "FURNITURE"
   | "POLYGON"
   | "BOUNDARY_EDGE"
   | "VERTEX"

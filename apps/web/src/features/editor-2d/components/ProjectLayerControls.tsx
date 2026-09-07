@@ -1,3 +1,4 @@
+import ChairRoundedIcon from "@mui/icons-material/ChairRounded";
 import DoorFrontRoundedIcon from "@mui/icons-material/DoorFrontRounded";
 import LayersRoundedIcon from "@mui/icons-material/LayersRounded";
 import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
@@ -26,7 +27,7 @@ export type ProjectLayerControlsProps = {
 
 /** One semantic layer and its mapping to renderer presentation flags. */
 type ProductLayer = {
-  readonly id: "walls" | "rooms" | "openings" | "dimensions" | "annotations";
+  readonly id: "furniture" | "walls" | "rooms" | "openings" | "dimensions" | "annotations";
   readonly icon: ReactNode;
   readonly visible: (options: GeometryDisplayOptions) => boolean;
   readonly apply: (options: GeometryDisplayOptions, visible: boolean) => GeometryDisplayOptions;
@@ -58,6 +59,11 @@ const productLayers: readonly ProductLayer[] = Object.freeze([
     icon: <DoorFrontRoundedIcon fontSize="small" />,
     visible: (options) => options.openings,
     apply: (options, visible) => ({ ...options, openings: visible })
+  },
+  {
+    id: "furniture", icon: <ChairRoundedIcon fontSize="small" />,
+    visible: (options) => options.furniture !== false,
+    apply: (options, visible) => ({ ...options, furniture: visible })
   },
   {
     id: "dimensions",

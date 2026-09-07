@@ -165,8 +165,10 @@
       "opening": "Place an unadorned opening through a wall.",
       "room": "Create a Room from existing walls or a predefined shape.",
       "stair": "Connect a Level or elevated Room with an assisted staircase.",
-      "measure": "Measure between snapped points without changing the project."
-    }
+      "measure": "Measure between snapped points without changing the project.",
+      "furniture": "Place Furniture in a Room"
+    },
+    "furniture": "Furniture"
   },
   "roomAuthoring": {
     "menuLabel": "Room authoring",
@@ -321,7 +323,8 @@
       "rooms": "Rooms",
       "openings": "Openings",
       "dimensions": "Dimensions",
-      "annotations": "Annotations"
+      "annotations": "Annotations",
+      "furniture": "Furniture"
     }
   },
   "planSummary": {
@@ -551,5 +554,37 @@
       "startElevation": "Start elevation",
       "endElevation": "End elevation"
     }
+  },
+  "furniture": {
+    "catalog": "Catalog",
+    "room": "Room",
+    "noRoom": "No Room",
+    "chooseRoom": "Choose Room",
+    "position": "Position",
+    "dimensions": "Dimensions",
+    "x": "X",
+    "z": "Z",
+    "width": "Width",
+    "depth": "Depth",
+    "height": "Height",
+    "rotation": "Rotation",
+    "definition": "Definition",
+    "floor": "Room floor elevation",
+    "unknown": "Unknown Furniture",
+    "selectHint": "Choose an item from the catalog.",
+    "placeHint": "Move the pointer into a Room, then click to place.",
+    "outside": "The center must be inside a Room. Placement is unavailable here.",
+    "ambiguous": "Rooms overlap here. Choose the intended Room and floor.",
+    "wallIntersection": "Furniture intersects a Wall. Move or resize it clear of the Wall.",
+    "furnitureIntersection": "Furniture overlaps another item on the same floor.",
+    "stairWarning": "Furniture overlaps a Staircase in plan. Vertical clearance is not validated.",
+    "ready": "Room resolved. Click to place; Escape cancels.",
+    "confirmHint": "Confirm the move to the chosen Room.",
+    "invalid": "The edit could not be committed. Choose a valid Room and positive dimensions.",
+    "cancel": "Cancel Furniture authoring",
+    "confirm": "Confirm move",
+    "duplicate": "Duplicate Furniture",
+    "delete": "Delete Furniture",
+    "gestureHint": "Release to apply the change. Escape cancels."
   }
 }

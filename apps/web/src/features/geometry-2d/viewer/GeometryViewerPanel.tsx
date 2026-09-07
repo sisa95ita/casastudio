@@ -1,3 +1,4 @@
+import type { GeometrySvgViewerProps } from "./GeometrySvgViewer";
 import FitScreenRoundedIcon from "@mui/icons-material/FitScreenRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import ZoomInRoundedIcon from "@mui/icons-material/ZoomInRounded";
@@ -43,7 +44,7 @@ import {
 } from "@casastudio/geometry";
 
 /** Props for the shared interactive 2D geometry viewer panel. */
-export type GeometryViewerPanelProps = {
+export type GeometryViewerPanelProps = Pick<GeometrySvgViewerProps, "furnitureModel" | "onFurniturePointerDown" | "onFurniturePointerUp" | "onFurniturePointerCancel"> & {
   /** Whether the surrounding Project shell owns all viewer chrome. */
   readonly workspaceCanvas?: boolean;
   readonly title: string;
@@ -95,6 +96,7 @@ export type GeometryViewerPanelProps = {
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
 export function GeometryViewerPanel({
+  furnitureModel, onFurniturePointerDown, onFurniturePointerUp, onFurniturePointerCancel,
   workspaceCanvas = false,
   title,
   headingId,
@@ -183,6 +185,7 @@ export function GeometryViewerPanel({
       </Box> : null}
       <Box className="geometry-viewer-panel__canvas">
         <GeometrySvgViewer
+          furnitureModel={furnitureModel} onFurniturePointerDown={onFurniturePointerDown} onFurniturePointerUp={onFurniturePointerUp} onFurniturePointerCancel={onFurniturePointerCancel}
           presentationModel={presentationModel}
           architecturalModel={architecturalModel}
           dimensionModel={dimensionModel}

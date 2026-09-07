@@ -1,3 +1,5 @@
+import { ProjectFurnitureProperties } from "../../../editor-2d/tools/furniture/ProjectFurnitureProperties";
+import type { FurnitureEditorController } from "../../../editor-2d/tools/furniture/useFurnitureEditor";
 import { measureLevel, type RoomMeasurement } from "@casastudio/geometry";
 import type {
   Opening,
@@ -12,7 +14,7 @@ import type {
   Wall
 } from "@casastudio/schema";
 import { Box, Tab, Tabs, Typography } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useCasaTranslation } from "../../../../core/i18n";
 import { ProjectLayerControls } from "../../../editor-2d/components/ProjectLayerControls";
@@ -33,6 +35,7 @@ import { ProjectPropertiesDetails } from "./ProjectSelectionDetails";
 import { ProjectStairAuthoringDetails } from "./ProjectStairSelectionDetails";
 
 type ProjectWorkspaceInspectorProps = {
+  readonly furniture?: FurnitureEditorController;
   readonly model: GeometryPresentationModel2D;
   readonly selectionState: GeometrySelectionState;
   readonly options: GeometryDisplayOptions;
@@ -104,6 +107,7 @@ type ProjectWorkspaceInspectorProps = {
 
 /** Provides the durable Layers and contextual Properties inspector foundation. */
 export function ProjectWorkspaceInspector({
+  furniture,
   model,
   selectionState,
   options,
@@ -145,10 +149,14 @@ export function ProjectWorkspaceInspector({
   onCancelStairAuthoring
 }: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
+  const contentRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"layers" | "properties">("layers");
   const selectionKey = selectionState.selected
     .map((selection) => `${selection.kind}:${selection.geometryId}`)
     .join("|");
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [activeTool, selectionKey]);
   useEffect(() => {
     if (
       selectionKey ||
@@ -172,7 +180,7 @@ export function ProjectWorkspaceInspector({
         <Tab value="layers" label={t("inspector.layers")} />
         <Tab value="properties" label={t("inspector.properties")} />
       </Tabs>
-      <Box className="project-inspector__content" role="tabpanel">
+      <Box ref={contentRef} className="project-inspector__content" role="tabpanel">
         {tab === "layers" ? (
           <ProjectLayerControls
             options={options}
@@ -181,7 +189,9 @@ export function ProjectWorkspaceInspector({
             units={units}
           />
         ) : (
-          units && mode === "edit" && stairAuthoring ? (
+          units && furniture && (furniture.authoring || furniture.selected || furniture.transient) ? (
+            <ProjectFurnitureProperties controller={furniture} units={units} editable={mode === "edit"} />
+          ) : units && mode === "edit" && stairAuthoring ? (
             <ProjectStairAuthoringDetails
               {...stairAuthoring}
               units={units}

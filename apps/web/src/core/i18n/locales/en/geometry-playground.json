@@ -49,7 +49,8 @@
     "drawWallTool": "Draw Wall tool",
     "doorTool": "Door tool",
     "windowTool": "Window tool",
-    "measureTool": "Measure tool"
+    "measureTool": "Measure tool",
+    "furnitureTool": "Furniture tool"
   },
   "status": {
     "engineBuildFailed": "Engine: build failed",

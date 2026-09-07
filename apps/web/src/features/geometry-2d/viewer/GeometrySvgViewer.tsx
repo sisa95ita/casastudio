@@ -1,3 +1,4 @@
+import { FurnitureSvgLayer, type FurnitureViewerModel } from "./FurnitureSvgLayer";
 import {
   useEffect,
   useRef,
@@ -89,6 +90,8 @@ export type GeometryDisplayOptions = {
   readonly roomMetrics: boolean;
   /** Whether persisted product annotations are visible when available. */
   readonly annotations: boolean;
+  /** Committed Furniture visibility; authoring proposals remain visible independently. */
+  readonly furniture?: boolean;
 };
 
 /**
@@ -96,6 +99,7 @@ export type GeometryDisplayOptions = {
  */
 export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
   Object.freeze({
+    furniture: true,
     architecturalWalls: true,
     openings: true,
     polygons: true,
@@ -119,6 +123,7 @@ export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
  */
 export const projectGeometryDisplayOptions: GeometryDisplayOptions =
   Object.freeze({
+    furniture: true,
     architecturalWalls: true,
     openings: true,
     polygons: true,
@@ -138,6 +143,10 @@ export const projectGeometryDisplayOptions: GeometryDisplayOptions =
  * Props for the interactive geometry SVG viewer.
  */
 export type GeometrySvgViewerProps = {
+  readonly furnitureModel?: FurnitureViewerModel;
+  readonly onFurniturePointerDown?: (id: string, intent: "move" | "rotate", pointer: SvgViewportPointer, pointerId: number) => void;
+  readonly onFurniturePointerUp?: (dragged: boolean) => void;
+  readonly onFurniturePointerCancel?: () => void;
   readonly presentationModel: GeometryPresentationModel2D;
   readonly architecturalModel?: ArchitecturalPresentationModel2D;
   readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
@@ -288,6 +297,10 @@ const defaultViewerInteraction: ProjectEditorInteraction = Object.freeze({
  * Wall hit targets, and handled entity clicks stop before the background layer.
  */
 export function GeometrySvgViewer({
+  furnitureModel,
+  onFurniturePointerDown,
+  onFurniturePointerUp,
+  onFurniturePointerCancel,
   presentationModel,
   architecturalModel,
   dimensionModel,
@@ -324,6 +337,8 @@ export function GeometrySvgViewer({
   const suppressNextBackgroundClickRef = useRef(false);
   const endpointPointerIdRef = useRef<number | undefined>(undefined);
   const openingPointerInteractionRef = useRef<OpeningPointerInteraction | undefined>(undefined);
+  const furniturePointerRef = useRef<{ pointerId: number; start: ScreenPoint; scale: number; dragged: boolean } | undefined>(undefined);
+  const furnitureClickHandledRef = useRef(false);
   const stairAdjustmentPointerIdRef = useRef<number | undefined>(undefined);
 
   currentViewportRef.current = viewport;
@@ -337,7 +352,7 @@ export function GeometrySvgViewer({
 
   const rendersSvgViewport = Boolean(
     bounds || architecturalModel?.staircases.length || interaction.drawWallEnabled || interaction.measurementEnabled ||
-      interaction.roomShapePlacementEnabled || interaction.stairPlacementEnabled
+      interaction.roomShapePlacementEnabled || interaction.stairPlacementEnabled || interaction.furniturePlacementEnabled || furnitureModel?.items.length
   );
 
   useEffect(() => {
@@ -421,6 +436,9 @@ export function GeometrySvgViewer({
   }): ScreenPoint => getEventPointer(event).svgPoint;
 
   const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    // Suppression belongs to the preceding gesture's synthetic click only.
+    suppressNextBackgroundClickRef.current = false;
+    furnitureClickHandledRef.current = false;
     if (openingPointerInteractionRef.current?.completed) {
       openingPointerInteractionRef.current = undefined;
     }
@@ -445,6 +463,15 @@ export function GeometrySvgViewer({
 
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
     const pointer = getEventPointer(event);
+    const furnitureGesture = furniturePointerRef.current;
+    if (furnitureGesture?.pointerId === event.pointerId) {
+      const distanceInCssPixels = Math.hypot(
+        pointer.svgPoint.x - furnitureGesture.start.x,
+        pointer.svgPoint.y - furnitureGesture.start.y
+      ) * furnitureGesture.scale;
+      if (distanceInCssPixels < openingDragThresholdCssPixels && !furnitureGesture.dragged) return;
+      furnitureGesture.dragged = true;
+    }
     const openingInteraction = openingPointerInteractionRef.current;
     if (openingInteraction?.pointerId === event.pointerId) {
       const distanceInCssPixels = Math.hypot(
@@ -493,6 +520,15 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    const furnitureGesture = furniturePointerRef.current;
+    if (furnitureGesture?.pointerId === event.pointerId) {
+      onFurniturePointerUp?.(furnitureGesture.dragged);
+      furniturePointerRef.current = undefined;
+      furnitureClickHandledRef.current = true;
+      suppressNextBackgroundClickRef.current = true;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
     if (stairAdjustmentPointerIdRef.current === event.pointerId) {
       onStairAdjustmentPointerUp?.(getEventPointer(event).worldPoint, event.pointerId);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -528,6 +564,11 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerCancel = (event: PointerEvent<SVGSVGElement>) => {
+    if (furniturePointerRef.current?.pointerId === event.pointerId) {
+      onFurniturePointerCancel?.();
+      furniturePointerRef.current = undefined;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     if (stairAdjustmentPointerIdRef.current === event.pointerId) {
       onStairAdjustmentPointerCancel?.(event.pointerId);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -571,7 +612,7 @@ export function GeometrySvgViewer({
       interaction.openingPlacement ||
       interaction.measurementEnabled ||
       interaction.roomShapePlacementEnabled ||
-      interaction.stairPlacementEnabled
+      interaction.stairPlacementEnabled || interaction.furniturePlacementEnabled
     ) {
       onEditorCanvasClick?.(getEventPointer(event));
     }
@@ -730,7 +771,7 @@ export function GeometrySvgViewer({
     <svg
       ref={svgRef}
       className={`geometry-svg geometry-svg--${
-        interaction.drawWallEnabled
+        interaction.drawWallEnabled || interaction.furniturePlacementEnabled
           ? "draw-wall"
           : interaction.measurementEnabled
             ? "measure"
@@ -1173,6 +1214,45 @@ export function GeometrySvgViewer({
         <ArchitecturalDimensionLayer model={dimensionModel} includeTemporary={false} />
       ) : null}
 
+      {furnitureModel ? <FurnitureSvgLayer
+        model={furnitureModel}
+        transform={transform}
+        selection={resolvedSelectionState}
+        visible={options.furniture !== false}
+        selectionEnabled={interaction.selectionEnabled}
+        onClick={(event, id) => {
+          if (furnitureClickHandledRef.current) {
+            furnitureClickHandledRef.current = false;
+            suppressNextBackgroundClickRef.current = false;
+            event.stopPropagation();
+            return;
+          }
+          handleEntityClick(event, { kind: "FURNITURE", geometryId: id });
+        }}
+        onHover={(id) => handleHoverChange(id ? { kind: "FURNITURE", geometryId: id } : undefined)}
+        onPointerDown={(event, id, intent) => {
+          if (!furnitureModel.editing || !interaction.selectionEnabled || interaction.panAnywhere || event.button !== 0) return;
+          const svg = event.currentTarget.ownerSVGElement;
+          if (!svg) return;
+          event.stopPropagation();
+          event.preventDefault();
+          suppressNextBackgroundClickRef.current = false;
+          const pointer = getEventPointer({
+            clientX: event.clientX, clientY: event.clientY, currentTarget: svg
+          });
+          furniturePointerRef.current = {
+            pointerId: event.pointerId,
+            start: pointer.svgPoint,
+            scale: pointer.cssPixelsPerSvgUnit,
+            dragged: false
+          };
+          furnitureClickHandledRef.current = false;
+          svg.setPointerCapture(event.pointerId);
+          onFurniturePointerDown?.(id, intent, pointer, event.pointerId);
+        }} /> : null}
+      {dimensionModel ? (
+        <ArchitecturalRoomMetricLayer model={dimensionModel} />
+      ) : null}
       <GeometryEditorOverlayLayer
         overlay={editorOverlay}
         transform={transform}
@@ -1236,25 +1316,35 @@ function ArchitecturalDimensionLayer({
           <ArchitecturalLinearDimension key={`selected-${index}`} dimension={dimension} testId="selected-dimension" />
         ))}
       </g>
-      <g data-layer="room-metrics" className="architectural-room-metric-layer">
-        {model.roomMetrics.map((metric) => (
-          <text
-            key={metric.roomId}
-            data-testid="room-metric"
-            data-source-room-id={metric.roomId}
-            x={formatSvgNumber(metric.anchor.x)}
-            y={formatSvgNumber(metric.anchor.y - 3)}
-            textAnchor="middle"
-          >
-            <tspan className="architectural-room-label__name" x={formatSvgNumber(metric.anchor.x)}>{metric.roomName}</tspan>
-            {metric.elevationLabel ? (
-              <tspan className="architectural-room-label__elevation" x={formatSvgNumber(metric.anchor.x)} dy="13">{metric.elevationLabel}</tspan>
-            ) : null}
-            <tspan className="architectural-room-label__area" x={formatSvgNumber(metric.anchor.x)} dy={metric.elevationLabel ? "12" : "14"}>{metric.formattedArea}</tspan>
-          </text>
-        ))}
-      </g>
     </>
+  );
+}
+
+/** Room labels are repositioned around occupancy, then painted above Furniture as fallback. */
+function ArchitecturalRoomMetricLayer({
+  model
+}: {
+  readonly model: ArchitecturalDimensionPresentationModel2D;
+}) {
+  return (
+    <g data-layer="room-metrics" className="architectural-room-metric-layer">
+      {model.roomMetrics.map((metric) => (
+        <text
+          key={metric.roomId}
+          data-testid="room-metric"
+          data-source-room-id={metric.roomId}
+          x={formatSvgNumber(metric.anchor.x)}
+          y={formatSvgNumber(metric.anchor.y - 3)}
+          textAnchor="middle"
+        >
+          <tspan className="architectural-room-label__name" x={formatSvgNumber(metric.anchor.x)}>{metric.roomName}</tspan>
+          {metric.elevationLabel ? (
+            <tspan className="architectural-room-label__elevation" x={formatSvgNumber(metric.anchor.x)} dy="13">{metric.elevationLabel}</tspan>
+          ) : null}
+          <tspan className="architectural-room-label__area" x={formatSvgNumber(metric.anchor.x)} dy={metric.elevationLabel ? "12" : "14"}>{metric.formattedArea}</tspan>
+        </text>
+      ))}
+    </g>
   );
 }
 

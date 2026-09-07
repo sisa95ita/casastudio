@@ -1,3 +1,4 @@
+import ChairRoundedIcon from "@mui/icons-material/ChairRounded";
 import DoorFrontRoundedIcon from "@mui/icons-material/DoorFrontRounded";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import LinearScaleRoundedIcon from "@mui/icons-material/LinearScaleRounded";
@@ -112,6 +113,11 @@ export function EditorToolbar({
           expanded={stairMenuOpen}
           controls={stairMenuOpen ? "stair-authoring-menu" : undefined}
           onClick={onStairToggle}
+        />
+        <ToolButton
+          tool="furniture" label={t("tools.furniture")} help={t("tools.help.furniture")}
+          icon={<ChairRoundedIcon fontSize="small" />} selected={activeTool === "furniture"}
+          disabled={disabled} onClick={() => toggleTool("furniture")}
         />
       </Box>
       <Divider orientation="vertical" flexItem />

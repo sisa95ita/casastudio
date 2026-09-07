@@ -1,3 +1,5 @@
+import { createFurniturePresentation2D } from "../presentation/furniture-presentation-model-2d";
+import { getProjectEditorInteraction } from "../../editor-2d/state/project-editor-tools";
 import { GeometryEngine, type LevelGeometry } from "@casastudio/geometry";
 import { ProjectSchema } from "@casastudio/schema";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -148,6 +150,54 @@ afterEach(() => {
 });
 
 describe("GeometrySvgViewer", () => {
+  it("keeps Furniture click/drag thresholds and allows the first placement after a rotation gesture", () => {
+    const item = createFurniturePresentation2D({ id: "sofa", roomId: "living", definitionId: "generic-sofa", position: { x: 100, z: 100 }, rotation: 27.5, width: 200, depth: 90, height: 85 });
+    const props = { ...createViewerProps(getPlaygroundLevel(), createGeometrySelectionState([{ kind: "FURNITURE", geometryId: "sofa" }])), options: defaultGeometryDisplayOptions,
+      furnitureModel: { items: [item], previewValid: true, editing: true },
+      onFurniturePointerDown: vi.fn(), onFurniturePointerUp: vi.fn(), onFurniturePointerCancel: vi.fn(), onEditorPointerMove: vi.fn(), onEditorCanvasClick: vi.fn() };
+    const { container, rerender } = render(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("select")} />);
+    const svg = container.querySelector("svg")!;
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({ bottom: 520, height: 520, left: 0, right: 800, top: 0, width: 800, x: 0, y: 0, toJSON: () => undefined });
+    svg.setPointerCapture = vi.fn(); svg.releasePointerCapture = vi.fn(); svg.hasPointerCapture = vi.fn(() => true);
+    const hit = screen.getByTestId("furniture-hit-target");
+    fireEvent.pointerDown(hit, { clientX: 100, clientY: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(svg, { clientX: 103, clientY: 100, pointerId: 1 });
+    expect(props.onEditorPointerMove).not.toHaveBeenCalled();
+    fireEvent.pointerUp(svg, { pointerId: 1 });
+    expect(props.onFurniturePointerUp).toHaveBeenLastCalledWith(false);
+    fireEvent.click(svg);
+    const handle = screen.getByTestId("furniture-rotation-handle");
+    fireEvent.pointerDown(handle, { clientX: 100, clientY: 100, pointerId: 2, button: 0 });
+    fireEvent.pointerMove(svg, { clientX: 110, clientY: 100, pointerId: 2 });
+    fireEvent.pointerUp(svg, { pointerId: 2 });
+    fireEvent.click(handle);
+    expect(props.onFurniturePointerUp).toHaveBeenLastCalledWith(true);
+    expect(props.onFurniturePointerDown.mock.calls.at(-1)?.slice(0, 2)).toEqual(["sofa", "rotate"]);
+    rerender(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("furniture")} />);
+    fireEvent.pointerDown(svg, { clientX: 200, clientY: 200, pointerId: 3, button: 0 });
+    fireEvent.pointerUp(svg, { pointerId: 3 });
+    fireEvent.click(svg, { clientX: 200, clientY: 200 });
+    expect(props.onEditorCanvasClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Furniture hover independent of geometry and gives Space-pan priority over Furniture hits", () => {
+    const item = createFurniturePresentation2D({ id: "chair", roomId: "living", definitionId: "generic-chair", position: { x: 50, z: 50 }, rotation: 37, width: 45, depth: 50, height: 85 });
+    const onSelectionStateChange = vi.fn(), onFurniturePointerDown = vi.fn(), onViewportChange = vi.fn();
+    const props = { ...createViewerProps(getPlaygroundLevel()), options: defaultGeometryDisplayOptions, furnitureModel: { items: [item], previewValid: true, editing: true }, onSelectionStateChange, onFurniturePointerDown, onViewportChange };
+    const { container, rerender } = render(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("select")} />);
+    fireEvent.mouseEnter(screen.getByTestId("furniture-hit-target"));
+    expect(onSelectionStateChange).toHaveBeenCalledWith({ selected: [], hovered: { kind: "FURNITURE", geometryId: "chair" } });
+    rerender(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("select", true)} />);
+    const svg = container.querySelector("svg")!;
+    svg.setPointerCapture = vi.fn(); svg.releasePointerCapture = vi.fn(); svg.hasPointerCapture = vi.fn(() => true);
+    fireEvent.pointerDown(screen.getByTestId("furniture-hit-target"), { clientX: 100, clientY: 100, pointerId: 5, button: 0 });
+    fireEvent.pointerMove(svg, { clientX: 120, clientY: 120, pointerId: 5 });
+    fireEvent.pointerUp(svg, { pointerId: 5 });
+    expect(onFurniturePointerDown).not.toHaveBeenCalled();
+    expect(onViewportChange).toHaveBeenCalled();
+    expect(item.rotation).toBe(37);
+  });
+
   it("renders two polygons from traversal-relative loop order", () => {
     const level = getPlaygroundLevel();
     const bounds = collectLevelBounds(level);

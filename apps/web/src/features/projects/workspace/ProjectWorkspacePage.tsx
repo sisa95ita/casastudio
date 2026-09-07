@@ -1,3 +1,4 @@
+import { useFurnitureEditor } from "../../editor-2d/tools/furniture/useFurnitureEditor";
 import {
   GeometryEngine,
   LevelGeometry,
@@ -426,6 +427,16 @@ export function ProjectWorkspacePage() {
   const activeProjectLevel = activeProject?.building.levels.find(
     (level) => level.id === selectedLevel?.sourceLevelId
   );
+  const furniture = useFurnitureEditor({
+    project: activeProject, levelId: activeProjectLevel?.id, editor, dispatch, selection: selectionState,
+    editable: workspaceMode === "edit" && !saveInteractionBlocked && workspaceRepresentation === "2d",
+    visible: displayOptions.furniture !== false
+  });
+  useEffect(() => {
+    if (displayOptions.furniture === false && selectionState.selected.some((entry) => entry.kind === "FURNITURE")) {
+      dispatch(workspaceMode === "edit" ? editorSelectionCleared() : geometrySelectionReset());
+    }
+  }, [displayOptions.furniture, selectionState.selected, dispatch, workspaceMode]);
   const roomShapePlacement = editor.transient.interaction?.kind === "place-room-shape"
     ? editor.transient.interaction
     : undefined;
@@ -628,6 +639,7 @@ export function ProjectWorkspacePage() {
       },
       selectedWall: selectedEditWall,
       selectedRoom,
+      furnitureFootprints: furniture.model.map((item) => item.footprint),
       temporaryMeasurement: measurement
     });
   }, [
@@ -636,6 +648,7 @@ export function ProjectWorkspacePage() {
     activeViewport,
     editor.presentation.scaleDenominator,
     editor.transient.interaction,
+    furniture.model,
     presentationResult,
     resolvedDisplayOptions.overallDimensions,
     resolvedDisplayOptions.roomMetrics,
@@ -1910,6 +1923,7 @@ export function ProjectWorkspacePage() {
   }, [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedStair]);
 
   useEditorKeyboardShortcuts({
+    selectedFurniture: furniture.selected, handleDeleteSelectedFurniture: furniture.remove,
     dispatch,
     selectedLevel,
     workspaceRepresentation,
@@ -2058,6 +2072,7 @@ export function ProjectWorkspacePage() {
 
     return (
       <ProjectWorkspaceInspector
+        furniture={furniture}
         model={presentationResult.model}
         selectionState={selectionState}
         options={resolvedDisplayOptions}
@@ -2132,6 +2147,7 @@ export function ProjectWorkspacePage() {
       />
     );
   }, [
+    furniture,
     resolvedDisplayOptions,
     editor.baseRevision,
     geometryResponse,
@@ -2524,8 +2540,19 @@ export function ProjectWorkspacePage() {
               : undefined
           }
           editorOverlay={editorOverlay}
-          onEditorCanvasClick={handleEditorCanvasClick}
-          onEditorPointerMove={handleEditorPointerMove}
+          furnitureModel={{ items: furniture.model, preview: furniture.preview, previewValid: furniture.previewValid, editing: workspaceMode === "edit" && !saveInteractionBlocked }}
+          onFurniturePointerDown={furniture.beginGesture}
+          onFurniturePointerUp={furniture.endGesture}
+          onFurniturePointerCancel={furniture.cancel}
+          onEditorCanvasClick={(pointer) => {
+            if (editor.activeTool === "furniture") furniture.canvasClick(pointer);
+            else handleEditorCanvasClick(pointer);
+          }}
+          onEditorPointerMove={(pointer, pointerId) => {
+            if (viewportPanModifierActive) return;
+            furniture.pointerMove(pointer, pointerId);
+            if (!furniture.transient) handleEditorPointerMove(pointer, pointerId);
+          }}
           onWallEndpointPointerDown={handleWallEndpointPointerDown}
           onWallEndpointPointerUp={handleWallEndpointPointerUp}
           onWallEndpointPointerCancel={handleWallEndpointPointerCancel}

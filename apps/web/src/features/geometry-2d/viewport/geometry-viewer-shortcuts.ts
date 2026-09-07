@@ -71,6 +71,11 @@ export const geometryEditorShortcuts = Object.freeze([
     translationKey: "shortcuts.measureTool"
   }),
   Object.freeze({
+    action: "FURNITURE_TOOL",
+    key: "U",
+    translationKey: "shortcuts.furnitureTool"
+  }),
+  Object.freeze({
     action: "UNDO",
     key: "Ctrl/Cmd + Z",
     translationKey: "shortcuts.undo"

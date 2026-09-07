@@ -1,4 +1,4 @@
-import type { Opening, Room, Wall } from "@casastudio/schema";
+import type { FurnitureItem, Opening, Room, Wall } from "@casastudio/schema";
 import type { Staircase } from "@casastudio/schema";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 
@@ -21,6 +21,8 @@ import {
 } from "../../geometry-2d/viewport/geometry-viewer-shortcuts";
 
 type UseEditorKeyboardShortcutsOptions = {
+  readonly selectedFurniture?: FurnitureItem;
+  readonly handleDeleteSelectedFurniture?: () => void;
   readonly dispatch: AppDispatch;
   readonly selectedLevel: unknown;
   readonly workspaceRepresentation: "2d" | "3d";
@@ -47,6 +49,7 @@ type UseEditorKeyboardShortcutsOptions = {
 
 /** Registers the Project editor keyboard interaction contract. */
 export function useEditorKeyboardShortcuts({
+  selectedFurniture, handleDeleteSelectedFurniture,
   dispatch,
   selectedLevel,
   workspaceRepresentation,
@@ -111,6 +114,8 @@ export function useEditorKeyboardShortcuts({
         }
         const tool = event.key.toLowerCase() === "d"
           ? "door"
+          : event.key.toLowerCase() === "u"
+            ? "furniture"
           : event.key.toLowerCase() === "n"
             ? "window"
             : event.key.toLowerCase() === "m"
@@ -130,6 +135,9 @@ export function useEditorKeyboardShortcuts({
       }
       const action = getGeometryViewerShortcutAction(event);
       if (!action) return;
+      if (action === "DELETE_SELECTION" && workspaceMode === "edit" && selectedFurniture) {
+        event.preventDefault(); handleDeleteSelectedFurniture?.(); return;
+      }
       if (
         action === "DELETE_SELECTION" &&
         workspaceMode === "edit" &&
@@ -198,6 +206,7 @@ export function useEditorKeyboardShortcuts({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    selectedFurniture, handleDeleteSelectedFurniture,
     dispatch,
     handleFitViewport,
     handleDeleteSelectedWall,

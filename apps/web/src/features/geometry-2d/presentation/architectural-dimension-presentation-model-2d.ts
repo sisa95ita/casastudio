@@ -23,6 +23,11 @@ import {
 import type { ProjectDimensionDisplayState } from "../../editor-2d/state/project-editor-slice";
 import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
 import type { ScreenPoint, ViewportTransform2D } from "../viewport/viewport-transform-2d";
+import { createStairFootprints2D } from "./plan-footprints-2d";
+import {
+  placeRoomLabel2D,
+  type RoomLabelBounds2D
+} from "./room-label-layout-2d";
 
 /** Screen-space line used exclusively by the SVG dimension renderer. */
 export type DimensionPresentationLine2D = {
@@ -71,6 +76,7 @@ export type CreateArchitecturalDimensionPresentationModel2DOptions = {
   readonly display: ProjectDimensionDisplayState;
   readonly selectedWall?: Pick<Wall, "start" | "end">;
   readonly selectedRoom?: Pick<Room, "boundary">;
+  readonly furnitureFootprints?: readonly (readonly Point2D[])[];
   readonly temporaryMeasurement?: {
     readonly start: Point2D;
     readonly end: Point2D;
@@ -90,6 +96,7 @@ export function createArchitecturalDimensionPresentationModel2D({
   display,
   selectedWall,
   selectedRoom,
+  furnitureFootprints = [],
   temporaryMeasurement
 }: CreateArchitecturalDimensionPresentationModel2DOptions): ArchitecturalDimensionPresentationModel2D {
   const exterior = display.overallDimensions
@@ -118,6 +125,13 @@ export function createArchitecturalDimensionPresentationModel2D({
         units
       })
     : undefined;
+  const occupiedLabelBounds: RoomLabelBounds2D[] = [];
+  const projectedFurniture = furnitureFootprints.map((footprint) =>
+    footprint.map((point) => transform.worldToScreen(point))
+  );
+  const projectedStairs = createStairFootprints2D(level).map((footprint) =>
+    footprint.map((point) => transform.worldToScreen(point))
+  );
   const roomMetrics = display.roomMetrics
     ? level.rooms.flatMap((room) => {
         const measurement = measureRoom(level, room);
@@ -126,16 +140,32 @@ export function createArchitecturalDimensionPresentationModel2D({
         const interiorAnchor = calculatePolygonInteriorAnchor(
           polygon.points.map((point) => point.world)
         );
+        const preferredAnchor = interiorAnchor
+          ? transform.worldToScreen(interiorAnchor)
+          : polygon.centroid.screen;
+        const formattedArea = formatArchitecturalArea(measurement.area, units.length);
+        const elevationLabel = room.elevation
+          ? `+${formatArchitecturalLength(room.elevation, units.length)}`
+          : undefined;
+        const placement = placeRoomLabel2D({
+          preferredAnchor,
+          roomPolygon: polygon.points.map((point) => point.screen),
+          roomName: room.name,
+          formattedArea,
+          ...(elevationLabel ? { elevationLabel } : {}),
+          furnitureFootprints: projectedFurniture,
+          stairFootprints: projectedStairs,
+          occupiedLabelBounds
+        });
+        occupiedLabelBounds.push(placement.bounds);
         return [{
           roomId: room.id,
           roomName: room.name,
           roomType: room.type,
-          anchor: interiorAnchor ? transform.worldToScreen(interiorAnchor) : polygon.centroid.screen,
+          anchor: placement.anchor,
           area: measurement.area,
-          formattedArea: formatArchitecturalArea(measurement.area, units.length),
-          ...(room.elevation
-            ? { elevationLabel: `+${formatArchitecturalLength(room.elevation, units.length)}` }
-            : {})
+          formattedArea,
+          ...(elevationLabel ? { elevationLabel } : {})
         }];
       })
     : [];

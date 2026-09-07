@@ -720,7 +720,7 @@ describe("ProjectViewerPage", () => {
 
     const toolbar = await screen.findByRole("toolbar", { name: "Editing tools" });
     expect(within(toolbar).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
-      .toEqual(["Select", "Wall", "Openings", "Room", "Stair", "Measure", "Shortcuts"]);
+      .toEqual(["Select", "Wall", "Openings", "Room", "Stair", "Furniture", "Measure", "Shortcuts"]);
     fireEvent.click(within(toolbar).getByRole("button", { name: "Openings" }));
     expect(screen.getAllByRole("menuitem").map((item) => item.textContent))
       .toEqual(["Door", "Window", "Wall Opening"]);
@@ -3675,6 +3675,8 @@ describe("ProjectViewerPage", () => {
     expect(within(dialog).getByText("Space + drag")).toBeTruthy();
     expect(within(dialog).getByText("Measure tool")).toBeTruthy();
     expect(within(dialog).getByText("M")).toBeTruthy();
+    expect(within(dialog).getByText("Furniture tool")).toBeTruthy();
+    expect(within(dialog).getByText("U")).toBeTruthy();
     expect(within(dialog).queryByText(/Zoom/i)).toBeNull();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
@@ -3695,6 +3697,17 @@ describe("ProjectViewerPage", () => {
 
     fireEvent.keyDown(window, { key: "f" });
     expect(polygon.getAttribute("points")).toBe(fittedPoints);
+  });
+
+  it("activates Furniture with U in Edit while preserving focused-field guards", async () => {
+    renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    const furniture = screen.getByRole("button", { name: "Furniture" });
+    fireEvent.keyDown(window, { key: "u" });
+    expect(furniture.getAttribute("aria-pressed")).toBe("true");
+    const catalog = screen.getByRole("combobox", { name: "Catalog" });
+    fireEvent.keyDown(catalog, { key: "v" });
+    expect(furniture.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("zooms and fits the authoritative viewport from status controls", async () => {

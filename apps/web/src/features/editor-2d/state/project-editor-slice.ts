@@ -1,3 +1,4 @@
+import type { FurnitureInteraction } from "../tools/furniture/project-furniture-authoring";
 import {
   createSelector,
   createSlice,
@@ -149,7 +150,7 @@ export type ProjectEditorTransientState = {
   readonly interaction:
     DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
     PlaceOpeningInteraction | AddWallVertexInteraction | MoveOpeningInteraction | MeasureInteraction |
-    PlaceRoomShapeInteraction | PlaceStairInteraction | MoveStairAdjustmentInteraction | null;
+    PlaceRoomShapeInteraction | PlaceStairInteraction | MoveStairAdjustmentInteraction | FurnitureInteraction | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
@@ -348,6 +349,14 @@ const projectEditorSlice = createSlice({
       ].slice(-projectEditorHistoryLimit);
       state.history.future = [];
       state.draft = cloneProject(nextDraft);
+      state.selection = state.selection.filter((selection) =>
+        selection.kind !== "FURNITURE" ||
+        nextDraft.building.furniture.some((item) => item.id === selection.geometryId)
+      );
+      if (
+        state.hover?.kind === "FURNITURE" &&
+        !nextDraft.building.furniture.some((item) => item.id === state.hover?.geometryId)
+      ) state.hover = undefined;
       state.dirty = true;
         if (
           state.transient.interaction?.kind === "place-opening" ||
@@ -455,6 +464,9 @@ const projectEditorSlice = createSlice({
               : null
         };
       }
+    },
+    editorFurnitureChanged(state, action: PayloadAction<FurnitureInteraction>) {
+      if (state.mode === "edit") state.transient = { interaction: action.payload };
     },
     editorDrawWallStarted(
       state,
@@ -860,6 +872,7 @@ export const {
   editingSessionEnded,
   editingSessionMarkedDirty,
   editingDraftReplaced,
+  editorFurnitureChanged,
   editorUndoRequested,
   editorRedoRequested,
   editorGridVisibilityChanged,
