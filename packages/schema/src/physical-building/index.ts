@@ -4,6 +4,7 @@ export * from "./level.js";
 export * from "./level-editing.js";
 export * from "./opening.js";
 export * from "./opening-editing.js";
+export * from "./plan-translation.js";
 export * from "./reverse-wall-direction.js";
 export * from "./room.js";
 export * from "./room-shape-authoring.js";

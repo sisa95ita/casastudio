@@ -38,7 +38,7 @@ export const geometryViewerShortcuts: readonly GeometryViewerShortcutDefinition[
     }),
     Object.freeze({
       action: "RESET_VIEWPORT",
-      key: "R",
+      key: "Shift + R",
       translationKey: "shortcuts.resetViewport"
     })
   ]);
@@ -64,6 +64,16 @@ export const geometryEditorShortcuts = Object.freeze([
     action: "WINDOW_TOOL",
     key: "N",
     translationKey: "shortcuts.windowTool"
+  }),
+  Object.freeze({
+    action: "WALL_OPENING_TOOL",
+    key: "O",
+    translationKey: "shortcuts.wallOpeningTool"
+  }),
+  Object.freeze({
+    action: "ROOM_TOOL",
+    key: "R",
+    translationKey: "shortcuts.roomTool"
   }),
   Object.freeze({
     action: "MEASURE_TOOL",
@@ -102,6 +112,7 @@ export const geometryEditorShortcuts = Object.freeze([
  */
 export const getGeometryViewerShortcutAction = (
   event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey"> & {
+    readonly shiftKey?: boolean;
     readonly target?: EventTarget | null;
   }
 ): GeometryViewerShortcutAction | undefined => {
@@ -128,7 +139,7 @@ export const getGeometryViewerShortcutAction = (
     return "FIT_VIEWPORT";
   }
 
-  if (normalizedKey === "r") {
+  if (normalizedKey === "r" && event.shiftKey) {
     return "RESET_VIEWPORT";
   }
 
@@ -145,8 +156,10 @@ export const isEditableShortcutTarget = (
 
   return (
     target.isContentEditable ||
-    Boolean(target.closest(
-      'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], .MuiInputBase-root'
-    ))
+    Boolean(
+      target.closest(
+        'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], .MuiInputBase-root'
+      )
+    )
   );
 };

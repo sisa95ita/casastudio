@@ -81,12 +81,12 @@ describe("geometry selection state", () => {
     });
   });
 
-  it("deselects an already-selected entity on an ordinary click", () => {
+  it("keeps an already-selected entity exclusively selected on an ordinary click", () => {
     const polygon = selectPolygon("polygon:left-room");
     const state = createGeometrySelectionState([polygon]);
 
     expect(applyGeometrySelectionClick(state, polygon, false)).toEqual({
-      selected: [],
+      selected: [polygon],
       hovered: undefined
     });
   });
@@ -103,7 +103,7 @@ describe("geometry selection state", () => {
     ]);
   });
 
-  it("uses shift-click semantics to toggle multi-selection", () => {
+  it("uses the additive flag to toggle multi-selection", () => {
     const polygon = selectPolygon("polygon:left-room");
     const edge = selectBoundaryEdge("boundary-edge:shared-wall");
     const state = createGeometrySelectionState([polygon]);

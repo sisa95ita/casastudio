@@ -116,7 +116,7 @@ export const createGeometrySelectionState = (
   hovered?: GeometrySelection
 ): GeometrySelectionState =>
   Object.freeze({
-    selected: Object.freeze([...selected]),
+    selected: Object.freeze(dedupeGeometrySelections(selected)),
     hovered
   });
 
@@ -181,19 +181,27 @@ export const toggleGeometrySelection = (
 /**
  * Applies viewer click selection semantics.
  *
- * Plain clicks replace the current selected set, except that clicking an
- * already-selected entity removes it. Additive clicks toggle one entity,
- * which currently maps to Shift-click in the SVG viewer.
+ * Plain clicks replace the current selected set. Modifier clicks toggle one
+ * entity while retaining the deterministic order of every other selection.
  */
 export const applyGeometrySelectionClick = (
   state: GeometrySelectionState,
   selection: GeometrySelection,
   additive: boolean
 ): GeometrySelectionState =>
-  additive ||
-  isGeometrySelectionMatch(state.selected, selection.kind, selection.geometryId)
+  additive
     ? toggleGeometrySelection(state, selection)
     : createGeometrySelectionState([selection], state.hovered);
+
+/** Adds selections in candidate order without removing existing members. */
+export const unionGeometrySelection = (
+  state: GeometrySelectionState,
+  selections: readonly GeometrySelection[]
+): GeometrySelectionState =>
+  createGeometrySelectionState(
+    [...state.selected, ...selections],
+    state.hovered
+  );
 
 /**
  * Checks whether a UI selection points at the requested runtime entity.
@@ -216,3 +224,15 @@ const isSameGeometrySelection = (
   second: GeometrySelection
 ): boolean =>
   first.kind === second.kind && first.geometryId === second.geometryId;
+
+const dedupeGeometrySelections = (
+  selections: readonly GeometrySelection[]
+): GeometrySelection[] => {
+  const seen = new Set<string>();
+  return selections.filter((selection) => {
+    const key = `${selection.kind}:${selection.geometryId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};

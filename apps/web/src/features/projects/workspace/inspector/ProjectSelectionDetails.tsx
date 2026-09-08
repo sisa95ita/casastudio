@@ -1,10 +1,22 @@
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
-import { Button, Divider, FormControl, InputAdornment, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
+import {
+  Button,
+  Divider,
+  FormControl,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography
+} from "@mui/material";
 import {
   formatArchitecturalArea,
   formatArchitecturalLength,
   formatDisplayValue,
   type Opening,
+  type FurnitureItem,
   type Project,
   type Room,
   type StairFlight,
@@ -33,9 +45,16 @@ import {
   ProjectOpeningPropertiesDetails,
   ProjectOpeningSelectionDetails
 } from "./ProjectOpeningSelectionDetails";
-import type { OpeningAuthoringProperties, OpeningAuthoringType } from "../../../editor-2d/state/project-editor-slice";
+import type {
+  OpeningAuthoringProperties,
+  OpeningAuthoringType
+} from "../../../editor-2d/state/project-editor-slice";
 import type { StairParameterChanges } from "../../../editor-2d/tools/stair/project-stair-authoring";
-import { ProjectStairPropertiesDetails, ProjectStairSelectionDetails } from "./ProjectStairSelectionDetails";
+import {
+  ProjectStairPropertiesDetails,
+  ProjectStairSelectionDetails
+} from "./ProjectStairSelectionDetails";
+import type { ProjectSelectionCapabilities } from "../../../editor-2d/selection/project-selection-transforms";
 
 /** Dispatches Edit-mode selection details by runtime geometry kind. */
 export function ProjectSelectionDetails({
@@ -71,7 +90,10 @@ export function ProjectSelectionDetails({
   readonly onRemoveVertex?: () => void;
   readonly opening?: Opening;
   readonly room?: Room;
-  readonly stair?: { readonly staircase: Staircase; readonly part?: StairFlight | StairLanding };
+  readonly stair?: {
+    readonly staircase: Staircase;
+    readonly part?: StairFlight | StairLanding;
+  };
   readonly roomMeasurement?: RoomMeasurement;
   readonly openingWall?: Wall;
   /** Transient Wall-local Opening offset used only for Inspector display. */
@@ -89,17 +111,39 @@ export function ProjectSelectionDetails({
   }
   if (
     selection.length === 1 &&
-    (selection[0]?.kind === "STAIRCASE" || selection[0]?.kind === "STAIR_FLIGHT" || selection[0]?.kind === "STAIR_LANDING") &&
+    (selection[0]?.kind === "STAIRCASE" ||
+      selection[0]?.kind === "STAIR_FLIGHT" ||
+      selection[0]?.kind === "STAIR_LANDING") &&
     stair
   ) {
-    return <ProjectStairSelectionDetails selection={stair} units={units} editable={editable} onDelete={onDeleteStair ?? (() => undefined)} />;
+    return (
+      <ProjectStairSelectionDetails
+        selection={stair}
+        units={units}
+        editable={editable}
+        onDelete={onDeleteStair ?? (() => undefined)}
+      />
+    );
   }
   if (
     selection.length === 1 &&
-    (selection[0]?.kind === "DOOR" || selection[0]?.kind === "WINDOW" || selection[0]?.kind === "OPENING") &&
-    opening && openingWall
+    (selection[0]?.kind === "DOOR" ||
+      selection[0]?.kind === "WINDOW" ||
+      selection[0]?.kind === "OPENING") &&
+    opening &&
+    openingWall
   ) {
-    return <ProjectOpeningSelectionDetails wall={openingWall} opening={opening} displayOffsetFromStart={openingDisplayOffsetFromStart} units={units} onDelete={onDeleteOpening ?? (() => undefined)} onUpdate={onUpdateOpening ?? (() => false)} editable={editable} />;
+    return (
+      <ProjectOpeningSelectionDetails
+        wall={openingWall}
+        opening={opening}
+        displayOffsetFromStart={openingDisplayOffsetFromStart}
+        units={units}
+        onDelete={onDeleteOpening ?? (() => undefined)}
+        onUpdate={onUpdateOpening ?? (() => false)}
+        editable={editable}
+      />
+    );
   }
   if (
     selection.length === 1 &&
@@ -107,7 +151,15 @@ export function ProjectSelectionDetails({
     room &&
     roomMeasurement
   ) {
-    return <ProjectRoomSelectionDetails room={room} measurement={roomMeasurement} units={units} onDelete={onDeleteRoom} editable={editable} />;
+    return (
+      <ProjectRoomSelectionDetails
+        room={room}
+        measurement={roomMeasurement}
+        units={units}
+        onDelete={onDeleteRoom}
+        editable={editable}
+      />
+    );
   }
   if (
     selection.length === 1 &&
@@ -173,7 +225,11 @@ export function ProjectPropertiesDetails({
   onUpdateStair,
   openingAuthoring,
   onUpdateOpeningAuthoringType,
-  onUpdateOpeningAuthoring
+  onUpdateOpeningAuthoring,
+  selectionCapabilities,
+  onDeleteSelection,
+  onDuplicateSelection,
+  multiSelectionFurniture
 }: {
   readonly model?: GeometryPresentationModel2D;
   readonly selectionState: GeometrySelectionState;
@@ -184,7 +240,10 @@ export function ProjectPropertiesDetails({
   readonly openingDisplayOffsetFromStart?: number;
   readonly room?: Room;
   readonly roomLevelElevation?: number;
-  readonly stair?: { readonly staircase: Staircase; readonly part?: StairFlight | StairLanding };
+  readonly stair?: {
+    readonly staircase: Staircase;
+    readonly part?: StairFlight | StairLanding;
+  };
   readonly roomMeasurement?: RoomMeasurement;
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly selectedVertexRemovable?: boolean;
@@ -203,7 +262,9 @@ export function ProjectPropertiesDetails({
   readonly onDeleteOpening?: () => void;
   readonly onUpdateOpening?: (properties: UpdateOpeningProperties) => boolean;
   readonly onDeleteRoom?: () => void;
-  readonly onUpdateRoomProperties?: (properties: Partial<UpdateRoomProperties>) => boolean;
+  readonly onUpdateRoomProperties?: (
+    properties: Partial<UpdateRoomProperties>
+  ) => boolean;
   readonly onDeleteStair?: () => void;
   readonly onUpdateStair?: (properties: StairParameterChanges) => boolean;
   readonly openingAuthoring?: {
@@ -211,8 +272,16 @@ export function ProjectPropertiesDetails({
     readonly properties: OpeningAuthoringProperties;
     readonly candidate?: OpeningPlacementCandidate;
   };
-  readonly onUpdateOpeningAuthoring?: (properties: Partial<OpeningAuthoringProperties>) => void;
-  readonly onUpdateOpeningAuthoringType?: (openingType: OpeningAuthoringType) => void;
+  readonly onUpdateOpeningAuthoring?: (
+    properties: Partial<OpeningAuthoringProperties>
+  ) => void;
+  readonly onUpdateOpeningAuthoringType?: (
+    openingType: OpeningAuthoringType
+  ) => void;
+  readonly selectionCapabilities?: ProjectSelectionCapabilities;
+  readonly onDeleteSelection?: () => void;
+  readonly onDuplicateSelection?: () => void;
+  readonly multiSelectionFurniture?: readonly FurnitureItem[];
 }) {
   const { t } = useCasaTranslation("project-viewer");
   if (openingAuthoring) {
@@ -228,15 +297,28 @@ export function ProjectPropertiesDetails({
     );
   }
   if (selectionState.selected.length === 0) {
-    return activeTool && activeTool !== "select"
-      ? <ActiveToolProperties tool={activeTool} />
-      : <PropertiesMessage message={t("properties.selectObject")} />;
+    return activeTool && activeTool !== "select" ? (
+      <ActiveToolProperties tool={activeTool} />
+    ) : (
+      <PropertiesMessage message={t("properties.selectObject")} />
+    );
   }
   if (selectionState.selected.length > 1) {
-    return <ProjectMultiSelectionDetails selectionState={selectionState} />;
+    return (
+      <ProjectMultiSelectionDetails
+        selectionState={selectionState}
+        capabilities={selectionCapabilities}
+        onDelete={onDeleteSelection}
+        onDuplicate={onDuplicateSelection}
+        furniture={multiSelectionFurniture}
+      />
+    );
   }
   const selection = selectionState.selected[0];
-  if ((selection?.kind === "BOUNDARY_EDGE" || selection?.kind === "WALL") && wall) {
+  if (
+    (selection?.kind === "BOUNDARY_EDGE" || selection?.kind === "WALL") &&
+    wall
+  ) {
     return (
       <Stack spacing={2}>
         {editable ? (
@@ -258,7 +340,9 @@ export function ProjectPropertiesDetails({
     );
   }
   if (
-    (selection?.kind === "DOOR" || selection?.kind === "WINDOW" || selection?.kind === "OPENING") &&
+    (selection?.kind === "DOOR" ||
+      selection?.kind === "WINDOW" ||
+      selection?.kind === "OPENING") &&
     opening &&
     openingWall
   ) {
@@ -289,7 +373,12 @@ export function ProjectPropertiesDetails({
     return (
       <Stack spacing={2}>
         {editable ? (
-          <ProjectRoomPropertiesDetails room={room} levelElevation={roomLevelElevation ?? 0} units={units} onUpdate={onUpdateRoomProperties ?? (() => false)} />
+          <ProjectRoomPropertiesDetails
+            room={room}
+            levelElevation={roomLevelElevation ?? 0}
+            units={units}
+            onUpdate={onUpdateRoomProperties ?? (() => false)}
+          />
         ) : null}
         <ProjectRoomSelectionDetails
           room={room}
@@ -301,13 +390,27 @@ export function ProjectPropertiesDetails({
       </Stack>
     );
   }
-  if ((selection?.kind === "STAIRCASE" || selection?.kind === "STAIR_FLIGHT" || selection?.kind === "STAIR_LANDING") && stair) {
+  if (
+    (selection?.kind === "STAIRCASE" ||
+      selection?.kind === "STAIR_FLIGHT" ||
+      selection?.kind === "STAIR_LANDING") &&
+    stair
+  ) {
     return (
       <Stack spacing={2}>
         {editable ? (
-          <ProjectStairPropertiesDetails staircase={stair.staircase} units={units} onUpdate={onUpdateStair ?? (() => false)} />
+          <ProjectStairPropertiesDetails
+            staircase={stair.staircase}
+            units={units}
+            onUpdate={onUpdateStair ?? (() => false)}
+          />
         ) : null}
-        <ProjectStairSelectionDetails selection={stair} units={units} editable={editable} onDelete={onDeleteStair ?? (() => undefined)} />
+        <ProjectStairSelectionDetails
+          selection={stair}
+          units={units}
+          editable={editable}
+          onDelete={onDeleteStair ?? (() => undefined)}
+        />
       </Stack>
     );
   }
@@ -348,7 +451,9 @@ export function ProjectPropertiesDetails({
       onDeleteStair={onDeleteStair}
       editable={editable}
     />
-  ) : <PropertiesMessage message={t("properties.unavailable")} />;
+  ) : (
+    <PropertiesMessage message={t("properties.unavailable")} />
+  );
 }
 
 function ActiveToolProperties({ tool }: { readonly tool: ProjectEditorTool }) {
@@ -366,38 +471,111 @@ function ActiveToolProperties({ tool }: { readonly tool: ProjectEditorTool }) {
 
 /** Displays a product-oriented summary for heterogeneous or homogeneous selections. */
 function ProjectMultiSelectionDetails({
-  selectionState
+  selectionState,
+  capabilities,
+  onDelete,
+  onDuplicate,
+  furniture
 }: {
   readonly selectionState: GeometrySelectionState;
+  readonly capabilities?: ProjectSelectionCapabilities;
+  readonly onDelete?: () => void;
+  readonly onDuplicate?: () => void;
+  readonly furniture?: readonly FurnitureItem[];
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const counts = new Map<string, number>();
   for (const selection of selectionState.selected) {
-    const kind = selection.kind === "BOUNDARY_EDGE" || selection.kind === "WALL"
-      ? "walls"
-      : selection.kind === "POLYGON"
-        ? "rooms"
-        : selection.kind === "DOOR"
-          ? "doors"
-        : selection.kind === "WINDOW"
-          ? "windows"
-      : selection.kind === "OPENING"
-            ? "openings"
-            : selection.kind === "STAIRCASE" || selection.kind === "STAIR_FLIGHT" || selection.kind === "STAIR_LANDING"
-              ? "stairs"
-            : "junctions";
+    const kind =
+      selection.kind === "BOUNDARY_EDGE" || selection.kind === "WALL"
+        ? "walls"
+        : selection.kind === "POLYGON"
+          ? "rooms"
+          : selection.kind === "DOOR"
+            ? "doors"
+            : selection.kind === "WINDOW"
+              ? "windows"
+              : selection.kind === "OPENING"
+                ? "openings"
+                : selection.kind === "STAIRCASE" ||
+                    selection.kind === "STAIR_FLIGHT" ||
+                    selection.kind === "STAIR_LANDING"
+                  ? "stairs"
+                  : selection.kind === "FURNITURE"
+                    ? "furniture"
+                    : "junctions";
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   }
   const composition = [...counts.entries()]
     .map(([kind, count]) => t(`selection.summary.${kind}`, { count }))
     .join(", ");
+  const furnitureRotation =
+    furniture && furniture.length === selectionState.selected.length
+      ? furniture.every((item) => item.rotation === furniture[0]?.rotation)
+        ? String(furniture[0]?.rotation ?? 0)
+        : t("selection.mixed")
+      : undefined;
 
   return (
     <Stack component="section" spacing={1}>
       <Typography variant="subtitle2">
-        {t("selection.multipleTitle", { count: selectionState.selected.length })}
+        {t("selection.multipleTitle", {
+          count: selectionState.selected.length
+        })}
       </Typography>
       <Typography variant="body2">{composition}</Typography>
+      {capabilities ? (
+        <Stack spacing={1}>
+          <Typography variant="caption" color="text.secondary">
+            {t("selection.commonActions")}
+          </Typography>
+          {capabilities.translate.supported ? (
+            <Typography variant="body2">{t("selection.moveHint")}</Typography>
+          ) : null}
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!capabilities.duplicate.supported}
+              onClick={onDuplicate}
+            >
+              {t("selection.duplicate")}
+            </Button>
+            <Button
+              color="error"
+              size="small"
+              variant="outlined"
+              disabled={!capabilities.delete.supported}
+              startIcon={<DeleteOutlineRoundedIcon />}
+              onClick={onDelete}
+            >
+              {t("selection.delete")}
+            </Button>
+          </Stack>
+          {!capabilities.translate.supported ? (
+            <Typography variant="caption" color="warning.main">
+              {capabilities.translate.reason}
+            </Typography>
+          ) : null}
+          {furnitureRotation !== undefined ? (
+            <Stack spacing={0.5}>
+              <Typography variant="caption" color="text.secondary">
+                {t("selection.sharedProperties")}
+              </Typography>
+              <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                <Typography variant="caption">
+                  {t("selection.rotation")}
+                </Typography>
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                  {furnitureRotation === t("selection.mixed")
+                    ? furnitureRotation
+                    : `${furnitureRotation}°`}
+                </Typography>
+              </Stack>
+            </Stack>
+          ) : null}
+        </Stack>
+      ) : null}
       <Typography variant="caption" color="text.secondary">
         {t("selection.multipleHint")}
       </Typography>
@@ -411,7 +589,9 @@ function PropertiesMessage({ message }: { readonly message: string }) {
   return (
     <Stack component="section" spacing={1}>
       <Typography variant="subtitle2">{t("properties.title")}</Typography>
-      <Typography variant="caption" color="text.secondary">{message}</Typography>
+      <Typography variant="caption" color="text.secondary">
+        {message}
+      </Typography>
     </Stack>
   );
 }
@@ -434,8 +614,14 @@ function ProjectRoomSelectionDetails({
   const rows = [
     [t("room.labels.name"), room.name],
     [t("room.labels.type"), t(`room.types.${room.type}`)],
-    [t("room.labels.area"), formatArchitecturalArea(measurement.area, units.length)],
-    [t("room.labels.perimeter"), formatArchitecturalLength(measurement.perimeter, units.length)]
+    [
+      t("room.labels.area"),
+      formatArchitecturalArea(measurement.area, units.length)
+    ],
+    [
+      t("room.labels.perimeter"),
+      formatArchitecturalLength(measurement.perimeter, units.length)
+    ]
   ] as const;
   return (
     <Stack component="section" spacing={1.5}>
@@ -444,22 +630,41 @@ function ProjectRoomSelectionDetails({
         {rows.map(([label, value]) => (
           <Stack key={label} spacing={0.75}>
             <Divider />
-            <Stack className="geometry-summary-item" direction="row" spacing={1.5} sx={{ justifyContent: "space-between" }}>
-              <Typography component="dt" variant="caption" color="text.secondary">{label}</Typography>
-              <Typography component="dd" variant="caption" sx={{ fontWeight: 700, m: 0, textAlign: "right" }}>{value}</Typography>
+            <Stack
+              className="geometry-summary-item"
+              direction="row"
+              spacing={1.5}
+              sx={{ justifyContent: "space-between" }}
+            >
+              <Typography
+                component="dt"
+                variant="caption"
+                color="text.secondary"
+              >
+                {label}
+              </Typography>
+              <Typography
+                component="dd"
+                variant="caption"
+                sx={{ fontWeight: 700, m: 0, textAlign: "right" }}
+              >
+                {value}
+              </Typography>
             </Stack>
           </Stack>
         ))}
       </Stack>
-      {editable ? <Button
-        color="error"
-        variant="outlined"
-        size="small"
-        startIcon={<DeleteOutlineRoundedIcon />}
-        onClick={onDelete}
-      >
-        {t("room.delete")}
-      </Button> : null}
+      {editable ? (
+        <Button
+          color="error"
+          variant="outlined"
+          size="small"
+          startIcon={<DeleteOutlineRoundedIcon />}
+          onClick={onDelete}
+        >
+          {t("room.delete")}
+        </Button>
+      ) : null}
     </Stack>
   );
 }
@@ -515,10 +720,14 @@ function ProjectRoomPropertiesDetails({
           label={t("room.labels.type")}
           value={room.type}
           inputProps={{ "aria-label": t("room.labels.type") }}
-          onChange={(event) => onUpdate({ type: event.target.value as Room["type"] })}
+          onChange={(event) =>
+            onUpdate({ type: event.target.value as Room["type"] })
+          }
         >
           {RoomTypeValues.map((type) => (
-            <MenuItem key={type} value={type}>{t(`room.types.${type}`)}</MenuItem>
+            <MenuItem key={type} value={type}>
+              {t(`room.types.${type}`)}
+            </MenuItem>
           ))}
         </Select>
       </FormControl>
@@ -537,8 +746,15 @@ function ProjectRoomPropertiesDetails({
           }
         }}
         slotProps={{
-          htmlInput: { step: "any", "aria-label": t("room.labels.floorOffset") },
-          input: { endAdornment: <InputAdornment position="end">{units.length}</InputAdornment> }
+          htmlInput: {
+            step: "any",
+            "aria-label": t("room.labels.floorOffset")
+          },
+          input: {
+            endAdornment: (
+              <InputAdornment position="end">{units.length}</InputAdornment>
+            )
+          }
         }}
       />
       <TextField
@@ -547,7 +763,11 @@ function ProjectRoomPropertiesDetails({
         value={levelElevation + (room.elevation ?? 0)}
         slotProps={{
           htmlInput: { readOnly: true },
-          input: { endAdornment: <InputAdornment position="end">{units.length}</InputAdornment> }
+          input: {
+            endAdornment: (
+              <InputAdornment position="end">{units.length}</InputAdornment>
+            )
+          }
         }}
       />
     </Stack>

@@ -50,15 +50,17 @@ import {
 import { useBlocker, useParams } from "react-router-dom";
 
 import { useCasaStudioApi } from "../../../core/api/ApiProvider";
-import type { GeometryLevel, GeometrySnapshot } from "../../../core/api/api-types";
+import type {
+  GeometryLevel,
+  GeometrySnapshot
+} from "../../../core/api/api-types";
 import { useAppShellContent } from "../../../shell/AppShellContext";
 import { createArchitecturalPresentationModel2D } from "../../geometry-2d/presentation/architectural-presentation-model-2d";
 import { createArchitecturalDimensionPresentationModel2D } from "../../geometry-2d/presentation/architectural-dimension-presentation-model-2d";
+import { createProjectSelectionFootprints } from "../../geometry-2d/selection/project-selection-footprints";
 import { createRuntimeGeometryPresentationModel2D } from "../../geometry-2d/presentation/geometry-presentation-model-2d";
 import { GeometryViewerPanel } from "../../geometry-2d/viewer/GeometryViewerPanel";
-import {
-  createGeometrySnapshotPresentationModel2D
-} from "../../geometry-2d/adapters/geometry-snapshot-presentation-adapter";
+import { createGeometrySnapshotPresentationModel2D } from "../../geometry-2d/adapters/geometry-snapshot-presentation-adapter";
 import {
   createGeometrySelectionState,
   selectDoor,
@@ -136,6 +138,8 @@ import {
   editorRedoRequested,
   editorSelectionChanged,
   editorSelectionCleared,
+  editorSelectionTranslationPointerMoved,
+  editorSelectionTranslationStarted,
   editorTransientInteractionCleared,
   editorTransientPointerMoved,
   editorUndoRequested,
@@ -147,6 +151,12 @@ import {
   type ProjectWorkspaceMode
 } from "../../editor-2d/state/project-editor-slice";
 import { getProjectEditorInteraction } from "../../editor-2d/state/project-editor-tools";
+import {
+  deleteProjectSelection,
+  getProjectSelectionCapabilities,
+  resolveProjectSelectionRoots,
+  translateProjectSelection
+} from "../../editor-2d/selection/project-selection-transforms";
 import {
   createDraftWall,
   createRoomIdentifier,
@@ -309,7 +319,8 @@ export function ProjectWorkspacePage() {
   const saveInteractionBlocked =
     replaceProjectMutation.isPending || refreshingAuthoritativeState;
   const scene3DResult = useMemo(() => {
-    if (!projectResponse || !geometryResponse || consistencyFailure) return undefined;
+    if (!projectResponse || !geometryResponse || consistencyFailure)
+      return undefined;
     try {
       return {
         ok: true as const,
@@ -373,9 +384,10 @@ export function ProjectWorkspacePage() {
     viewLevels[0];
   const activeLevelId3D = selectedViewLevel?.sourceLevelId;
   const resolvedSelection3D = useMemo(
-    () => scene3DResult?.ok && selection3D
-      ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
-      : undefined,
+    () =>
+      scene3DResult?.ok && selection3D
+        ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
+        : undefined,
     [scene3DResult, selection3D]
   );
 
@@ -387,7 +399,8 @@ export function ProjectWorkspacePage() {
         levelVisibility3D,
         activeLevelId3D
       )
-    ) setSelection3D(undefined);
+    )
+      setSelection3D(undefined);
   }, [activeLevelId3D, levelVisibility3D, resolvedSelection3D, selection3D]);
 
   useEffect(() => {
@@ -427,34 +440,65 @@ export function ProjectWorkspacePage() {
     viewportOwnerKey === viewportKey
       ? viewport
       : createInitialViewportState(selectedLevel);
-  const activeProject = workspaceMode === "edit" ? editor.draft : projectResponse?.project;
+  const activeProject =
+    workspaceMode === "edit" ? editor.draft : projectResponse?.project;
   const activeProjectLevel = activeProject?.building.levels.find(
     (level) => level.id === selectedLevel?.sourceLevelId
   );
   const furniture = useFurnitureEditor({
-    project: activeProject, levelId: activeProjectLevel?.id, editor, dispatch, selection: selectionState,
-    editable: workspaceMode === "edit" && !saveInteractionBlocked && workspaceRepresentation === "2d",
+    project: activeProject,
+    levelId: activeProjectLevel?.id,
+    editor,
+    dispatch,
+    selection: selectionState,
+    editable:
+      workspaceMode === "edit" &&
+      !saveInteractionBlocked &&
+      workspaceRepresentation === "2d",
     visible: displayOptions.furniture !== false
   });
   useEffect(() => {
-    if (displayOptions.furniture === false && selectionState.selected.some((entry) => entry.kind === "FURNITURE")) {
-      dispatch(workspaceMode === "edit" ? editorSelectionCleared() : geometrySelectionReset());
+    if (
+      displayOptions.furniture === false &&
+      selectionState.selected.some((entry) => entry.kind === "FURNITURE")
+    ) {
+      dispatch(
+        workspaceMode === "edit"
+          ? editorSelectionCleared()
+          : geometrySelectionReset()
+      );
     }
-  }, [displayOptions.furniture, selectionState.selected, dispatch, workspaceMode]);
-  const roomShapePlacement = editor.transient.interaction?.kind === "place-room-shape"
-    ? editor.transient.interaction
-    : undefined;
-  const stairPlacement = editor.transient.interaction?.kind === "place-stair"
-    ? editor.transient.interaction
-    : undefined;
+  }, [
+    displayOptions.furniture,
+    selectionState.selected,
+    dispatch,
+    workspaceMode
+  ]);
+  const roomShapePlacement =
+    editor.transient.interaction?.kind === "place-room-shape"
+      ? editor.transient.interaction
+      : undefined;
+  const stairPlacement =
+    editor.transient.interaction?.kind === "place-stair"
+      ? editor.transient.interaction
+      : undefined;
   const stairProposal = useMemo(() => {
-    if (!activeProject || !stairPlacement?.toLevelId || !stairPlacement.template ||
-        !stairPlacement.identifiers || !stairPlacement.start) return undefined;
-    const firstStepCount = stairPlacement.parameters.kind === "STRAIGHT"
-      ? stairPlacement.parameters.flightStepCount
-      : stairPlacement.parameters.firstFlightStepCount;
+    if (
+      !activeProject ||
+      !stairPlacement?.toLevelId ||
+      !stairPlacement.template ||
+      !stairPlacement.identifiers ||
+      !stairPlacement.start
+    )
+      return undefined;
+    const firstStepCount =
+      stairPlacement.parameters.kind === "STRAIGHT"
+        ? stairPlacement.parameters.flightStepCount
+        : stairPlacement.parameters.firstFlightStepCount;
     const control = {
-      x: stairPlacement.start.x + firstStepCount * stairPlacement.parameters.treadDepth,
+      x:
+        stairPlacement.start.x +
+        firstStepCount * stairPlacement.parameters.treadDepth,
       z: stairPlacement.start.z
     };
     return createStairProposal({
@@ -462,7 +506,9 @@ export function ProjectWorkspacePage() {
       owningLevelId: stairPlacement.owningLevelId,
       destination: {
         toLevelId: stairPlacement.toLevelId,
-        ...(stairPlacement.toRoomId ? { toRoomId: stairPlacement.toRoomId } : {})
+        ...(stairPlacement.toRoomId
+          ? { toRoomId: stairPlacement.toRoomId }
+          : {})
       },
       template: stairPlacement.template,
       parameters: stairPlacement.parameters,
@@ -476,49 +522,75 @@ export function ProjectWorkspacePage() {
   const activeRoomShapeKind = roomShapePlacement?.shape.kind;
   const activeRoomBoundaryKind = roomShapePlacement?.boundaryKind;
   const parsedRoomElevation = Number(roomElevationDraft);
-  const validRoomElevation = Number.isFinite(parsedRoomElevation) && parsedRoomElevation >= 0
-    ? parsedRoomElevation
-    : undefined;
+  const validRoomElevation =
+    Number.isFinite(parsedRoomElevation) && parsedRoomElevation >= 0
+      ? parsedRoomElevation
+      : undefined;
   const validatedRoomShape = useMemo(
-    () => activeRoomShapeKind
-      ? parseRoomShapeDefinition(activeRoomShapeKind, roomShapeDimensions)
-      : undefined,
+    () =>
+      activeRoomShapeKind
+        ? parseRoomShapeDefinition(activeRoomShapeKind, roomShapeDimensions)
+        : undefined,
     [activeRoomShapeKind, roomShapeDimensions]
   );
   const roomPlacementValidation = useMemo(() => {
-    if (!editor.draft || !editor.activeLevelId || !roomShapePlacement?.origin || !validatedRoomShape) return undefined;
+    if (
+      !editor.draft ||
+      !editor.activeLevelId ||
+      !roomShapePlacement?.origin ||
+      !validatedRoomShape
+    )
+      return undefined;
     const room = {
       id: "room-authoring-preview",
       name: "Room preview",
       type: roomShapePlacement.roomType,
-      ...(roomShapePlacement.boundaryKind === "FREE" ? { elevation: roomShapePlacement.elevation } : {})
+      ...(roomShapePlacement.boundaryKind === "FREE"
+        ? { elevation: roomShapePlacement.elevation }
+        : {})
     };
     return roomShapePlacement.boundaryKind === "FREE"
       ? createFreeBoundaryRoomFromShape(editor.draft, {
-          levelId: editor.activeLevelId, origin: roomShapePlacement.origin,
-          shape: validatedRoomShape, room
+          levelId: editor.activeLevelId,
+          origin: roomShapePlacement.origin,
+          shape: validatedRoomShape,
+          room
         })
       : createRoomFromShape(editor.draft, {
-          levelId: editor.activeLevelId, origin: roomShapePlacement.origin,
-          shape: validatedRoomShape, room,
+          levelId: editor.activeLevelId,
+          origin: roomShapePlacement.origin,
+          shape: validatedRoomShape,
+          room,
           wallIds: Array.from(
-            { length: deriveRoomShapeVertices(roomShapePlacement.origin, validatedRoomShape)?.length ?? 0 },
+            {
+              length:
+                deriveRoomShapeVertices(
+                  roomShapePlacement.origin,
+                  validatedRoomShape
+                )?.length ?? 0
+            },
             (_, index) => `room-authoring-preview-wall-${index + 1}`
           ),
           wallHeight: newWallDefaults.height,
           wallThickness: newWallDefaults.thickness
         });
-  }, [editor.activeLevelId, editor.draft, roomShapePlacement, validatedRoomShape]);
-  const resolvedDisplayOptions: GeometryDisplayOptions = workspaceMode === "edit"
-    ? { ...displayOptions, ...editor.presentation.dimensions }
-    : {
-        ...displayOptions,
-        boundaryEdges: false,
-        vertices: false,
-        centroids: false,
-        roomContours: false,
-        entityLabels: false
-      };
+  }, [
+    editor.activeLevelId,
+    editor.draft,
+    roomShapePlacement,
+    validatedRoomShape
+  ]);
+  const resolvedDisplayOptions: GeometryDisplayOptions =
+    workspaceMode === "edit"
+      ? { ...displayOptions, ...editor.presentation.dimensions }
+      : {
+          ...displayOptions,
+          boundaryEdges: false,
+          vertices: false,
+          centroids: false,
+          roomContours: false,
+          entityLabels: false
+        };
 
   const presentationResult = useMemo(() => {
     if (!selectedLevel || (workspaceMode === "view" && consistencyFailure)) {
@@ -541,7 +613,11 @@ export function ProjectWorkspacePage() {
             });
 
       const architecturalModel = activeProjectLevel
-        ? createArchitecturalPresentationModel2D(activeProjectLevel, transform, selectionState)
+        ? createArchitecturalPresentationModel2D(
+            activeProjectLevel,
+            transform,
+            selectionState
+          )
         : undefined;
       return { ok: true as const, model, architecturalModel };
     } catch (error) {
@@ -556,6 +632,46 @@ export function ProjectWorkspacePage() {
     activeProjectLevel
   ]);
 
+  const selectionFootprints = useMemo(() => {
+    if (!presentationResult?.ok || !activeProjectLevel || !activeProject)
+      return [];
+    const visibleFurnitureIds = new Set(furniture.model.map((item) => item.id));
+    return createProjectSelectionFootprints(
+      activeProjectLevel,
+      presentationResult.model,
+      activeProject.building.furniture.filter((item) =>
+        visibleFurnitureIds.has(item.id)
+      )
+    );
+  }, [activeProject, activeProjectLevel, furniture.model, presentationResult]);
+  const selectionRoots = useMemo(
+    () =>
+      activeProject && activeProjectLevel && presentationResult?.ok
+        ? resolveProjectSelectionRoots(
+            activeProject,
+            activeProjectLevel,
+            presentationResult.model,
+            selectionState.selected
+          )
+        : [],
+    [
+      activeProject,
+      activeProjectLevel,
+      presentationResult,
+      selectionState.selected
+    ]
+  );
+  const selectionCapabilities = useMemo(
+    () =>
+      activeProjectLevel
+        ? getProjectSelectionCapabilities(activeProjectLevel, selectionRoots)
+        : getProjectSelectionCapabilities(
+            { walls: [], rooms: [], staircases: [] } as never,
+            []
+          ),
+    [activeProjectLevel, selectionRoots]
+  );
+
   const selectedEditWall = useMemo(() => {
     if (
       !presentationResult?.ok ||
@@ -567,13 +683,18 @@ export function ProjectWorkspacePage() {
     }
 
     const selected = selectionState.selected[0];
-    const selectedEdge = selected?.kind === "BOUNDARY_EDGE"
-      ? presentationResult.model.boundaryEdges.find((edge) => edge.geometryId === selected.geometryId)
-      : undefined;
+    const selectedEdge =
+      selected?.kind === "BOUNDARY_EDGE"
+        ? presentationResult.model.boundaryEdges.find(
+            (edge) => edge.geometryId === selected.geometryId
+          )
+        : undefined;
     return findProjectWall(
       activeProject ?? null,
       activeProjectLevel?.id ?? null,
-      selected?.kind === "WALL" ? selected.geometryId : selectedEdge?.sourceWallId
+      selected?.kind === "WALL"
+        ? selected.geometryId
+        : selectedEdge?.sourceWallId
     );
   }, [
     activeProject,
@@ -581,43 +702,72 @@ export function ProjectWorkspacePage() {
     presentationResult,
     selectionState.selected
   ]);
-  const selectedWallEndpointAvailability =
-    getWallEndpointEditingAvailability(
-      editor.draft,
-      editor.activeLevelId,
-      selectedEditWall?.id
-    );
+  const selectedWallEndpointAvailability = getWallEndpointEditingAvailability(
+    editor.draft,
+    editor.activeLevelId,
+    selectedEditWall?.id
+  );
   const selectedEditOpening = useMemo(() => {
-    const selected = selectionState.selected.length === 1
-      ? selectionState.selected[0]
-      : undefined;
-    return selected && (selected.kind === "DOOR" || selected.kind === "WINDOW" || selected.kind === "OPENING")
-      ? findProjectOpening(activeProject ?? null, activeProjectLevel?.id ?? null, selected.geometryId)
+    const selected =
+      selectionState.selected.length === 1
+        ? selectionState.selected[0]
+        : undefined;
+    return selected &&
+      (selected.kind === "DOOR" ||
+        selected.kind === "WINDOW" ||
+        selected.kind === "OPENING")
+      ? findProjectOpening(
+          activeProject ?? null,
+          activeProjectLevel?.id ?? null,
+          selected.geometryId
+        )
       : undefined;
   }, [activeProject, activeProjectLevel?.id, selectionState.selected]);
   const selectedRoom = useMemo(() => {
-    const selected = selectionState.selected.length === 1
-      ? selectionState.selected[0]
-      : undefined;
-    if (selected?.kind !== "POLYGON" || !presentationResult?.ok || !activeProjectLevel) {
+    const selected =
+      selectionState.selected.length === 1
+        ? selectionState.selected[0]
+        : undefined;
+    if (
+      selected?.kind !== "POLYGON" ||
+      !presentationResult?.ok ||
+      !activeProjectLevel
+    ) {
       return undefined;
     }
     const polygon = presentationResult.model.polygons.find(
       (candidate) => candidate.geometryId === selected.geometryId
     );
-    return activeProjectLevel.rooms.find((room) => room.id === polygon?.sourceRoomId);
+    return activeProjectLevel.rooms.find(
+      (room) => room.id === polygon?.sourceRoomId
+    );
   }, [activeProjectLevel, presentationResult, selectionState.selected]);
   const selectedStair = useMemo(() => {
-    const selected = selectionState.selected.length === 1 ? selectionState.selected[0] : undefined;
-    if (!selected || (selected.kind !== "STAIRCASE" && selected.kind !== "STAIR_FLIGHT" && selected.kind !== "STAIR_LANDING")) return undefined;
+    const selected =
+      selectionState.selected.length === 1
+        ? selectionState.selected[0]
+        : undefined;
+    if (
+      !selected ||
+      (selected.kind !== "STAIRCASE" &&
+        selected.kind !== "STAIR_FLIGHT" &&
+        selected.kind !== "STAIR_LANDING")
+    )
+      return undefined;
     return findProjectStaircase(activeProjectLevel, selected.geometryId);
   }, [activeProjectLevel, selectionState.selected]);
   const stairAdjustmentProposal = useMemo(() => {
-    const adjustment = editor.transient.interaction?.kind === "move-stair-adjustment"
-      ? editor.transient.interaction
-      : undefined;
-    if (!activeProject || !selectedStair || !adjustment ||
-        adjustment.staircaseId !== selectedStair.staircase.id) return undefined;
+    const adjustment =
+      editor.transient.interaction?.kind === "move-stair-adjustment"
+        ? editor.transient.interaction
+        : undefined;
+    if (
+      !activeProject ||
+      !selectedStair ||
+      !adjustment ||
+      adjustment.staircaseId !== selectedStair.staircase.id
+    )
+      return undefined;
     const staircase = selectedStair.staircase;
     const proposal = createStairProposal({
       project: activeProject,
@@ -638,45 +788,56 @@ export function ProjectWorkspacePage() {
       name: staircase.name
     });
     return proposal && staircase.fromRoomId
-      ? { ...proposal, staircase: { ...proposal.staircase, fromRoomId: staircase.fromRoomId } }
+      ? {
+          ...proposal,
+          staircase: { ...proposal.staircase, fromRoomId: staircase.fromRoomId }
+        }
       : proposal;
   }, [activeProject, editor.transient.interaction, selectedStair]);
   const translatedStaircase = useMemo(() => {
-    const move = editor.transient.interaction?.kind === "move-stair-translation"
-      ? editor.transient.interaction
-      : undefined;
-    if (!move || !selectedStair || move.staircaseId !== selectedStair.staircase.id) return undefined;
+    const move =
+      editor.transient.interaction?.kind === "move-stair-translation"
+        ? editor.transient.interaction
+        : undefined;
+    if (
+      !move ||
+      !selectedStair ||
+      move.staircaseId !== selectedStair.staircase.id
+    )
+      return undefined;
     return translateStaircase(selectedStair.staircase, {
       x: move.currentPointer.x - move.startPointer.x,
       z: move.currentPointer.z - move.startPointer.z
     });
   }, [editor.transient.interaction, selectedStair]);
   const selectedRoomMeasurement = useMemo(
-    () => activeProjectLevel && selectedRoom
-      ? measureRoom(activeProjectLevel, selectedRoom)
-      : undefined,
+    () =>
+      activeProjectLevel && selectedRoom
+        ? measureRoom(activeProjectLevel, selectedRoom)
+        : undefined,
     [activeProjectLevel, selectedRoom]
   );
   const activeLevelMeasurement = useMemo(
-    () => activeProjectLevel ? measureLevel(activeProjectLevel) : undefined,
+    () => (activeProjectLevel ? measureLevel(activeProjectLevel) : undefined),
     [activeProjectLevel]
   );
   const dimensionModel = useMemo(() => {
-    if (!activeProjectLevel || !activeProject || !presentationResult?.ok) return undefined;
-    const measurement = editor.transient.interaction?.kind === "measure"
-      ? {
-          start: editor.transient.interaction.startPoint,
-          end: editor.transient.interaction.currentPointerPoint
-        }
-      : undefined;
+    if (!activeProjectLevel || !activeProject || !presentationResult?.ok)
+      return undefined;
+    const measurement =
+      editor.transient.interaction?.kind === "measure"
+        ? {
+            start: editor.transient.interaction.startPoint,
+            end: editor.transient.interaction.currentPointerPoint
+          }
+        : undefined;
     return createArchitecturalDimensionPresentationModel2D({
       level: activeProjectLevel,
       units: activeProject.units,
       transform: createViewportTransform2D(activeViewport),
       geometryModel: presentationResult.model,
-      scaleDenominator: workspaceMode === "edit"
-        ? editor.presentation.scaleDenominator
-        : 75,
+      scaleDenominator:
+        workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75,
       display: {
         overallDimensions: resolvedDisplayOptions.overallDimensions,
         selectedDimensions: resolvedDisplayOptions.selectedDimensions,
@@ -708,7 +869,8 @@ export function ProjectWorkspacePage() {
       !presentationResult?.ok ||
       selectionState.selected.length !== 1 ||
       selectionState.selected[0]?.kind !== "VERTEX"
-    ) return undefined;
+    )
+      return undefined;
     return presentationResult.model.vertices.find(
       (vertex) => vertex.geometryId === selectionState.selected[0]?.geometryId
     );
@@ -725,15 +887,16 @@ export function ProjectWorkspacePage() {
     [editor.activeLevelId, editor.draft, selectedEditVertex]
   );
   const selectedVertexRemovable = useMemo(
-    () => Boolean(
-      editor.draft &&
-      editor.activeLevelId &&
-      selectedEditVertex &&
-      canCollapseWallJunction(editor.draft, {
-        levelId: editor.activeLevelId,
-        junction: selectedEditVertex.coordinates
-      })
-    ),
+    () =>
+      Boolean(
+        editor.draft &&
+        editor.activeLevelId &&
+        selectedEditVertex &&
+        canCollapseWallJunction(editor.draft, {
+          levelId: editor.activeLevelId,
+          junction: selectedEditVertex.coordinates
+        })
+      ),
     [editor.activeLevelId, editor.draft, selectedEditVertex]
   );
   const roomTopology = useMemo(
@@ -758,66 +921,87 @@ export function ProjectWorkspacePage() {
     setRoomDetectionActive(true);
   }, [dispatch]);
 
-  const handleSelectRoomShape = useCallback((
-    kind: RoomShapeKind,
-    boundaryKind: "WALLS" | "FREE" = Number(roomElevationDraft) === 0 ? "WALLS" : "FREE",
-    roomType = "OTHER" as const
-  ) => {
-    if (!editor.activeLevelId) return;
-    const dimensions = getDefaultRoomShapeDimensions(kind);
-    const shape = parseRoomShapeDefinition(kind, dimensions);
-    if (!shape) return;
-    setRoomShapeDimensions(dimensions);
-    setRoomDetectionActive(false);
-    dispatch(editorActiveToolChanged("room"));
-    dispatch(editorRoomShapePlacementStarted({
-      levelId: editor.activeLevelId,
-      shape,
-      boundaryKind,
-      elevation: boundaryKind === "FREE" ? (validRoomElevation ?? 0) : 0,
-      roomType
-    }));
-  }, [dispatch, editor.activeLevelId, roomElevationDraft, validRoomElevation]);
+  const handleSelectRoomShape = useCallback(
+    (
+      kind: RoomShapeKind,
+      boundaryKind: "WALLS" | "FREE" = Number(roomElevationDraft) === 0
+        ? "WALLS"
+        : "FREE",
+      roomType = "OTHER" as const
+    ) => {
+      if (!editor.activeLevelId) return;
+      const dimensions = getDefaultRoomShapeDimensions(kind);
+      const shape = parseRoomShapeDefinition(kind, dimensions);
+      if (!shape) return;
+      setRoomShapeDimensions(dimensions);
+      setRoomDetectionActive(false);
+      dispatch(editorActiveToolChanged("room"));
+      dispatch(
+        editorRoomShapePlacementStarted({
+          levelId: editor.activeLevelId,
+          shape,
+          boundaryKind,
+          elevation: boundaryKind === "FREE" ? (validRoomElevation ?? 0) : 0,
+          roomType
+        })
+      );
+    },
+    [dispatch, editor.activeLevelId, roomElevationDraft, validRoomElevation]
+  );
 
-  const handleRoomMethodChange = useCallback((method: "DETECT" | "SHAPE") => {
-    if (method === "DETECT") handleDetectRoom();
-    else handleSelectRoomShape(activeRoomShapeKind ?? "RECTANGLE");
-  }, [activeRoomShapeKind, handleDetectRoom, handleSelectRoomShape]);
+  const handleRoomMethodChange = useCallback(
+    (method: "DETECT" | "SHAPE") => {
+      if (method === "DETECT") handleDetectRoom();
+      else handleSelectRoomShape(activeRoomShapeKind ?? "RECTANGLE");
+    },
+    [activeRoomShapeKind, handleDetectRoom, handleSelectRoomShape]
+  );
 
-  const handleRoomPresetChange = useCallback((preset: RoomAuthoringPreset) => {
-    const values = getRoomAuthoringPresetValues(preset);
-    setRoomPreset(preset);
-    setRoomShapeDimensions(values.dimensions);
-    setRoomDetectionActive(false);
-    const shape = parseRoomShapeDefinition(values.shape, values.dimensions);
-    if (!shape || !editor.activeLevelId) return;
-    dispatch(editorRoomShapePlacementStarted({
-      levelId: editor.activeLevelId,
-      shape,
-      boundaryKind: Number(roomElevationDraft) === 0 ? "WALLS" : "FREE",
-      elevation: Number(roomElevationDraft) || 0,
-      roomType: values.roomType
-    }));
-  }, [dispatch, editor.activeLevelId, roomElevationDraft]);
+  const handleRoomPresetChange = useCallback(
+    (preset: RoomAuthoringPreset) => {
+      const values = getRoomAuthoringPresetValues(preset);
+      setRoomPreset(preset);
+      setRoomShapeDimensions(values.dimensions);
+      setRoomDetectionActive(false);
+      const shape = parseRoomShapeDefinition(values.shape, values.dimensions);
+      if (!shape || !editor.activeLevelId) return;
+      dispatch(
+        editorRoomShapePlacementStarted({
+          levelId: editor.activeLevelId,
+          shape,
+          boundaryKind: Number(roomElevationDraft) === 0 ? "WALLS" : "FREE",
+          elevation: Number(roomElevationDraft) || 0,
+          roomType: values.roomType
+        })
+      );
+    },
+    [dispatch, editor.activeLevelId, roomElevationDraft]
+  );
 
-  const handleRoomElevationChange = useCallback((value: string) => {
-    setRoomElevationDraft(value);
-    const elevation = Number(value);
-    if (Number.isFinite(elevation) && elevation >= 0) {
-      dispatch(editorRoomShapeElevationChanged(elevation));
-    }
-  }, [dispatch]);
+  const handleRoomElevationChange = useCallback(
+    (value: string) => {
+      setRoomElevationDraft(value);
+      const elevation = Number(value);
+      if (Number.isFinite(elevation) && elevation >= 0) {
+        dispatch(editorRoomShapeElevationChanged(elevation));
+      }
+    },
+    [dispatch]
+  );
 
-  const handleRoomShapeDimensionChange = useCallback((
-    field: keyof RoomShapeDimensionDraft,
-    value: string
-  ) => {
-    if (!activeRoomShapeKind) return;
-    const nextDimensions = { ...roomShapeDimensions, [field]: value };
-    setRoomShapeDimensions(nextDimensions);
-    const shape = parseRoomShapeDefinition(activeRoomShapeKind, nextDimensions);
-    if (shape) dispatch(editorRoomShapePlacementChanged(shape));
-  }, [activeRoomShapeKind, dispatch, roomShapeDimensions]);
+  const handleRoomShapeDimensionChange = useCallback(
+    (field: keyof RoomShapeDimensionDraft, value: string) => {
+      if (!activeRoomShapeKind) return;
+      const nextDimensions = { ...roomShapeDimensions, [field]: value };
+      setRoomShapeDimensions(nextDimensions);
+      const shape = parseRoomShapeDefinition(
+        activeRoomShapeKind,
+        nextDimensions
+      );
+      if (shape) dispatch(editorRoomShapePlacementChanged(shape));
+    },
+    [activeRoomShapeKind, dispatch, roomShapeDimensions]
+  );
 
   const handleCancelRoomAuthoring = useCallback(() => {
     dispatch(editorTransientInteractionCleared());
@@ -825,66 +1009,124 @@ export function ProjectWorkspacePage() {
     setRoomDetectionActive(false);
   }, [dispatch]);
 
-  const handleStairDestinationChange = useCallback((toLevelId: string, toRoomId?: string) => {
-    if (!editor.draft || !editor.activeLevelId) return;
-    const parameters = getSuggestedStairParameters(editor.draft, editor.activeLevelId, {
-      toLevelId,
-      ...(toRoomId ? { toRoomId } : {})
-    }, stairPlacement?.template ?? "STRAIGHT");
-    dispatch(editorStairAuthoringChanged({ toLevelId, toRoomId, parameters }));
-  }, [dispatch, editor.activeLevelId, editor.draft, stairPlacement?.template]);
+  const handleStairDestinationChange = useCallback(
+    (toLevelId: string, toRoomId?: string) => {
+      if (!editor.draft || !editor.activeLevelId) return;
+      const parameters = getSuggestedStairParameters(
+        editor.draft,
+        editor.activeLevelId,
+        {
+          toLevelId,
+          ...(toRoomId ? { toRoomId } : {})
+        },
+        stairPlacement?.template ?? "STRAIGHT"
+      );
+      dispatch(
+        editorStairAuthoringChanged({ toLevelId, toRoomId, parameters })
+      );
+    },
+    [dispatch, editor.activeLevelId, editor.draft, stairPlacement?.template]
+  );
 
-  const handleStairTemplateChange = useCallback((template: StairTemplate) => {
-    if (!editor.draft || !editor.activeLevelId || !stairPlacement?.toLevelId) return;
-    const parameters = getSuggestedStairParameters(
-      editor.draft,
+  const handleStairTemplateChange = useCallback(
+    (template: StairTemplate) => {
+      if (!editor.draft || !editor.activeLevelId || !stairPlacement?.toLevelId)
+        return;
+      const parameters = getSuggestedStairParameters(
+        editor.draft,
+        editor.activeLevelId,
+        {
+          toLevelId: stairPlacement.toLevelId,
+          ...(stairPlacement.toRoomId
+            ? { toRoomId: stairPlacement.toRoomId }
+            : {})
+        },
+        template
+      );
+      dispatch(
+        editorStairAuthoringChanged({
+          template,
+          parameters,
+          identifiers: createStairIdentifiers(template)
+        })
+      );
+    },
+    [
+      dispatch,
       editor.activeLevelId,
-      {
-        toLevelId: stairPlacement.toLevelId,
-        ...(stairPlacement.toRoomId ? { toRoomId: stairPlacement.toRoomId } : {})
-      },
-      template
-    );
-    dispatch(editorStairAuthoringChanged({
-      template,
-      parameters,
-      identifiers: createStairIdentifiers(template)
-    }));
-  }, [dispatch, editor.activeLevelId, editor.draft, stairPlacement?.toLevelId, stairPlacement?.toRoomId]);
+      editor.draft,
+      stairPlacement?.toLevelId,
+      stairPlacement?.toRoomId
+    ]
+  );
 
-  const handleStairParametersChange = useCallback((parameters: StairAuthoringParameters) => {
-    dispatch(editorStairAuthoringChanged({ parameters }));
-  }, [dispatch]);
+  const handleStairParametersChange = useCallback(
+    (parameters: StairAuthoringParameters) => {
+      dispatch(editorStairAuthoringChanged({ parameters }));
+    },
+    [dispatch]
+  );
 
   const handleCancelStairAuthoring = useCallback(() => {
     dispatch(editorActiveToolChanged("select"));
   }, [dispatch]);
 
   useEffect(() => {
-    if (editor.activeTool === "room" && !roomShapePlacement && !roomDetectionActive) {
+    if (
+      editor.activeTool === "room" &&
+      !roomShapePlacement &&
+      !roomDetectionActive
+    ) {
       handleSelectRoomShape("RECTANGLE");
     }
-  }, [editor.activeTool, handleSelectRoomShape, roomDetectionActive, roomShapePlacement]);
+  }, [
+    editor.activeTool,
+    handleSelectRoomShape,
+    roomDetectionActive,
+    roomShapePlacement
+  ]);
 
   useEffect(() => {
-    if (editor.activeTool !== "stair" || !stairPlacement || stairPlacement.template ||
-        !editor.draft || !editor.activeLevelId) return;
-    const owningLevel = editor.draft.building.levels.find((level) => level.id === editor.activeLevelId);
+    if (
+      editor.activeTool !== "stair" ||
+      !stairPlacement ||
+      stairPlacement.template ||
+      !editor.draft ||
+      !editor.activeLevelId
+    )
+      return;
+    const owningLevel = editor.draft.building.levels.find(
+      (level) => level.id === editor.activeLevelId
+    );
     const higherLevel = editor.draft.building.levels
       .filter((level) => level.elevation > (owningLevel?.elevation ?? 0))
       .sort((first, second) => first.elevation - second.elevation)[0];
-    const elevatedRoom = owningLevel?.rooms.find((room) => (room.elevation ?? 0) > 0);
+    const elevatedRoom = owningLevel?.rooms.find(
+      (room) => (room.elevation ?? 0) > 0
+    );
     const toLevelId = higherLevel?.id ?? owningLevel?.id;
     const toRoomId = higherLevel ? undefined : elevatedRoom?.id;
     if (!toLevelId) return;
     const destination = { toLevelId, ...(toRoomId ? { toRoomId } : {}) };
-    dispatch(editorStairAuthoringChanged({
-      ...destination,
-      template: "STRAIGHT",
-      parameters: getSuggestedStairParameters(editor.draft, editor.activeLevelId, destination),
-      identifiers: createStairIdentifiers("STRAIGHT")
-    }));
-  }, [dispatch, editor.activeLevelId, editor.activeTool, editor.draft, stairPlacement]);
+    dispatch(
+      editorStairAuthoringChanged({
+        ...destination,
+        template: "STRAIGHT",
+        parameters: getSuggestedStairParameters(
+          editor.draft,
+          editor.activeLevelId,
+          destination
+        ),
+        identifiers: createStairIdentifiers("STRAIGHT")
+      })
+    );
+  }, [
+    dispatch,
+    editor.activeLevelId,
+    editor.activeTool,
+    editor.draft,
+    stairPlacement
+  ]);
 
   const handleConfirmStairAuthoring = useCallback(() => {
     if (!editor.draft || !stairPlacement || !stairProposal?.valid) return;
@@ -899,9 +1141,13 @@ export function ProjectWorkspacePage() {
     setEditingError(undefined);
     dispatch(editingDraftReplaced(result.project));
     dispatch(editorActiveToolChanged("select"));
-    dispatch(editorSelectionChanged(createGeometrySelectionState([
-      selectStaircase(stairProposal.staircase.id)
-    ])));
+    dispatch(
+      editorSelectionChanged(
+        createGeometrySelectionState([
+          selectStaircase(stairProposal.staircase.id)
+        ])
+      )
+    );
   }, [dispatch, editor.draft, stairPlacement, stairProposal]);
 
   const editorOverlay = useMemo<GeometryEditorOverlay | undefined>(() => {
@@ -923,7 +1169,7 @@ export function ProjectWorkspacePage() {
                   selectedEditWall.start.x === transient.position.x &&
                   selectedEditWall.start.z === transient.position.z
                 ? transient.currentPointerPoint
-              : selectedEditWall.start,
+                : selectedEditWall.start,
           end:
             transient?.kind === "move-wall-endpoint" &&
             transient.wallId === selectedEditWall.id &&
@@ -933,7 +1179,7 @@ export function ProjectWorkspacePage() {
                   selectedEditWall.end.x === transient.position.x &&
                   selectedEditWall.end.z === transient.position.z
                 ? transient.currentPointerPoint
-              : selectedEditWall.end,
+                : selectedEditWall.end,
           draggingEndpoint:
             transient?.kind === "move-wall-endpoint" &&
             transient.wallId === selectedEditWall.id
@@ -941,19 +1187,63 @@ export function ProjectWorkspacePage() {
               : undefined
         }
       : undefined;
-    const placementCandidate = transient?.kind === "place-opening"
-      ? transient.candidate
-      : undefined;
+    const placementCandidate =
+      transient?.kind === "place-opening" ? transient.candidate : undefined;
     const placementWall = placementCandidate
-      ? findProjectWall(editor.draft, editor.activeLevelId, placementCandidate.wallId)
+      ? findProjectWall(
+          editor.draft,
+          editor.activeLevelId,
+          placementCandidate.wallId
+        )
       : undefined;
-    const draggedOpening = transient?.kind === "move-opening" && transient.dragging && selectedEditOpening
-      ? { ...selectedEditOpening.opening, offsetFromStart: transient.currentOffsetFromStart } as Opening
-      : undefined;
-    const previewShape = transient?.kind === "place-room-shape" &&
-        (transient.boundaryKind === "WALLS" || validRoomElevation !== undefined)
-      ? transient.shape
-      : undefined;
+    const draggedOpening =
+      transient?.kind === "move-opening" &&
+      transient.dragging &&
+      selectedEditOpening
+        ? ({
+            ...selectedEditOpening.opening,
+            offsetFromStart: transient.currentOffsetFromStart
+          } as Opening)
+        : undefined;
+    const selectionTranslation =
+      transient?.kind === "translate-selection"
+        ? (() => {
+            const selectedKeys = new Set(
+              selectionState.selected.map(
+                (selection) => `${selection.kind}:${selection.geometryId}`
+              )
+            );
+            const points = selectionFootprints
+              .filter((footprint) =>
+                selectedKeys.has(
+                  `${footprint.selection.kind}:${footprint.selection.geometryId}`
+                )
+              )
+              .flatMap((footprint) =>
+                footprint.polygons.flatMap((polygon) => polygon)
+              );
+            if (points.length === 0) return undefined;
+            return {
+              min: {
+                x: Math.min(...points.map((point) => point.x)),
+                z: Math.min(...points.map((point) => point.z))
+              },
+              max: {
+                x: Math.max(...points.map((point) => point.x)),
+                z: Math.max(...points.map((point) => point.z))
+              },
+              delta: {
+                x: transient.currentPointer.x - transient.startPointer.x,
+                z: transient.currentPointer.z - transient.startPointer.z
+              }
+            };
+          })()
+        : undefined;
+    const previewShape =
+      transient?.kind === "place-room-shape" &&
+      (transient.boundaryKind === "WALLS" || validRoomElevation !== undefined)
+        ? transient.shape
+        : undefined;
     const shapeVertices =
       previewShape &&
       transient?.kind === "place-room-shape" &&
@@ -966,22 +1256,34 @@ export function ProjectWorkspacePage() {
       : undefined;
 
     return {
-      stairPreview: (translatedStaircase ?? stairAdjustmentProposal ?? stairProposal)
-        ? {
-            staircase: translatedStaircase ?? (stairAdjustmentProposal ?? stairProposal)!.staircase,
-            valid: translatedStaircase ? true : (stairAdjustmentProposal ?? stairProposal)!.valid,
-            locked: Boolean(translatedStaircase || stairAdjustmentProposal)
-          }
-        : undefined,
+      stairPreview:
+        (translatedStaircase ?? stairAdjustmentProposal ?? stairProposal)
+          ? {
+              staircase:
+                translatedStaircase ??
+                (stairAdjustmentProposal ?? stairProposal)!.staircase,
+              valid: translatedStaircase
+                ? true
+                : (stairAdjustmentProposal ?? stairProposal)!.valid,
+              locked: Boolean(translatedStaircase || stairAdjustmentProposal)
+            }
+          : undefined,
       selectedStair:
         selectedStair && selectionState.selected[0]?.kind === "STAIRCASE"
           ? {
               staircaseId: selectedStair.staircase.id,
-              adjustmentPoint: editor.transient.interaction?.kind === "move-stair-adjustment"
-                ? editor.transient.interaction.control
-                : inferStairTemplate(selectedStair.staircase) === "STRAIGHT"
-                ? selectedStair.staircase.flights.at(-1)?.end ?? { x: 0, z: 0 }
-                : selectedStair.staircase.flights[0]?.end ?? { x: 0, z: 0 }
+              adjustmentPoint:
+                editor.transient.interaction?.kind === "move-stair-adjustment"
+                  ? editor.transient.interaction.control
+                  : inferStairTemplate(selectedStair.staircase) === "STRAIGHT"
+                    ? (selectedStair.staircase.flights.at(-1)?.end ?? {
+                        x: 0,
+                        z: 0
+                      })
+                    : (selectedStair.staircase.flights[0]?.end ?? {
+                        x: 0,
+                        z: 0
+                      })
             }
           : undefined,
       roomFaceCandidates:
@@ -993,14 +1295,20 @@ export function ProjectWorkspacePage() {
             }))
           : undefined,
       roomShapePreview:
-        shapeVertices && shapeLabelAnchor && activeProject && previewShape && roomShapePlacement
+        shapeVertices &&
+        shapeLabelAnchor &&
+        activeProject &&
+        previewShape &&
+        roomShapePlacement
           ? {
               vertices: shapeVertices,
               labelAnchor: shapeLabelAnchor,
               label: formatRoomShapePreviewLabel(
                 previewShape,
                 activeProject.units.length,
-                roomShapePlacement.boundaryKind === "FREE" ? roomShapePlacement.elevation : undefined
+                roomShapePlacement.boundaryKind === "FREE"
+                  ? roomShapePlacement.elevation
+                  : undefined
               ),
               kind: previewShape.kind,
               elevated: roomShapePlacement.boundaryKind === "FREE",
@@ -1013,21 +1321,24 @@ export function ProjectWorkspacePage() {
           ? {
               start: transient.startPoint,
               end: transient.currentPointerPoint,
-              lengthLabel: activeProject &&
+              lengthLabel:
+                activeProject &&
                 (transient.currentPointerPoint.x !== transient.startPoint.x ||
                   transient.currentPointerPoint.z !== transient.startPoint.z)
-                ? formatArchitecturalLength(
-                    Math.hypot(
-                      transient.currentPointerPoint.x - transient.startPoint.x,
-                      transient.currentPointerPoint.z - transient.startPoint.z
-                    ),
-                    activeProject.units.length
-                  )
-                : undefined
+                  ? formatArchitecturalLength(
+                      Math.hypot(
+                        transient.currentPointerPoint.x -
+                          transient.startPoint.x,
+                        transient.currentPointerPoint.z - transient.startPoint.z
+                      ),
+                      activeProject.units.length
+                    )
+                  : undefined
             }
           : undefined,
       snapCandidate: editor.transient.snapCandidate,
-      snapMarkerPurpose: editor.activeTool === "measure" ? "measurement" : "authoring",
+      snapMarkerPurpose:
+        editor.activeTool === "measure" ? "measurement" : "authoring",
       selectedWall,
       selectedJunction:
         selectedEditVertex && selectedJunctionWallIds.length > 1
@@ -1040,12 +1351,24 @@ export function ProjectWorkspacePage() {
             }
           : undefined,
       wallVertexPreview:
-        transient?.kind === "add-wall-vertex" ? transient.splitPoint : undefined,
-      openingPreview: placementCandidate && placementWall
-        ? { wall: placementWall, opening: placementCandidate.opening, valid: placementCandidate.valid }
-        : draggedOpening && selectedEditOpening
-          ? { wall: selectedEditOpening.wall, opening: draggedOpening, valid: transient?.kind === "move-opening" ? transient.valid : false }
+        transient?.kind === "add-wall-vertex"
+          ? transient.splitPoint
           : undefined,
+      openingPreview:
+        placementCandidate && placementWall
+          ? {
+              wall: placementWall,
+              opening: placementCandidate.opening,
+              valid: placementCandidate.valid
+            }
+          : draggedOpening && selectedEditOpening
+            ? {
+                wall: selectedEditOpening.wall,
+                opening: draggedOpening,
+                valid:
+                  transient?.kind === "move-opening" ? transient.valid : false
+              }
+            : undefined,
       activeOpeningDragId:
         transient?.kind === "move-opening" && transient.dragging
           ? transient.openingId
@@ -1053,7 +1376,8 @@ export function ProjectWorkspacePage() {
       grid: {
         visible: editor.precision.gridVisible,
         spacing: editor.precision.gridSpacing
-      }
+      },
+      selectionTranslation
     };
   }, [
     editor.transient.interaction,
@@ -1075,6 +1399,7 @@ export function ProjectWorkspacePage() {
     translatedStaircase,
     selectedStair,
     selectionState.selected,
+    selectionFootprints,
     t,
     validatedRoomShape,
     roomPlacementValidation,
@@ -1205,7 +1530,12 @@ export function ProjectWorkspacePage() {
 
       if (editor.activeTool === "stair") {
         const placement = editor.transient.interaction;
-        if (placement?.kind !== "place-stair" || !placement.toLevelId || !placement.template) return;
+        if (
+          placement?.kind !== "place-stair" ||
+          !placement.toLevelId ||
+          !placement.template
+        )
+          return;
         if (stairProposal?.valid) handleConfirmStairAuthoring();
         else setEditingError("errors.stair.invalid");
         return;
@@ -1214,20 +1544,30 @@ export function ProjectWorkspacePage() {
       if (editor.activeTool === "room") {
         const placement = editor.transient.interaction;
         if (placement?.kind !== "place-room-shape") return;
-        if (!validatedRoomShape ||
-            (placement.boundaryKind === "FREE" && validRoomElevation === undefined)) {
+        if (
+          !validatedRoomShape ||
+          (placement.boundaryKind === "FREE" &&
+            validRoomElevation === undefined)
+        ) {
           setEditingError("errors.room.geometry");
           return;
         }
-        if (placement.origin && roomPlacementValidation && !roomPlacementValidation.ok) {
-          setEditingError(getRoomEditingErrorKey(roomPlacementValidation.errors[0]?.code));
+        if (
+          placement.origin &&
+          roomPlacementValidation &&
+          !roomPlacementValidation.ok
+        ) {
+          setEditingError(
+            getRoomEditingErrorKey(roomPlacementValidation.errors[0]?.code)
+          );
           return;
         }
         // Commit the exact origin that was previewed. Pointer movement owns
         // snapping, so validation and the semantic write cannot diverge.
         const origin = placement.origin ?? pointer.worldPoint;
         const roomId = createRoomIdentifier();
-        const wallCount = deriveRoomShapeVertices(origin, validatedRoomShape)?.length ?? 0;
+        const wallCount =
+          deriveRoomShapeVertices(origin, validatedRoomShape)?.length ?? 0;
         const level = editor.draft.building.levels.find(
           (candidate) => candidate.id === editor.activeLevelId
         );
@@ -1235,24 +1575,29 @@ export function ProjectWorkspacePage() {
           id: roomId,
           name: `Room ${(level?.rooms.length ?? 0) + 1}`,
           type: placement.roomType,
-          ...(placement.boundaryKind === "FREE" ? { elevation: placement.elevation } : {})
+          ...(placement.boundaryKind === "FREE"
+            ? { elevation: placement.elevation }
+            : {})
         };
-        const result = placement.boundaryKind === "FREE"
-          ? createFreeBoundaryRoomFromShape(editor.draft, {
-              levelId: editor.activeLevelId,
-              origin,
-              shape: validatedRoomShape,
-              room
-            })
-          : createRoomFromShape(editor.draft, {
-              levelId: editor.activeLevelId,
-              origin,
-              shape: validatedRoomShape,
-              room,
-              wallIds: Array.from({ length: wallCount }, () => createWallIdentifier()),
-              wallHeight: newWallDefaults.height,
-              wallThickness: newWallDefaults.thickness
-            });
+        const result =
+          placement.boundaryKind === "FREE"
+            ? createFreeBoundaryRoomFromShape(editor.draft, {
+                levelId: editor.activeLevelId,
+                origin,
+                shape: validatedRoomShape,
+                room
+              })
+            : createRoomFromShape(editor.draft, {
+                levelId: editor.activeLevelId,
+                origin,
+                shape: validatedRoomShape,
+                room,
+                wallIds: Array.from({ length: wallCount }, () =>
+                  createWallIdentifier()
+                ),
+                wallHeight: newWallDefaults.height,
+                wallThickness: newWallDefaults.thickness
+              });
         if (!result.ok) {
           setEditingError(getRoomEditingErrorKey(result.errors[0]?.code));
           return;
@@ -1261,28 +1606,36 @@ export function ProjectWorkspacePage() {
         setRoomDetectionActive(false);
         dispatch(editingDraftReplaced(result.project));
         dispatch(editorActiveToolChanged("select"));
-        dispatch(editorSelectionChanged(createGeometrySelectionState([
-          selectPolygon(`polygon:${roomId}`)
-        ])));
+        dispatch(
+          editorSelectionChanged(
+            createGeometrySelectionState([selectPolygon(`polygon:${roomId}`)])
+          )
+        );
         return;
       }
 
       if (editor.activeTool === "measure") {
         const snapCandidate = presentationResult?.ok
-          ? resolveProjectPointSnapCandidate(pointer.svgPoint, presentationResult.model, {
-              cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
-              worldPoint: pointer.worldPoint,
-              grid: {
-                enabled: editor.precision.snapToGrid,
-                spacing: editor.precision.gridSpacing,
-                worldToSvgScale: activeViewport.zoom
+          ? resolveProjectPointSnapCandidate(
+              pointer.svgPoint,
+              presentationResult.model,
+              {
+                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                worldPoint: pointer.worldPoint,
+                grid: {
+                  enabled: editor.precision.snapToGrid,
+                  spacing: editor.precision.gridSpacing,
+                  worldToSvgScale: activeViewport.zoom
+                }
               }
-            })
+            )
           : undefined;
-        dispatch(editorMeasurementPointSet({
-          point: snapCandidate?.point ?? pointer.worldPoint,
-          snapCandidate
-        }));
+        dispatch(
+          editorMeasurementPointSet({
+            point: snapCandidate?.point ?? pointer.worldPoint,
+            snapCandidate
+          })
+        );
         return;
       }
 
@@ -1305,16 +1658,27 @@ export function ProjectWorkspacePage() {
         if (result?.ok) {
           setEditingError(undefined);
           dispatch(editingDraftReplaced(result.project));
-          dispatch(editorSelectionChanged(createGeometrySelectionState([
-            openingType === "DOOR"
-              ? selectDoor(openingId)
-              : openingType === "WINDOW" ? selectWindow(openingId) : selectWallOpening(openingId)
-          ])));
-          dispatch(editorOpeningPlacementChanged({
-            openingType,
-            properties: placement?.kind === "place-opening" ? placement.properties : undefined,
-            candidate: undefined
-          }));
+          dispatch(
+            editorSelectionChanged(
+              createGeometrySelectionState([
+                openingType === "DOOR"
+                  ? selectDoor(openingId)
+                  : openingType === "WINDOW"
+                    ? selectWindow(openingId)
+                    : selectWallOpening(openingId)
+              ])
+            )
+          );
+          dispatch(
+            editorOpeningPlacementChanged({
+              openingType,
+              properties:
+                placement?.kind === "place-opening"
+                  ? placement.properties
+                  : undefined,
+              candidate: undefined
+            })
+          );
         } else {
           setEditingError("errors.opening.invalid");
         }
@@ -1322,36 +1686,37 @@ export function ProjectWorkspacePage() {
       }
       if (editor.activeTool !== "draw-wall") return;
 
-      const snapCandidate =
-        presentationResult?.ok
-          ? resolveDrawWallSnapCandidate(
-              pointer.svgPoint,
-              presentationResult.model,
-              {
-                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
-                worldPoint: pointer.worldPoint,
-                drawStart:
-                  editor.transient.interaction?.kind === "draw-wall"
-                    ? {
-                        worldPoint: editor.transient.interaction.startPoint,
-                        svgPoint: createViewportTransform2D(activeViewport).worldToScreen(
-                          editor.transient.interaction.startPoint
-                        )
-                      }
-                    : undefined,
-                grid: {
-                  enabled: editor.precision.snapToGrid,
-                  spacing: editor.precision.gridSpacing,
-                  worldToSvgScale: activeViewport.zoom
-                }
+      const snapCandidate = presentationResult?.ok
+        ? resolveDrawWallSnapCandidate(
+            pointer.svgPoint,
+            presentationResult.model,
+            {
+              cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+              worldPoint: pointer.worldPoint,
+              drawStart:
+                editor.transient.interaction?.kind === "draw-wall"
+                  ? {
+                      worldPoint: editor.transient.interaction.startPoint,
+                      svgPoint: createViewportTransform2D(
+                        activeViewport
+                      ).worldToScreen(editor.transient.interaction.startPoint)
+                    }
+                  : undefined,
+              grid: {
+                enabled: editor.precision.snapToGrid,
+                spacing: editor.precision.gridSpacing,
+                worldToSvgScale: activeViewport.zoom
               }
-            )
-          : undefined;
+            }
+          )
+        : undefined;
       const resolvedPoint = snapCandidate?.point ?? pointer.worldPoint;
       const interaction = editor.transient.interaction;
       if (interaction?.kind !== "draw-wall") {
         setEditingError(undefined);
-        dispatch(editorDrawWallStarted({ point: resolvedPoint, snapCandidate }));
+        dispatch(
+          editorDrawWallStarted({ point: resolvedPoint, snapCandidate })
+        );
         return;
       }
 
@@ -1360,12 +1725,18 @@ export function ProjectWorkspacePage() {
         levelId: editor.activeLevelId,
         wall,
         startConnections: interaction.startConnectionWallIds.map((wallId) => ({
-              wallId,
-              newWallId: createWallIdentifier()
-            })),
+          wallId,
+          newWallId: createWallIdentifier()
+        })),
         endConnections:
-          snapCandidate?.kind === "wall-interior" || snapCandidate?.kind === "wall-midpoint"
-            ? [{ wallId: snapCandidate.wallId, newWallId: createWallIdentifier() }]
+          snapCandidate?.kind === "wall-interior" ||
+          snapCandidate?.kind === "wall-midpoint"
+            ? [
+                {
+                  wallId: snapCandidate.wallId,
+                  newWallId: createWallIdentifier()
+                }
+              ]
             : snapCandidate?.kind === "wall-intersection"
               ? snapCandidate.wallIds.map((wallId) => ({
                   wallId,
@@ -1378,7 +1749,9 @@ export function ProjectWorkspacePage() {
       if (result.ok) {
         setEditingError(undefined);
         dispatch(editingDraftReplaced(result.project));
-        if (!doesWallCloseCycle(result.project, editor.activeLevelId, wall.id)) {
+        if (
+          !doesWallCloseCycle(result.project, editor.activeLevelId, wall.id)
+        ) {
           dispatch(editorDrawWallStarted({ point: resolvedPoint }));
         }
       } else {
@@ -1404,48 +1777,75 @@ export function ProjectWorkspacePage() {
 
   const handleEditorPointerMove = useCallback(
     (pointer: SvgViewportPointer, pointerId: number) => {
-      if (
-        saveInteractionBlocked
-      ) {
+      if (saveInteractionBlocked) {
         return;
       }
       if (
         workspaceMode === "edit" &&
+        editor.transient.interaction?.kind === "translate-selection" &&
+        editor.transient.interaction.pointerId === pointerId
+      ) {
+        dispatch(
+          editorSelectionTranslationPointerMoved({
+            pointerId,
+            point: pointer.worldPoint
+          })
+        );
+      } else if (
+        workspaceMode === "edit" &&
         editor.transient.interaction?.kind === "move-stair-translation" &&
         editor.transient.interaction.pointerId === pointerId
       ) {
-        dispatch(editorStairTranslationPointerMoved({ pointerId, point: pointer.worldPoint }));
+        dispatch(
+          editorStairTranslationPointerMoved({
+            pointerId,
+            point: pointer.worldPoint
+          })
+        );
       } else if (
         workspaceMode === "edit" &&
         editor.transient.interaction?.kind === "move-stair-adjustment" &&
         editor.transient.interaction.pointerId === pointerId &&
         presentationResult?.ok
       ) {
-        const snapCandidate = resolveProjectPointSnapCandidate(pointer.svgPoint, presentationResult.model, {
-          cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
-          worldPoint: pointer.worldPoint,
-          grid: {
-            enabled: editor.precision.snapToGrid,
-            spacing: editor.precision.gridSpacing,
-            worldToSvgScale: activeViewport.zoom
+        const snapCandidate = resolveProjectPointSnapCandidate(
+          pointer.svgPoint,
+          presentationResult.model,
+          {
+            cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            worldPoint: pointer.worldPoint,
+            grid: {
+              enabled: editor.precision.snapToGrid,
+              spacing: editor.precision.gridSpacing,
+              worldToSvgScale: activeViewport.zoom
+            }
           }
-        });
-        dispatch(editorStairAdjustmentPointerMoved({ pointerId, control: snapCandidate.point }));
+        );
+        dispatch(
+          editorStairAdjustmentPointerMoved({
+            pointerId,
+            control: snapCandidate.point
+          })
+        );
       } else if (
         workspaceMode === "edit" &&
         editor.activeTool === "stair" &&
         editor.transient.interaction?.kind === "place-stair" &&
         presentationResult?.ok
       ) {
-        const snapCandidate = resolveProjectPointSnapCandidate(pointer.svgPoint, presentationResult.model, {
-          cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
-          worldPoint: pointer.worldPoint,
-          grid: {
-            enabled: editor.precision.snapToGrid,
-            spacing: editor.precision.gridSpacing,
-            worldToSvgScale: activeViewport.zoom
+        const snapCandidate = resolveProjectPointSnapCandidate(
+          pointer.svgPoint,
+          presentationResult.model,
+          {
+            cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            worldPoint: pointer.worldPoint,
+            grid: {
+              enabled: editor.precision.snapToGrid,
+              spacing: editor.precision.gridSpacing,
+              worldToSvgScale: activeViewport.zoom
+            }
           }
-        });
+        );
         dispatch(editorStairPlacementPointerMoved(snapCandidate.point));
       } else if (
         workspaceMode === "edit" &&
@@ -1454,57 +1854,76 @@ export function ProjectWorkspacePage() {
         validatedRoomShape
       ) {
         const snapCandidate = presentationResult?.ok
-          ? resolveProjectPointSnapCandidate(pointer.svgPoint, presentationResult.model, {
-              cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
-              worldPoint: pointer.worldPoint,
-              grid: {
-                enabled: editor.precision.snapToGrid,
-                spacing: editor.precision.gridSpacing,
-                worldToSvgScale: activeViewport.zoom
+          ? resolveProjectPointSnapCandidate(
+              pointer.svgPoint,
+              presentationResult.model,
+              {
+                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                worldPoint: pointer.worldPoint,
+                grid: {
+                  enabled: editor.precision.snapToGrid,
+                  spacing: editor.precision.gridSpacing,
+                  worldToSvgScale: activeViewport.zoom
+                }
               }
-            })
+            )
           : resolveGridSnapCandidate(pointer.worldPoint, {
               enabled: editor.precision.snapToGrid,
               spacing: editor.precision.gridSpacing,
               worldToSvgScale: activeViewport.zoom,
               cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
             });
-        dispatch(editorRoomShapePlacementPointerMoved(
-          snapCandidate?.point ?? pointer.worldPoint
-        ));
+        dispatch(
+          editorRoomShapePlacementPointerMoved(
+            snapCandidate?.point ?? pointer.worldPoint
+          )
+        );
       } else if (
         workspaceMode === "edit" &&
         editor.draft &&
         editor.transient.interaction?.kind === "add-wall-vertex"
       ) {
         const interaction = editor.transient.interaction;
-        const wall = findProjectWall(editor.draft, interaction.levelId, interaction.wallId);
+        const wall = findProjectWall(
+          editor.draft,
+          interaction.levelId,
+          interaction.wallId
+        );
         if (!wall) {
           dispatch(editorWallVertexPlacementChanged(undefined));
         } else {
           const projection = projectPointOntoWall(pointer.worldPoint, wall);
-          const wallLength = Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z);
-          const maximumDistance = 18 / Math.max(
-            Number.EPSILON,
-            activeViewport.zoom * pointer.cssPixelsPerSvgUnit
+          const wallLength = Math.hypot(
+            wall.end.x - wall.start.x,
+            wall.end.z - wall.start.z
           );
-          dispatch(editorWallVertexPlacementChanged(
-            Math.abs(projection.perpendicularDistance) <= maximumDistance &&
-            projection.distanceAlongWall > 1e-7 &&
-            projection.distanceAlongWall < wallLength - 1e-7
-              ? projection.projected
-              : undefined
-          ));
+          const maximumDistance =
+            18 /
+            Math.max(
+              Number.EPSILON,
+              activeViewport.zoom * pointer.cssPixelsPerSvgUnit
+            );
+          dispatch(
+            editorWallVertexPlacementChanged(
+              Math.abs(projection.perpendicularDistance) <= maximumDistance &&
+                projection.distanceAlongWall > 1e-7 &&
+                projection.distanceAlongWall < wallLength - 1e-7
+                ? projection.projected
+                : undefined
+            )
+          );
         }
-      } else
-      if (
+      } else if (
         workspaceMode === "edit" &&
         editor.draft &&
         editor.transient.interaction?.kind === "move-opening" &&
         editor.transient.interaction.pointerId === pointerId &&
         selectedEditOpening
       ) {
-        const projection = projectPointOntoWall(pointer.worldPoint, selectedEditOpening.wall);
+        const projection = projectPointOntoWall(
+          pointer.worldPoint,
+          selectedEditOpening.wall
+        );
         const wallLength = Math.hypot(
           selectedEditOpening.wall.end.x - selectedEditOpening.wall.start.x,
           selectedEditOpening.wall.end.z - selectedEditOpening.wall.start.z
@@ -1514,7 +1933,8 @@ export function ProjectWorkspacePage() {
             0,
             Math.min(
               wallLength - selectedEditOpening.opening.width,
-              projection.distanceAlongWall - selectedEditOpening.opening.width / 2
+              projection.distanceAlongWall -
+                selectedEditOpening.opening.width / 2
             )
           )
         );
@@ -1524,7 +1944,13 @@ export function ProjectWorkspacePage() {
           openingId: editor.transient.interaction.openingId,
           offsetFromStart
         });
-        dispatch(editorOpeningDragPreviewChanged({ pointerId, offsetFromStart, valid: validation.ok }));
+        dispatch(
+          editorOpeningDragPreviewChanged({
+            pointerId,
+            offsetFromStart,
+            valid: validation.ok
+          })
+        );
       } else if (
         workspaceMode === "edit" &&
         editor.draft &&
@@ -1535,20 +1961,25 @@ export function ProjectWorkspacePage() {
         if (placement?.kind !== "place-opening") return;
         const openingType = placement.openingType;
         const properties = placement.properties;
-        dispatch(editorOpeningPlacementChanged({
-          openingType,
-          properties,
-          candidate: resolveOpeningPlacementCandidate(
-            editor.draft,
-            editor.activeLevelId,
-            pointer.worldPoint,
+        dispatch(
+          editorOpeningPlacementChanged({
             openingType,
-            18 / Math.max(Number.EPSILON, activeViewport.zoom * pointer.cssPixelsPerSvgUnit),
-            properties
-          )
-        }));
-      } else
-      if (
+            properties,
+            candidate: resolveOpeningPlacementCandidate(
+              editor.draft,
+              editor.activeLevelId,
+              pointer.worldPoint,
+              openingType,
+              18 /
+                Math.max(
+                  Number.EPSILON,
+                  activeViewport.zoom * pointer.cssPixelsPerSvgUnit
+                ),
+              properties
+            )
+          })
+        );
+      } else if (
         workspaceMode === "edit" &&
         editor.activeTool === "draw-wall" &&
         presentationResult?.ok
@@ -1563,9 +1994,9 @@ export function ProjectWorkspacePage() {
               editor.transient.interaction?.kind === "draw-wall"
                 ? {
                     worldPoint: editor.transient.interaction.startPoint,
-                    svgPoint: createViewportTransform2D(activeViewport).worldToScreen(
-                      editor.transient.interaction.startPoint
-                    )
+                    svgPoint: createViewportTransform2D(
+                      activeViewport
+                    ).worldToScreen(editor.transient.interaction.startPoint)
                   }
                 : undefined,
             grid: {
@@ -1599,10 +2030,12 @@ export function ProjectWorkspacePage() {
             }
           }
         );
-        dispatch(editorMeasurementPointerMoved({
-          point: snapCandidate.point,
-          snapCandidate
-        }));
+        dispatch(
+          editorMeasurementPointerMoved({
+            point: snapCandidate.point,
+            snapCandidate
+          })
+        );
       } else if (workspaceMode === "edit" && editor.transient.interaction) {
         dispatch(
           editorTransientPointerMoved({
@@ -1649,7 +2082,11 @@ export function ProjectWorkspacePage() {
           editorJunctionDragStarted({
             levelId: editor.activeLevelId,
             position: point,
-            incidentWallIds: getIncidentWallIds(editor.draft, editor.activeLevelId, point),
+            incidentWallIds: getIncidentWallIds(
+              editor.draft,
+              editor.activeLevelId,
+              point
+            ),
             pointerId
           })
         );
@@ -1686,7 +2123,8 @@ export function ProjectWorkspacePage() {
         !editor.activeLevelId ||
         !selectedEditVertex ||
         selectedJunctionWallIds.length < 2
-      ) return;
+      )
+        return;
       setEditingError(undefined);
       dispatch(
         editorJunctionDragStarted({
@@ -1715,34 +2153,39 @@ export function ProjectWorkspacePage() {
         saveInteractionBlocked ||
         workspaceMode !== "edit" ||
         !editor.draft ||
-        (interaction?.kind !== "move-wall-endpoint" && interaction?.kind !== "move-junction") ||
+        (interaction?.kind !== "move-wall-endpoint" &&
+          interaction?.kind !== "move-junction") ||
         interaction.pointerId !== pointerId
       ) {
         return;
       }
 
-      const result = interaction.kind === "move-junction"
-        ? moveJunction(editor.draft, {
-            levelId: interaction.levelId,
-            position: interaction.position,
-            destination: point,
-            incidentWallIds: interaction.incidentWallIds
-          })
-        : (() => {
-            const availability = getWallEndpointEditingAvailability(
-              editor.draft,
-              interaction.levelId,
-              interaction.wallId
-            );
-            if (!availability?.[interaction.endpoint].draggable ||
-                availability[interaction.endpoint].topology !== "standalone") return undefined;
-            return moveWallEndpoint(editor.draft, {
+      const result =
+        interaction.kind === "move-junction"
+          ? moveJunction(editor.draft, {
               levelId: interaction.levelId,
-              wallId: interaction.wallId,
-              endpoint: interaction.endpoint,
-              position: point
-            });
-          })();
+              position: interaction.position,
+              destination: point,
+              incidentWallIds: interaction.incidentWallIds
+            })
+          : (() => {
+              const availability = getWallEndpointEditingAvailability(
+                editor.draft,
+                interaction.levelId,
+                interaction.wallId
+              );
+              if (
+                !availability?.[interaction.endpoint].draggable ||
+                availability[interaction.endpoint].topology !== "standalone"
+              )
+                return undefined;
+              return moveWallEndpoint(editor.draft, {
+                levelId: interaction.levelId,
+                wallId: interaction.wallId,
+                endpoint: interaction.endpoint,
+                position: point
+              });
+            })();
       dispatch(editorTransientInteractionCleared());
 
       if (!result) return;
@@ -1766,7 +2209,8 @@ export function ProjectWorkspacePage() {
     (pointerId: number) => {
       const interaction = editor.transient.interaction;
       if (
-        (interaction?.kind === "move-wall-endpoint" || interaction?.kind === "move-junction") &&
+        (interaction?.kind === "move-wall-endpoint" ||
+          interaction?.kind === "move-junction") &&
         interaction.pointerId === pointerId
       ) {
         dispatch(editorTransientInteractionCleared());
@@ -1783,22 +2227,37 @@ export function ProjectWorkspacePage() {
         editor.activeTool !== "select" ||
         !editor.activeLevelId ||
         !editor.draft
-      ) return;
-      const target = findProjectOpening(editor.draft, editor.activeLevelId, openingId);
+      )
+        return;
+      const target = findProjectOpening(
+        editor.draft,
+        editor.activeLevelId,
+        openingId
+      );
       if (!target || target.wall.id !== wallId) return;
-      dispatch(editorOpeningDragStarted({
-        levelId: editor.activeLevelId,
-        wallId,
-        openingId,
-        pointerId,
-        offsetFromStart: target.opening.offsetFromStart
-      }));
+      dispatch(
+        editorOpeningDragStarted({
+          levelId: editor.activeLevelId,
+          wallId,
+          openingId,
+          pointerId,
+          offsetFromStart: target.opening.offsetFromStart
+        })
+      );
     },
-    [dispatch, editor.activeLevelId, editor.activeTool, editor.draft, saveInteractionBlocked, workspaceMode]
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.activeTool,
+      editor.draft,
+      saveInteractionBlocked,
+      workspaceMode
+    ]
   );
 
   const handleOpeningDragThresholdCrossed = useCallback(
-    (pointerId: number) => dispatch(editorOpeningDragThresholdCrossed({ pointerId })),
+    (pointerId: number) =>
+      dispatch(editorOpeningDragThresholdCrossed({ pointerId })),
     [dispatch]
   );
 
@@ -1809,7 +2268,8 @@ export function ProjectWorkspacePage() {
         interaction?.kind !== "move-opening" ||
         interaction.pointerId !== pointerId ||
         !editor.draft
-      ) return;
+      )
+        return;
       if (!dragged) {
         dispatch(editorTransientInteractionCleared());
         return;
@@ -1819,7 +2279,9 @@ export function ProjectWorkspacePage() {
             levelId: interaction.levelId,
             wallId: interaction.wallId,
             openingId: interaction.openingId,
-            offsetFromStart: normalizeEditorMeasurement(interaction.currentOffsetFromStart)
+            offsetFromStart: normalizeEditorMeasurement(
+              interaction.currentOffsetFromStart
+            )
           })
         : undefined;
       dispatch(editorTransientInteractionCleared());
@@ -1836,121 +2298,325 @@ export function ProjectWorkspacePage() {
   const handleOpeningPointerCancel = useCallback(
     (pointerId: number) => {
       const interaction = editor.transient.interaction;
-      if (interaction?.kind === "move-opening" && interaction.pointerId === pointerId) {
+      if (
+        interaction?.kind === "move-opening" &&
+        interaction.pointerId === pointerId
+      ) {
         dispatch(editorTransientInteractionCleared());
       }
     },
     [dispatch, editor.transient.interaction]
   );
 
-  const handleStairAdjustmentPointerDown = useCallback((staircaseId: string, pointerId: number) => {
-    if (!editor.activeLevelId || editor.activeTool !== "select" || !selectedStair ||
-        selectedStair.staircase.id !== staircaseId || saveInteractionBlocked) return;
-    const staircase = selectedStair.staircase;
-    const control = inferStairTemplate(staircase) === "STRAIGHT"
-      ? staircase.flights.at(-1)?.end
-      : staircase.flights[0]?.end;
-    if (!control) return;
-    dispatch(editorStairAdjustmentStarted({
-      owningLevelId: editor.activeLevelId,
-      staircaseId,
-      pointerId,
-      control
-    }));
-  }, [dispatch, editor.activeLevelId, editor.activeTool, saveInteractionBlocked, selectedStair]);
+  const handleSelectionTranslationPointerDown = useCallback(
+    (_selection: unknown, point: WorldPointXZ, pointerId: number) => {
+      if (
+        saveInteractionBlocked ||
+        workspaceMode !== "edit" ||
+        editor.activeTool !== "select"
+      )
+        return;
+      if (!selectionCapabilities.translate.supported) {
+        setEditingError("errors.selection.invalid");
+        return;
+      }
+      setEditingError(undefined);
+      dispatch(
+        editorSelectionTranslationStarted({ pointerId, startPointer: point })
+      );
+    },
+    [
+      dispatch,
+      editor.activeTool,
+      saveInteractionBlocked,
+      selectionCapabilities.translate,
+      workspaceMode
+    ]
+  );
 
-  const handleStairTranslationPointerDown = useCallback((
-    staircaseId: string,
-    point: WorldPointXZ,
-    pointerId: number
-  ) => {
-    if (!editor.activeLevelId || editor.activeTool !== "select" || !selectedStair ||
-        selectedStair.staircase.id !== staircaseId || saveInteractionBlocked) return;
-    dispatch(editorStairTranslationStarted({
-      owningLevelId: editor.activeLevelId,
-      staircaseId,
-      pointerId,
-      startPointer: point
-    }));
-  }, [dispatch, editor.activeLevelId, editor.activeTool, saveInteractionBlocked, selectedStair]);
+  const handleSelectionTranslationPointerUp = useCallback(
+    (pointerId: number, dragged: boolean) => {
+      const interaction = editor.transient.interaction;
+      if (
+        interaction?.kind !== "translate-selection" ||
+        interaction.pointerId !== pointerId
+      )
+        return;
+      dispatch(editorTransientInteractionCleared());
+      if (!dragged || !editor.draft || !activeProjectLevel) return;
+      const result = translateProjectSelection(
+        editor.draft,
+        activeProjectLevel,
+        selectionRoots,
+        {
+          x: interaction.currentPointer.x - interaction.startPointer.x,
+          z: interaction.currentPointer.z - interaction.startPointer.z
+        }
+      );
+      if (!result.ok) {
+        setEditingError("errors.selection.invalid");
+        return;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+    },
+    [
+      activeProjectLevel,
+      dispatch,
+      editor.draft,
+      editor.transient.interaction,
+      selectionRoots
+    ]
+  );
 
-  const handleStairTranslationPointerUp = useCallback((pointerId: number) => {
-    const interaction = editor.transient.interaction;
-    if (interaction?.kind !== "move-stair-translation" || interaction.pointerId !== pointerId ||
-        !editor.draft || !translatedStaircase) return;
-    const result = updateStaircase(editor.draft, {
-      owningLevelId: interaction.owningLevelId,
-      staircaseId: interaction.staircaseId,
-      staircase: translatedStaircase
-    });
-    dispatch(editorTransientInteractionCleared());
+  const handleSelectionTranslationPointerCancel = useCallback(
+    (pointerId: number) => {
+      if (
+        editor.transient.interaction?.kind === "translate-selection" &&
+        editor.transient.interaction.pointerId === pointerId
+      )
+        dispatch(editorTransientInteractionCleared());
+    },
+    [dispatch, editor.transient.interaction]
+  );
+
+  const handleNudgeSelection = useCallback(
+    (delta: WorldPointXZ) => {
+      if (
+        !editor.draft ||
+        !activeProjectLevel ||
+        saveInteractionBlocked ||
+        workspaceMode !== "edit"
+      )
+        return;
+      const result = translateProjectSelection(
+        editor.draft,
+        activeProjectLevel,
+        selectionRoots,
+        delta
+      );
+      if (!result.ok) {
+        setEditingError("errors.selection.invalid");
+        return;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+    },
+    [
+      activeProjectLevel,
+      dispatch,
+      editor.draft,
+      saveInteractionBlocked,
+      selectionRoots,
+      workspaceMode
+    ]
+  );
+
+  const handleDeleteSelection = useCallback(() => {
+    if (
+      !editor.draft ||
+      !activeProjectLevel ||
+      saveInteractionBlocked ||
+      workspaceMode !== "edit"
+    )
+      return;
+    const result = deleteProjectSelection(
+      editor.draft,
+      activeProjectLevel,
+      selectionRoots
+    );
     if (!result.ok) {
-      setEditingError("errors.stair.invalid");
+      setEditingError("errors.selection.invalid");
       return;
     }
     setEditingError(undefined);
+    dispatch(editorSelectionCleared());
     dispatch(editingDraftReplaced(result.project));
-    dispatch(editorSelectionChanged(createGeometrySelectionState([selectStaircase(interaction.staircaseId)])));
-  }, [dispatch, editor.draft, editor.transient.interaction, translatedStaircase]);
+  }, [
+    activeProjectLevel,
+    dispatch,
+    editor.draft,
+    saveInteractionBlocked,
+    selectionRoots,
+    workspaceMode
+  ]);
 
-  const handleStairTranslationPointerCancel = useCallback((pointerId: number) => {
-    if (editor.transient.interaction?.kind === "move-stair-translation" &&
-        editor.transient.interaction.pointerId === pointerId) {
+  const handleStairAdjustmentPointerDown = useCallback(
+    (staircaseId: string, pointerId: number) => {
+      if (
+        !editor.activeLevelId ||
+        editor.activeTool !== "select" ||
+        !selectedStair ||
+        selectedStair.staircase.id !== staircaseId ||
+        saveInteractionBlocked
+      )
+        return;
+      const staircase = selectedStair.staircase;
+      const control =
+        inferStairTemplate(staircase) === "STRAIGHT"
+          ? staircase.flights.at(-1)?.end
+          : staircase.flights[0]?.end;
+      if (!control) return;
+      dispatch(
+        editorStairAdjustmentStarted({
+          owningLevelId: editor.activeLevelId,
+          staircaseId,
+          pointerId,
+          control
+        })
+      );
+    },
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.activeTool,
+      saveInteractionBlocked,
+      selectedStair
+    ]
+  );
+
+  const handleStairTranslationPointerDown = useCallback(
+    (staircaseId: string, point: WorldPointXZ, pointerId: number) => {
+      if (
+        !editor.activeLevelId ||
+        editor.activeTool !== "select" ||
+        !selectedStair ||
+        selectedStair.staircase.id !== staircaseId ||
+        saveInteractionBlocked
+      )
+        return;
+      dispatch(
+        editorStairTranslationStarted({
+          owningLevelId: editor.activeLevelId,
+          staircaseId,
+          pointerId,
+          startPointer: point
+        })
+      );
+    },
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.activeTool,
+      saveInteractionBlocked,
+      selectedStair
+    ]
+  );
+
+  const handleStairTranslationPointerUp = useCallback(
+    (pointerId: number) => {
+      const interaction = editor.transient.interaction;
+      if (
+        interaction?.kind !== "move-stair-translation" ||
+        interaction.pointerId !== pointerId ||
+        !editor.draft ||
+        !translatedStaircase
+      )
+        return;
+      const result = updateStaircase(editor.draft, {
+        owningLevelId: interaction.owningLevelId,
+        staircaseId: interaction.staircaseId,
+        staircase: translatedStaircase
+      });
       dispatch(editorTransientInteractionCleared());
-    }
-  }, [dispatch, editor.transient.interaction]);
+      if (!result.ok) {
+        setEditingError("errors.stair.invalid");
+        return;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+      dispatch(
+        editorSelectionChanged(
+          createGeometrySelectionState([
+            selectStaircase(interaction.staircaseId)
+          ])
+        )
+      );
+    },
+    [dispatch, editor.draft, editor.transient.interaction, translatedStaircase]
+  );
 
-  const handleStairAdjustmentPointerUp = useCallback((control: WorldPointXZ, pointerId: number) => {
-    const interaction = editor.transient.interaction;
-    if (interaction?.kind !== "move-stair-adjustment" || interaction.pointerId !== pointerId ||
-        !editor.draft || !selectedStair) return;
-    const staircase = selectedStair.staircase;
-    const proposal = createStairProposal({
-      project: editor.draft,
-      owningLevelId: interaction.owningLevelId,
-      destination: {
-        toLevelId: staircase.toLevelId,
-        ...(staircase.toRoomId ? { toRoomId: staircase.toRoomId } : {})
-      },
-      template: inferStairTemplate(staircase),
-      parameters: getStairAuthoringParameters(staircase),
-      start: staircase.flights[0]?.start ?? control,
-      control,
-      identifiers: {
+  const handleStairTranslationPointerCancel = useCallback(
+    (pointerId: number) => {
+      if (
+        editor.transient.interaction?.kind === "move-stair-translation" &&
+        editor.transient.interaction.pointerId === pointerId
+      ) {
+        dispatch(editorTransientInteractionCleared());
+      }
+    },
+    [dispatch, editor.transient.interaction]
+  );
+
+  const handleStairAdjustmentPointerUp = useCallback(
+    (control: WorldPointXZ, pointerId: number) => {
+      const interaction = editor.transient.interaction;
+      if (
+        interaction?.kind !== "move-stair-adjustment" ||
+        interaction.pointerId !== pointerId ||
+        !editor.draft ||
+        !selectedStair
+      )
+        return;
+      const staircase = selectedStair.staircase;
+      const proposal = createStairProposal({
+        project: editor.draft,
+        owningLevelId: interaction.owningLevelId,
+        destination: {
+          toLevelId: staircase.toLevelId,
+          ...(staircase.toRoomId ? { toRoomId: staircase.toRoomId } : {})
+        },
+        template: inferStairTemplate(staircase),
+        parameters: getStairAuthoringParameters(staircase),
+        start: staircase.flights[0]?.start ?? control,
+        control,
+        identifiers: {
+          staircaseId: staircase.id,
+          flightIds: staircase.flights.map((flight) => flight.id),
+          landingIds: staircase.landings.map((landing) => landing.id)
+        },
+        name: staircase.name
+      });
+      dispatch(editorTransientInteractionCleared());
+      if (!proposal?.valid) {
+        setEditingError("errors.stair.invalid");
+        return;
+      }
+      const editedStaircase = staircase.fromRoomId
+        ? { ...proposal.staircase, fromRoomId: staircase.fromRoomId }
+        : proposal.staircase;
+      const result = updateStaircase(editor.draft, {
+        owningLevelId: interaction.owningLevelId,
         staircaseId: staircase.id,
-        flightIds: staircase.flights.map((flight) => flight.id),
-        landingIds: staircase.landings.map((landing) => landing.id)
-      },
-      name: staircase.name
-    });
-    dispatch(editorTransientInteractionCleared());
-    if (!proposal?.valid) {
-      setEditingError("errors.stair.invalid");
-      return;
-    }
-    const editedStaircase = staircase.fromRoomId
-      ? { ...proposal.staircase, fromRoomId: staircase.fromRoomId }
-      : proposal.staircase;
-    const result = updateStaircase(editor.draft, {
-      owningLevelId: interaction.owningLevelId,
-      staircaseId: staircase.id,
-      staircase: editedStaircase
-    });
-    if (!result.ok) {
-      setEditingError("errors.stair.invalid");
-      return;
-    }
-    setEditingError(undefined);
-    dispatch(editingDraftReplaced(result.project));
-    dispatch(editorSelectionChanged(createGeometrySelectionState([selectStaircase(staircase.id)])));
-  }, [dispatch, editor.draft, editor.transient.interaction, selectedStair]);
+        staircase: editedStaircase
+      });
+      if (!result.ok) {
+        setEditingError("errors.stair.invalid");
+        return;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+      dispatch(
+        editorSelectionChanged(
+          createGeometrySelectionState([selectStaircase(staircase.id)])
+        )
+      );
+    },
+    [dispatch, editor.draft, editor.transient.interaction, selectedStair]
+  );
 
-  const handleStairAdjustmentPointerCancel = useCallback((pointerId: number) => {
-    const interaction = editor.transient.interaction;
-    if (interaction?.kind === "move-stair-adjustment" && interaction.pointerId === pointerId) {
-      dispatch(editorTransientInteractionCleared());
-    }
-  }, [dispatch, editor.transient.interaction]);
+  const handleStairAdjustmentPointerCancel = useCallback(
+    (pointerId: number) => {
+      const interaction = editor.transient.interaction;
+      if (
+        interaction?.kind === "move-stair-adjustment" &&
+        interaction.pointerId === pointerId
+      ) {
+        dispatch(editorTransientInteractionCleared());
+      }
+    },
+    [dispatch, editor.transient.interaction]
+  );
 
   const {
     handleDeleteSelectedWall,
@@ -1979,7 +2645,13 @@ export function ProjectWorkspacePage() {
   });
 
   const handleDeleteSelectedStair = useCallback(() => {
-    if (!editor.draft || !editor.activeLevelId || !selectedStair || saveInteractionBlocked) return;
+    if (
+      !editor.draft ||
+      !editor.activeLevelId ||
+      !selectedStair ||
+      saveInteractionBlocked
+    )
+      return;
     const result = deleteStaircase(editor.draft, {
       owningLevelId: editor.activeLevelId,
       staircaseId: selectedStair.staircase.id
@@ -1991,29 +2663,58 @@ export function ProjectWorkspacePage() {
     setEditingError(undefined);
     dispatch(editorSelectionCleared());
     dispatch(editingDraftReplaced(result.project));
-  }, [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedStair]);
+  }, [
+    dispatch,
+    editor.activeLevelId,
+    editor.draft,
+    saveInteractionBlocked,
+    selectedStair
+  ]);
 
-  const handleUpdateSelectedStair = useCallback((changes: StairParameterChanges): boolean => {
-    if (!editor.draft || !editor.activeLevelId || !selectedStair || saveInteractionBlocked) return false;
-    const staircase = updateStaircaseParameters(selectedStair.staircase, changes);
-    if (!staircase) return false;
-    const result = updateStaircase(editor.draft, {
-      owningLevelId: editor.activeLevelId,
-      staircaseId: staircase.id,
-      staircase
-    });
-    if (!result.ok) {
-      setEditingError("errors.stair.invalid");
-      return false;
-    }
-    setEditingError(undefined);
-    dispatch(editingDraftReplaced(result.project));
-    dispatch(editorSelectionChanged(createGeometrySelectionState([selectStaircase(staircase.id)])));
-    return true;
-  }, [dispatch, editor.activeLevelId, editor.draft, saveInteractionBlocked, selectedStair]);
+  const handleUpdateSelectedStair = useCallback(
+    (changes: StairParameterChanges): boolean => {
+      if (
+        !editor.draft ||
+        !editor.activeLevelId ||
+        !selectedStair ||
+        saveInteractionBlocked
+      )
+        return false;
+      const staircase = updateStaircaseParameters(
+        selectedStair.staircase,
+        changes
+      );
+      if (!staircase) return false;
+      const result = updateStaircase(editor.draft, {
+        owningLevelId: editor.activeLevelId,
+        staircaseId: staircase.id,
+        staircase
+      });
+      if (!result.ok) {
+        setEditingError("errors.stair.invalid");
+        return false;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+      dispatch(
+        editorSelectionChanged(
+          createGeometrySelectionState([selectStaircase(staircase.id)])
+        )
+      );
+      return true;
+    },
+    [
+      dispatch,
+      editor.activeLevelId,
+      editor.draft,
+      saveInteractionBlocked,
+      selectedStair
+    ]
+  );
 
   useEditorKeyboardShortcuts({
-    selectedFurniture: furniture.selected, handleDeleteSelectedFurniture: furniture.remove,
+    selectedFurniture: furniture.selected,
+    handleDeleteSelectedFurniture: furniture.remove,
     dispatch,
     selectedLevel,
     workspaceRepresentation,
@@ -2031,7 +2732,10 @@ export function ProjectWorkspacePage() {
     handleDeleteSelectedWall,
     handleFitViewport,
     handleResetViewport,
-    handleCancelStairAuthoring
+    handleCancelStairAuthoring,
+    selectionCount: selectionState.selected.length,
+    handleDeleteSelection,
+    handleNudgeSelection
   });
 
   const handleModeChange = useCallback(
@@ -2082,18 +2786,20 @@ export function ProjectWorkspacePage() {
     ]
   );
 
-  const handleRepresentationChange = useCallback((
-    representation: ProjectWorkspaceRepresentation | null
-  ) => {
-    if (
-      !representation ||
-      representation === workspaceRepresentation ||
-      saveInteractionBlocked ||
-      (representation === "3d" && workspaceMode === "edit")
-    ) return;
-    setWorkspaceRepresentation(representation);
-    if (representation === "2d") setSelection3D(undefined);
-  }, [saveInteractionBlocked, workspaceMode, workspaceRepresentation]);
+  const handleRepresentationChange = useCallback(
+    (representation: ProjectWorkspaceRepresentation | null) => {
+      if (
+        !representation ||
+        representation === workspaceRepresentation ||
+        saveInteractionBlocked ||
+        (representation === "3d" && workspaceMode === "edit")
+      )
+        return;
+      setWorkspaceRepresentation(representation);
+      if (representation === "2d") setSelection3D(undefined);
+    },
+    [saveInteractionBlocked, workspaceMode, workspaceRepresentation]
+  );
 
   const {
     handleSave,
@@ -2119,16 +2825,21 @@ export function ProjectWorkspacePage() {
     setSaveFeedback
   });
 
-  const handleDisplayOptionsChange = useCallback((options: GeometryDisplayOptions) => {
-    setDisplayOptions(options);
-    if (workspaceMode === "edit") {
-      dispatch(editorDimensionDisplayChanged({
-        overallDimensions: options.overallDimensions,
-        selectedDimensions: options.selectedDimensions,
-        roomMetrics: options.roomMetrics
-      }));
-    }
-  }, [dispatch, workspaceMode]);
+  const handleDisplayOptionsChange = useCallback(
+    (options: GeometryDisplayOptions) => {
+      setDisplayOptions(options);
+      if (workspaceMode === "edit") {
+        dispatch(
+          editorDimensionDisplayChanged({
+            overallDimensions: options.overallDimensions,
+            selectedDimensions: options.selectedDimensions,
+            roomMetrics: options.roomMetrics
+          })
+        );
+      }
+    },
+    [dispatch, workspaceMode]
+  );
 
   const inspector = useMemo(() => {
     if (
@@ -2176,8 +2887,12 @@ export function ProjectWorkspacePage() {
         roomAuthoring={
           editor.activeTool === "room"
             ? {
-                ...(activeRoomShapeKind ? { activeShape: activeRoomShapeKind } : {}),
-                ...(activeRoomBoundaryKind ? { boundaryKind: activeRoomBoundaryKind } : {}),
+                ...(activeRoomShapeKind
+                  ? { activeShape: activeRoomShapeKind }
+                  : {}),
+                ...(activeRoomBoundaryKind
+                  ? { boundaryKind: activeRoomBoundaryKind }
+                  : {}),
                 detectionActive: roomDetectionActive,
                 preset: roomPreset,
                 roomType: roomShapePlacement?.roomType ?? "OTHER",
@@ -2186,15 +2901,20 @@ export function ProjectWorkspacePage() {
                 dimensions: roomShapeDimensions,
                 valid: Boolean(
                   validatedRoomShape &&
-                  (activeRoomBoundaryKind !== "FREE" || validRoomElevation !== undefined) &&
+                  (activeRoomBoundaryKind !== "FREE" ||
+                    validRoomElevation !== undefined) &&
                   (!roomShapePlacement?.origin || roomPlacementValidation?.ok)
                 ),
-                validationIssue: !validatedRoomShape ||
-                  (activeRoomBoundaryKind === "FREE" && validRoomElevation === undefined)
-                  ? "PARAMETERS"
-                  : roomShapePlacement?.origin && roomPlacementValidation && !roomPlacementValidation.ok
-                    ? "TOPOLOGY"
-                    : undefined
+                validationIssue:
+                  !validatedRoomShape ||
+                  (activeRoomBoundaryKind === "FREE" &&
+                    validRoomElevation === undefined)
+                    ? "PARAMETERS"
+                    : roomShapePlacement?.origin &&
+                        roomPlacementValidation &&
+                        !roomPlacementValidation.ok
+                      ? "TOPOLOGY"
+                      : undefined
               }
             : undefined
         }
@@ -2207,7 +2927,9 @@ export function ProjectWorkspacePage() {
                 levels: activeProject?.building.levels ?? [],
                 owningLevelId: stairPlacement.owningLevelId,
                 targetLevelId: stairPlacement.toLevelId,
-                ...(stairPlacement.toRoomId ? { targetRoomId: stairPlacement.toRoomId } : {}),
+                ...(stairPlacement.toRoomId
+                  ? { targetRoomId: stairPlacement.toRoomId }
+                  : {}),
                 template: stairPlacement.template,
                 parameters: stairPlacement.parameters,
                 proposal: stairProposal,
@@ -2227,7 +2949,9 @@ export function ProjectWorkspacePage() {
         onDeleteOpening={handleDeleteSelectedOpening}
         onUpdateOpening={handleUpdateSelectedOpening}
         onUpdateOpeningAuthoring={handleUpdateOpeningAuthoring}
-        onUpdateOpeningAuthoringType={(openingType) => dispatch(editorOpeningAuthoringTypeChanged(openingType))}
+        onUpdateOpeningAuthoringType={(openingType) =>
+          dispatch(editorOpeningAuthoringTypeChanged(openingType))
+        }
         onUpdateRoomAuthoringDimension={handleRoomShapeDimensionChange}
         onRoomAuthoringMethodChange={handleRoomMethodChange}
         onRoomAuthoringShapeChange={(shape) => {
@@ -2244,10 +2968,28 @@ export function ProjectWorkspacePage() {
         onUpdateStair={handleUpdateSelectedStair}
         onStairAuthoringTemplateChange={handleStairTemplateChange}
         onStairAuthoringDestinationChange={handleStairDestinationChange}
-        onStairAuthoringTurnChange={(turnDirection) => dispatch(editorStairAuthoringChanged({ turnDirection }))}
+        onStairAuthoringTurnChange={(turnDirection) =>
+          dispatch(editorStairAuthoringChanged({ turnDirection }))
+        }
         onStairAuthoringParametersChange={handleStairParametersChange}
         onConfirmStairAuthoring={handleConfirmStairAuthoring}
         onCancelStairAuthoring={handleCancelStairAuthoring}
+        selectionCapabilities={selectionCapabilities}
+        onDeleteSelection={handleDeleteSelection}
+        onDuplicateSelection={furniture.duplicate}
+        multiSelectionFurniture={
+          selectionState.selected.length > 1 &&
+          selectionState.selected.every(
+            (selection) => selection.kind === "FURNITURE"
+          )
+            ? selectionState.selected.flatMap((selection) => {
+                const item = activeProject?.building.furniture.find(
+                  (candidate) => candidate.id === selection.geometryId
+                );
+                return item ? [item] : [];
+              })
+            : undefined
+        }
       />
     );
   }, [
@@ -2300,6 +3042,8 @@ export function ProjectWorkspacePage() {
     handleStairParametersChange,
     handleConfirmStairAuthoring,
     handleCancelStairAuthoring,
+    selectionCapabilities,
+    handleDeleteSelection,
     handleDisplayOptionsChange,
     workspaceRepresentation,
     scene3DResult,
@@ -2311,85 +3055,117 @@ export function ProjectWorkspacePage() {
   const shellContent = useMemo(
     () => ({
       title: projectResponse?.project.name ?? t("shell.title"),
-      breadcrumb: workspaceMode === "edit"
-        ? t("workspace.editingLevel", { level: activeProjectLevel?.name ?? "" })
-        : t("shell.breadcrumb"),
-      headerContextAccessory: !isPhone && projectResponse && !consistencyFailure ? (
-        <ProjectLevelControl
-          mode={workspaceMode}
-          viewLevels={viewLevels}
-          selectedViewLevel={selectedViewLevel}
-          draftLevelIds={editor.draft?.building.levels.map((level) => ({
-            id: level.id,
-            name: level.name,
-            elevation: level.elevation
-          })) ?? []}
-          projectLevelNames={projectResponse.project.building.levels.map((level) => ({
-            id: level.id,
-            name: level.name
-          }))}
-          activeEditLevelId={editor.activeLevelId}
-          onViewLevelChange={setSelectedViewLevelId}
-          onEditLevelChange={(levelId) => dispatch(editorActiveLevelChanged(levelId))}
-          onCreateLevel={handleCreateLevel}
-          onUpdateActiveLevel={handleUpdateActiveLevel}
-        />
-      ) : undefined,
-      headerCenter: !isPhone && projectResponse && !consistencyFailure && workspaceMode === "view" ? (
+      breadcrumb:
+        workspaceMode === "edit"
+          ? t("workspace.editingLevel", {
+              level: activeProjectLevel?.name ?? ""
+            })
+          : t("shell.breadcrumb"),
+      headerContextAccessory:
+        !isPhone && projectResponse && !consistencyFailure ? (
+          <ProjectLevelControl
+            mode={workspaceMode}
+            viewLevels={viewLevels}
+            selectedViewLevel={selectedViewLevel}
+            draftLevelIds={
+              editor.draft?.building.levels.map((level) => ({
+                id: level.id,
+                name: level.name,
+                elevation: level.elevation
+              })) ?? []
+            }
+            projectLevelNames={projectResponse.project.building.levels.map(
+              (level) => ({
+                id: level.id,
+                name: level.name
+              })
+            )}
+            activeEditLevelId={editor.activeLevelId}
+            onViewLevelChange={setSelectedViewLevelId}
+            onEditLevelChange={(levelId) =>
+              dispatch(editorActiveLevelChanged(levelId))
+            }
+            onCreateLevel={handleCreateLevel}
+            onUpdateActiveLevel={handleUpdateActiveLevel}
+          />
+        ) : undefined,
+      headerCenter:
+        !isPhone &&
+        projectResponse &&
+        !consistencyFailure &&
+        workspaceMode === "view" ? (
           <WorkspaceRepresentationControl
             representation={workspaceRepresentation}
             disabled={saveInteractionBlocked}
             threeDDisabled={false}
             onChange={handleRepresentationChange}
           />
-      ) : undefined,
-      headerAccessory: !isPhone && projectResponse && !consistencyFailure ? (
-        workspaceMode === "view" ? (
-          <ProjectViewEditAction
-            fromThreeD={workspaceRepresentation === "3d"}
-            disabled={saveInteractionBlocked}
-            onEdit={() => handleModeChange("edit")}
+        ) : undefined,
+      headerAccessory:
+        !isPhone && projectResponse && !consistencyFailure ? (
+          workspaceMode === "view" ? (
+            <ProjectViewEditAction
+              fromThreeD={workspaceRepresentation === "3d"}
+              disabled={saveInteractionBlocked}
+              onEdit={() => handleModeChange("edit")}
+            />
+          ) : (
+            <ProjectEditHeaderActions
+              dirty={editor.dirty}
+              disabled={saveInteractionBlocked}
+              canUndo={editor.history.past.length > 0}
+              canRedo={editor.history.future.length > 0}
+              onBack={() => handleModeChange("view")}
+              onUndo={() => dispatch(editorUndoRequested())}
+              onRedo={() => dispatch(editorRedoRequested())}
+              onDiscard={() => setPersistenceDialog("discard")}
+              onSave={handleSave}
+            />
+          )
+        ) : undefined,
+      inspector: isTablet || isPhone ? undefined : inspector,
+      status:
+        workspaceRepresentation === "3d" && scene3DResult?.ok ? (
+          t("threeD.status", {
+            count: getVisibleLevelReferences3D(
+              scene3DResult.model,
+              levelVisibility3D,
+              activeLevelId3D
+            ).length
+          })
+        ) : selectedLevel && activeProject ? (
+          <ProjectEditorStatusBar
+            scale={
+              workspaceMode === "edit"
+                ? editor.presentation.scaleDenominator
+                : 75
+            }
+            units={activeProject.units}
+            gridVisible={
+              workspaceMode === "edit" && editor.precision.gridVisible
+            }
+            snapToGrid={workspaceMode === "edit" && editor.precision.snapToGrid}
+            gridSpacing={editor.precision.gridSpacing}
+            zoom={activeViewport.zoom}
+            editing={workspaceMode === "edit"}
+            onScaleChange={(scale) =>
+              dispatch(editorDocumentScaleChanged(scale))
+            }
+            onGridVisibleChange={(visible) =>
+              dispatch(editorGridVisibilityChanged(visible))
+            }
+            onSnapToGridChange={(enabled) =>
+              dispatch(editorGridSnappingChanged(enabled))
+            }
+            onGridSpacingChange={(spacing) =>
+              dispatch(editorGridSpacingChanged(spacing))
+            }
+            onZoom={handleZoomViewport}
+            onFit={handleFitViewport}
           />
         ) : (
-          <ProjectEditHeaderActions
-            dirty={editor.dirty}
-            disabled={saveInteractionBlocked}
-            canUndo={editor.history.past.length > 0}
-            canRedo={editor.history.future.length > 0}
-            onBack={() => handleModeChange("view")}
-            onUndo={() => dispatch(editorUndoRequested())}
-            onRedo={() => dispatch(editorRedoRequested())}
-            onDiscard={() => setPersistenceDialog("discard")}
-            onSave={handleSave}
-          />
-        )
-      ) : undefined,
-      inspector: isTablet || isPhone ? undefined : inspector,
-      status: workspaceRepresentation === "3d" && scene3DResult?.ok ? (
-        t("threeD.status", {
-          count: getVisibleLevelReferences3D(
-            scene3DResult.model,
-            levelVisibility3D,
-            activeLevelId3D
-          ).length
-        })
-      ) : selectedLevel && activeProject ? (
-        <ProjectEditorStatusBar
-          scale={workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75}
-          units={activeProject.units}
-          gridVisible={workspaceMode === "edit" && editor.precision.gridVisible}
-          snapToGrid={workspaceMode === "edit" && editor.precision.snapToGrid}
-          gridSpacing={editor.precision.gridSpacing}
-          zoom={activeViewport.zoom}
-          editing={workspaceMode === "edit"}
-          onScaleChange={(scale) => dispatch(editorDocumentScaleChanged(scale))}
-          onGridVisibleChange={(visible) => dispatch(editorGridVisibilityChanged(visible))}
-          onSnapToGridChange={(enabled) => dispatch(editorGridSnappingChanged(enabled))}
-          onGridSpacingChange={(spacing) => dispatch(editorGridSpacingChanged(spacing))}
-          onZoom={handleZoomViewport}
-          onFit={handleFitViewport}
-        />
-      ) : t("status.unavailable"),
+          t("status.unavailable")
+        ),
       immersiveWorkspace: true
     }),
     [
@@ -2464,7 +3240,9 @@ export function ProjectWorkspacePage() {
   }
   if (!projectResponse || !geometryResponse) {
     return (
-      <ProjectWorkspaceError error={new Error("Query completed without data.")} />
+      <ProjectWorkspaceError
+        error={new Error("Query completed without data.")}
+      />
     );
   }
   if (consistencyFailure && !saveInteractionBlocked) {
@@ -2521,9 +3299,7 @@ export function ProjectWorkspacePage() {
           variant="filled"
           onClose={() => setSaveFeedback(undefined)}
         >
-          {saveFeedback
-            ? t(`persistence.feedback.${saveFeedback}`)
-            : ""}
+          {saveFeedback ? t(`persistence.feedback.${saveFeedback}`) : ""}
         </Alert>
       </Snackbar>
 
@@ -2542,7 +3318,11 @@ export function ProjectWorkspacePage() {
         scene3DResult?.ok ? (
           <Suspense
             fallback={
-              <Stack role="status" spacing={1.5} sx={{ alignItems: "center", py: 8 }}>
+              <Stack
+                role="status"
+                spacing={1.5}
+                sx={{ alignItems: "center", py: 8 }}
+              >
                 <CircularProgress size={28} />
                 <Typography>{t("threeD.loading")}</Typography>
               </Stack>
@@ -2589,15 +3369,28 @@ export function ProjectWorkspacePage() {
           options={resolvedDisplayOptions}
           viewport={activeViewport}
           selectionState={selectionState}
+          selectionFootprints={selectionFootprints}
           onSelectionStateChange={handleSelectionStateChange}
+          onSelectionTranslationPointerDown={
+            handleSelectionTranslationPointerDown
+          }
+          onSelectionTranslationPointerUp={handleSelectionTranslationPointerUp}
+          onSelectionTranslationPointerCancel={
+            handleSelectionTranslationPointerCancel
+          }
           onViewportChange={setViewport}
           onFitViewport={handleFitViewport}
           onResetViewport={handleResetViewport}
           onZoomViewport={handleZoomViewport}
-          documentScaleDenominator={workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75}
-          onDocumentScaleChange={workspaceMode === "edit"
-            ? (denominator) => dispatch(editorDocumentScaleChanged(denominator))
-            : undefined}
+          documentScaleDenominator={
+            workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75
+          }
+          onDocumentScaleChange={
+            workspaceMode === "edit"
+              ? (denominator) =>
+                  dispatch(editorDocumentScaleChanged(denominator))
+              : undefined
+          }
           levelMeasurement={activeLevelMeasurement}
           units={activeProject?.units}
           statusLabel={t(
@@ -2614,18 +3407,25 @@ export function ProjectWorkspacePage() {
               : undefined
           }
           editorOverlay={editorOverlay}
-          furnitureModel={{ items: furniture.model, preview: furniture.preview, previewValid: furniture.previewValid, editing: workspaceMode === "edit" && !saveInteractionBlocked }}
+          furnitureModel={{
+            items: furniture.model,
+            preview: furniture.preview,
+            previewValid: furniture.previewValid,
+            editing: workspaceMode === "edit" && !saveInteractionBlocked
+          }}
           onFurniturePointerDown={furniture.beginGesture}
           onFurniturePointerUp={furniture.endGesture}
           onFurniturePointerCancel={furniture.cancel}
           onEditorCanvasClick={(pointer) => {
-            if (editor.activeTool === "furniture") furniture.canvasClick(pointer);
+            if (editor.activeTool === "furniture")
+              furniture.canvasClick(pointer);
             else handleEditorCanvasClick(pointer);
           }}
           onEditorPointerMove={(pointer, pointerId) => {
             if (viewportPanModifierActive) return;
             furniture.pointerMove(pointer, pointerId);
-            if (!furniture.transient) handleEditorPointerMove(pointer, pointerId);
+            if (!furniture.transient)
+              handleEditorPointerMove(pointer, pointerId);
           }}
           onWallEndpointPointerDown={handleWallEndpointPointerDown}
           onWallEndpointPointerUp={handleWallEndpointPointerUp}
@@ -2641,12 +3441,14 @@ export function ProjectWorkspacePage() {
           onStairTranslationPointerDown={handleStairTranslationPointerDown}
           onStairTranslationPointerUp={handleStairTranslationPointerUp}
           onStairTranslationPointerCancel={handleStairTranslationPointerCancel}
-          onRoomFaceCandidateClick={viewportPanModifierActive
-            ? undefined
-            : (faceKey) => {
-                dispatch(editorSelectionCleared());
-                handleCreateRoom(faceKey);
-              }}
+          onRoomFaceCandidateClick={
+            viewportPanModifierActive
+              ? undefined
+              : (faceKey) => {
+                  dispatch(editorSelectionCleared());
+                  handleCreateRoom(faceKey);
+                }
+          }
         />
       ) : (
         <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>

@@ -29,7 +29,10 @@ import {
   GeometrySvgViewer,
   type SvgViewportPointer
 } from "./GeometrySvgViewer";
-import type { ViewportState, WorldPointXZ } from "../viewport/viewport-transform-2d";
+import type {
+  ViewportState,
+  WorldPointXZ
+} from "../viewport/viewport-transform-2d";
 import type { ProjectEditorInteraction } from "../../editor-2d/state/project-editor-tools";
 import type { WallEndpoint } from "@casastudio/schema";
 import {
@@ -44,7 +47,14 @@ import {
 } from "@casastudio/geometry";
 
 /** Props for the shared interactive 2D geometry viewer panel. */
-export type GeometryViewerPanelProps = Pick<GeometrySvgViewerProps, "furnitureModel" | "onFurniturePointerDown" | "onFurniturePointerUp" | "onFurniturePointerCancel"> & {
+export type GeometryViewerPanelProps = Pick<
+  GeometrySvgViewerProps,
+  | "furnitureModel"
+  | "selectionFootprints"
+  | "onFurniturePointerDown"
+  | "onFurniturePointerUp"
+  | "onFurniturePointerCancel"
+> & {
   /** Whether the surrounding Project shell owns all viewer chrome. */
   readonly workspaceCanvas?: boolean;
   readonly title: string;
@@ -58,12 +68,17 @@ export type GeometryViewerPanelProps = Pick<GeometrySvgViewerProps, "furnitureMo
   readonly onSelectionStateChange: (
     selectionState: GeometrySelectionState
   ) => void;
+  readonly onSelectionTranslationPointerDown?: GeometrySvgViewerProps["onSelectionTranslationPointerDown"];
+  readonly onSelectionTranslationPointerUp?: GeometrySvgViewerProps["onSelectionTranslationPointerUp"];
+  readonly onSelectionTranslationPointerCancel?: GeometrySvgViewerProps["onSelectionTranslationPointerCancel"];
   readonly onViewportChange: (viewport: ViewportState) => void;
   readonly onFitViewport: () => void;
   readonly onResetViewport: () => void;
   readonly onZoomViewport: (zoomFactor: number) => void;
   readonly documentScaleDenominator?: ArchitecturalScaleDenominator;
-  readonly onDocumentScaleChange?: (denominator: ArchitecturalScaleDenominator) => void;
+  readonly onDocumentScaleChange?: (
+    denominator: ArchitecturalScaleDenominator
+  ) => void;
   readonly levelMeasurement?: LevelMeasurement;
   readonly units?: Pick<Units, "length">;
   readonly statusLabel?: string;
@@ -84,22 +99,40 @@ export type GeometryViewerPanelProps = Pick<GeometrySvgViewerProps, "furnitureMo
   ) => void;
   readonly onWallEndpointPointerCancel?: (pointerId: number) => void;
   readonly onJunctionPointerDown?: (pointerId: number) => void;
-  readonly onOpeningPointerDown?: (openingId: string, wallId: string, pointerId: number) => void;
+  readonly onOpeningPointerDown?: (
+    openingId: string,
+    wallId: string,
+    pointerId: number
+  ) => void;
   readonly onOpeningDragThresholdCrossed?: (pointerId: number) => void;
   readonly onOpeningPointerUp?: (pointerId: number, dragged: boolean) => void;
   readonly onOpeningPointerCancel?: (pointerId: number) => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
-  readonly onStairAdjustmentPointerDown?: (staircaseId: string, pointerId: number) => void;
-  readonly onStairAdjustmentPointerUp?: (point: WorldPointXZ, pointerId: number) => void;
+  readonly onStairAdjustmentPointerDown?: (
+    staircaseId: string,
+    pointerId: number
+  ) => void;
+  readonly onStairAdjustmentPointerUp?: (
+    point: WorldPointXZ,
+    pointerId: number
+  ) => void;
   readonly onStairAdjustmentPointerCancel?: (pointerId: number) => void;
-  readonly onStairTranslationPointerDown?: (staircaseId: string, point: WorldPointXZ, pointerId: number) => void;
+  readonly onStairTranslationPointerDown?: (
+    staircaseId: string,
+    point: WorldPointXZ,
+    pointerId: number
+  ) => void;
   readonly onStairTranslationPointerUp?: (pointerId: number) => void;
   readonly onStairTranslationPointerCancel?: (pointerId: number) => void;
 };
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
 export function GeometryViewerPanel({
-  furnitureModel, onFurniturePointerDown, onFurniturePointerUp, onFurniturePointerCancel,
+  furnitureModel,
+  selectionFootprints,
+  onFurniturePointerDown,
+  onFurniturePointerUp,
+  onFurniturePointerCancel,
   workspaceCanvas = false,
   title,
   headingId,
@@ -110,6 +143,9 @@ export function GeometryViewerPanel({
   viewport,
   selectionState,
   onSelectionStateChange,
+  onSelectionTranslationPointerDown,
+  onSelectionTranslationPointerUp,
+  onSelectionTranslationPointerCancel,
   onViewportChange,
   onFitViewport,
   onResetViewport,
@@ -144,54 +180,72 @@ export function GeometryViewerPanel({
   return (
     <Paper
       component="section"
-      className={workspaceCanvas ? "geometry-viewer-panel geometry-viewer-panel--workspace" : "geometry-viewer-panel"}
+      className={
+        workspaceCanvas
+          ? "geometry-viewer-panel geometry-viewer-panel--workspace"
+          : "geometry-viewer-panel"
+      }
       aria-labelledby={headingId}
       variant="outlined"
     >
-      {!workspaceCanvas ? <Box className="geometry-viewer-panel__toolbar">
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: "center", minWidth: 0 }}
-        >
-          <Typography variant="subtitle2" component="h2" id={headingId} noWrap>
-            {title}
-          </Typography>
-          <Chip
-            label={statusLabel ?? t("viewer.readOnly")}
-            size="small"
-            variant="outlined"
-          />
-        </Stack>
-        <Stack
-          direction="row"
-          spacing={0.25}
-          role="toolbar"
-          aria-label={t("toolbar.label")}
-        >
-          <ViewportButton
-            label={t("toolbar.zoomOut")}
-            onClick={() => onZoomViewport(0.85)}
+      {!workspaceCanvas ? (
+        <Box className="geometry-viewer-panel__toolbar">
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: "center", minWidth: 0 }}
           >
-            <ZoomOutRoundedIcon fontSize="small" />
-          </ViewportButton>
-          <ViewportButton
-            label={t("toolbar.zoomIn")}
-            onClick={() => onZoomViewport(1.18)}
+            <Typography
+              variant="subtitle2"
+              component="h2"
+              id={headingId}
+              noWrap
+            >
+              {title}
+            </Typography>
+            <Chip
+              label={statusLabel ?? t("viewer.readOnly")}
+              size="small"
+              variant="outlined"
+            />
+          </Stack>
+          <Stack
+            direction="row"
+            spacing={0.25}
+            role="toolbar"
+            aria-label={t("toolbar.label")}
           >
-            <ZoomInRoundedIcon fontSize="small" />
-          </ViewportButton>
-          <ViewportButton label={t("toolbar.fit")} onClick={onFitViewport}>
-            <FitScreenRoundedIcon fontSize="small" />
-          </ViewportButton>
-          <ViewportButton label={t("toolbar.reset")} onClick={onResetViewport}>
-            <RestartAltRoundedIcon fontSize="small" />
-          </ViewportButton>
-        </Stack>
-      </Box> : null}
+            <ViewportButton
+              label={t("toolbar.zoomOut")}
+              onClick={() => onZoomViewport(0.85)}
+            >
+              <ZoomOutRoundedIcon fontSize="small" />
+            </ViewportButton>
+            <ViewportButton
+              label={t("toolbar.zoomIn")}
+              onClick={() => onZoomViewport(1.18)}
+            >
+              <ZoomInRoundedIcon fontSize="small" />
+            </ViewportButton>
+            <ViewportButton label={t("toolbar.fit")} onClick={onFitViewport}>
+              <FitScreenRoundedIcon fontSize="small" />
+            </ViewportButton>
+            <ViewportButton
+              label={t("toolbar.reset")}
+              onClick={onResetViewport}
+            >
+              <RestartAltRoundedIcon fontSize="small" />
+            </ViewportButton>
+          </Stack>
+        </Box>
+      ) : null}
       <Box className="geometry-viewer-panel__canvas">
         <GeometrySvgViewer
-          furnitureModel={furnitureModel} onFurniturePointerDown={onFurniturePointerDown} onFurniturePointerUp={onFurniturePointerUp} onFurniturePointerCancel={onFurniturePointerCancel}
+          furnitureModel={furnitureModel}
+          selectionFootprints={selectionFootprints}
+          onFurniturePointerDown={onFurniturePointerDown}
+          onFurniturePointerUp={onFurniturePointerUp}
+          onFurniturePointerCancel={onFurniturePointerCancel}
           presentationModel={presentationModel}
           architecturalModel={architecturalModel}
           dimensionModel={dimensionModel}
@@ -199,6 +253,11 @@ export function GeometryViewerPanel({
           viewport={viewport}
           selectionState={selectionState}
           onSelectionStateChange={onSelectionStateChange}
+          onSelectionTranslationPointerDown={onSelectionTranslationPointerDown}
+          onSelectionTranslationPointerUp={onSelectionTranslationPointerUp}
+          onSelectionTranslationPointerCancel={
+            onSelectionTranslationPointerCancel
+          }
           onViewportChange={onViewportChange}
           interaction={interaction}
           editorOverlay={editorOverlay}
@@ -224,43 +283,95 @@ export function GeometryViewerPanel({
           <Typography variant="caption">{t("viewer.canvasHint")}</Typography>
         </Box>
       </Box>
-      {!workspaceCanvas ? <Box className="geometry-viewer-panel__technical-bar" role="group" aria-label={t("toolbar.technical")}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-          {documentScaleDenominator ? (
-            onDocumentScaleChange ? (
-              <FormControl size="small" className="geometry-document-scale">
-                <InputLabel id="geometry-document-scale-label">{t("toolbar.scale")}</InputLabel>
-                <Select
-                  labelId="geometry-document-scale-label"
-                  label={t("toolbar.scale")}
-                  value={documentScaleDenominator}
-                  onChange={(event) => onDocumentScaleChange(event.target.value as ArchitecturalScaleDenominator)}
-                >
-                  {architecturalScaleDenominators.map((denominator) => (
-                    <MenuItem key={denominator} value={denominator}>1:{denominator}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            ) : (
-              <Chip size="small" variant="outlined" label={`${t("toolbar.scale")}: 1:${documentScaleDenominator}`} />
-            )
-          ) : null}
-          <Chip size="small" variant="outlined" label={`${t("toolbar.zoom")}: ${Math.round(viewport.zoom * 100)}%`} />
-        </Stack>
-        {levelMeasurement && units ? (
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {levelMeasurement.rooms.length > 0 ? (
-              <Typography variant="caption">{t("metrics.totalArea")}: {formatArchitecturalArea(levelMeasurement.totalRoomArea, units.length)}</Typography>
+      {!workspaceCanvas ? (
+        <Box
+          className="geometry-viewer-panel__technical-bar"
+          role="group"
+          aria-label={t("toolbar.technical")}
+        >
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: "center", flexWrap: "wrap" }}
+          >
+            {documentScaleDenominator ? (
+              onDocumentScaleChange ? (
+                <FormControl size="small" className="geometry-document-scale">
+                  <InputLabel id="geometry-document-scale-label">
+                    {t("toolbar.scale")}
+                  </InputLabel>
+                  <Select
+                    labelId="geometry-document-scale-label"
+                    label={t("toolbar.scale")}
+                    value={documentScaleDenominator}
+                    onChange={(event) =>
+                      onDocumentScaleChange(
+                        event.target.value as ArchitecturalScaleDenominator
+                      )
+                    }
+                  >
+                    {architecturalScaleDenominators.map((denominator) => (
+                      <MenuItem key={denominator} value={denominator}>
+                        1:{denominator}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`${t("toolbar.scale")}: 1:${documentScaleDenominator}`}
+                />
+              )
             ) : null}
-            {levelMeasurement.plan ? (
-              <>
-                <Typography variant="caption">{t("metrics.width")}: {formatArchitecturalLength(levelMeasurement.plan.width, units.length)}</Typography>
-                <Typography variant="caption">{t("metrics.depth")}: {formatArchitecturalLength(levelMeasurement.plan.depth, units.length)}</Typography>
-              </>
-            ) : null}
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${t("toolbar.zoom")}: ${Math.round(viewport.zoom * 100)}%`}
+            />
           </Stack>
-        ) : null}
-      </Box> : null}
+          {levelMeasurement && units ? (
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                alignItems: "center",
+                flexWrap: "wrap",
+                justifyContent: "flex-end"
+              }}
+            >
+              {levelMeasurement.rooms.length > 0 ? (
+                <Typography variant="caption">
+                  {t("metrics.totalArea")}:{" "}
+                  {formatArchitecturalArea(
+                    levelMeasurement.totalRoomArea,
+                    units.length
+                  )}
+                </Typography>
+              ) : null}
+              {levelMeasurement.plan ? (
+                <>
+                  <Typography variant="caption">
+                    {t("metrics.width")}:{" "}
+                    {formatArchitecturalLength(
+                      levelMeasurement.plan.width,
+                      units.length
+                    )}
+                  </Typography>
+                  <Typography variant="caption">
+                    {t("metrics.depth")}:{" "}
+                    {formatArchitecturalLength(
+                      levelMeasurement.plan.depth,
+                      units.length
+                    )}
+                  </Typography>
+                </>
+              ) : null}
+            </Stack>
+          ) : null}
+        </Box>
+      ) : null}
     </Paper>
   );
 }

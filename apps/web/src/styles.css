@@ -1072,6 +1072,36 @@ img {
   cursor: grabbing;
 }
 
+.geometry-selection-box {
+  fill: rgba(36, 108, 175, 0.08);
+  pointer-events: none;
+  stroke: #246caf;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-selection-box--crossing {
+  fill: rgba(47, 125, 91, 0.08);
+  stroke: #2f7d5b;
+  stroke-dasharray: 6 4;
+}
+
+.geometry-selection-translation-source,
+.geometry-selection-translation-destination {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(36, 108, 175, 0.45);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-selection-translation-destination {
+  fill: rgba(36, 108, 175, 0.07);
+  stroke: #246caf;
+  stroke-width: 1.5;
+}
+
 .geometry-svg--pan,
 .geometry-svg--pan * {
   cursor: grab !important;

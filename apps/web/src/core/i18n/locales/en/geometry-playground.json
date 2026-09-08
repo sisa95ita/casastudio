@@ -50,6 +50,8 @@
     "doorTool": "Door tool",
     "stairTool": "Stair tool",
     "windowTool": "Window tool",
+    "wallOpeningTool": "Wall Opening tool",
+    "roomTool": "Room tool",
     "measureTool": "Measure tool",
     "furnitureTool": "Furniture tool"
   },

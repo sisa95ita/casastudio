@@ -415,6 +415,9 @@
     "opening": {
       "invalid": "The opening cannot be placed or changed because it would violate wall clearance, collision, or dimension constraints."
     },
+    "selection": {
+      "invalid": "The selected entities cannot complete that operation together."
+    },
     "stair": {
       "invalid": "The staircase could not be created or changed because its connection or geometry is invalid."
     }
@@ -489,12 +492,21 @@
       "windows_other": "{{count}} Windows",
       "openings_one": "{{count}} Wall Opening",
       "openings_other": "{{count}} Wall Openings",
-      "stairs_one": "{{count}} Stair part",
-      "stairs_other": "{{count}} Stair parts",
+      "stairs_one": "{{count}} Staircase",
+      "stairs_other": "{{count}} Staircases",
+      "furniture_one": "{{count}} Furniture item",
+      "furniture_other": "{{count}} Furniture items",
       "junctions_one": "{{count}} Junction",
       "junctions_other": "{{count}} Junctions"
     },
     "moveJunction": "Move junction",
+    "commonActions": "Common actions",
+    "moveHint": "Move by dragging a selected object or using the arrow keys",
+    "duplicate": "Duplicate",
+    "delete": "Delete selected",
+    "sharedProperties": "Shared properties",
+    "rotation": "Rotation",
+    "mixed": "Mixed",
     "selectRoomRegion": "Select room region",
     "labels": {
       "type": "Type",

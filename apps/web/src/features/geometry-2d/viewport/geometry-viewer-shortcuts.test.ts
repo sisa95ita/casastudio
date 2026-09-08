@@ -29,9 +29,19 @@ describe("geometry viewer shortcuts", () => {
         key: "R",
         altKey: false,
         ctrlKey: false,
-        metaKey: false
+        metaKey: false,
+        shiftKey: true
       })
     ).toBe("RESET_VIEWPORT");
+    expect(
+      getGeometryViewerShortcutAction({
+        key: "R",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false
+      })
+    ).toBeUndefined();
     expect(
       getGeometryViewerShortcutAction({
         key: "Delete",
@@ -74,7 +84,9 @@ describe("geometry viewer shortcuts", () => {
 
   it("documents temporary pan and both Redo bindings without duplicate actions", () => {
     expect(
-      geometryEditorShortcuts.filter((shortcut) => shortcut.translationKey === "shortcuts.redo")
+      geometryEditorShortcuts.filter(
+        (shortcut) => shortcut.translationKey === "shortcuts.redo"
+      )
     ).toEqual([
       expect.objectContaining({
         action: "REDO",
@@ -87,6 +99,12 @@ describe("geometry viewer shortcuts", () => {
         key: "Space + drag",
         translationKey: "shortcuts.panViewport"
       })
+    );
+    expect(geometryEditorShortcuts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "ROOM_TOOL", key: "R" }),
+        expect.objectContaining({ action: "WALL_OPENING_TOOL", key: "O" })
+      ])
     );
   });
 

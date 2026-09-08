@@ -14,9 +14,7 @@ import {
   type ProjectEditorTransientState,
   type ProjectWorkspaceMode
 } from "../state/project-editor-slice";
-import {
-  geometrySelectionCleared
-} from "../state/viewer-slice";
+import { geometrySelectionCleared } from "../state/viewer-slice";
 import {
   getGeometryViewerShortcutAction,
   isEditableShortcutTarget
@@ -31,7 +29,10 @@ type UseEditorKeyboardShortcutsOptions = {
   readonly shortcutsOpen: boolean;
   readonly saveInteractionBlocked: boolean;
   readonly workspaceMode: ProjectWorkspaceMode;
-  readonly selectedEditOpening?: { readonly wall: Wall; readonly opening: Opening };
+  readonly selectedEditOpening?: {
+    readonly wall: Wall;
+    readonly opening: Opening;
+  };
   readonly selectedRoom?: Room;
   readonly selectedStair?: { readonly staircase: Staircase };
   readonly selectedEditWall?: Wall;
@@ -43,11 +44,18 @@ type UseEditorKeyboardShortcutsOptions = {
   readonly handleFitViewport: () => void;
   readonly handleResetViewport: () => void;
   readonly handleCancelStairAuthoring: () => void;
+  readonly selectionCount?: number;
+  readonly handleDeleteSelection?: () => void;
+  readonly handleNudgeSelection?: (delta: {
+    readonly x: number;
+    readonly z: number;
+  }) => void;
 };
 
 /** Registers the Project editor keyboard interaction contract. */
 export function useEditorKeyboardShortcuts({
-  selectedFurniture, handleDeleteSelectedFurniture,
+  selectedFurniture,
+  handleDeleteSelectedFurniture,
   dispatch,
   selectedLevel,
   workspaceRepresentation,
@@ -65,7 +73,10 @@ export function useEditorKeyboardShortcuts({
   handleDeleteSelectedWall,
   handleFitViewport,
   handleResetViewport,
-  handleCancelStairAuthoring
+  handleCancelStairAuthoring,
+  selectionCount = 0,
+  handleDeleteSelection,
+  handleNudgeSelection
 }: UseEditorKeyboardShortcutsOptions) {
   useEffect(() => {
     if (!selectedLevel) {
@@ -79,14 +90,17 @@ export function useEditorKeyboardShortcuts({
       if (
         typeof target?.closest === "function" &&
         target.closest('[role="dialog"]')
-      ) return;
+      )
+        return;
       const isTextInput = isEditableShortcutTarget(target);
       const modifier = event.metaKey || event.ctrlKey;
       if (workspaceMode === "edit" && modifier && !isTextInput) {
         const key = event.key.toLowerCase();
         if (key === "z") {
           event.preventDefault();
-          dispatch(event.shiftKey ? editorRedoRequested() : editorUndoRequested());
+          dispatch(
+            event.shiftKey ? editorRedoRequested() : editorUndoRequested()
+          );
           return;
         }
         if (key === "y") {
@@ -96,16 +110,45 @@ export function useEditorKeyboardShortcuts({
         }
       }
       if (workspaceMode === "edit" && !modifier && !isTextInput) {
-        if (event.key === "Escape" && transient.interaction?.kind === "place-stair") {
+        if (
+          event.key === "Escape" &&
+          transient.interaction?.kind === "place-stair"
+        ) {
           event.preventDefault();
           handleCancelStairAuthoring();
           return;
         }
         const key = event.key.toLowerCase();
-        if (key === "d" || key === "n") {
+        if (
+          transient.interaction === null &&
+          selectionCount > 0 &&
+          event.key.startsWith("Arrow")
+        ) {
+          const distance = event.shiftKey ? 10 : 1;
+          const delta =
+            event.key === "ArrowLeft"
+              ? { x: -distance, z: 0 }
+              : event.key === "ArrowRight"
+                ? { x: distance, z: 0 }
+                : event.key === "ArrowUp"
+                  ? { x: 0, z: distance }
+                  : event.key === "ArrowDown"
+                    ? { x: 0, z: -distance }
+                    : undefined;
+          if (delta) {
+            event.preventDefault();
+            handleNudgeSelection?.(delta);
+            return;
+          }
+        }
+        if (key === "d" || key === "n" || key === "o") {
           event.preventDefault();
-          const openingType = key === "d" ? "DOOR" : "WINDOW";
-          if (transient.interaction?.kind === "place-opening" && transient.interaction.openingType === openingType) {
+          const openingType =
+            key === "d" ? "DOOR" : key === "n" ? "WINDOW" : "OPENING";
+          if (
+            transient.interaction?.kind === "place-opening" &&
+            transient.interaction.openingType === openingType
+          ) {
             dispatch(editorToolToggled("openings"));
           } else {
             dispatch(editorActiveToolChanged("openings"));
@@ -113,17 +156,20 @@ export function useEditorKeyboardShortcuts({
           }
           return;
         }
-        const tool = key === "u"
-            ? "furniture"
-          : key === "m"
-              ? "measure"
-            : key === "s"
-              ? "stair"
-            : key === "w"
-              ? "draw-wall"
-              : key === "v"
-                ? "select"
-                : undefined;
+        const tool =
+          key === "r" && !event.shiftKey
+            ? "room"
+            : key === "u"
+              ? "furniture"
+              : key === "m"
+                ? "measure"
+                : key === "s"
+                  ? "stair"
+                  : key === "w"
+                    ? "draw-wall"
+                    : key === "v"
+                      ? "select"
+                      : undefined;
         if (tool) {
           event.preventDefault();
           dispatch(editorToolToggled(tool));
@@ -132,8 +178,23 @@ export function useEditorKeyboardShortcuts({
       }
       const action = getGeometryViewerShortcutAction(event);
       if (!action) return;
-      if (action === "DELETE_SELECTION" && workspaceMode === "edit" && selectedFurniture) {
-        event.preventDefault(); handleDeleteSelectedFurniture?.(); return;
+      if (
+        action === "DELETE_SELECTION" &&
+        workspaceMode === "edit" &&
+        selectionCount > 1
+      ) {
+        event.preventDefault();
+        handleDeleteSelection?.();
+        return;
+      }
+      if (
+        action === "DELETE_SELECTION" &&
+        workspaceMode === "edit" &&
+        selectedFurniture
+      ) {
+        event.preventDefault();
+        handleDeleteSelectedFurniture?.();
+        return;
       }
       if (
         action === "DELETE_SELECTION" &&
@@ -198,7 +259,8 @@ export function useEditorKeyboardShortcuts({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    selectedFurniture, handleDeleteSelectedFurniture,
+    selectedFurniture,
+    handleDeleteSelectedFurniture,
     dispatch,
     handleFitViewport,
     handleDeleteSelectedWall,
@@ -207,6 +269,9 @@ export function useEditorKeyboardShortcuts({
     handleDeleteSelectedStair,
     handleResetViewport,
     handleCancelStairAuthoring,
+    handleDeleteSelection,
+    handleNudgeSelection,
+    selectionCount,
     transient.interaction,
     transient.snapCandidate,
     selectedLevel,

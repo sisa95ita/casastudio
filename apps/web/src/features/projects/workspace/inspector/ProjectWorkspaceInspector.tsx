@@ -3,6 +3,7 @@ import type { FurnitureEditorController } from "../../../editor-2d/tools/furnitu
 import { measureLevel, type RoomMeasurement } from "@casastudio/geometry";
 import type {
   Opening,
+  FurnitureItem,
   Level,
   Project,
   Room,
@@ -31,10 +32,16 @@ import { ProjectRoomAuthoringDetails } from "../../../editor-2d/tools/room/Proje
 import type { RoomShapeDimensionDraft } from "../../../editor-2d/tools/room/room-shape-authoring";
 import type { RoomAuthoringPreset } from "../../../editor-2d/tools/room/room-shape-authoring";
 import type { WallEndpointEditingAvailability } from "../../../editor-2d/tools/wall/project-wall-editing";
-import type { StairAuthoringParameters, StairParameterChanges, StairProposal, StairTemplate } from "../../../editor-2d/tools/stair/project-stair-authoring";
+import type {
+  StairAuthoringParameters,
+  StairParameterChanges,
+  StairProposal,
+  StairTemplate
+} from "../../../editor-2d/tools/stair/project-stair-authoring";
 import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentation/geometry-presentation-model-2d";
 import type { GeometrySelectionState } from "../../../geometry-2d/selection/geometry-selection-state";
 import type { GeometryDisplayOptions } from "../../../geometry-2d/viewer/GeometrySvgViewer";
+import type { ProjectSelectionCapabilities } from "../../../editor-2d/selection/project-selection-transforms";
 import { ProjectPropertiesDetails } from "./ProjectSelectionDetails";
 import { ProjectStairAuthoringDetails } from "./ProjectStairSelectionDetails";
 
@@ -50,7 +57,10 @@ type ProjectWorkspaceInspectorProps = {
   readonly selectedOpening?: { readonly wall: Wall; readonly opening: Opening };
   readonly selectedRoom?: Room;
   readonly selectedRoomLevelElevation?: number;
-  readonly selectedStair?: { readonly staircase: Staircase; readonly part?: StairFlight | StairLanding };
+  readonly selectedStair?: {
+    readonly staircase: Staircase;
+    readonly part?: StairFlight | StairLanding;
+  };
   readonly stairAuthoring?: {
     readonly levels: readonly Level[];
     readonly owningLevelId: string;
@@ -95,7 +105,9 @@ type ProjectWorkspaceInspectorProps = {
   readonly onUpdateOpeningAuthoring: (
     properties: Partial<OpeningAuthoringProperties>
   ) => void;
-  readonly onUpdateOpeningAuthoringType: (openingType: OpeningAuthoringType) => void;
+  readonly onUpdateOpeningAuthoringType: (
+    openingType: OpeningAuthoringType
+  ) => void;
   readonly onUpdateRoomAuthoringDimension: (
     field: keyof RoomShapeDimensionDraft,
     value: string
@@ -107,15 +119,26 @@ type ProjectWorkspaceInspectorProps = {
   readonly onRoomAuthoringSpacePanChange: (active: boolean) => void;
   readonly onCancelRoomAuthoring: () => void;
   readonly onDeleteRoom: () => void;
-  readonly onUpdateRoomProperties: (properties: Partial<UpdateRoomProperties>) => boolean;
+  readonly onUpdateRoomProperties: (
+    properties: Partial<UpdateRoomProperties>
+  ) => boolean;
   readonly onDeleteStair: () => void;
   readonly onUpdateStair: (properties: StairParameterChanges) => boolean;
   readonly onStairAuthoringTemplateChange: (template: StairTemplate) => void;
-  readonly onStairAuthoringDestinationChange: (levelId: string, roomId?: string) => void;
+  readonly onStairAuthoringDestinationChange: (
+    levelId: string,
+    roomId?: string
+  ) => void;
   readonly onStairAuthoringTurnChange: (turn: "LEFT" | "RIGHT") => void;
-  readonly onStairAuthoringParametersChange: (parameters: StairAuthoringParameters) => void;
+  readonly onStairAuthoringParametersChange: (
+    parameters: StairAuthoringParameters
+  ) => void;
   readonly onConfirmStairAuthoring: () => void;
   readonly onCancelStairAuthoring: () => void;
+  readonly selectionCapabilities?: ProjectSelectionCapabilities;
+  readonly onDeleteSelection?: () => void;
+  readonly onDuplicateSelection?: () => void;
+  readonly multiSelectionFurniture?: readonly FurnitureItem[];
 };
 
 /** Provides the durable Layers and contextual Properties inspector foundation. */
@@ -165,7 +188,11 @@ export function ProjectWorkspaceInspector({
   onStairAuthoringTurnChange,
   onStairAuthoringParametersChange,
   onConfirmStairAuthoring,
-  onCancelStairAuthoring
+  onCancelStairAuthoring,
+  selectionCapabilities,
+  onDeleteSelection,
+  onDuplicateSelection,
+  multiSelectionFurniture
 }: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
   const contentRef = useRef<HTMLDivElement>(null);
@@ -186,7 +213,14 @@ export function ProjectWorkspaceInspector({
     ) {
       setTab("properties");
     }
-  }, [activeTool, mode, openingAuthoring, roomAuthoring, selectionKey, stairAuthoring]);
+  }, [
+    activeTool,
+    mode,
+    openingAuthoring,
+    roomAuthoring,
+    selectionKey,
+    stairAuthoring
+  ]);
 
   return (
     <Box className="project-inspector">
@@ -199,7 +233,11 @@ export function ProjectWorkspaceInspector({
         <Tab value="layers" label={t("inspector.layers")} />
         <Tab value="properties" label={t("inspector.properties")} />
       </Tabs>
-      <Box ref={contentRef} className="project-inspector__content" role="tabpanel">
+      <Box
+        ref={contentRef}
+        className="project-inspector__content"
+        role="tabpanel"
+      >
         {tab === "layers" ? (
           <ProjectLayerControls
             options={options}
@@ -207,68 +245,76 @@ export function ProjectWorkspaceInspector({
             measurement={levelMeasurement}
             units={units}
           />
+        ) : units &&
+          furniture &&
+          (furniture.authoring || furniture.selected || furniture.transient) ? (
+          <ProjectFurnitureProperties
+            controller={furniture}
+            units={units}
+            editable={mode === "edit"}
+          />
+        ) : units && mode === "edit" && stairAuthoring ? (
+          <ProjectStairAuthoringDetails
+            {...stairAuthoring}
+            units={units}
+            onDestinationChange={onStairAuthoringDestinationChange}
+            onTurnDirectionChange={onStairAuthoringTurnChange}
+            onTemplateChange={onStairAuthoringTemplateChange}
+            onParametersChange={onStairAuthoringParametersChange}
+            onConfirm={onConfirmStairAuthoring}
+            onCancel={onCancelStairAuthoring}
+          />
+        ) : units && mode === "edit" && roomAuthoring ? (
+          <ProjectRoomAuthoringDetails
+            {...roomAuthoring}
+            unit={units.length}
+            onDimensionChange={onUpdateRoomAuthoringDimension}
+            onMethodChange={onRoomAuthoringMethodChange}
+            onShapeChange={onRoomAuthoringShapeChange}
+            onPresetChange={onRoomAuthoringPresetChange}
+            onElevationChange={onUpdateRoomAuthoringElevation}
+            onSpacePanChange={onRoomAuthoringSpacePanChange}
+            onCancel={onCancelRoomAuthoring}
+          />
+        ) : units ? (
+          <ProjectPropertiesDetails
+            model={model}
+            selectionState={selectionState}
+            wall={selectedWall}
+            opening={selectedOpening?.opening}
+            openingWall={selectedOpening?.wall}
+            openingDisplayOffsetFromStart={selectedOpeningDisplayOffset}
+            room={selectedRoom}
+            roomLevelElevation={selectedRoomLevelElevation}
+            stair={selectedStair}
+            roomMeasurement={selectedRoomMeasurement}
+            endpointAvailability={endpointAvailability}
+            selectedVertexRemovable={selectedVertexRemovable}
+            units={units}
+            activeTool={activeTool}
+            editable={mode === "edit"}
+            onDeleteWall={onDeleteWall}
+            onAddWallVertex={onAddWallVertex}
+            onRemoveVertex={onRemoveVertex}
+            onUpdateWallProperties={onUpdateWallProperties}
+            onDeleteOpening={onDeleteOpening}
+            onUpdateOpening={onUpdateOpening}
+            openingAuthoring={openingAuthoring}
+            onUpdateOpeningAuthoringType={onUpdateOpeningAuthoringType}
+            onUpdateOpeningAuthoring={onUpdateOpeningAuthoring}
+            onDeleteRoom={onDeleteRoom}
+            onUpdateRoomProperties={onUpdateRoomProperties}
+            onDeleteStair={onDeleteStair}
+            onUpdateStair={onUpdateStair}
+            selectionCapabilities={selectionCapabilities}
+            onDeleteSelection={onDeleteSelection}
+            onDuplicateSelection={onDuplicateSelection}
+            multiSelectionFurniture={multiSelectionFurniture}
+          />
         ) : (
-          units && furniture && (furniture.authoring || furniture.selected || furniture.transient) ? (
-            <ProjectFurnitureProperties controller={furniture} units={units} editable={mode === "edit"} />
-          ) : units && mode === "edit" && stairAuthoring ? (
-            <ProjectStairAuthoringDetails
-              {...stairAuthoring}
-              units={units}
-              onDestinationChange={onStairAuthoringDestinationChange}
-              onTurnDirectionChange={onStairAuthoringTurnChange}
-              onTemplateChange={onStairAuthoringTemplateChange}
-              onParametersChange={onStairAuthoringParametersChange}
-              onConfirm={onConfirmStairAuthoring}
-              onCancel={onCancelStairAuthoring}
-            />
-          ) : units && mode === "edit" && roomAuthoring ? (
-            <ProjectRoomAuthoringDetails
-              {...roomAuthoring}
-              unit={units.length}
-              onDimensionChange={onUpdateRoomAuthoringDimension}
-              onMethodChange={onRoomAuthoringMethodChange}
-              onShapeChange={onRoomAuthoringShapeChange}
-              onPresetChange={onRoomAuthoringPresetChange}
-              onElevationChange={onUpdateRoomAuthoringElevation}
-              onSpacePanChange={onRoomAuthoringSpacePanChange}
-              onCancel={onCancelRoomAuthoring}
-            />
-          ) : units ? (
-            <ProjectPropertiesDetails
-              model={model}
-              selectionState={selectionState}
-              wall={selectedWall}
-              opening={selectedOpening?.opening}
-              openingWall={selectedOpening?.wall}
-              openingDisplayOffsetFromStart={selectedOpeningDisplayOffset}
-              room={selectedRoom}
-              roomLevelElevation={selectedRoomLevelElevation}
-              stair={selectedStair}
-              roomMeasurement={selectedRoomMeasurement}
-              endpointAvailability={endpointAvailability}
-              selectedVertexRemovable={selectedVertexRemovable}
-              units={units}
-              activeTool={activeTool}
-              editable={mode === "edit"}
-              onDeleteWall={onDeleteWall}
-              onAddWallVertex={onAddWallVertex}
-              onRemoveVertex={onRemoveVertex}
-              onUpdateWallProperties={onUpdateWallProperties}
-              onDeleteOpening={onDeleteOpening}
-              onUpdateOpening={onUpdateOpening}
-              openingAuthoring={openingAuthoring}
-              onUpdateOpeningAuthoringType={onUpdateOpeningAuthoringType}
-              onUpdateOpeningAuthoring={onUpdateOpeningAuthoring}
-              onDeleteRoom={onDeleteRoom}
-              onUpdateRoomProperties={onUpdateRoomProperties}
-              onDeleteStair={onDeleteStair}
-              onUpdateStair={onUpdateStair}
-            />
-          ) : (
-            <Typography variant="caption" color="text.secondary">
-              {t("properties.editModeOnly")}
-            </Typography>
-          )
+          <Typography variant="caption" color="text.secondary">
+            {t("properties.editModeOnly")}
+          </Typography>
         )}
       </Box>
     </Box>

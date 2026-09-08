@@ -77,73 +77,106 @@ const createViewerProps = (
 };
 
 const architecturalPresentationModel: ArchitecturalPresentationModel2D = {
-  walls: [{
-    kind: "WALL",
-    geometryId: "wall",
-    bodySvgPoints: ["80,90 80,110 300,110 300,90"],
-    start: { x: 80, y: 100 },
-    end: { x: 300, y: 100 },
-    hitWidth: 20,
-    selected: false,
-    hovered: false
-  }],
-  doors: [{
-    kind: "DOOR",
-    geometryId: "door",
-    wallId: "wall",
-    spanStart: { x: 100, y: 100 },
-    spanEnd: { x: 190, y: 100 },
-    hinge: { x: 100, y: 100 },
-    leafEnd: { x: 100, y: 190 },
-    arcPath: "M 190,100 A 90 90 0 0 1 100,190",
-    jambs: [
-      [{ x: 100, y: 90 }, { x: 100, y: 110 }],
-      [{ x: 190, y: 90 }, { x: 190, y: 110 }]
-    ],
-    selected: false,
-    hovered: false
-  }],
-  windows: [{
-    kind: "WINDOW",
-    geometryId: "window",
-    wallId: "wall",
-    spanStart: { x: 210, y: 100 },
-    spanEnd: { x: 280, y: 100 },
-    glazingLines: [
-      [{ x: 210, y: 96 }, { x: 280, y: 96 }],
-      [{ x: 210, y: 104 }, { x: 280, y: 104 }]
-    ],
-    jambs: [
-      [{ x: 210, y: 90 }, { x: 210, y: 110 }],
-      [{ x: 280, y: 90 }, { x: 280, y: 110 }]
-    ],
-    selected: false,
-    hovered: false
-  }],
-  openings: [{
-    kind: "OPENING",
-    geometryId: "passage",
-    wallId: "wall",
-    spanStart: { x: 300, y: 100 },
-    spanEnd: { x: 350, y: 100 },
-    jambs: [
-      [{ x: 300, y: 90 }, { x: 300, y: 110 }],
-      [{ x: 350, y: 90 }, { x: 350, y: 110 }]
-    ],
-    selected: false,
-    hovered: false
-  }],
+  walls: [
+    {
+      kind: "WALL",
+      geometryId: "wall",
+      bodySvgPoints: ["80,90 80,110 300,110 300,90"],
+      start: { x: 80, y: 100 },
+      end: { x: 300, y: 100 },
+      hitWidth: 20,
+      selected: false,
+      hovered: false
+    }
+  ],
+  doors: [
+    {
+      kind: "DOOR",
+      geometryId: "door",
+      wallId: "wall",
+      spanStart: { x: 100, y: 100 },
+      spanEnd: { x: 190, y: 100 },
+      hinge: { x: 100, y: 100 },
+      leafEnd: { x: 100, y: 190 },
+      arcPath: "M 190,100 A 90 90 0 0 1 100,190",
+      jambs: [
+        [
+          { x: 100, y: 90 },
+          { x: 100, y: 110 }
+        ],
+        [
+          { x: 190, y: 90 },
+          { x: 190, y: 110 }
+        ]
+      ],
+      selected: false,
+      hovered: false
+    }
+  ],
+  windows: [
+    {
+      kind: "WINDOW",
+      geometryId: "window",
+      wallId: "wall",
+      spanStart: { x: 210, y: 100 },
+      spanEnd: { x: 280, y: 100 },
+      glazingLines: [
+        [
+          { x: 210, y: 96 },
+          { x: 280, y: 96 }
+        ],
+        [
+          { x: 210, y: 104 },
+          { x: 280, y: 104 }
+        ]
+      ],
+      jambs: [
+        [
+          { x: 210, y: 90 },
+          { x: 210, y: 110 }
+        ],
+        [
+          { x: 280, y: 90 },
+          { x: 280, y: 110 }
+        ]
+      ],
+      selected: false,
+      hovered: false
+    }
+  ],
+  openings: [
+    {
+      kind: "OPENING",
+      geometryId: "passage",
+      wallId: "wall",
+      spanStart: { x: 300, y: 100 },
+      spanEnd: { x: 350, y: 100 },
+      jambs: [
+        [
+          { x: 300, y: 90 },
+          { x: 300, y: 110 }
+        ],
+        [
+          { x: 350, y: 90 },
+          { x: 350, y: 110 }
+        ]
+      ],
+      selected: false,
+      hovered: false
+    }
+  ],
   staircases: [],
   joins: []
 };
 
-const selectedDoorArchitecturalPresentationModel: ArchitecturalPresentationModel2D = {
-  ...architecturalPresentationModel,
-  doors: architecturalPresentationModel.doors.map((door) => ({
-    ...door,
-    selected: door.geometryId === "door"
-  }))
-};
+const selectedDoorArchitecturalPresentationModel: ArchitecturalPresentationModel2D =
+  {
+    ...architecturalPresentationModel,
+    doors: architecturalPresentationModel.doors.map((door) => ({
+      ...door,
+      selected: door.geometryId === "door"
+    }))
+  };
 
 afterEach(() => {
   cleanup();
@@ -151,46 +184,144 @@ afterEach(() => {
 
 describe("GeometrySvgViewer", () => {
   it("keeps Furniture click/drag thresholds and allows the first placement after a rotation gesture", () => {
-    const item = createFurniturePresentation2D({ id: "sofa", roomId: "living", definitionId: "generic-sofa", position: { x: 100, z: 100 }, rotation: 27.5, width: 200, depth: 90, height: 85 });
-    const props = { ...createViewerProps(getPlaygroundLevel(), createGeometrySelectionState([{ kind: "FURNITURE", geometryId: "sofa" }])), options: defaultGeometryDisplayOptions,
+    const item = createFurniturePresentation2D({
+      id: "sofa",
+      roomId: "living",
+      definitionId: "generic-sofa",
+      position: { x: 100, z: 100 },
+      rotation: 27.5,
+      width: 200,
+      depth: 90,
+      height: 85
+    });
+    const props = {
+      ...createViewerProps(
+        getPlaygroundLevel(),
+        createGeometrySelectionState([
+          { kind: "FURNITURE", geometryId: "sofa" }
+        ])
+      ),
+      options: defaultGeometryDisplayOptions,
       furnitureModel: { items: [item], previewValid: true, editing: true },
-      onFurniturePointerDown: vi.fn(), onFurniturePointerUp: vi.fn(), onFurniturePointerCancel: vi.fn(), onEditorPointerMove: vi.fn(), onEditorCanvasClick: vi.fn() };
-    const { container, rerender } = render(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("select")} />);
+      onFurniturePointerDown: vi.fn(),
+      onFurniturePointerUp: vi.fn(),
+      onFurniturePointerCancel: vi.fn(),
+      onEditorPointerMove: vi.fn(),
+      onEditorCanvasClick: vi.fn()
+    };
+    const { container, rerender } = render(
+      <GeometrySvgViewer
+        {...props}
+        interaction={getProjectEditorInteraction("select")}
+      />
+    );
     const svg = container.querySelector("svg")!;
-    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({ bottom: 520, height: 520, left: 0, right: 800, top: 0, width: 800, x: 0, y: 0, toJSON: () => undefined });
-    svg.setPointerCapture = vi.fn(); svg.releasePointerCapture = vi.fn(); svg.hasPointerCapture = vi.fn(() => true);
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      bottom: 520,
+      height: 520,
+      left: 0,
+      right: 800,
+      top: 0,
+      width: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined
+    });
+    svg.setPointerCapture = vi.fn();
+    svg.releasePointerCapture = vi.fn();
+    svg.hasPointerCapture = vi.fn(() => true);
     const hit = screen.getByTestId("furniture-hit-target");
-    fireEvent.pointerDown(hit, { clientX: 100, clientY: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerDown(hit, {
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+      button: 0
+    });
     fireEvent.pointerMove(svg, { clientX: 103, clientY: 100, pointerId: 1 });
     expect(props.onEditorPointerMove).not.toHaveBeenCalled();
     fireEvent.pointerUp(svg, { pointerId: 1 });
     expect(props.onFurniturePointerUp).toHaveBeenLastCalledWith(false);
     fireEvent.click(svg);
     const handle = screen.getByTestId("furniture-rotation-handle");
-    fireEvent.pointerDown(handle, { clientX: 100, clientY: 100, pointerId: 2, button: 0 });
+    fireEvent.pointerDown(handle, {
+      clientX: 100,
+      clientY: 100,
+      pointerId: 2,
+      button: 0
+    });
     fireEvent.pointerMove(svg, { clientX: 110, clientY: 100, pointerId: 2 });
     fireEvent.pointerUp(svg, { pointerId: 2 });
     fireEvent.click(handle);
     expect(props.onFurniturePointerUp).toHaveBeenLastCalledWith(true);
-    expect(props.onFurniturePointerDown.mock.calls.at(-1)?.slice(0, 2)).toEqual(["sofa", "rotate"]);
-    rerender(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("furniture")} />);
-    fireEvent.pointerDown(svg, { clientX: 200, clientY: 200, pointerId: 3, button: 0 });
+    expect(props.onFurniturePointerDown.mock.calls.at(-1)?.slice(0, 2)).toEqual(
+      ["sofa", "rotate"]
+    );
+    rerender(
+      <GeometrySvgViewer
+        {...props}
+        interaction={getProjectEditorInteraction("furniture")}
+      />
+    );
+    fireEvent.pointerDown(svg, {
+      clientX: 200,
+      clientY: 200,
+      pointerId: 3,
+      button: 0
+    });
     fireEvent.pointerUp(svg, { pointerId: 3 });
     fireEvent.click(svg, { clientX: 200, clientY: 200 });
     expect(props.onEditorCanvasClick).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Furniture hover independent of geometry and gives Space-pan priority over Furniture hits", () => {
-    const item = createFurniturePresentation2D({ id: "chair", roomId: "living", definitionId: "generic-chair", position: { x: 50, z: 50 }, rotation: 37, width: 45, depth: 50, height: 85 });
-    const onSelectionStateChange = vi.fn(), onFurniturePointerDown = vi.fn(), onViewportChange = vi.fn();
-    const props = { ...createViewerProps(getPlaygroundLevel()), options: defaultGeometryDisplayOptions, furnitureModel: { items: [item], previewValid: true, editing: true }, onSelectionStateChange, onFurniturePointerDown, onViewportChange };
-    const { container, rerender } = render(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("select")} />);
+    const item = createFurniturePresentation2D({
+      id: "chair",
+      roomId: "living",
+      definitionId: "generic-chair",
+      position: { x: 50, z: 50 },
+      rotation: 37,
+      width: 45,
+      depth: 50,
+      height: 85
+    });
+    const onSelectionStateChange = vi.fn(),
+      onFurniturePointerDown = vi.fn(),
+      onViewportChange = vi.fn();
+    const props = {
+      ...createViewerProps(getPlaygroundLevel()),
+      options: defaultGeometryDisplayOptions,
+      furnitureModel: { items: [item], previewValid: true, editing: true },
+      onSelectionStateChange,
+      onFurniturePointerDown,
+      onViewportChange
+    };
+    const { container, rerender } = render(
+      <GeometrySvgViewer
+        {...props}
+        interaction={getProjectEditorInteraction("select")}
+      />
+    );
     fireEvent.mouseEnter(screen.getByTestId("furniture-hit-target"));
-    expect(onSelectionStateChange).toHaveBeenCalledWith({ selected: [], hovered: { kind: "FURNITURE", geometryId: "chair" } });
-    rerender(<GeometrySvgViewer {...props} interaction={getProjectEditorInteraction("select", true)} />);
+    expect(onSelectionStateChange).toHaveBeenCalledWith({
+      selected: [],
+      hovered: { kind: "FURNITURE", geometryId: "chair" }
+    });
+    rerender(
+      <GeometrySvgViewer
+        {...props}
+        interaction={getProjectEditorInteraction("select", true)}
+      />
+    );
     const svg = container.querySelector("svg")!;
-    svg.setPointerCapture = vi.fn(); svg.releasePointerCapture = vi.fn(); svg.hasPointerCapture = vi.fn(() => true);
-    fireEvent.pointerDown(screen.getByTestId("furniture-hit-target"), { clientX: 100, clientY: 100, pointerId: 5, button: 0 });
+    svg.setPointerCapture = vi.fn();
+    svg.releasePointerCapture = vi.fn();
+    svg.hasPointerCapture = vi.fn(() => true);
+    fireEvent.pointerDown(screen.getByTestId("furniture-hit-target"), {
+      clientX: 100,
+      clientY: 100,
+      pointerId: 5,
+      button: 0
+    });
     fireEvent.pointerMove(svg, { clientX: 120, clientY: 120, pointerId: 5 });
     fireEvent.pointerUp(svg, { pointerId: 5 });
     expect(onFurniturePointerDown).not.toHaveBeenCalled();
@@ -257,7 +388,11 @@ describe("GeometrySvgViewer", () => {
           wallEndpointEditingEnabled: true
         }}
         editorOverlay={{
-          drawWall: { start: { x: 0, z: 0 }, end: { x: 25, z: 25 }, lengthLabel: "0.35 m" },
+          drawWall: {
+            start: { x: 0, z: 0 },
+            end: { x: 25, z: 25 },
+            lengthLabel: "0.35 m"
+          },
           selectedWall: {
             wallId: edge.sourceWallId!,
             start: edge.startVertex,
@@ -275,7 +410,9 @@ describe("GeometrySvgViewer", () => {
         .querySelector("line")
         ?.getAttribute("class")
     ).toBe("geometry-wall-preview");
-    expect(screen.getByTestId("draw-wall-preview-length").textContent).toContain("0.35 m");
+    expect(
+      screen.getByTestId("draw-wall-preview-length").textContent
+    ).toContain("0.35 m");
     expect(
       screen
         .getByTestId("selected-wall-overlay")
@@ -367,19 +504,23 @@ describe("GeometrySvgViewer", () => {
       world: { x: screen.x, z: screen.y },
       screen
     }));
-    const irregularPoints = screenPoints.map((point) => `${point.x},${point.y}`).join(" ");
+    const irregularPoints = screenPoints
+      .map((point) => `${point.x},${point.y}`)
+      .join(" ");
     const presentationModel = {
       ...viewerProps.presentationModel,
-      polygons: [{
-        ...polygon,
-        points: presentationPoints,
-        svgPoints: irregularPoints,
-        centroid: {
-          world: { x: 213.25, z: 139.75 },
-          screen: { x: 213.25, y: 139.75 }
-        },
-        screenBounds: { x: 120, y: 80, width: 240, height: 180 }
-      }],
+      polygons: [
+        {
+          ...polygon,
+          points: presentationPoints,
+          svgPoints: irregularPoints,
+          centroid: {
+            world: { x: 213.25, z: 139.75 },
+            screen: { x: 213.25, y: 139.75 }
+          },
+          screenBounds: { x: 120, y: 80, width: 240, height: 180 }
+        }
+      ],
       boundaryEdges: screenPoints.map((start, index) => {
         const edge = viewerProps.presentationModel.boundaryEdges[index]!;
         const end = screenPoints[(index + 1) % screenPoints.length]!;
@@ -404,13 +545,19 @@ describe("GeometrySvgViewer", () => {
     const bounds = screen.getByTestId("polygon-bounds");
     const centroid = screen.getByTestId("polygon-centroid");
     const layers = [...container.querySelectorAll("g[data-layer]")];
-    const boundsLayer = container.querySelector('[data-layer="polygon-bounds"]');
+    const boundsLayer = container.querySelector(
+      '[data-layer="polygon-bounds"]'
+    );
 
     expect(roomPolygon.getAttribute("points")).toBe(irregularPoints);
     expect(roomContour.getAttribute("points")).toBe(irregularPoints);
-    expect(roomContour.getAttribute("points")).toBe(roomPolygon.getAttribute("points"));
+    expect(roomContour.getAttribute("points")).toBe(
+      roomPolygon.getAttribute("points")
+    );
     expect(roomContour.getAttribute("points")?.split(" ")).toHaveLength(6);
-    expect(roomContour.getAttribute("points")).toContain("330,140 240,165 180,220");
+    expect(roomContour.getAttribute("points")).toContain(
+      "330,140 240,165 180,220"
+    );
     expect(roomContour.tagName.toLowerCase()).toBe("polygon");
     expect(bounds.tagName.toLowerCase()).toBe("rect");
     expect(bounds.getAttribute("x")).toBe("120");
@@ -422,23 +569,35 @@ describe("GeometrySvgViewer", () => {
     expect(bounds.hasAttribute("points")).toBe(false);
     expect(boundsLayer?.getAttribute("data-diagnostic")).toBe("true");
     expect(boundsLayer?.getAttribute("aria-hidden")).toBe("true");
-    expect(boundsLayer?.getAttribute("class")).toContain("geometry-diagnostic-layer");
+    expect(boundsLayer?.getAttribute("class")).toContain(
+      "geometry-diagnostic-layer"
+    );
     expect(layers.indexOf(boundsLayer!)).toBeLessThan(
       layers.indexOf(container.querySelector('[data-layer="polygons"]')!)
     );
-    expect(layers.indexOf(container.querySelector('[data-layer="polygons"]')!)).toBeLessThan(
+    expect(
+      layers.indexOf(container.querySelector('[data-layer="polygons"]')!)
+    ).toBeLessThan(
       layers.indexOf(container.querySelector('[data-layer="room-contours"]')!)
     );
-    expect(layers.indexOf(container.querySelector('[data-layer="room-contours"]')!)).toBeLessThan(
+    expect(
+      layers.indexOf(container.querySelector('[data-layer="room-contours"]')!)
+    ).toBeLessThan(
       layers.indexOf(container.querySelector('[data-layer="boundary-edges"]')!)
     );
-    expect(screen.getAllByTestId("boundary-edge").map((edge) => [
-      `${edge.getAttribute("x1")},${edge.getAttribute("y1")}`,
-      `${edge.getAttribute("x2")},${edge.getAttribute("y2")}`
-    ])).toEqual(screenPoints.map((point, index) => {
-      const end = screenPoints[(index + 1) % screenPoints.length]!;
-      return [`${point.x},${point.y}`, `${end.x},${end.y}`];
-    }));
+    expect(
+      screen
+        .getAllByTestId("boundary-edge")
+        .map((edge) => [
+          `${edge.getAttribute("x1")},${edge.getAttribute("y1")}`,
+          `${edge.getAttribute("x2")},${edge.getAttribute("y2")}`
+        ])
+    ).toEqual(
+      screenPoints.map((point, index) => {
+        const end = screenPoints[(index + 1) % screenPoints.length]!;
+        return [`${point.x},${point.y}`, `${end.x},${end.y}`];
+      })
+    );
   });
 
   it("uses clean architectural Project defaults without removing physical hit geometry", () => {
@@ -453,7 +612,9 @@ describe("GeometrySvgViewer", () => {
       bounds: false,
       entityLabels: false
     });
-    expect(defaultGeometryDisplayOptions).not.toBe(projectGeometryDisplayOptions);
+    expect(defaultGeometryDisplayOptions).not.toBe(
+      projectGeometryDisplayOptions
+    );
   });
 
   it("renders a stable empty state for levels with no runtime geometry", () => {
@@ -512,7 +673,7 @@ describe("GeometrySvgViewer", () => {
     expect(editableMarkup).toContain('data-layer="editor-grid"');
   });
 
-  it("selects polygons, boundary edges, and vertices from SVG clicks", () => {
+  it("normalizes boundary-edge clicks to canonical Walls while retaining Vertex diagnostics", () => {
     const level = getPlaygroundLevel();
     const handleSelectionStateChange = vi.fn();
     const { container } = render(
@@ -547,8 +708,8 @@ describe("GeometrySvgViewer", () => {
     expect(handleSelectionStateChange).toHaveBeenNthCalledWith(2, {
       selected: [
         {
-          kind: "BOUNDARY_EDGE",
-          geometryId: level.boundaryEdges[0]?.id
+          kind: "WALL",
+          geometryId: level.boundaryEdges[0]?.sourceWallId
         }
       ],
       hovered: undefined
@@ -592,8 +753,15 @@ describe("GeometrySvgViewer", () => {
     );
     const svg = container.querySelector("svg")!;
     vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
-      bottom: 520, height: 520, left: 0, right: 800, top: 0, width: 800,
-      x: 0, y: 0, toJSON: () => undefined
+      bottom: 520,
+      height: 520,
+      left: 0,
+      right: 800,
+      top: 0,
+      width: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined
     });
     svg.setPointerCapture = vi.fn();
     svg.releasePointerCapture = vi.fn();
@@ -628,8 +796,13 @@ describe("GeometrySvgViewer", () => {
       hovered: undefined
     });
     const layers = [...container.querySelectorAll("g[data-layer]")];
-    expect(layers.indexOf(container.querySelector('[data-layer="boundary-edges"]')!))
-      .toBeLessThan(layers.indexOf(container.querySelector('[data-layer="architectural-openings"]')!));
+    expect(
+      layers.indexOf(container.querySelector('[data-layer="boundary-edges"]')!)
+    ).toBeLessThan(
+      layers.indexOf(
+        container.querySelector('[data-layer="architectural-openings"]')!
+      )
+    );
   });
 
   it("selects a Window as the canonical Opening entity", () => {
@@ -702,15 +875,19 @@ describe("GeometrySvgViewer", () => {
     );
 
     expect(screen.queryByTestId("selected-opening-drag-handle")).toBeNull();
-    expect(screen.getByTestId("architectural-door").classList)
-      .toContain("architectural-opening--draggable");
+    expect(screen.getByTestId("architectural-door").classList).toContain(
+      "architectural-opening--draggable"
+    );
 
     rerender(
       <GeometrySvgViewer
-        {...createViewerProps(level, createGeometrySelectionState([
-          selectDoor("door"),
-          selectWindow("window")
-        ]))}
+        {...createViewerProps(
+          level,
+          createGeometrySelectionState([
+            selectDoor("door"),
+            selectWindow("window")
+          ])
+        )}
         architecturalModel={selectedDoorArchitecturalPresentationModel}
         options={defaultGeometryDisplayOptions}
         interaction={interaction}
@@ -737,8 +914,12 @@ describe("GeometrySvgViewer", () => {
         editorOverlay={{ activeOpeningDragId: "door" }}
       />
     );
-    expect(container.querySelector("svg")?.classList).toContain("geometry-svg--opening-drag");
-    expect(screen.getByTestId("architectural-door").getAttribute("data-dragging")).toBe("true");
+    expect(container.querySelector("svg")?.classList).toContain(
+      "geometry-svg--opening-drag"
+    );
+    expect(
+      screen.getByTestId("architectural-door").getAttribute("data-dragging")
+    ).toBe("true");
 
     rerender(
       <GeometrySvgViewer
@@ -748,9 +929,12 @@ describe("GeometrySvgViewer", () => {
         interaction={interaction}
       />
     );
-    expect(container.querySelector("svg")?.classList).not.toContain("geometry-svg--opening-drag");
-    expect(screen.getByTestId("architectural-door").classList)
-      .toContain("architectural-opening--draggable");
+    expect(container.querySelector("svg")?.classList).not.toContain(
+      "geometry-svg--opening-drag"
+    );
+    expect(screen.getByTestId("architectural-door").classList).toContain(
+      "architectural-opening--draggable"
+    );
   });
 
   it("emits hover state separately from the selected set", () => {
@@ -791,7 +975,7 @@ describe("GeometrySvgViewer", () => {
     });
   });
 
-  it("supports shift-click additive selection and toggling", () => {
+  it("supports Cmd/Ctrl-click additive selection and toggling without using Shift", () => {
     const level = getPlaygroundLevel();
     const selectedPolygon = level.polygons[0];
     const handleAdditiveSelection = vi.fn();
@@ -819,14 +1003,14 @@ describe("GeometrySvgViewer", () => {
       throw new Error("Expected a boundary edge hit target.");
     }
 
-    fireEvent.click(edgeHitTarget, { shiftKey: true });
+    fireEvent.click(edgeHitTarget, { metaKey: true });
 
     expect(handleAdditiveSelection).toHaveBeenCalledWith({
       selected: [
         selectPolygon(selectedPolygon.id),
         {
-          kind: "BOUNDARY_EDGE",
-          geometryId: level.boundaryEdges[0]?.id
+          kind: "WALL",
+          geometryId: level.boundaryEdges[0]?.sourceWallId
         }
       ],
       hovered: undefined
@@ -850,7 +1034,7 @@ describe("GeometrySvgViewer", () => {
       throw new Error("Expected a polygon hit target.");
     }
 
-    fireEvent.click(polygon, { shiftKey: true });
+    fireEvent.click(polygon, { ctrlKey: true });
 
     expect(handleToggleSelection).toHaveBeenCalledWith({
       selected: [],
@@ -858,7 +1042,145 @@ describe("GeometrySvgViewer", () => {
     });
   });
 
-  it("deselects an already-selected entity on a plain click", () => {
+  it("does not let modifier pointer-down start Furniture manipulation or replace the selection", () => {
+    const level = getPlaygroundLevel();
+    const selectedPolygon = level.polygons[0]!;
+    const item = createFurniturePresentation2D({
+      id: "chair",
+      roomId: "living",
+      definitionId: "generic-chair",
+      position: { x: 50, z: 50 },
+      rotation: 0,
+      width: 45,
+      depth: 50,
+      height: 85
+    });
+    const onSelectionStateChange = vi.fn();
+    const onFurniturePointerDown = vi.fn();
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(
+          level,
+          createGeometrySelectionState([selectPolygon(selectedPolygon.id)])
+        )}
+        options={defaultGeometryDisplayOptions}
+        interaction={getProjectEditorInteraction("select")}
+        furnitureModel={{ items: [item], previewValid: true, editing: true }}
+        onFurniturePointerDown={onFurniturePointerDown}
+        onSelectionStateChange={onSelectionStateChange}
+      />
+    );
+
+    const furniture = screen.getByTestId("furniture-hit-target");
+    fireEvent.pointerDown(furniture, {
+      pointerId: 51,
+      button: 0,
+      metaKey: true
+    });
+    fireEvent.click(furniture, { metaKey: true });
+
+    expect(onFurniturePointerDown).not.toHaveBeenCalled();
+    expect(onSelectionStateChange).toHaveBeenLastCalledWith({
+      selected: [
+        selectPolygon(selectedPolygon.id),
+        { kind: "FURNITURE", geometryId: "chair" }
+      ],
+      hovered: undefined
+    });
+  });
+
+  it("clears on a normal empty click and preserves on a modifier empty click", () => {
+    const level = getPlaygroundLevel();
+    const selectedPolygon = level.polygons[0]!;
+    const onSelectionStateChange = vi.fn();
+    const { container } = render(
+      <GeometrySvgViewer
+        {...createViewerProps(
+          level,
+          createGeometrySelectionState([selectPolygon(selectedPolygon.id)])
+        )}
+        options={defaultGeometryDisplayOptions}
+        interaction={getProjectEditorInteraction("select")}
+        editorOverlay={{}}
+        onSelectionStateChange={onSelectionStateChange}
+      />
+    );
+    const background = container.querySelector(".geometry-pan-background")!;
+
+    fireEvent.click(background, { ctrlKey: true });
+    expect(onSelectionStateChange).not.toHaveBeenCalled();
+
+    fireEvent.click(background);
+    expect(onSelectionStateChange).toHaveBeenCalledWith({
+      selected: [],
+      hovered: undefined
+    });
+  });
+
+  it("creates a transient directional selection box from empty Select canvas", () => {
+    const level = getPlaygroundLevel();
+    const onSelectionStateChange = vi.fn();
+    const { container } = render(
+      <GeometrySvgViewer
+        {...createViewerProps(level, createGeometrySelectionState(), {
+          zoom: 1,
+          offsetX: 0,
+          offsetY: 0
+        })}
+        options={defaultGeometryDisplayOptions}
+        interaction={getProjectEditorInteraction("select")}
+        editorOverlay={{}}
+        selectionFootprints={[
+          {
+            selection: { kind: "FURNITURE", geometryId: "chair" },
+            polygons: [
+              [
+                { x: 10, z: -10 },
+                { x: 20, z: -10 },
+                { x: 20, z: -20 },
+                { x: 10, z: -20 }
+              ]
+            ]
+          }
+        ]}
+        onSelectionStateChange={onSelectionStateChange}
+      />
+    );
+    const svg = container.querySelector("svg")!;
+    const background = container.querySelector(".geometry-pan-background")!;
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      bottom: 520,
+      height: 520,
+      left: 0,
+      right: 800,
+      top: 0,
+      width: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined
+    });
+    svg.setPointerCapture = vi.fn();
+    svg.releasePointerCapture = vi.fn();
+    svg.hasPointerCapture = vi.fn(() => true);
+    fireEvent.pointerDown(background, {
+      clientX: 5,
+      clientY: 5,
+      pointerId: 31,
+      button: 0
+    });
+    fireEvent.pointerMove(svg, { clientX: 30, clientY: 30, pointerId: 31 });
+    expect(
+      screen.getByTestId("geometry-selection-box").getAttribute("data-mode")
+    ).toBe("containment");
+    fireEvent.pointerUp(svg, { clientX: 30, clientY: 30, pointerId: 31 });
+    expect(onSelectionStateChange).toHaveBeenCalledWith({
+      selected: [{ kind: "FURNITURE", geometryId: "chair" }],
+      hovered: undefined
+    });
+    expect(screen.queryByTestId("geometry-selection-box")).toBeNull();
+  });
+
+  it("keeps an already-selected entity exclusively selected on a plain click", () => {
     const level = getPlaygroundLevel();
     const selectedPolygon = level.polygons[0];
     const handleSelectionStateChange = vi.fn();
@@ -881,7 +1203,7 @@ describe("GeometrySvgViewer", () => {
     fireEvent.click(screen.getAllByTestId("geometry-polygon")[0]!);
 
     expect(handleSelectionStateChange).toHaveBeenCalledWith({
-      selected: [],
+      selected: [selectPolygon(selectedPolygon.id)],
       hovered: undefined
     });
   });
@@ -940,7 +1262,10 @@ describe("GeometrySvgViewer", () => {
 
   it("registers one non-passive wheel listener and removes the same listener", () => {
     const level = getPlaygroundLevel();
-    const addEventListener = vi.spyOn(SVGSVGElement.prototype, "addEventListener");
+    const addEventListener = vi.spyOn(
+      SVGSVGElement.prototype,
+      "addEventListener"
+    );
     const removeEventListener = vi.spyOn(
       SVGSVGElement.prototype,
       "removeEventListener"
@@ -1049,8 +1374,15 @@ describe("GeometrySvgViewer", () => {
     );
     const svg = container.querySelector("svg")!;
     vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
-      bottom: 520, height: 520, left: 0, right: 800, top: 0, width: 800,
-      x: 0, y: 0, toJSON: () => undefined
+      bottom: 520,
+      height: 520,
+      left: 0,
+      right: 800,
+      top: 0,
+      width: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined
     });
     svg.setPointerCapture = vi.fn();
     svg.releasePointerCapture = vi.fn();
@@ -1076,7 +1408,11 @@ describe("GeometrySvgViewer", () => {
     expect(svg.setPointerCapture).toHaveBeenCalledTimes(4);
     expect(svg.releasePointerCapture).toHaveBeenCalledTimes(4);
 
-    fireEvent.pointerDown(targets[0]!, { clientX: 100, clientY: 100, pointerId: 30 });
+    fireEvent.pointerDown(targets[0]!, {
+      clientX: 100,
+      clientY: 100,
+      pointerId: 30
+    });
     fireEvent.pointerCancel(svg, { pointerId: 30 });
     expect(svg.releasePointerCapture).toHaveBeenLastCalledWith(30);
     expect(svg.classList).not.toContain("geometry-svg--panning");
@@ -1093,23 +1429,29 @@ describe("GeometrySvgViewer", () => {
         onSelectionStateChange={handleSelectionStateChange}
         onRoomFaceCandidateClick={handleFaceClick}
         editorOverlay={{
-          roomFaceCandidates: [{
-            faceKey: "face-a",
-            vertices: [
-              { x: 0, z: 0 },
-              { x: 100, z: 0 },
-              { x: 100, z: 100 },
-              { x: 0, z: 100 }
-            ],
-            selected: true
-          }]
+          roomFaceCandidates: [
+            {
+              faceKey: "face-a",
+              vertices: [
+                { x: 0, z: 0 },
+                { x: 100, z: 0 },
+                { x: 100, z: 100 },
+                { x: 0, z: 100 }
+              ],
+              selected: true
+            }
+          ]
         }}
       />
     );
 
     const candidate = screen.getByTestId("room-face-candidate");
-    expect(candidate.getAttribute("class")).toContain("geometry-room-face-candidate--selected");
-    expect(candidate.getAttribute("class")).toContain("geometry-room-face-candidate--focusable");
+    expect(candidate.getAttribute("class")).toContain(
+      "geometry-room-face-candidate--selected"
+    );
+    expect(candidate.getAttribute("class")).toContain(
+      "geometry-room-face-candidate--focusable"
+    );
     expect(candidate.getAttribute("tabindex")).toBe("0");
     fireEvent.click(candidate);
     expect(handleFaceClick).toHaveBeenCalledWith("face-a");
