@@ -240,6 +240,22 @@ export type SvgViewportPointer = {
   readonly altKey?: boolean;
 };
 
+/** Prevents a final out-of-bounds move from relocating passive authoring previews. */
+export function isClientPointInsideCanvas(
+  point: Pick<PointerEvent<SVGSVGElement>, "clientX" | "clientY">,
+  canvas: Pick<SVGSVGElement, "getBoundingClientRect">
+): boolean {
+  const bounds = canvas.getBoundingClientRect();
+  // Layout-less DOMs (including jsdom) cannot provide meaningful bounds.
+  if (bounds.width <= 0 || bounds.height <= 0) return true;
+  return (
+    point.clientX >= bounds.left &&
+    point.clientX <= bounds.right &&
+    point.clientY >= bounds.top &&
+    point.clientY <= bounds.bottom
+  );
+}
+
 /** Screen-local state for distinguishing an Opening click from a drag. */
 type OpeningPointerInteraction = {
   readonly pointerId: number;
@@ -670,7 +686,19 @@ export function GeometrySvgViewer({
 
     const panInteraction = panInteractionRef.current;
     if (!panInteraction || panInteraction.pointerId !== event.pointerId) {
-      onEditorPointerMove?.(pointer, event.pointerId);
+      const capturedEditorGesture =
+        furnitureGesture?.pointerId === event.pointerId ||
+        openingInteraction?.pointerId === event.pointerId ||
+        selectionTranslationPointerRef.current?.pointerId === event.pointerId ||
+        stairAdjustmentPointerIdRef.current === event.pointerId ||
+        stairTranslationPointerIdRef.current === event.pointerId ||
+        endpointPointerIdRef.current === event.pointerId;
+      if (
+        capturedEditorGesture ||
+        isClientPointInsideCanvas(event, event.currentTarget)
+      ) {
+        onEditorPointerMove?.(pointer, event.pointerId);
+      }
     }
 
     if (

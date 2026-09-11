@@ -46,7 +46,8 @@ describe("Furniture presentation", () => {
         definitionId: definition.id
       });
       expect(model.category).toBe(definition.category);
-      expect(model.lines.length > 0).toBe(definition.category !== "GENERIC");
+      expect(model.primitives.length).toBeGreaterThan(0);
+      expect(model.symbolKind).toBe(definition.category);
     }
     const fallback = createFurniturePresentation2D({
       ...item,
@@ -60,7 +61,42 @@ describe("Furniture presentation", () => {
       rotation: 41,
       definitionId: "unknown:chair"
     });
-    expect(fallback.lines).toEqual([]);
+    expect(fallback.primitives.map((primitive) => primitive.role)).toEqual([
+      "generic-mark",
+      "generic-mark"
+    ]);
+  });
+  it.each([
+    ["generic-single-bed", ["mattress", "pillow", "head"]],
+    ["generic-sofa", ["seat", "arm", "back"]],
+    ["generic-dining-table", ["tabletop", "leg"]],
+    ["generic-chair", ["seat", "back"]],
+    ["generic-cabinet", ["storage-panel", "front", "door-seam", "handle"]],
+    ["generic-desk", ["worktop", "front", "pedestal"]],
+    ["generic-furniture", ["generic-mark"]]
+  ] as const)("exposes recognizable semantic cues for %s", (definitionId, roles) => {
+    const model = createFurniturePresentation2D({ ...item, definitionId });
+    const actual = new Set(model.primitives.map((primitive) => primitive.role));
+    for (const role of roles) expect(actual.has(role)).toBe(true);
+  });
+  it("keeps every cue finite and inside varied effective footprints", () => {
+    for (const [width, depth, rotation] of [
+      [240, 100, 0],
+      [35, 260, 47],
+      [300, 30, -123]
+    ] as const) {
+      const model = createFurniturePresentation2D({
+        ...item,
+        width,
+        depth,
+        rotation
+      });
+      const radius = Math.hypot(width / 2, depth / 2);
+      for (const point of model.primitives.flatMap((primitive) => primitive.points)) {
+        expect(Number.isFinite(point.x) && Number.isFinite(point.z)).toBe(true);
+        expect(Math.hypot(point.x - item.position.x, point.z - item.position.z)).toBeLessThanOrEqual(radius);
+      }
+    }
   });
   it("derives Level through Room and keeps deterministic persisted overlap order", () => {
     const project = furnitureProjectFixture();

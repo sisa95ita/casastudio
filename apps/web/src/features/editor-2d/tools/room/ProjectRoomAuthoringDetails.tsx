@@ -14,6 +14,8 @@ import type { KeyboardEvent } from "react";
 import type { RoomShapeKind, RoomType } from "@casastudio/schema";
 
 import { useCasaTranslation } from "../../../../core/i18n";
+import { VisualChoiceStrip } from "../../components/VisualChoiceStrip";
+import { RoomShapeThumbnail } from "../../components/AuthoringChoiceThumbnails";
 import type { RoomAuthoringPreset, RoomShapeDimensionDraft } from "./room-shape-authoring";
 
 /** Detailed transient Room controls rendered by the contextual Properties surface. */
@@ -72,15 +74,22 @@ export function ProjectRoomAuthoringDetails({
       </FormControl>
       {!detectionActive ? (
         <>
-          <FormControl size="small" fullWidth>
-            <InputLabel id="room-authoring-shape-label">{t("roomAuthoring.shape")}</InputLabel>
-            <Select labelId="room-authoring-shape-label" label={t("roomAuthoring.shape")} value={activeShape ?? "RECTANGLE"} onChange={(event) => onShapeChange(event.target.value as RoomShapeKind)}>
-              <MenuItem value="RECTANGLE">{t("roomAuthoring.rectangle")}</MenuItem>
-              <MenuItem value="L_SHAPE">{t("roomAuthoring.lShape")}</MenuItem>
-              <MenuItem value="U_SHAPE">{t("roomAuthoring.uShape")}</MenuItem>
-              <MenuItem value="T_SHAPE">{t("roomAuthoring.tShape")}</MenuItem>
-            </Select>
-          </FormControl>
+          <VisualChoiceStrip
+            label={t("roomAuthoring.shape")}
+            value={activeShape ?? "RECTANGLE"}
+            onChange={onShapeChange}
+            options={([
+              ["RECTANGLE", "rectangle"],
+              ["L_SHAPE", "lShape"],
+              ["U_SHAPE", "uShape"],
+              ["T_SHAPE", "tShape"]
+            ] as const).map(([value, key]) => ({
+              value,
+              label: t(`roomAuthoring.${key}`),
+              caption: t(`roomAuthoring.${key}`),
+              thumbnail: <RoomShapeThumbnail shape={value} />
+            }))}
+          />
           <FormControl size="small" fullWidth>
             <InputLabel id="room-authoring-preset-label">{t("roomAuthoring.preset")}</InputLabel>
             <Select labelId="room-authoring-preset-label" label={t("roomAuthoring.preset")} value={preset} onChange={(event) => onPresetChange(event.target.value as RoomAuthoringPreset)}>

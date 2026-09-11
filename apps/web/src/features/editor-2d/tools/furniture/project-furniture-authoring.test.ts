@@ -61,7 +61,7 @@ describe("Furniture authoring", () => {
         rotation: 0
       });
       expect(draft.positioned).toBe(false);
-      expect(draft.previewVisible).toBe(true);
+      expect(draft.previewVisible).toBe(false);
     }
     expect(startFurniturePlacement("absent")).toBeUndefined();
   });

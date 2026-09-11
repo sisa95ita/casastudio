@@ -44,6 +44,9 @@ type UseEditorKeyboardShortcutsOptions = {
   readonly handleFitViewport: () => void;
   readonly handleResetViewport: () => void;
   readonly handleCancelStairAuthoring: () => void;
+  readonly handleOpeningAuthoringTypeChange?: (
+    openingType: "DOOR" | "WINDOW" | "OPENING"
+  ) => void;
   readonly selectionCount?: number;
   readonly handleDeleteSelection?: () => void;
   readonly handleNudgeSelection?: (delta: {
@@ -74,6 +77,7 @@ export function useEditorKeyboardShortcuts({
   handleFitViewport,
   handleResetViewport,
   handleCancelStairAuthoring,
+  handleOpeningAuthoringTypeChange,
   selectionCount = 0,
   handleDeleteSelection,
   handleNudgeSelection
@@ -152,7 +156,11 @@ export function useEditorKeyboardShortcuts({
             dispatch(editorToolToggled("openings"));
           } else {
             dispatch(editorActiveToolChanged("openings"));
-            dispatch(editorOpeningAuthoringTypeChanged(openingType));
+            if (handleOpeningAuthoringTypeChange) {
+              handleOpeningAuthoringTypeChange(openingType);
+            } else {
+              dispatch(editorOpeningAuthoringTypeChanged(openingType));
+            }
           }
           return;
         }
@@ -269,6 +277,7 @@ export function useEditorKeyboardShortcuts({
     handleDeleteSelectedStair,
     handleResetViewport,
     handleCancelStairAuthoring,
+    handleOpeningAuthoringTypeChange,
     handleDeleteSelection,
     handleNudgeSelection,
     selectionCount,

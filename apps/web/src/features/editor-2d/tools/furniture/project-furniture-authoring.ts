@@ -45,7 +45,7 @@ export type FurnitureInteraction = {
   readonly item: FurnitureItem;
   readonly sourceId?: string;
   readonly positioned: boolean;
-  /** Definition preview may render before the canvas has supplied its first anchor. */
+  /** Spatial preview becomes visible only after the canvas supplies its first anchor. */
   readonly previewVisible?: boolean;
   readonly awaitingRoom?: boolean;
   /** Explicit placement target retained only while its Room contains the center. */
@@ -129,7 +129,7 @@ export function startFurniturePlacement(
     intent: "place",
     item: { ...item, roomId: "" },
     positioned: false,
-    previewVisible: true
+    previewVisible: false
   };
 }
 

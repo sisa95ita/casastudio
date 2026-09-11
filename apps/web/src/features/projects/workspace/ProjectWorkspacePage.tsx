@@ -104,6 +104,7 @@ import { useProjectQuery } from "../data/project-queries";
 import { useAppDispatch, useAppSelector } from "../../../app/store/hooks";
 import {
   cleanEditingSessionLeft,
+  createOpeningAuthoringInteraction,
   editingDraftReplaced,
   editingSessionEntered,
   editorActiveLevelChanged,
@@ -121,6 +122,7 @@ import {
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
   editorRoomShapePlacementChanged,
+  editorRoomAuthoringTypeChanged,
   editorRoomShapeElevationChanged,
   editorRoomShapePlacementPointerMoved,
   editorRoomShapePlacementStarted,
@@ -134,7 +136,6 @@ import {
   editorOpeningDragPreviewChanged,
   editorOpeningDragStarted,
   editorOpeningPlacementChanged,
-  editorOpeningAuthoringTypeChanged,
   editorWallVertexPlacementChanged,
   editorRedoRequested,
   editorSelectionChanged,
@@ -948,17 +949,27 @@ export function ProjectWorkspacePage() {
       setRoomShapeDimensions(dimensions);
       setRoomDetectionActive(false);
       dispatch(editorActiveToolChanged("room"));
-      dispatch(
-        editorRoomShapePlacementStarted({
-          levelId: editor.activeLevelId,
-          shape,
-          boundaryKind,
-          elevation: boundaryKind === "FREE" ? (validRoomElevation ?? 0) : 0,
-          roomType
-        })
-      );
+      if (roomShapePlacement?.levelId === editor.activeLevelId) {
+        dispatch(editorRoomShapePlacementChanged(shape));
+      } else {
+        dispatch(
+          editorRoomShapePlacementStarted({
+            levelId: editor.activeLevelId,
+            shape,
+            boundaryKind,
+            elevation: boundaryKind === "FREE" ? (validRoomElevation ?? 0) : 0,
+            roomType
+          })
+        );
+      }
     },
-    [dispatch, editor.activeLevelId, roomElevationDraft, validRoomElevation]
+    [
+      dispatch,
+      editor.activeLevelId,
+      roomElevationDraft,
+      roomShapePlacement,
+      validRoomElevation
+    ]
   );
 
   const handleRoomMethodChange = useCallback(
@@ -977,17 +988,22 @@ export function ProjectWorkspacePage() {
       setRoomDetectionActive(false);
       const shape = parseRoomShapeDefinition(values.shape, values.dimensions);
       if (!shape || !editor.activeLevelId) return;
-      dispatch(
-        editorRoomShapePlacementStarted({
-          levelId: editor.activeLevelId,
-          shape,
-          boundaryKind: Number(roomElevationDraft) === 0 ? "WALLS" : "FREE",
-          elevation: Number(roomElevationDraft) || 0,
-          roomType: values.roomType
-        })
-      );
+      if (roomShapePlacement?.levelId === editor.activeLevelId) {
+        dispatch(editorRoomShapePlacementChanged(shape));
+        dispatch(editorRoomAuthoringTypeChanged(values.roomType));
+      } else {
+        dispatch(
+          editorRoomShapePlacementStarted({
+            levelId: editor.activeLevelId,
+            shape,
+            boundaryKind: Number(roomElevationDraft) === 0 ? "WALLS" : "FREE",
+            elevation: Number(roomElevationDraft) || 0,
+            roomType: values.roomType
+          })
+        );
+      }
     },
-    [dispatch, editor.activeLevelId, roomElevationDraft]
+    [dispatch, editor.activeLevelId, roomElevationDraft, roomShapePlacement]
   );
 
   const handleRoomElevationChange = useCallback(
@@ -2933,6 +2949,31 @@ export function ProjectWorkspacePage() {
     ]
   );
 
+  const handleOpeningAuthoringTypeChange = useCallback(
+    (openingType: "DOOR" | "WINDOW" | "OPENING") => {
+      const interaction = editor.transient.interaction;
+      const properties = createOpeningAuthoringInteraction(openingType).properties;
+      const candidate =
+        interaction?.kind === "place-opening" &&
+        interaction.candidate &&
+        editor.draft &&
+        editor.activeLevelId
+          ? resolveOpeningPlacementCandidate(
+              editor.draft,
+              editor.activeLevelId,
+              interaction.candidate.projectedPoint,
+              openingType,
+              1e-6,
+              properties
+            )
+          : undefined;
+      dispatch(
+        editorOpeningPlacementChanged({ openingType, properties, candidate })
+      );
+    },
+    [dispatch, editor.activeLevelId, editor.draft, editor.transient.interaction]
+  );
+
   useEditorKeyboardShortcuts({
     selectedFurniture: furniture.selected,
     handleDeleteSelectedFurniture: furniture.remove,
@@ -2954,6 +2995,7 @@ export function ProjectWorkspacePage() {
     handleFitViewport,
     handleResetViewport,
     handleCancelStairAuthoring,
+    handleOpeningAuthoringTypeChange,
     selectionCount: selectionState.selected.length,
     handleDeleteSelection,
     handleNudgeSelection
@@ -3170,9 +3212,7 @@ export function ProjectWorkspacePage() {
         onDeleteOpening={handleDeleteSelectedOpening}
         onUpdateOpening={handleUpdateSelectedOpening}
         onUpdateOpeningAuthoring={handleUpdateOpeningAuthoring}
-        onUpdateOpeningAuthoringType={(openingType) =>
-          dispatch(editorOpeningAuthoringTypeChanged(openingType))
-        }
+        onUpdateOpeningAuthoringType={handleOpeningAuthoringTypeChange}
         onUpdateRoomAuthoringDimension={handleRoomShapeDimensionChange}
         onRoomAuthoringMethodChange={handleRoomMethodChange}
         onRoomAuthoringShapeChange={(shape) => {
@@ -3253,6 +3293,7 @@ export function ProjectWorkspacePage() {
     handleDeleteSelectedOpening,
     handleUpdateSelectedOpening,
     handleUpdateOpeningAuthoring,
+    handleOpeningAuthoringTypeChange,
     handleRoomShapeDimensionChange,
     handleRoomElevationChange,
     handleCancelRoomAuthoring,

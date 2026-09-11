@@ -5,6 +5,7 @@ import {
   isGeometrySelectionMatch,
   type GeometrySelectionState
 } from "../selection/geometry-selection-state";
+import { FurnitureSymbolSvg } from "./FurnitureSymbolSvg";
 
 /** Renderer-neutral Furniture plan plus transient geometry and interaction availability. */
 export type FurnitureViewerModel = {
@@ -81,19 +82,12 @@ export function FurnitureSvgLayer({
         pointerEvents={preview ? "none" : undefined}
       >
         <title>{item.name}</title>
-        <polygon
-          points={points(item.footprint)}
-          fill="#f5f3ec"
-          pointerEvents="none"
+        <FurnitureSymbolSvg
+          model={item}
+          project={(point) => transform.worldToScreen(point)}
+          stroke={color}
+          strokeWidth={selected ? 1.8 : hovered || preview ? 1.45 : 1.2}
         />
-        {item.lines.map((line, index) => (
-          <polyline
-            key={index}
-            points={points(line)}
-            fill="none"
-            pointerEvents="none"
-          />
-        ))}
         {!preview ? (
           <polygon
             data-testid="furniture-hit-target"
@@ -112,6 +106,7 @@ export function FurnitureSvgLayer({
         ) : null}
         {!preview &&
         selected &&
+        selection.selected.length === 1 &&
         model.editing &&
         selectionEnabled &&
         !model.preview ? (

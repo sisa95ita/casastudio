@@ -10,6 +10,8 @@ import {
 } from "@casastudio/schema";
 
 import { useCasaTranslation } from "../../../../core/i18n";
+import { VisualChoiceStrip } from "../../../editor-2d/components/VisualChoiceStrip";
+import { StairTemplateThumbnail } from "../../../editor-2d/components/AuthoringChoiceThumbnails";
 import {
   inferStairTemplate,
   measureStaircase,
@@ -196,19 +198,21 @@ export function ProjectStairAuthoringDetails({
           {toLevel?.rooms.map((room) => <MenuItem key={room.id} value={room.id}>{room.name}</MenuItem>)}
         </Select>
       </FormControl>
-      <FormControl size="small">
-        <InputLabel id="stair-inspector-template-label">{t("stairAuthoring.template")}</InputLabel>
-        <Select
-          labelId="stair-inspector-template-label"
-          label={t("stairAuthoring.template")}
-          value={template}
-          onChange={(event) => onTemplateChange(event.target.value as StairTemplate)}
-        >
-          <MenuItem value="STRAIGHT">{t("stairAuthoring.templates.straight")}</MenuItem>
-          <MenuItem value="L_SHAPED">{t("stairAuthoring.templates.lShaped")}</MenuItem>
-          <MenuItem value="U_SHAPED">{t("stairAuthoring.templates.uShaped")}</MenuItem>
-        </Select>
-      </FormControl>
+      <VisualChoiceStrip
+        label={t("stairAuthoring.template")}
+        value={template}
+        onChange={onTemplateChange}
+        options={([
+          ["STRAIGHT", "straight"],
+          ["L_SHAPED", "lShaped"],
+          ["U_SHAPED", "uShaped"]
+        ] as const).map(([value, key]) => ({
+          value,
+          label: t(`stairAuthoring.templates.${key}`),
+          caption: t(`stairAuthoring.templates.${key}`),
+          thumbnail: <StairTemplateThumbnail template={value} />
+        }))}
+      />
       {template === "L_SHAPED" ? (
         <FormControl size="small" fullWidth>
           <InputLabel id="stair-turn-label">{t("stairAuthoring.turn")}</InputLabel>

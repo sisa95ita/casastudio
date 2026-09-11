@@ -277,8 +277,7 @@ async function selectRoomMethod(name: "Detect" | "Shape") {
 async function selectRoomShape(
   name: "Rectangle" | "L-shape" | "U-shape" | "T-shape"
 ) {
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Shape" }));
-  fireEvent.click(await screen.findByRole("option", { name }));
+  fireEvent.click(await screen.findByRole("radio", { name }));
 }
 
 function emptyProjectFetch(): typeof fetch {
@@ -1565,6 +1564,36 @@ describe("ProjectViewerPage", () => {
         ? previewInteraction.candidate
         : undefined;
     expect(previewCandidate?.valid).toBe(true);
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Type" }));
+    fireEvent.click(screen.getByRole("option", { name: "Window" }));
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-opening",
+      openingType: "WINDOW",
+      candidate: { projectedPoint: previewCandidate?.projectedPoint }
+    });
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Type" }));
+    fireEvent.click(screen.getByRole("option", { name: "Door" }));
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-opening",
+      openingType: "DOOR",
+      candidate: { projectedPoint: previewCandidate?.projectedPoint }
+    });
+    const authoringWidth = screen.getByRole("spinbutton", {
+      name: "Width (cm)"
+    });
+    fireEvent.change(authoringWidth, { target: { value: "100" } });
+    fireEvent.blur(authoringWidth);
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-opening",
+      properties: { width: 100 },
+      candidate: { projectedPoint: previewCandidate?.projectedPoint }
+    });
+    const finalOpeningInteraction =
+      store.getState().projectEditor.transient.interaction;
+    const finalOpeningCandidate =
+      finalOpeningInteraction?.kind === "place-opening"
+        ? finalOpeningInteraction.candidate
+        : undefined;
     fireEvent.click(svg, { clientX: 580, clientY: 395 });
 
     await waitFor(() =>
@@ -1581,10 +1610,10 @@ describe("ProjectViewerPage", () => {
     )!;
     expect(owningWall.id).toBe(previewCandidate?.wallId);
     expect(door.offsetFromStart).toBe(
-      previewCandidate?.opening.offsetFromStart
+      finalOpeningCandidate?.opening.offsetFromStart
     );
     expect(door).toMatchObject({
-      width: 90,
+      width: 100,
       height: 210,
       elevation: 0,
       hingeSide: "START",
@@ -1921,7 +1950,13 @@ describe("ProjectViewerPage", () => {
 
     expect(screen.queryByRole("menuitem", { name: "Detect room" })).toBeNull();
     expect(screen.getByRole("combobox", { name: "Method" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Shape" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Shape" })).toBeNull();
+    expect(
+      within(screen.getByRole("radiogroup", { name: "Shape" })).getAllByRole(
+        "radio"
+      )
+    ).toHaveLength(4);
     expect(screen.getByRole("spinbutton", { name: "Width" })).toBeTruthy();
     await selectRoomShape("U-shape");
     expect(
@@ -2023,6 +2058,16 @@ describe("ProjectViewerPage", () => {
     expect(
       within(inspector).getByRole("spinbutton", { name: "Width" })
     ).toBeTruthy();
+    expect(
+      within(inspector).getByRole("radiogroup", {
+        name: "Initial template"
+      })
+    ).toBeTruthy();
+    expect(
+      within(inspector).queryByRole("combobox", {
+        name: "Initial template"
+      })
+    ).toBeNull();
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Target Level" }));
     fireEvent.click(
       await screen.findByRole("option", { name: "Ground Floor · same Level" })
@@ -2034,10 +2079,36 @@ describe("ProjectViewerPage", () => {
       await screen.findByRole("option", { name: "Left Room" })
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("option", { name: "Left Room" }));
-    fireEvent.mouseDown(
-      within(inspector).getByRole("combobox", { name: "Initial template" })
+    fireEvent.click(
+      within(inspector).getByRole("radio", { name: "L-shaped" })
     );
-    fireEvent.click(await screen.findByRole("option", { name: "L-shaped" }));
+    fireEvent.pointerMove(svg, { clientX: 620, clientY: 180, pointerId: 711 });
+    const stairInteraction =
+      store.getState().projectEditor.transient.interaction;
+    const anchoredStart =
+      stairInteraction?.kind === "place-stair"
+        ? stairInteraction.start
+        : undefined;
+    fireEvent.click(
+      within(inspector).getByRole("radio", { name: "Straight" })
+    );
+    expect(
+      screen
+        .getByTestId("stair-preview")
+        .querySelectorAll(".geometry-stair-preview__body")
+    ).toHaveLength(1);
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-stair",
+      start: anchoredStart
+    });
+    fireEvent.click(
+      within(inspector).getByRole("radio", { name: "L-shaped" })
+    );
+    expect(
+      screen
+        .getByTestId("stair-preview")
+        .querySelectorAll(".geometry-stair-preview__body")
+    ).toHaveLength(2);
     const firstSteps = within(inspector).getByRole("spinbutton", {
       name: "Flight 1 steps"
     });
@@ -2049,7 +2120,6 @@ describe("ProjectViewerPage", () => {
     const confirm = within(inspector).getByRole("button", {
       name: "Create Staircase"
     });
-    fireEvent.pointerMove(svg, { clientX: 620, clientY: 180, pointerId: 711 });
     expect(screen.getByTestId("stair-preview").getAttribute("data-valid")).toBe(
       "true"
     );
@@ -2178,7 +2248,7 @@ describe("ProjectViewerPage", () => {
     const roomButton = screen.getByRole("button", { name: "Room" });
     fireEvent.click(roomButton);
     expect(store.getState().projectEditor.activeTool).toBe("room");
-    expect(screen.getByRole("combobox", { name: "Shape" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeTruthy();
     const svg = (await screen.findByRole("img")) as unknown as SVGSVGElement;
     prepareSvgPointerCoordinates(svg);
     fireEvent.pointerMove(svg, { clientX: 140, clientY: 140, pointerId: 900 });
@@ -2187,13 +2257,13 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(roomButton);
     expect(store.getState().projectEditor.activeTool).toBe("select");
     expect(store.getState().projectEditor.transient.interaction).toBeNull();
-    expect(screen.queryByRole("combobox", { name: "Shape" })).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Shape" })).toBeNull();
     expect(screen.queryByTestId("room-shape-preview")).toBeNull();
     expect(store.getState().projectEditor.dirty).toBe(before.dirty);
     expect(store.getState().projectEditor.history).toEqual(before.history);
     fireEvent.click(roomButton);
     expect(store.getState().projectEditor.activeTool).toBe("room");
-    expect(screen.getByRole("combobox", { name: "Shape" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeTruthy();
   });
 
   it("previews and atomically commits a snapped rectangular Room on an empty Level", async () => {
@@ -2307,9 +2377,9 @@ describe("ProjectViewerPage", () => {
     ]);
     expect(store.getState().projectEditor.activeTool).toBe("select");
     expect(screen.queryByTestId("room-shape-preview")).toBeNull();
-    expect(screen.queryByRole("combobox", { name: "Shape" })).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Shape" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
-    expect(screen.getByRole("combobox", { name: "Shape" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -2372,9 +2442,17 @@ describe("ProjectViewerPage", () => {
     expect(uPreview.querySelector("polygon")!.getAttribute("points")).not.toBe(
       uPoints
     );
+    const roomInteraction = store.getState().projectEditor.transient.interaction;
+    const anchoredOrigin =
+      roomInteraction?.kind === "place-room-shape"
+        ? roomInteraction.origin
+        : undefined;
 
     await selectRoomShape("T-shape");
-    fireEvent.pointerMove(svg, { clientX: 220, clientY: 200, pointerId: 441 });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-room-shape",
+      origin: anchoredOrigin
+    });
     expect(
       screen.getByTestId("room-shape-preview").getAttribute("data-shape-kind")
     ).toBe("T_SHAPE");
@@ -4563,10 +4641,13 @@ describe("ProjectViewerPage", () => {
     const furniture = screen.getByRole("button", { name: "Furniture" });
     fireEvent.keyDown(window, { key: "u" });
     expect(furniture.getAttribute("aria-pressed")).toBe("true");
-    const catalog = screen.getByRole("combobox", { name: "Catalog" });
-    fireEvent.keyDown(catalog, { key: "v" });
+    const catalog = screen.getByRole("radiogroup", { name: "Catalog" });
+    const catalogChoice = within(catalog).getByRole("radio", {
+      name: "Single bed"
+    });
+    fireEvent.keyDown(catalogChoice, { key: "v" });
     expect(furniture.getAttribute("aria-pressed")).toBe("true");
-    fireEvent.keyDown(catalog, { key: "u" });
+    fireEvent.keyDown(catalogChoice, { key: "u" });
     expect(furniture.getAttribute("aria-pressed")).toBe("true");
     fireEvent.keyDown(window, { key: "u" });
     expect(furniture.getAttribute("aria-pressed")).toBe("false");

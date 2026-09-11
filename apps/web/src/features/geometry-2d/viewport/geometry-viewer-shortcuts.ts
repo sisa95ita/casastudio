@@ -158,7 +158,7 @@ export const isEditableShortcutTarget = (
     target.isContentEditable ||
     Boolean(
       target.closest(
-        'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], .MuiInputBase-root'
+        'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [data-editor-shortcut-scope="true"], .MuiInputBase-root'
       )
     )
   );

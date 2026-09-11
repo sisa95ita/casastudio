@@ -12,9 +12,14 @@ import {
   MenuItem,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography
 } from "@mui/material";
+import { useState } from "react";
 import { useCasaTranslation } from "../../../../core/i18n";
+import { FurnitureChoiceThumbnail } from "../../components/FurnitureChoiceThumbnail";
+import { VisualChoiceStrip } from "../../components/VisualChoiceStrip";
 import type { FurnitureEditorController } from "./useFurnitureEditor";
 
 /** Contextual catalog, placement ownership, and exact instance editing in the Inspector. */
@@ -28,11 +33,18 @@ export function ProjectFurnitureProperties({
   readonly editable: boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
+  const [category, setCategory] = useState<string>("ALL");
   const { item } = c;
   const definition = builtinFurnitureDefinitions.find(
     (entry) => entry.id === item?.definitionId
   );
   const draft = c.transient;
+  const categories = Array.from(
+    new Set(builtinFurnitureDefinitions.map((entry) => entry.category))
+  );
+  const visibleDefinitions = builtinFurnitureDefinitions.filter(
+    (entry) => category === "ALL" || entry.category === category
+  );
   const roomControl = (() => {
     const roomState =
       c.candidates.length === 0
@@ -121,24 +133,45 @@ export function ProjectFurnitureProperties({
         {t("tools.furniture")}
       </Typography>
       {c.authoring ? (
-        <TextField
-          select
-          size="small"
-          label={t("furniture.catalog")}
-          value={item?.definitionId ?? ""}
-          onChange={(event) => c.chooseDefinition(event.target.value)}
-        >
-          {builtinFurnitureDefinitions.map((entry) => (
-            <MenuItem key={entry.id} value={entry.id}>
-              {entry.category} · {entry.name}
-            </MenuItem>
-          ))}
-          {item && !definition ? (
-            <MenuItem value={item.definitionId}>
-              {t("furniture.unknown")}
-            </MenuItem>
-          ) : null}
-        </TextField>
+        <Stack spacing={1}>
+          <Box
+            data-editor-shortcut-scope="true"
+            sx={{ maxWidth: "100%", overflowX: "auto" }}
+          >
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={category}
+              aria-label={t("furniture.catalog")}
+              onChange={(_event, value: string | null) => {
+                if (value) setCategory(value);
+              }}
+              sx={{ whiteSpace: "nowrap" }}
+            >
+              {["ALL", ...categories].map((value) => (
+                <ToggleButton
+                  key={value}
+                  value={value}
+                  aria-label={formatCategory(value)}
+                  sx={{ px: 1, py: 0.4, textTransform: "none" }}
+                >
+                  {formatCategory(value)}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Box>
+          <VisualChoiceStrip
+            label={t("furniture.catalog")}
+            value={item?.definitionId ?? ""}
+            onChange={c.chooseDefinition}
+            options={visibleDefinitions.map((entry) => ({
+              value: entry.id,
+              label: entry.name,
+              caption: entry.name,
+              thumbnail: <FurnitureChoiceThumbnail definition={entry} />
+            }))}
+          />
+        </Stack>
       ) : item ? (
         <Typography variant="body2">
           {item.name ?? definition?.name ?? t("furniture.unknown")} ·{" "}
@@ -289,6 +322,15 @@ export function ProjectFurnitureProperties({
       ) : null}
     </Stack>
   );
+}
+
+function formatCategory(value: string): string {
+  if (value === "ALL") return "All";
+  return value
+    .toLowerCase()
+    .replace(/(^|_)([a-z])/g, (_match, separator, letter: string) =>
+      `${separator ? " " : ""}${letter.toUpperCase()}`
+    );
 }
 
 function FurnitureNumber({

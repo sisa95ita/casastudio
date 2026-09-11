@@ -34,7 +34,7 @@ import {
   createFurniturePlan2D,
   createFurniturePresentation2D
 } from "../../../geometry-2d/presentation/furniture-presentation-model-2d";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveFurniturePrecisionTranslation } from "../../precision/project-precision-assistance";
 
 type Options = {
@@ -66,6 +66,14 @@ export function useFurnitureEditor({
   const lastCanvasPointerRef = useRef<SvgViewportPointer | undefined>(
     undefined
   );
+  const furnitureAuthoringActive = editable && editor.activeTool === "furniture";
+  const previousAuthoringActiveRef = useRef(false);
+  useEffect(() => {
+    if (furnitureAuthoringActive && !previousAuthoringActiveRef.current) {
+      lastCanvasPointerRef.current = undefined;
+    }
+    previousAuthoringActiveRef.current = furnitureAuthoringActive;
+  }, [furnitureAuthoringActive]);
   const [error, setError] = useState<
     FurniturePlacementIssue | "EDIT_FAILED" | undefined
   >();
@@ -82,7 +90,7 @@ export function useFurnitureEditor({
     const selected = visible
       ? project?.building.furniture.find((item) => item.id === selectedId)
       : undefined;
-    const authoring = editable && editor.activeTool === "furniture";
+    const authoring = furnitureAuthoringActive;
     const setTransient = (value: FurnitureInteraction) => {
       setError(undefined);
       dispatch(editorFurnitureChanged(value));
@@ -199,7 +207,7 @@ export function useFurnitureEditor({
       return { ...positioned, precision };
     };
     const pointerMove = (pointer: SvgViewportPointer, pointerId: number) => {
-      lastCanvasPointerRef.current = pointer;
+      if (authoring && transient) lastCanvasPointerRef.current = pointer;
       if (
         !editable ||
         !project ||
@@ -518,7 +526,8 @@ export function useFurnitureEditor({
     error,
     zoom,
     snapToGrid,
-    gridSpacing
+    gridSpacing,
+    furnitureAuthoringActive
   ]);
 }
 

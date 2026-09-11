@@ -183,6 +183,35 @@ afterEach(() => {
 });
 
 describe("GeometrySvgViewer", () => {
+  it("emits passive authoring coordinates only while the pointer is inside canvas bounds", () => {
+    const onEditorPointerMove = vi.fn();
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(getPlaygroundLevel())}
+        options={defaultGeometryDisplayOptions}
+        onEditorPointerMove={onEditorPointerMove}
+      />
+    );
+    const canvas = screen.getByRole("img", {
+      name: /interactive 2d geometry viewer/i
+    });
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      left: 10,
+      top: 20,
+      right: 810,
+      bottom: 540,
+      width: 800,
+      height: 520,
+      x: 10,
+      y: 20,
+      toJSON: () => ({})
+    });
+
+    fireEvent.pointerMove(canvas, { clientX: 400, clientY: 260, pointerId: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 900, clientY: 260, pointerId: 1 });
+
+    expect(onEditorPointerMove).toHaveBeenCalledTimes(1);
+  });
   it("keeps Furniture click/drag thresholds and allows the first placement after a rotation gesture", () => {
     const item = createFurniturePresentation2D({
       id: "sofa",

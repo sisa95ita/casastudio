@@ -58,9 +58,11 @@ describe("Furniture controller and Properties", () => {
   it("creates a visible preview before any click and commits the final transient geometry once", () => {
     const { result } = renderHook(useEditorHarness);
     const c = () => result.current.controller;
-    act(() => c().pointerMove(pointer(150, 150), 1));
     act(() => result.current.dispatch(editorActiveToolChanged("furniture")));
     act(() => c().chooseDefinition("generic-sofa"));
+    expect(c().transient).toMatchObject({ positioned: false, previewVisible: false });
+    expect(c().preview).toBeUndefined();
+    act(() => c().pointerMove(pointer(150, 150), 1));
     expect(c().transient).toMatchObject({ positioned: true, previewVisible: true });
     expect(c().preview).toMatchObject({
       category: "SOFA",
@@ -92,6 +94,10 @@ describe("Furniture controller and Properties", () => {
       rotation: 0
     });
     act(() => c().update({ width: 130, depth: 70, height: 82, rotation: 12 }));
+    expect(c().preview?.center).toEqual({ x: 150, z: 150 });
+    act(() => c().pointerMove(pointer(175, 165), 1));
+    expect(c().preview?.center).toEqual({ x: 175, z: 165 });
+    act(() => c().pointerMove(pointer(150, 150), 1));
     const finalPreview = c().preview!;
     expect(result.current.editor.history.past).toHaveLength(0);
     act(() => c().canvasClick(pointer(150, 150)));
@@ -156,7 +162,7 @@ describe("Furniture controller and Properties", () => {
     const c = () => result.current.controller;
     act(() => result.current.dispatch(editorActiveToolChanged("furniture")));
     act(() => c().chooseDefinition("generic-chair"));
-    expect(c().preview).toBeTruthy();
+    expect(c().preview).toBeUndefined();
     expect(c().previewValid).toBe(false);
     expect(c().candidates).toEqual([]);
 
@@ -227,7 +233,7 @@ describe("Furniture controller and Properties", () => {
     expect(room.value).toBe("No Room");
     expect(room.disabled).toBe(true);
     expect(screen.queryByRole("combobox", { name: "Room" })).toBeNull();
-    expect(result.current.controller.preview).toBeTruthy();
+    expect(result.current.controller.preview).toBeUndefined();
     expect(result.current.controller.previewValid).toBe(false);
 
     act(() => result.current.controller.pointerMove(pointer(150, 150), 1));
@@ -527,9 +533,17 @@ describe("Furniture controller and Properties", () => {
     }
     render(<Harness />);
     fireEvent.click(screen.getByText("Start"));
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Catalog" }));
-    expect(screen.getAllByRole("option")).toHaveLength(8);
-    fireEvent.click(screen.getByRole("option", { name: "SOFA · Sofa" }));
+    expect(
+      screen.getByRole("radiogroup", { name: "Catalog" }).children
+    ).toHaveLength(8);
+    fireEvent.click(screen.getByRole("button", { name: "Sofa" }));
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
+      "Sofa"
+    ]);
+    expect(screen.getByRole("button", { name: "Sofa" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getAllByRole("radio")).toHaveLength(8);
+    fireEvent.click(screen.getByRole("radio", { name: "Sofa" }));
     const width = screen.getByRole("spinbutton", {
       name: "Width (cm)"
     }) as HTMLInputElement;
@@ -580,6 +594,19 @@ describe("Furniture controller and Properties", () => {
     ).toBe("all");
     expect(screen.getByTestId("furniture-rotation-handle")).toBeTruthy();
     expect(item.rotation).toBe(25);
+    rerender(
+      <svg>
+        <FurnitureSvgLayer
+          {...props}
+          selection={createGeometrySelectionState([
+            { kind: "FURNITURE", geometryId: item.id },
+            { kind: "FURNITURE", geometryId: "another-chair" }
+          ])}
+          visible
+        />
+      </svg>
+    );
+    expect(screen.queryByTestId("furniture-rotation-handle")).toBeNull();
     rerender(
       <svg>
         <FurnitureSvgLayer {...props} visible={false} />
