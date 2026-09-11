@@ -21,6 +21,7 @@ import {
   createWallFootprints2D,
   polygonContainsPoint
 } from "../../../geometry-2d/presentation/plan-footprints-2d";
+import type { PrecisionTranslationResult } from "../../../geometry-2d/precision/precision-assistance-2d";
 
 /** Anchor-containing Room with global floor elevation for an explicit placement choice. */
 export type FurnitureRoomCandidate = {
@@ -49,6 +50,8 @@ export type FurnitureInteraction = {
   readonly awaitingRoom?: boolean;
   /** Explicit placement target retained only while its Room contains the center. */
   readonly explicitRoomId?: string;
+  /** Exact transient assistance shared by preview and gesture commit. */
+  readonly precision?: PrecisionTranslationResult;
   readonly gesture?: {
     readonly pointerId: number;
     readonly start: Point2D;
@@ -57,10 +60,7 @@ export type FurnitureInteraction = {
 };
 
 export type FurniturePlacementIssue =
-  | "NO_ROOM"
-  | "AMBIGUOUS_ROOM"
-  | "WALL_INTERSECTION"
-  | "FURNITURE_INTERSECTION";
+  "NO_ROOM" | "AMBIGUOUS_ROOM" | "WALL_INTERSECTION" | "FURNITURE_INTERSECTION";
 
 export type FurniturePlacementWarning = "STAIRCASE_OVERLAP";
 
@@ -173,7 +173,9 @@ export function validateFurniturePlacement(
 ): FurniturePlacementValidation {
   const level = project.building.levels.find((entry) => entry.id === levelId);
   const candidates = furnitureRoomCandidates(project, levelId, item.position);
-  const target = candidates.find((candidate) => candidate.roomId === item.roomId);
+  const target = candidates.find(
+    (candidate) => candidate.roomId === item.roomId
+  );
   if (!target)
     return {
       status: "INVALID",
@@ -226,7 +228,8 @@ export function commitFurnitureInteraction(
     !interaction.positioned ||
     validateFurniturePlacement(project, levelId, item, ignoreFurnitureId)
       .status === "INVALID"
-  ) return undefined;
+  )
+    return undefined;
   if (interaction.intent === "rotate" && interaction.sourceId) {
     return rotateFurniture(project, {
       furnitureId: interaction.sourceId,

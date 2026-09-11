@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Level, Project } from "@casastudio/schema";
+import { createFurnitureFootprint2D } from "../../geometry-2d/presentation/plan-footprints-2d";
 
 import {
+  alignFurnitureSelection,
   deleteProjectSelection,
+  distributeFurnitureSelection,
   getProjectSelectionCapabilities,
   resolveProjectSelectionRoots,
   translateProjectSelection,
@@ -166,6 +169,165 @@ function fixture(): Project {
 const level = (project: Project): Level => project.building.levels[0]!;
 
 describe("Project selection transforms", () => {
+  it.each([
+    ["left", "minX"],
+    ["center-x", "centerX"],
+    ["right", "maxX"],
+    ["top", "minZ"],
+    ["center-z", "centerZ"],
+    ["bottom", "maxZ"]
+  ] as const)(
+    "aligns oriented footprint extents for %s to the last-selected stationary anchor",
+    (alignment, extent) => {
+      const project = fixture();
+      project.building.furniture[0]!.position = { x: 100, z: 100 };
+      project.building.furniture[0]!.rotation = 45;
+      project.building.furniture[0]!.width = 60;
+      project.building.furniture[0]!.depth = 30;
+      project.building.furniture[1]!.position = { x: 400, z: 400 };
+      const roots: ProjectSelectionRoot[] = [
+        { kind: "FURNITURE", id: "chair-a", roomId: "lower" },
+        { kind: "FURNITURE", id: "chair-b", roomId: "lower" }
+      ];
+      const movingBefore = structuredClone(project.building.furniture[0]!);
+      const anchor = structuredClone(project.building.furniture[1]!);
+      const result = alignFurnitureSelection(
+        project,
+        level(project),
+        roots,
+        alignment
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const moved = result.project.building.furniture[0]!;
+      expect(result.project.building.furniture[1]).toEqual(anchor);
+      expect(bounds(moved)[extent]).toBeCloseTo(bounds(anchor)[extent]);
+      expect(moved.position).not.toEqual(movingBefore.position);
+      expect(moved.rotation).toBe(movingBefore.rotation);
+      expect(moved.width).toBe(movingBefore.width);
+      expect(moved.depth).toBe(movingBefore.depth);
+      expect(moved.height).toBe(movingBefore.height);
+      expect(moved.roomId).toBe(movingBefore.roomId);
+    }
+  );
+
+  it("rejects an entire alignment that would collide with unselected Furniture", () => {
+    const project = fixture();
+    project.building.furniture[0]!.position = { x: 100, z: 100 };
+    project.building.furniture[1]!.position = { x: 300, z: 300 };
+    project.building.furniture.push({
+      ...project.building.furniture[0]!,
+      id: "blocker",
+      position: { x: 100, z: 300 }
+    });
+    const before = structuredClone(project);
+    const result = alignFurnitureSelection(
+      project,
+      level(project),
+      [
+        { kind: "FURNITURE", id: "chair-a", roomId: "lower" },
+        { kind: "FURNITURE", id: "chair-b", roomId: "lower" }
+      ],
+      "top"
+    );
+    expect(result.ok).toBe(false);
+    expect(project).toEqual(before);
+  });
+
+  it("distributes unequal footprint widths with fixed outer items and equal clear gaps", () => {
+    const project = fixture();
+    project.building.furniture = [
+      {
+        ...project.building.furniture[0]!,
+        position: { x: 100, z: 300 },
+        width: 40
+      },
+      {
+        ...project.building.furniture[1]!,
+        position: { x: 480, z: 300 },
+        width: 80
+      },
+      {
+        ...project.building.furniture[0]!,
+        id: "chair-c",
+        position: { x: 800, z: 300 },
+        width: 120
+      }
+    ];
+    const beforeFirst = structuredClone(project.building.furniture[0]);
+    const beforeLast = structuredClone(project.building.furniture[2]);
+    const roots: ProjectSelectionRoot[] = [
+      { kind: "FURNITURE", id: "chair-c", roomId: "lower" },
+      { kind: "FURNITURE", id: "chair-a", roomId: "lower" },
+      { kind: "FURNITURE", id: "chair-b", roomId: "lower" }
+    ];
+    const result = distributeFurnitureSelection(
+      project,
+      level(project),
+      roots,
+      "horizontal"
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.building.furniture[0]).toEqual(
+      project.building.furniture[0]
+    );
+    expect(result.project.building.furniture[2]).toEqual(beforeLast);
+    const ordered = [...result.project.building.furniture].sort(
+      (a, b) => bounds(a).minX - bounds(b).minX
+    );
+    const firstGap = bounds(ordered[1]!).minX - bounds(ordered[0]!).maxX;
+    const secondGap = bounds(ordered[2]!).minX - bounds(ordered[1]!).maxX;
+    expect(firstGap).toBeCloseTo(secondGap);
+    expect(result.project.building.furniture[0]).toEqual(beforeFirst);
+  });
+
+  it("distributes unequal footprint depths vertically with fixed outer items and equal clear gaps", () => {
+    const project = fixture();
+    project.building.furniture = [
+      {
+        ...project.building.furniture[0]!,
+        position: { x: 300, z: 100 },
+        depth: 40
+      },
+      {
+        ...project.building.furniture[1]!,
+        position: { x: 300, z: 480 },
+        depth: 80
+      },
+      {
+        ...project.building.furniture[0]!,
+        id: "chair-c",
+        position: { x: 300, z: 800 },
+        depth: 120
+      }
+    ];
+    const beforeFirst = structuredClone(project.building.furniture[0]);
+    const beforeMiddle = structuredClone(project.building.furniture[1]);
+    const beforeLast = structuredClone(project.building.furniture[2]);
+    const result = distributeFurnitureSelection(
+      project,
+      level(project),
+      [
+        { kind: "FURNITURE", id: "chair-b", roomId: "lower" },
+        { kind: "FURNITURE", id: "chair-c", roomId: "lower" },
+        { kind: "FURNITURE", id: "chair-a", roomId: "lower" }
+      ],
+      "vertical"
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const ordered = [...result.project.building.furniture].sort(
+      (a, b) => bounds(a).minZ - bounds(b).minZ
+    );
+    const firstGap = bounds(ordered[1]!).minZ - bounds(ordered[0]!).maxZ;
+    const secondGap = bounds(ordered[2]!).minZ - bounds(ordered[1]!).maxZ;
+    expect(firstGap).toBeCloseTo(secondGap);
+    expect(result.project.building.furniture[0]).toEqual(beforeFirst);
+    expect(result.project.building.furniture[1]).not.toEqual(beforeMiddle);
+    expect(result.project.building.furniture[2]).toEqual(beforeLast);
+  });
+
   it("moves Furniture groups rigidly without colliding with their old footprints", () => {
     const project = fixture();
     const roots: ProjectSelectionRoot[] = [
@@ -268,3 +430,22 @@ describe("Project selection transforms", () => {
     expect(project).toEqual(before);
   });
 });
+
+const footprint = (item: Project["building"]["furniture"][number]) =>
+  createFurnitureFootprint2D(item);
+
+const bounds = (item: Project["building"]["furniture"][number]) => {
+  const points = footprint(item);
+  const minX = Math.min(...points.map((point) => point.x));
+  const minZ = Math.min(...points.map((point) => point.z));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxZ = Math.max(...points.map((point) => point.z));
+  return {
+    minX,
+    minZ,
+    maxX,
+    maxZ,
+    centerX: (minX + maxX) / 2,
+    centerZ: (minZ + maxZ) / 2
+  };
+};

@@ -43,18 +43,40 @@ import {
 describe("Project editor state", () => {
   it("retains canonical Furniture through clone, replacement, undo and redo snapshots", () => {
     const project = structuredClone(demoProjectFixture);
-    project.building.furniture = [{ id: "test-desk", roomId: project.building.levels[0]!.rooms[0]!.id,
-      definitionId: "custom:desk", position: { x: 50, z: 50 }, rotation: 27.5, width: 120, depth: 60, height: 75, name: "Desk" }];
-    const entered = projectEditorReducer(undefined, editingSessionEntered({ project, baseRevision: project.revision }));
-    expect(entered.draft?.building.furniture).toEqual(project.building.furniture);
-    expect(entered.draft?.building.furniture[0]?.position).not.toBe(project.building.furniture[0]?.position);
+    project.building.furniture = [
+      {
+        id: "test-desk",
+        roomId: project.building.levels[0]!.rooms[0]!.id,
+        definitionId: "custom:desk",
+        position: { x: 50, z: 50 },
+        rotation: 27.5,
+        width: 120,
+        depth: 60,
+        height: 75,
+        name: "Desk"
+      }
+    ];
+    const entered = projectEditorReducer(
+      undefined,
+      editingSessionEntered({ project, baseRevision: project.revision })
+    );
+    expect(entered.draft?.building.furniture).toEqual(
+      project.building.furniture
+    );
+    expect(entered.draft?.building.furniture[0]?.position).not.toBe(
+      project.building.furniture[0]?.position
+    );
     const changed = structuredClone(project);
     changed.building.furniture[0]!.width = 150;
     const edited = projectEditorReducer(entered, editingDraftReplaced(changed));
     const undone = projectEditorReducer(edited, editorUndoRequested());
-    expect(undone.draft?.building.furniture).toEqual(project.building.furniture);
+    expect(undone.draft?.building.furniture).toEqual(
+      project.building.furniture
+    );
     const redone = projectEditorReducer(undone, editorRedoRequested());
-    expect(redone.draft?.building.furniture).toEqual(changed.building.furniture);
+    expect(redone.draft?.building.furniture).toEqual(
+      changed.building.furniture
+    );
   });
   it("starts in authoritative View mode", () => {
     expect(projectEditorReducer(undefined, { type: "unknown" })).toEqual(
@@ -125,10 +147,13 @@ describe("Project editor state", () => {
   });
 
   it("keeps pointer-following Stair authoring transient", () => {
-    let state = projectEditorReducer(undefined, editingSessionEntered({
-      project: demoProjectFixture,
-      baseRevision: demoProjectFixture.revision
-    }));
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
     state = projectEditorReducer(state, editorActiveToolChanged("stair"));
     expect(state.transient.interaction).toMatchObject({
       kind: "place-stair",
@@ -136,24 +161,30 @@ describe("Project editor state", () => {
       turnDirection: "LEFT"
     });
     const draft = state.draft;
-    state = projectEditorReducer(state, editorStairAuthoringChanged({
-      toLevelId: state.activeLevelId!,
-      toRoomId: "elevated-room",
-      template: "L_SHAPED",
-      parameters: {
-        kind: "TWO_FLIGHT",
-        width: 90,
-        firstFlightStepCount: 4,
-        secondFlightStepCount: 13,
-        treadDepth: 28
-      },
-      identifiers: {
-        staircaseId: "staircase-test",
-        flightIds: ["flight-one", "flight-two"],
-        landingIds: ["landing-one"]
-      }
-    }));
-    state = projectEditorReducer(state, editorStairPlacementPointerMoved({ x: 300, z: 0 }));
+    state = projectEditorReducer(
+      state,
+      editorStairAuthoringChanged({
+        toLevelId: state.activeLevelId!,
+        toRoomId: "elevated-room",
+        template: "L_SHAPED",
+        parameters: {
+          kind: "TWO_FLIGHT",
+          width: 90,
+          firstFlightStepCount: 4,
+          secondFlightStepCount: 13,
+          treadDepth: 28
+        },
+        identifiers: {
+          staircaseId: "staircase-test",
+          flightIds: ["flight-one", "flight-two"],
+          landingIds: ["landing-one"]
+        }
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editorStairPlacementPointerMoved({ x: 300, z: 0 })
+    );
     expect(state.transient.interaction).toMatchObject({
       kind: "place-stair",
       start: { x: 300, z: 0 },
@@ -167,11 +198,21 @@ describe("Project editor state", () => {
   });
 
   it("toggles every authoring tool back to Select without draft or history mutation", () => {
-    for (const tool of ["draw-wall", "openings", "room", "stair", "furniture", "measure"] as const) {
-      let state = projectEditorReducer(undefined, editingSessionEntered({
-        project: demoProjectFixture,
-        baseRevision: demoProjectFixture.revision
-      }));
+    for (const tool of [
+      "draw-wall",
+      "openings",
+      "room",
+      "stair",
+      "furniture",
+      "measure"
+    ] as const) {
+      let state = projectEditorReducer(
+        undefined,
+        editingSessionEntered({
+          project: demoProjectFixture,
+          baseRevision: demoProjectFixture.revision
+        })
+      );
       state = projectEditorReducer(state, editorToolToggled(tool));
       expect(state.activeTool).toBe(tool);
       const draft = state.draft;
@@ -185,21 +226,30 @@ describe("Project editor state", () => {
   });
 
   it("keeps Stair aggregate translation transient so cancellation restores the draft", () => {
-    let state = projectEditorReducer(undefined, editingSessionEntered({
-      project: demoProjectFixture,
-      baseRevision: demoProjectFixture.revision
-    }));
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({
+        project: demoProjectFixture,
+        baseRevision: demoProjectFixture.revision
+      })
+    );
     const draft = state.draft;
-    state = projectEditorReducer(state, editorStairTranslationStarted({
-      owningLevelId: state.activeLevelId!,
-      staircaseId: "staircase-test",
-      pointerId: 17,
-      startPointer: { x: 10, z: 20 }
-    }));
-    state = projectEditorReducer(state, editorStairTranslationPointerMoved({
-      pointerId: 17,
-      point: { x: 70, z: -15 }
-    }));
+    state = projectEditorReducer(
+      state,
+      editorStairTranslationStarted({
+        owningLevelId: state.activeLevelId!,
+        staircaseId: "staircase-test",
+        pointerId: 17,
+        startPointer: { x: 10, z: 20 }
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editorStairTranslationPointerMoved({
+        pointerId: 17,
+        point: { x: 70, z: -15 }
+      })
+    );
     expect(state.transient.interaction).toMatchObject({
       kind: "move-stair-translation",
       currentPointer: { x: 70, z: -15 }
@@ -327,29 +377,41 @@ describe("Project editor state", () => {
     ["DOOR", 90],
     ["WINDOW", 120],
     ["OPENING", 120]
-  ] as const)("initializes %s authoring defaults without dirtying history", (openingType, width) => {
-    let state = projectEditorReducer(undefined, editingSessionEntered({
-      project: demoProjectFixture,
-      baseRevision: demoProjectFixture.revision
-    }));
-    state = projectEditorReducer(state, editorActiveToolChanged("openings"));
-    state = projectEditorReducer(state, editorOpeningAuthoringTypeChanged(openingType));
-    expect(state.transient.interaction).toMatchObject({
-      kind: "place-opening",
-      openingType,
-      properties: { width }
-    });
-    const draft = state.draft;
-    state = projectEditorReducer(state, editorOpeningAuthoringPropertiesChanged({ width: 70 }));
-    expect(state.transient.interaction).toMatchObject({
-      kind: "place-opening",
-      openingType,
-      properties: { width: 70 }
-    });
-    expect(state.draft).toBe(draft);
-    expect(state.dirty).toBe(false);
-    expect(state.history).toEqual({ past: [], future: [] });
-  });
+  ] as const)(
+    "initializes %s authoring defaults without dirtying history",
+    (openingType, width) => {
+      let state = projectEditorReducer(
+        undefined,
+        editingSessionEntered({
+          project: demoProjectFixture,
+          baseRevision: demoProjectFixture.revision
+        })
+      );
+      state = projectEditorReducer(state, editorActiveToolChanged("openings"));
+      state = projectEditorReducer(
+        state,
+        editorOpeningAuthoringTypeChanged(openingType)
+      );
+      expect(state.transient.interaction).toMatchObject({
+        kind: "place-opening",
+        openingType,
+        properties: { width }
+      });
+      const draft = state.draft;
+      state = projectEditorReducer(
+        state,
+        editorOpeningAuthoringPropertiesChanged({ width: 70 })
+      );
+      expect(state.transient.interaction).toMatchObject({
+        kind: "place-opening",
+        openingType,
+        properties: { width: 70 }
+      });
+      expect(state.draft).toBe(draft);
+      expect(state.dirty).toBe(false);
+      expect(state.history).toEqual({ past: [], future: [] });
+    }
+  );
 
   it("keeps valid and invalid Opening drag proposals outside draft history", () => {
     let state = projectEditorReducer(
@@ -361,19 +423,28 @@ describe("Project editor state", () => {
     );
     state = projectEditorReducer(state, editorActiveToolChanged("select"));
     const draft = state.draft;
-    state = projectEditorReducer(state, editorOpeningDragStarted({
-      levelId: state.activeLevelId!,
-      wallId: "wall",
-      openingId: "door",
-      pointerId: 21,
-      offsetFromStart: 80
-    }));
-    state = projectEditorReducer(state, editorOpeningDragThresholdCrossed({ pointerId: 21 }));
-    state = projectEditorReducer(state, editorOpeningDragPreviewChanged({
-      pointerId: 21,
-      offsetFromStart: 91.24,
-      valid: false
-    }));
+    state = projectEditorReducer(
+      state,
+      editorOpeningDragStarted({
+        levelId: state.activeLevelId!,
+        wallId: "wall",
+        openingId: "door",
+        pointerId: 21,
+        offsetFromStart: 80
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editorOpeningDragThresholdCrossed({ pointerId: 21 })
+    );
+    state = projectEditorReducer(
+      state,
+      editorOpeningDragPreviewChanged({
+        pointerId: 21,
+        offsetFromStart: 91.24,
+        valid: false
+      })
+    );
 
     expect(state.transient.interaction).toMatchObject({
       kind: "move-opening",
@@ -455,7 +526,10 @@ describe("Project editor state", () => {
       expect(state.selection).toEqual([]);
       expect(state.hover).toBeUndefined();
       if (nextTool === "openings") {
-        expect(state.transient.interaction).toMatchObject({ kind: "place-opening", openingType: "DOOR" });
+        expect(state.transient.interaction).toMatchObject({
+          kind: "place-opening",
+          openingType: "DOOR"
+        });
       } else {
         expect(state.transient.interaction).toBeNull();
       }
@@ -506,6 +580,57 @@ describe("Project editor state", () => {
     expect(nextState.draft?.updatedAt).toBe(demoProjectFixture.updatedAt);
     expect(nextState.history.past).toHaveLength(1);
     expect(nextState.history.future).toEqual([]);
+  });
+
+  it("records one Furniture transform snapshot and preserves its semantic selection", () => {
+    const project = structuredClone(demoProjectFixture);
+    const roomId = project.building.levels[0]!.rooms[0]!.id;
+    project.building.furniture = [
+      {
+        id: "chair-a",
+        roomId,
+        definitionId: "generic-chair",
+        position: { x: 100, z: 100 },
+        rotation: 0,
+        width: 40,
+        depth: 40,
+        height: 80
+      },
+      {
+        id: "chair-b",
+        roomId,
+        definitionId: "generic-chair",
+        position: { x: 200, z: 200 },
+        rotation: 0,
+        width: 40,
+        depth: 40,
+        height: 80
+      }
+    ];
+    let state = projectEditorReducer(
+      undefined,
+      editingSessionEntered({ project, baseRevision: project.revision })
+    );
+    state = projectEditorReducer(
+      state,
+      editorSelectionChanged({
+        selected: [
+          { kind: "FURNITURE", geometryId: "chair-a" },
+          { kind: "FURNITURE", geometryId: "chair-b" }
+        ]
+      })
+    );
+    const selection = state.selection;
+    const transformed = structuredClone(project);
+    transformed.building.furniture[0]!.position.x = 200;
+    state = projectEditorReducer(state, editingDraftReplaced(transformed));
+
+    expect(state.history.past).toHaveLength(1);
+    expect(state.selection).toEqual(selection);
+    state = projectEditorReducer(state, editorUndoRequested());
+    expect(state.draft?.building.furniture[0]?.position.x).toBe(100);
+    state = projectEditorReducer(state, editorRedoRequested());
+    expect(state.draft?.building.furniture[0]?.position.x).toBe(200);
   });
 
   it("undoes and redoes meaningful commits and clears redo after a new edit", () => {
@@ -582,10 +707,16 @@ describe("Project editor state", () => {
       })
     );
     state = projectEditorReducer(state, editorGridVisibilityChanged(true));
-    expect(state.precision).toMatchObject({ gridVisible: true, snapToGrid: false });
+    expect(state.precision).toMatchObject({
+      gridVisible: true,
+      snapToGrid: false
+    });
     state = projectEditorReducer(state, editorGridVisibilityChanged(false));
     state = projectEditorReducer(state, editorGridSnappingChanged(true));
-    expect(state.precision).toMatchObject({ gridVisible: false, snapToGrid: true });
+    expect(state.precision).toMatchObject({
+      gridVisible: false,
+      snapToGrid: true
+    });
     expect(state.history).toEqual({ past: [], future: [] });
     expect(state.dirty).toBe(false);
   });
@@ -601,10 +732,13 @@ describe("Project editor state", () => {
     const originalDraft = structuredClone(state.draft);
     const draftReference = state.draft;
     state = projectEditorReducer(state, editorDocumentScaleChanged(100));
-    state = projectEditorReducer(state, editorDimensionDisplayChanged({
-      overallDimensions: false,
-      roomMetrics: false
-    }));
+    state = projectEditorReducer(
+      state,
+      editorDimensionDisplayChanged({
+        overallDimensions: false,
+        roomMetrics: false
+      })
+    );
 
     expect(state.presentation).toEqual({
       scaleDenominator: 100,
@@ -630,34 +764,49 @@ describe("Project editor state", () => {
     );
     state = projectEditorReducer(state, editorActiveToolChanged("measure"));
     const draft = state.draft;
-    state = projectEditorReducer(state, editorMeasurementPointSet({
-      point: { x: 0, z: 0 },
-      snapCandidate: {
-        kind: "vertex",
-        geometryId: "vertex:0:0",
+    state = projectEditorReducer(
+      state,
+      editorMeasurementPointSet({
         point: { x: 0, z: 0 },
-        visualDistancePixels: 2
-      }
-    }));
-    state = projectEditorReducer(state, editorMeasurementPointerMoved({
-      point: { x: 300, z: 400 },
-      snapCandidate: {
-        kind: "wall-midpoint",
-        geometryId: "wall:midpoint",
-        wallId: "wall",
+        snapCandidate: {
+          kind: "vertex",
+          geometryId: "vertex:0:0",
+          point: { x: 0, z: 0 },
+          visualDistancePixels: 2
+        }
+      })
+    );
+    state = projectEditorReducer(
+      state,
+      editorMeasurementPointerMoved({
         point: { x: 300, z: 400 },
-        visualDistancePixels: 3
-      }
-    }));
+        snapCandidate: {
+          kind: "wall-midpoint",
+          geometryId: "wall:midpoint",
+          wallId: "wall",
+          point: { x: 300, z: 400 },
+          visualDistancePixels: 3
+        }
+      })
+    );
     expect(state.transient.interaction).toMatchObject({
       kind: "measure",
       startPoint: { x: 0, z: 0 },
       currentPointerPoint: { x: 300, z: 400 },
       completed: false
     });
-    state = projectEditorReducer(state, editorMeasurementPointSet({ point: { x: 300, z: 400 } }));
-    expect(state.transient.interaction).toMatchObject({ kind: "measure", completed: true });
-    state = projectEditorReducer(state, editorMeasurementPointSet({ point: { x: 25, z: 50 } }));
+    state = projectEditorReducer(
+      state,
+      editorMeasurementPointSet({ point: { x: 300, z: 400 } })
+    );
+    expect(state.transient.interaction).toMatchObject({
+      kind: "measure",
+      completed: true
+    });
+    state = projectEditorReducer(
+      state,
+      editorMeasurementPointSet({ point: { x: 25, z: 50 } })
+    );
     expect(state.transient.interaction).toMatchObject({
       kind: "measure",
       startPoint: { x: 25, z: 50 },

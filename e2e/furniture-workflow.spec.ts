@@ -51,15 +51,17 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
       fromLevelId: "ground",
       toLevelId: "upper",
       width: 100,
-      flights: [{
-        id: "flight",
-        start: { x: 400, z: 100 },
-        end: { x: 500, z: 100 },
-        width: 100,
-        stepCount: 10,
-        startElevation: 0,
-        endElevation: 280
-      }],
+      flights: [
+        {
+          id: "flight",
+          start: { x: 400, z: 100 },
+          end: { x: 500, z: 100 },
+          width: 100,
+          stepCount: 10,
+          startElevation: 0,
+          endElevation: 280
+        }
+      ],
       landings: []
     });
     const initial = { ...existing, building: fixture.building };
@@ -207,7 +209,9 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
     await expect(
       page.locator('[data-testid="furniture-properties"]:visible')
     ).toContainText("Vertical clearance is not validated");
+    await page.keyboard.down("Alt");
     await place(page, 450, 100);
+    await page.keyboard.up("Alt");
     await expect(page.getByTestId("furniture-symbol")).toHaveCount(3);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.getByTestId("furniture-hit-target").last().click();

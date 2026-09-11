@@ -24,6 +24,7 @@ import { createGeometrySelectionState } from "../../geometry-2d/selection/geomet
 import type { RootState } from "../../../app/store/store";
 import type { ProjectEditorTool } from "./project-editor-tools";
 import type { DrawWallSnapCandidate } from "../tools/wall/project-wall-snapping";
+import type { PrecisionTranslationResult } from "../../geometry-2d/precision/precision-assistance-2d";
 import type { OpeningPlacementCandidate } from "../tools/opening/project-opening-editing";
 import {
   defaultStairAuthoringParameters,
@@ -156,6 +157,7 @@ export type MoveStairTranslationInteraction = {
   readonly pointerId: number;
   readonly startPointer: WorldPointXZ;
   readonly currentPointer: WorldPointXZ;
+  readonly precision?: PrecisionTranslationResult;
 };
 
 /** Rigid preview delta for one validated canonical selection. */
@@ -164,6 +166,7 @@ export type TranslateSelectionInteraction = {
   readonly pointerId: number;
   readonly startPointer: WorldPointXZ;
   readonly currentPointer: WorldPointXZ;
+  readonly precision?: PrecisionTranslationResult;
 };
 
 /** Editor-only pointer state cleared at stable session boundaries. */
@@ -842,6 +845,7 @@ const projectEditorSlice = createSlice({
       action: PayloadAction<{
         readonly pointerId: number;
         readonly point: WorldPointXZ;
+        readonly precision?: PrecisionTranslationResult;
       }>
     ) {
       const interaction = state.transient.interaction;
@@ -850,6 +854,7 @@ const projectEditorSlice = createSlice({
         interaction.pointerId === action.payload.pointerId
       ) {
         interaction.currentPointer = action.payload.point;
+        interaction.precision = action.payload.precision;
       }
     },
     editorSelectionTranslationStarted(
@@ -875,6 +880,7 @@ const projectEditorSlice = createSlice({
       action: PayloadAction<{
         readonly pointerId: number;
         readonly point: WorldPointXZ;
+        readonly precision?: PrecisionTranslationResult;
       }>
     ) {
       const interaction = state.transient.interaction;
@@ -883,6 +889,7 @@ const projectEditorSlice = createSlice({
         interaction.pointerId === action.payload.pointerId
       ) {
         interaction.currentPointer = action.payload.point;
+        interaction.precision = action.payload.precision;
       }
     },
     editorOpeningPlacementChanged(

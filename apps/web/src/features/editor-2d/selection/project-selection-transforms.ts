@@ -15,6 +15,7 @@ import {
 
 import type { GeometryPresentationModel2D } from "../../geometry-2d/presentation/geometry-presentation-model-2d";
 import type { GeometrySelection } from "../../geometry-2d/selection/geometry-selection-state";
+import { createFurnitureFootprint2D } from "../../geometry-2d/presentation/plan-footprints-2d";
 import { validateFurniturePlacement } from "../tools/furniture/project-furniture-authoring";
 
 /** Canonical semantic root used to validate one whole selection operation. */
@@ -47,6 +48,13 @@ export type ProjectSelectionCapabilities = {
   readonly delete: ProjectSelectionCapability;
   readonly rotate: ProjectSelectionCapability;
 };
+
+/** Plan-space footprint alignment modes for compatible Furniture selections. */
+export type FurnitureAlignment =
+  "left" | "center-x" | "right" | "top" | "center-z" | "bottom";
+
+/** Equal-clear-gap distribution axes for three or more Furniture items. */
+export type FurnitureDistribution = "horizontal" | "vertical";
 
 /** Resolves presentation identities and Stair children into unique canonical roots. */
 export function resolveProjectSelectionRoots(
@@ -252,6 +260,118 @@ export function translateProjectSelection(
   return result;
 }
 
+/**
+ * Aligns Furniture footprint extents atomically. The final selected root is the
+ * stationary anchor; rotations, dimensions, Room ownership, and identity remain unchanged.
+ */
+export function alignFurnitureSelection(
+  project: Project,
+  level: Level,
+  roots: readonly ProjectSelectionRoot[],
+  alignment: FurnitureAlignment
+): ProjectEditingResult {
+  const items = selectedFurniture(project, roots);
+  if (!items || items.length < 2)
+    return editingFailure(
+      "Alignment requires a Furniture-only multi-selection."
+    );
+  const anchor = items.at(-1)!;
+  const anchorBounds = footprintBounds(anchor);
+  const furniture = project.building.furniture.map((item) => {
+    if (
+      item.id === anchor.id ||
+      !items.some((selected) => selected.id === item.id)
+    )
+      return item;
+    const bounds = footprintBounds(item);
+    const delta =
+      alignment === "left"
+        ? { x: anchorBounds.minX - bounds.minX, z: 0 }
+        : alignment === "center-x"
+          ? { x: anchorBounds.centerX - bounds.centerX, z: 0 }
+          : alignment === "right"
+            ? { x: anchorBounds.maxX - bounds.maxX, z: 0 }
+            : alignment === "top"
+              ? { x: 0, z: anchorBounds.minZ - bounds.minZ }
+              : alignment === "center-z"
+                ? { x: 0, z: anchorBounds.centerZ - bounds.centerZ }
+                : { x: 0, z: anchorBounds.maxZ - bounds.maxZ };
+    return { ...item, position: addPoint(item.position, delta) };
+  });
+  return validateFurnitureTransform(
+    {
+      ...project,
+      building: { ...project.building, furniture }
+    },
+    level.id,
+    items.map((item) => item.id),
+    "alignment"
+  );
+}
+
+/** Distributes Furniture geometrically with fixed outer items and equal footprint gaps. */
+export function distributeFurnitureSelection(
+  project: Project,
+  level: Level,
+  roots: readonly ProjectSelectionRoot[],
+  distribution: FurnitureDistribution
+): ProjectEditingResult {
+  const items = selectedFurniture(project, roots);
+  if (!items || items.length < 3)
+    return editingFailure(
+      "Distribution requires at least three selected Furniture items."
+    );
+  const horizontal = distribution === "horizontal";
+  const ordered = [...items].sort((first, second) => {
+    const firstBounds = footprintBounds(first);
+    const secondBounds = footprintBounds(second);
+    const difference = horizontal
+      ? firstBounds.minX - secondBounds.minX
+      : firstBounds.minZ - secondBounds.minZ;
+    return difference !== 0 ? difference : first.id.localeCompare(second.id);
+  });
+  const firstBounds = footprintBounds(ordered[0]!);
+  const lastBounds = footprintBounds(ordered.at(-1)!);
+  const sizes = ordered.map((item) => {
+    const bounds = footprintBounds(item);
+    return horizontal ? bounds.maxX - bounds.minX : bounds.maxZ - bounds.minZ;
+  });
+  const available = horizontal
+    ? lastBounds.maxX - firstBounds.minX
+    : lastBounds.maxZ - firstBounds.minZ;
+  const gap =
+    (available - sizes.reduce((sum, size) => sum + size, 0)) /
+    (ordered.length - 1);
+  let cursor = horizontal ? firstBounds.minX : firstBounds.minZ;
+  const positions = new Map<string, Point>();
+  ordered.forEach((item, index) => {
+    const bounds = footprintBounds(item);
+    if (index > 0 && index < ordered.length - 1) {
+      positions.set(
+        item.id,
+        horizontal
+          ? { x: item.position.x + cursor - bounds.minX, z: item.position.z }
+          : { x: item.position.x, z: item.position.z + cursor - bounds.minZ }
+      );
+    }
+    cursor += sizes[index]! + gap;
+  });
+  const furniture = project.building.furniture.map((item) =>
+    positions.has(item.id)
+      ? { ...item, position: positions.get(item.id)! }
+      : item
+  );
+  return validateFurnitureTransform(
+    {
+      ...project,
+      building: { ...project.building, furniture }
+    },
+    level.id,
+    items.map((item) => item.id),
+    "distribution"
+  );
+}
+
 /** Deletes normalized semantic roots on a candidate Project and returns once. */
 export function deleteProjectSelection(
   project: Project,
@@ -337,6 +457,68 @@ function ids<K extends ProjectSelectionRoot["kind"]>(
     )
     .map((root) => root.id);
 }
+
+type Point = { readonly x: number; readonly z: number };
+
+function selectedFurniture(
+  project: Project,
+  roots: readonly ProjectSelectionRoot[]
+): Project["building"]["furniture"] | undefined {
+  if (!roots.every((root) => root.kind === "FURNITURE")) return undefined;
+  const items = roots.map((root) =>
+    project.building.furniture.find((item) => item.id === root.id)
+  );
+  return items.every((item) => item !== undefined)
+    ? (items as Project["building"]["furniture"])
+    : undefined;
+}
+
+function footprintBounds(item: Project["building"]["furniture"][number]) {
+  const footprint = createFurnitureFootprint2D(item);
+  const minX = Math.min(...footprint.map((point) => point.x));
+  const minZ = Math.min(...footprint.map((point) => point.z));
+  const maxX = Math.max(...footprint.map((point) => point.x));
+  const maxZ = Math.max(...footprint.map((point) => point.z));
+  return {
+    minX,
+    minZ,
+    maxX,
+    maxZ,
+    centerX: (minX + maxX) / 2,
+    centerZ: (minZ + maxZ) / 2
+  };
+}
+
+function validateFurnitureTransform(
+  candidate: Project,
+  levelId: string,
+  furnitureIds: readonly string[],
+  operation: string
+): ProjectEditingResult {
+  for (const furnitureId of furnitureIds) {
+    const item = candidate.building.furniture.find(
+      (entry) => entry.id === furnitureId
+    );
+    if (!item)
+      return editingFailure(`Furniture ${operation} could not be validated.`);
+    const validation = validateFurniturePlacement(
+      candidate,
+      levelId,
+      item,
+      item.id
+    );
+    if (validation.status === "INVALID")
+      return editingFailure(
+        `Furniture ${operation} is invalid: ${validation.issue}.`
+      );
+  }
+  return { ok: true, project: candidate };
+}
+
+const addPoint = (first: Point, second: Point): Point => ({
+  x: first.x + second.x,
+  z: first.z + second.z
+});
 
 const supported = { supported: true } as const;
 const unsupported = (reason: string): ProjectSelectionCapability => ({

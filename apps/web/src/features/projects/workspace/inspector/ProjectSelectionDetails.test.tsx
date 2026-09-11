@@ -107,6 +107,7 @@ describe("ProjectSelectionDetails", () => {
 
   it("shows common actions and explicit mixed Furniture values for multi-selection", () => {
     const onDeleteSelection = vi.fn();
+    const onAlignSelection = vi.fn();
     render(
       <ProjectPropertiesDetails
         model={model}
@@ -148,6 +149,7 @@ describe("ProjectSelectionDetails", () => {
           }
         ]}
         onDeleteSelection={onDeleteSelection}
+        onAlignSelection={onAlignSelection}
       />
     );
     expect(screen.getByText("2 Furniture items")).toBeTruthy();
@@ -158,6 +160,8 @@ describe("ProjectSelectionDetails", () => {
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
     expect(onDeleteSelection).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Left" }));
+    expect(onAlignSelection).toHaveBeenCalledWith("left");
   });
 
   it("separates Room metrics and deletion from canonical metadata properties", () => {

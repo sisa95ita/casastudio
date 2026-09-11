@@ -58,6 +58,7 @@ import { useAppShellContent } from "../../../shell/AppShellContext";
 import { createArchitecturalPresentationModel2D } from "../../geometry-2d/presentation/architectural-presentation-model-2d";
 import { createArchitecturalDimensionPresentationModel2D } from "../../geometry-2d/presentation/architectural-dimension-presentation-model-2d";
 import { createProjectSelectionFootprints } from "../../geometry-2d/selection/project-selection-footprints";
+import { createStairFootprints2D } from "../../geometry-2d/presentation/plan-footprints-2d";
 import { createRuntimeGeometryPresentationModel2D } from "../../geometry-2d/presentation/geometry-presentation-model-2d";
 import { GeometryViewerPanel } from "../../geometry-2d/viewer/GeometryViewerPanel";
 import { createGeometrySnapshotPresentationModel2D } from "../../geometry-2d/adapters/geometry-snapshot-presentation-adapter";
@@ -152,11 +153,19 @@ import {
 } from "../../editor-2d/state/project-editor-slice";
 import { getProjectEditorInteraction } from "../../editor-2d/state/project-editor-tools";
 import {
+  alignFurnitureSelection,
   deleteProjectSelection,
+  distributeFurnitureSelection,
   getProjectSelectionCapabilities,
   resolveProjectSelectionRoots,
-  translateProjectSelection
+  translateProjectSelection,
+  type FurnitureAlignment,
+  type FurnitureDistribution
 } from "../../editor-2d/selection/project-selection-transforms";
+import {
+  resolveAggregatePrecisionTranslation,
+  resolveFurniturePrecisionTranslation
+} from "../../editor-2d/precision/project-precision-assistance";
 import {
   createDraftWall,
   createRoomIdentifier,
@@ -455,7 +464,10 @@ export function ProjectWorkspacePage() {
       workspaceMode === "edit" &&
       !saveInteractionBlocked &&
       workspaceRepresentation === "2d",
-    visible: displayOptions.furniture !== false
+    visible: displayOptions.furniture !== false,
+    zoom: activeViewport.zoom,
+    snapToGrid: editor.precision.snapToGrid,
+    gridSpacing: editor.precision.gridSpacing
   });
   useEffect(() => {
     if (
@@ -1256,6 +1268,14 @@ export function ProjectWorkspacePage() {
       : undefined;
 
     return {
+      precisionGuides:
+        transient?.kind === "translate-selection"
+          ? transient.precision?.guides
+          : transient?.kind === "move-stair-translation"
+            ? transient.precision?.guides
+            : transient?.kind === "furniture"
+              ? transient.precision?.guides
+              : undefined,
       stairPreview:
         (translatedStaircase ?? stairAdjustmentProposal ?? stairProposal)
           ? {
@@ -1621,6 +1641,7 @@ export function ProjectWorkspacePage() {
               presentationResult.model,
               {
                 cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                bypass: pointer.altKey,
                 worldPoint: pointer.worldPoint,
                 grid: {
                   enabled: editor.precision.snapToGrid,
@@ -1692,6 +1713,7 @@ export function ProjectWorkspacePage() {
             presentationResult.model,
             {
               cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+              bypass: pointer.altKey,
               worldPoint: pointer.worldPoint,
               drawStart:
                 editor.transient.interaction?.kind === "draw-wall"
@@ -1785,10 +1807,102 @@ export function ProjectWorkspacePage() {
         editor.transient.interaction?.kind === "translate-selection" &&
         editor.transient.interaction.pointerId === pointerId
       ) {
+        const interaction = editor.transient.interaction;
+        const selectedKeys = new Set(
+          selectionState.selected.map(
+            (selection) => `${selection.kind}:${selection.geometryId}`
+          )
+        );
+        const selectedPoints = selectionFootprints
+          .filter((footprint) =>
+            selectedKeys.has(
+              `${footprint.selection.kind}:${footprint.selection.geometryId}`
+            )
+          )
+          .flatMap((footprint) =>
+            footprint.polygons.flatMap((polygon) => polygon)
+          );
+        const rawDelta = {
+          x: pointer.worldPoint.x - interaction.startPointer.x,
+          z: pointer.worldPoint.z - interaction.startPointer.z
+        };
+        const pixelsPerWorldUnit = Math.max(
+          Number.EPSILON,
+          activeViewport.zoom * pointer.cssPixelsPerSvgUnit
+        );
+        const selectedFurniture =
+          activeProject &&
+          selectionRoots.length > 0 &&
+          selectionRoots.every((root) => root.kind === "FURNITURE")
+            ? selectionRoots.flatMap((root) => {
+                const item = activeProject.building.furniture.find(
+                  (candidate) => candidate.id === root.id
+                );
+                return item ? [item] : [];
+              })
+            : [];
+        const isValid = (delta: WorldPointXZ) =>
+          Boolean(
+            editor.draft &&
+            activeProjectLevel &&
+            translateProjectSelection(
+              editor.draft,
+              activeProjectLevel,
+              selectionRoots,
+              delta
+            ).ok
+          );
+        const precision =
+          activeProject && activeProjectLevel && selectedFurniture.length > 0
+            ? resolveFurniturePrecisionTranslation({
+                project: activeProject,
+                levelId: activeProjectLevel.id,
+                moving: selectedFurniture,
+                rawDelta,
+                pixelsPerWorldUnit,
+                grid: {
+                  enabled: editor.precision.snapToGrid,
+                  spacing: editor.precision.gridSpacing
+                },
+                bypass: pointer.altKey,
+                previous: interaction.precision,
+                isValid
+              })
+            : resolveAggregatePrecisionTranslation({
+                points: selectedPoints,
+                targetPoints: presentationResult?.ok
+                  ? presentationResult.model.vertices
+                      .filter(
+                        (vertex) =>
+                          !selectedPoints.some(
+                            (point) =>
+                              point.x === vertex.coordinates.x &&
+                              point.z === vertex.coordinates.z
+                          )
+                      )
+                      .map((vertex) => ({
+                        id: vertex.geometryId,
+                        point: vertex.coordinates
+                      }))
+                  : [],
+                rawDelta,
+                pixelsPerWorldUnit,
+                grid: {
+                  enabled: editor.precision.snapToGrid,
+                  spacing: editor.precision.gridSpacing
+                },
+                bypass: pointer.altKey,
+                previous: interaction.precision,
+                isValid
+              });
         dispatch(
           editorSelectionTranslationPointerMoved({
             pointerId,
-            point: pointer.worldPoint
+            point: {
+              x: interaction.startPointer.x + precision.delta.x,
+              z: interaction.startPointer.z + precision.delta.z
+            },
+            precision
           })
         );
       } else if (
@@ -1796,10 +1910,53 @@ export function ProjectWorkspacePage() {
         editor.transient.interaction?.kind === "move-stair-translation" &&
         editor.transient.interaction.pointerId === pointerId
       ) {
+        const interaction = editor.transient.interaction;
+        const rawDelta = {
+          x: pointer.worldPoint.x - interaction.startPointer.x,
+          z: pointer.worldPoint.z - interaction.startPointer.z
+        };
+        const stair = selectedStair?.staircase;
+        const points = stair
+          ? createStairFootprints2D({ staircases: [stair] }).flat()
+          : [];
+        const precision = resolveAggregatePrecisionTranslation({
+          points,
+          targetPoints: presentationResult?.ok
+            ? presentationResult.model.vertices.map((vertex) => ({
+                id: vertex.geometryId,
+                point: vertex.coordinates
+              }))
+            : [],
+          rawDelta,
+          pixelsPerWorldUnit: Math.max(
+            Number.EPSILON,
+            activeViewport.zoom * pointer.cssPixelsPerSvgUnit
+          ),
+          grid: {
+            enabled: editor.precision.snapToGrid,
+            spacing: editor.precision.gridSpacing
+          },
+          bypass: pointer.altKey,
+          previous: interaction.precision,
+          isValid: (delta) =>
+            Boolean(
+              editor.draft &&
+              stair &&
+              updateStaircase(editor.draft, {
+                owningLevelId: interaction.owningLevelId,
+                staircaseId: interaction.staircaseId,
+                staircase: translateStaircase(stair, delta)
+              }).ok
+            )
+        });
         dispatch(
           editorStairTranslationPointerMoved({
             pointerId,
-            point: pointer.worldPoint
+            point: {
+              x: interaction.startPointer.x + precision.delta.x,
+              z: interaction.startPointer.z + precision.delta.z
+            },
+            precision
           })
         );
       } else if (
@@ -1813,6 +1970,7 @@ export function ProjectWorkspacePage() {
           presentationResult.model,
           {
             cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            bypass: pointer.altKey,
             worldPoint: pointer.worldPoint,
             grid: {
               enabled: editor.precision.snapToGrid,
@@ -1838,6 +1996,7 @@ export function ProjectWorkspacePage() {
           presentationResult.model,
           {
             cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            bypass: pointer.altKey,
             worldPoint: pointer.worldPoint,
             grid: {
               enabled: editor.precision.snapToGrid,
@@ -1859,6 +2018,7 @@ export function ProjectWorkspacePage() {
               presentationResult.model,
               {
                 cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                bypass: pointer.altKey,
                 worldPoint: pointer.worldPoint,
                 grid: {
                   enabled: editor.precision.snapToGrid,
@@ -1867,12 +2027,14 @@ export function ProjectWorkspacePage() {
                 }
               }
             )
-          : resolveGridSnapCandidate(pointer.worldPoint, {
-              enabled: editor.precision.snapToGrid,
-              spacing: editor.precision.gridSpacing,
-              worldToSvgScale: activeViewport.zoom,
-              cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
-            });
+          : pointer.altKey
+            ? undefined
+            : resolveGridSnapCandidate(pointer.worldPoint, {
+                enabled: editor.precision.snapToGrid,
+                spacing: editor.precision.gridSpacing,
+                worldToSvgScale: activeViewport.zoom,
+                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
+              });
         dispatch(
           editorRoomShapePlacementPointerMoved(
             snapCandidate?.point ?? pointer.worldPoint
@@ -1989,6 +2151,7 @@ export function ProjectWorkspacePage() {
           presentationResult.model,
           {
             cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            bypass: pointer.altKey,
             worldPoint: pointer.worldPoint,
             drawStart:
               editor.transient.interaction?.kind === "draw-wall"
@@ -2022,6 +2185,7 @@ export function ProjectWorkspacePage() {
           presentationResult.model,
           {
             cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+            bypass: pointer.altKey,
             worldPoint: pointer.worldPoint,
             grid: {
               enabled: editor.precision.snapToGrid,
@@ -2053,7 +2217,12 @@ export function ProjectWorkspacePage() {
       editor.activeLevelId,
       editor.draft,
       activeViewport,
+      activeProject,
+      activeProjectLevel,
       presentationResult,
+      selectionFootprints,
+      selectionRoots,
+      selectionState.selected,
       selectedEditOpening,
       validatedRoomShape,
       saveInteractionBlocked,
@@ -2409,6 +2578,58 @@ export function ProjectWorkspacePage() {
       saveInteractionBlocked,
       selectionRoots,
       workspaceMode
+    ]
+  );
+
+  const handleAlignSelection = useCallback(
+    (alignment: FurnitureAlignment) => {
+      if (!editor.draft || !activeProjectLevel || saveInteractionBlocked)
+        return;
+      const result = alignFurnitureSelection(
+        editor.draft,
+        activeProjectLevel,
+        selectionRoots,
+        alignment
+      );
+      if (!result.ok) {
+        setEditingError("errors.selection.invalid");
+        return;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+    },
+    [
+      activeProjectLevel,
+      dispatch,
+      editor.draft,
+      saveInteractionBlocked,
+      selectionRoots
+    ]
+  );
+
+  const handleDistributeSelection = useCallback(
+    (distribution: FurnitureDistribution) => {
+      if (!editor.draft || !activeProjectLevel || saveInteractionBlocked)
+        return;
+      const result = distributeFurnitureSelection(
+        editor.draft,
+        activeProjectLevel,
+        selectionRoots,
+        distribution
+      );
+      if (!result.ok) {
+        setEditingError("errors.selection.invalid");
+        return;
+      }
+      setEditingError(undefined);
+      dispatch(editingDraftReplaced(result.project));
+    },
+    [
+      activeProjectLevel,
+      dispatch,
+      editor.draft,
+      saveInteractionBlocked,
+      selectionRoots
     ]
   );
 
@@ -2977,6 +3198,8 @@ export function ProjectWorkspacePage() {
         selectionCapabilities={selectionCapabilities}
         onDeleteSelection={handleDeleteSelection}
         onDuplicateSelection={furniture.duplicate}
+        onAlignSelection={handleAlignSelection}
+        onDistributeSelection={handleDistributeSelection}
         multiSelectionFurniture={
           selectionState.selected.length > 1 &&
           selectionState.selected.every(
@@ -3044,6 +3267,8 @@ export function ProjectWorkspacePage() {
     handleCancelStairAuthoring,
     selectionCapabilities,
     handleDeleteSelection,
+    handleAlignSelection,
+    handleDistributeSelection,
     handleDisplayOptionsChange,
     workspaceRepresentation,
     scene3DResult,

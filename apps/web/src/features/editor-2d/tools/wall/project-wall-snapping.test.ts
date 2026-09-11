@@ -38,7 +38,9 @@ describe("resolveDrawWallSnapCandidate", () => {
     const model = createModel();
     model.vertices = [];
 
-    expect(resolveDrawWallSnapCandidate({ x: 5, y: 7 }, model)?.kind).toBe("wall-endpoint");
+    expect(resolveDrawWallSnapCandidate({ x: 5, y: 7 }, model)?.kind).toBe(
+      "wall-endpoint"
+    );
   });
 
   it("clears the candidate outside the visual tolerance", () => {
@@ -54,17 +56,17 @@ describe("resolveDrawWallSnapCandidate", () => {
       vertex("vertex-a", 60, 0, 60, 0),
       vertex("vertex-nearest", 51, 0, 51, 0)
     ];
-    expect(resolveDrawWallSnapCandidate({ x: 50, y: 0 }, model)?.geometryId).toBe(
-      "vertex-nearest"
-    );
+    expect(
+      resolveDrawWallSnapCandidate({ x: 50, y: 0 }, model)?.geometryId
+    ).toBe("vertex-nearest");
 
     model.vertices = [
       vertex("vertex-z", 40, 0, 40, 0),
       vertex("vertex-a", 60, 0, 60, 0)
     ];
-    expect(resolveDrawWallSnapCandidate({ x: 50, y: 0 }, model)?.geometryId).toBe(
-      "vertex-a"
-    );
+    expect(
+      resolveDrawWallSnapCandidate({ x: 50, y: 0 }, model)?.geometryId
+    ).toBe("vertex-a");
   });
 
   it("keeps the same pixel tolerance when world scale changes", () => {
@@ -80,8 +82,12 @@ describe("resolveDrawWallSnapCandidate", () => {
     expect(resolveDrawWallSnapCandidate({ x: 30, y: 9 }, zoomed)?.kind).toBe(
       "wall-interior"
     );
-    expect(resolveDrawWallSnapCandidate({ x: 30, y: 11 }, normal)?.kind).toBe("free");
-    expect(resolveDrawWallSnapCandidate({ x: 30, y: 11 }, zoomed)?.kind).toBe("free");
+    expect(resolveDrawWallSnapCandidate({ x: 30, y: 11 }, normal)?.kind).toBe(
+      "free"
+    );
+    expect(resolveDrawWallSnapCandidate({ x: 30, y: 11 }, zoomed)?.kind).toBe(
+      "free"
+    );
   });
 
   it("converts SVG distances into stable CSS-pixel tolerance", () => {
@@ -105,9 +111,7 @@ describe("resolveDrawWallSnapCandidate", () => {
   it("uses transformed SVG coordinates after combined zoom and pan", () => {
     const model = createModel();
     model.vertices = [];
-    model.boundaryEdges = [
-      edge("wall-b", 0, 0, 100, 0, 200, 150, 600, 150)
-    ];
+    model.boundaryEdges = [edge("wall-b", 0, 0, 100, 0, 200, 150, 600, 150)];
 
     const candidate = resolveDrawWallSnapCandidate(
       { x: 350, y: 158 },
@@ -125,9 +129,13 @@ describe("resolveDrawWallSnapCandidate", () => {
   it("prioritizes midpoint and proper Wall intersections before interiors", () => {
     const model = createModel();
     model.vertices = [];
-    expect(resolveDrawWallSnapCandidate({ x: 50, y: 7 }, model)?.kind).toBe("wall-midpoint");
+    expect(resolveDrawWallSnapCandidate({ x: 50, y: 7 }, model)?.kind).toBe(
+      "wall-midpoint"
+    );
 
-    model.boundaryEdges.push(edge("wall-cross", 30, -20, 30, 80, 30, 20, 30, -80));
+    model.boundaryEdges.push(
+      edge("wall-cross", 30, -20, 30, 80, 30, 20, 30, -80)
+    );
     expect(resolveDrawWallSnapCandidate({ x: 30, y: 0 }, model)).toMatchObject({
       kind: "wall-intersection",
       wallIds: ["wall-b", "wall-cross"],
@@ -144,15 +152,23 @@ describe("resolveDrawWallSnapCandidate", () => {
       drawStart: { worldPoint: { x: 0, z: 0 }, svgPoint: { x: 0, y: 0 } },
       grid: { enabled: true, spacing: 25, worldToSvgScale: 1 }
     });
-    expect(orthogonal).toMatchObject({ kind: "orthogonal", axis: "horizontal", point: { x: 80, z: 0 } });
+    expect(orthogonal).toMatchObject({
+      kind: "orthogonal",
+      axis: "horizontal",
+      point: { x: 80, z: 0 }
+    });
 
-    expect(resolveDrawWallSnapCandidate({ x: 49, y: -49 }, model, {
-      worldPoint: { x: 49, z: 49 },
-      grid: { enabled: true, spacing: 50, worldToSvgScale: 1 }
-    })).toMatchObject({ kind: "grid", point: { x: 50, z: 50 } });
-    expect(resolveDrawWallSnapCandidate({ x: 37, y: -31 }, model, {
-      worldPoint: { x: 37, z: 31 }
-    })).toMatchObject({ kind: "free", point: { x: 37, z: 31 } });
+    expect(
+      resolveDrawWallSnapCandidate({ x: 49, y: -49 }, model, {
+        worldPoint: { x: 49, z: 49 },
+        grid: { enabled: true, spacing: 50, worldToSvgScale: 1 }
+      })
+    ).toMatchObject({ kind: "grid", point: { x: 50, z: 50 } });
+    expect(
+      resolveDrawWallSnapCandidate({ x: 37, y: -31 }, model, {
+        worldPoint: { x: 37, z: 31 }
+      })
+    ).toMatchObject({ kind: "free", point: { x: 37, z: 31 } });
   });
 
   it("keeps geometric snapping independent from the grid-enabled option", () => {
@@ -170,21 +186,37 @@ describe("resolveDrawWallSnapCandidate", () => {
     expect(withGrid.kind).toBe("vertex");
   });
 
+  it("bypasses architectural and grid assistance for an Alt gesture sample", () => {
+    expect(
+      resolveDrawWallSnapCandidate({ x: 8, y: 2 }, createModel(), {
+        bypass: true,
+        worldPoint: { x: 8, z: -2 },
+        grid: { enabled: true, spacing: 25, worldToSvgScale: 1 }
+      })
+    ).toMatchObject({ kind: "free", point: { x: 8, z: -2 } });
+  });
+
   it("does not expose free-only Room boundary vertices or edges as Wall topology", () => {
     const model = createModel();
-    model.boundaryEdges = [{
-      ...edge("free-edge", 200, 200, 300, 200, 200, -200, 300, -200),
-      sourceWallId: undefined,
-      sourceKind: "FREE"
-    }];
-    model.vertices = [{
-      ...vertex("free-vertex", 200, -200, 200, 200),
-      wallBacked: false
-    }];
+    model.boundaryEdges = [
+      {
+        ...edge("free-edge", 200, 200, 300, 200, 200, -200, 300, -200),
+        sourceWallId: undefined,
+        sourceKind: "FREE"
+      }
+    ];
+    model.vertices = [
+      {
+        ...vertex("free-vertex", 200, -200, 200, 200),
+        wallBacked: false
+      }
+    ];
 
-    expect(resolveDrawWallSnapCandidate({ x: 200, y: -200 }, model, {
-      worldPoint: { x: 200, z: 200 }
-    })).toMatchObject({ kind: "free", point: { x: 200, z: 200 } });
+    expect(
+      resolveDrawWallSnapCandidate({ x: 200, y: -200 }, model, {
+        worldPoint: { x: 200, z: 200 }
+      })
+    ).toMatchObject({ kind: "free", point: { x: 200, z: 200 } });
   });
 });
 
@@ -204,7 +236,9 @@ function createModel({ vertexOrder = ["vertex-a", "vertex-b"] } = {}) {
 }
 
 type MutablePresentationModel = {
-  -readonly [Key in keyof GeometryPresentationModel2D]: GeometryPresentationModel2D[Key] extends readonly (infer Item)[]
+  -readonly [
+    Key in keyof GeometryPresentationModel2D
+  ]: GeometryPresentationModel2D[Key] extends readonly (infer Item)[]
     ? Item[]
     : GeometryPresentationModel2D[Key];
 };

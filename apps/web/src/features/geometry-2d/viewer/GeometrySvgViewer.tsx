@@ -71,6 +71,7 @@ import {
   createWindowPlanGeometry
 } from "@casastudio/geometry";
 import type { DrawWallSnapCandidate } from "../../editor-2d/tools/wall/project-wall-snapping";
+import type { PrecisionGuide2D } from "../precision/precision-assistance-2d";
 
 /**
  * Fixed internal SVG viewport dimensions for the technical geometry viewer.
@@ -235,6 +236,8 @@ export type SvgViewportPointer = {
   readonly svgPoint: ScreenPoint;
   readonly worldPoint: WorldPointXZ;
   readonly cssPixelsPerSvgUnit: number;
+  /** Active gesture-only precision bypass; never changes editor preferences. */
+  readonly altKey?: boolean;
 };
 
 /** Screen-local state for distinguishing an Opening click from a drag. */
@@ -278,6 +281,8 @@ const openingDragThresholdCssPixels = 5;
 
 /** Editor-only geometry rendered above the stable presentation model. */
 export type GeometryEditorOverlay = {
+  /** Transient, non-interactive geometry explaining the active precision result. */
+  readonly precisionGuides?: readonly PrecisionGuide2D[];
   readonly roomFaceCandidates?: readonly {
     readonly faceKey: string;
     readonly vertices: readonly WorldPointXZ[];
@@ -532,6 +537,7 @@ export function GeometrySvgViewer({
     readonly clientX: number;
     readonly clientY: number;
     readonly currentTarget: SVGSVGElement;
+    readonly altKey?: boolean;
   }): SvgViewportPointer => {
     const normalized = normalizeClientPointToSvgViewport({
       clientX: event.clientX,
@@ -543,7 +549,8 @@ export function GeometrySvgViewer({
     return {
       svgPoint: normalized.point,
       worldPoint: transform.screenToWorld(normalized.point),
-      cssPixelsPerSvgUnit: normalized.cssPixelsPerSvgUnit
+      cssPixelsPerSvgUnit: normalized.cssPixelsPerSvgUnit,
+      altKey: Boolean(event.altKey)
     };
   };
   const getEventPoint = (event: {
@@ -1916,7 +1923,8 @@ export function GeometrySvgViewer({
           onEditorCanvasClick?.({
             worldPoint: editorOverlay.wallVertexPreview,
             svgPoint: transform.worldToScreen(editorOverlay.wallVertexPreview),
-            cssPixelsPerSvgUnit: 1
+            cssPixelsPerSvgUnit: 1,
+            altKey: false
           });
         }}
         onRoomFaceCandidateClick={(faceKey) => {
@@ -2416,6 +2424,26 @@ function GeometryEditorOverlayLayer({
               </text>
             </g>
           ) : null}
+        </g>
+      ) : null}
+      {overlay?.precisionGuides?.length ? (
+        <g
+          className="geometry-precision-guides"
+          data-testid="precision-guides"
+          aria-hidden="true"
+          pointerEvents="none"
+        >
+          {overlay.precisionGuides.map((guide, index) => {
+            const start = transform.worldToScreen(guide.start);
+            const end = transform.worldToScreen(guide.end);
+            return (
+              <line
+                key={`${guide.kind}:${index}`}
+                className={`geometry-precision-guide geometry-precision-guide--${guide.kind}`}
+                {...lineAttributes(start, end)}
+              />
+            );
+          })}
         </g>
       ) : null}
       {snapPoint &&

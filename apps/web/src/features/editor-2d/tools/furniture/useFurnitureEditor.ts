@@ -35,6 +35,7 @@ import {
   createFurniturePresentation2D
 } from "../../../geometry-2d/presentation/furniture-presentation-model-2d";
 import { useMemo, useRef, useState } from "react";
+import { resolveFurniturePrecisionTranslation } from "../../precision/project-precision-assistance";
 
 type Options = {
   readonly project?: Project | null;
@@ -44,6 +45,9 @@ type Options = {
   readonly selection: GeometrySelectionState;
   readonly editable: boolean;
   readonly visible: boolean;
+  readonly zoom?: number;
+  readonly snapToGrid?: boolean;
+  readonly gridSpacing?: number;
 };
 
 /** Coordinates Furniture proposals, canonical operations, and one snapshot per confirmed edit. */
@@ -54,9 +58,14 @@ export function useFurnitureEditor({
   dispatch,
   selection,
   editable,
-  visible
+  visible,
+  zoom = 1,
+  snapToGrid = false,
+  gridSpacing = 100
 }: Options) {
-  const lastCanvasPointerRef = useRef<SvgViewportPointer | undefined>(undefined);
+  const lastCanvasPointerRef = useRef<SvgViewportPointer | undefined>(
+    undefined
+  );
   const [error, setError] = useState<
     FurniturePlacementIssue | "EDIT_FAILED" | undefined
   >();
@@ -129,7 +138,8 @@ export function useFurnitureEditor({
       if (!editable || !project || !levelId) return;
       const next = startFurniturePlacement(id);
       if (!next) return;
-      const currentPosition = lastCanvasPointerRef.current?.worldPoint ??
+      const currentPosition =
+        lastCanvasPointerRef.current?.worldPoint ??
         (transient?.positioned ? transient.item.position : undefined);
       const proposal = { ...next, explicitRoomId: transient?.explicitRoomId };
       setTransient(
@@ -137,6 +147,56 @@ export function useFurnitureEditor({
           ? positionFurniture(project, levelId, proposal, currentPosition)
           : proposal
       );
+    };
+    const positionWithPrecision = (
+      interaction: FurnitureInteraction,
+      position: { readonly x: number; readonly z: number },
+      pointer: SvgViewportPointer
+    ): FurnitureInteraction => {
+      if (!project || !levelId) return interaction;
+      const raw = positionFurniture(project, levelId, interaction, position);
+      const rawValidation = validateFurniturePlacement(
+        project,
+        levelId,
+        raw.item,
+        raw.intent === "move" || raw.intent === "rotate"
+          ? raw.sourceId
+          : undefined
+      );
+      const precision = resolveFurniturePrecisionTranslation({
+        project,
+        levelId,
+        moving: [raw.item],
+        rawDelta: { x: 0, z: 0 },
+        pixelsPerWorldUnit: Math.max(
+          Number.EPSILON,
+          zoom * pointer.cssPixelsPerSvgUnit
+        ),
+        grid: { enabled: snapToGrid, spacing: gridSpacing },
+        bypass: pointer.altKey || rawValidation.status === "INVALID",
+        previous: interaction.precision,
+        isValid: (correction) => {
+          const candidate = positionFurniture(project, levelId, raw, {
+            x: raw.item.position.x + correction.x,
+            z: raw.item.position.z + correction.z
+          });
+          return (
+            validateFurniturePlacement(
+              project,
+              levelId,
+              candidate.item,
+              candidate.intent === "move" || candidate.intent === "rotate"
+                ? candidate.sourceId
+                : undefined
+            ).status !== "INVALID"
+          );
+        }
+      });
+      const positioned = positionFurniture(project, levelId, raw, {
+        x: raw.item.position.x + precision.delta.x,
+        z: raw.item.position.z + precision.delta.z
+      });
+      return { ...positioned, precision };
     };
     const pointerMove = (pointer: SvgViewportPointer, pointerId: number) => {
       lastCanvasPointerRef.current = pointer;
@@ -174,25 +234,26 @@ export function useFurnitureEditor({
           });
         } else {
           setTransient(
-            positionFurniture(project, levelId, transient, {
-              x: item.position.x + pointer.worldPoint.x - gesture.start.x,
-              z: item.position.z + pointer.worldPoint.z - gesture.start.z
-            })
+            positionWithPrecision(
+              transient,
+              {
+                x: item.position.x + pointer.worldPoint.x - gesture.start.x,
+                z: item.position.z + pointer.worldPoint.z - gesture.start.z
+              },
+              pointer
+            )
           );
         }
       } else if (authoring)
         setTransient(
-          positionFurniture(project, levelId, transient, pointer.worldPoint)
+          positionWithPrecision(transient, pointer.worldPoint, pointer)
         );
     };
     const canvasClick = (pointer: SvgViewportPointer) => {
       if (!editable || !authoring || !transient || !project || !levelId) return;
-      const proposal = positionFurniture(
-        project,
-        levelId,
-        transient,
-        pointer.worldPoint
-      );
+      const proposal = transient.positioned
+        ? transient
+        : positionWithPrecision(transient, pointer.worldPoint, pointer);
       if (!proposal.item.roomId) setTransient(proposal);
       else {
         const validation = validateFurniturePlacement(
@@ -429,15 +490,16 @@ export function useFurnitureEditor({
           ? resolveFurnitureRoom(project, item)
           : undefined,
       model: project && levelId ? createFurniturePlan2D(project, levelId) : [],
-      preview: transient && (transient.positioned || transient.previewVisible)
-        ? createFurniturePresentation2D({
-            ...transient.item,
-            id:
-              transient.intent === "move" || transient.intent === "rotate"
-                ? transient.item.id
-                : "furniture-preview"
-          })
-        : undefined,
+      preview:
+        transient && (transient.positioned || transient.previewVisible)
+          ? createFurniturePresentation2D({
+              ...transient.item,
+              id:
+                transient.intent === "move" || transient.intent === "rotate"
+                  ? transient.item.id
+                  : "furniture-preview"
+            })
+          : undefined,
       previewValid:
         Boolean(transient?.positioned) && validation?.status !== "INVALID",
       pointerMove,
@@ -445,7 +507,19 @@ export function useFurnitureEditor({
       beginGesture,
       endGesture
     };
-  }, [project, levelId, editor, dispatch, selection, editable, visible, error]);
+  }, [
+    project,
+    levelId,
+    editor,
+    dispatch,
+    selection,
+    editable,
+    visible,
+    error,
+    zoom,
+    snapToGrid,
+    gridSpacing
+  ]);
 }
 
 /** Shared Furniture controller contract for contextual Properties and canvas integration. */

@@ -42,6 +42,10 @@ import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentat
 import type { GeometrySelectionState } from "../../../geometry-2d/selection/geometry-selection-state";
 import type { GeometryDisplayOptions } from "../../../geometry-2d/viewer/GeometrySvgViewer";
 import type { ProjectSelectionCapabilities } from "../../../editor-2d/selection/project-selection-transforms";
+import type {
+  FurnitureAlignment,
+  FurnitureDistribution
+} from "../../../editor-2d/selection/project-selection-transforms";
 import { ProjectPropertiesDetails } from "./ProjectSelectionDetails";
 import { ProjectStairAuthoringDetails } from "./ProjectStairSelectionDetails";
 
@@ -139,6 +143,10 @@ type ProjectWorkspaceInspectorProps = {
   readonly onDeleteSelection?: () => void;
   readonly onDuplicateSelection?: () => void;
   readonly multiSelectionFurniture?: readonly FurnitureItem[];
+  readonly onAlignSelection?: (alignment: FurnitureAlignment) => void;
+  readonly onDistributeSelection?: (
+    distribution: FurnitureDistribution
+  ) => void;
 };
 
 /** Provides the durable Layers and contextual Properties inspector foundation. */
@@ -192,7 +200,9 @@ export function ProjectWorkspaceInspector({
   selectionCapabilities,
   onDeleteSelection,
   onDuplicateSelection,
-  multiSelectionFurniture
+  multiSelectionFurniture,
+  onAlignSelection,
+  onDistributeSelection
 }: ProjectWorkspaceInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
   const contentRef = useRef<HTMLDivElement>(null);
@@ -310,6 +320,8 @@ export function ProjectWorkspaceInspector({
             onDeleteSelection={onDeleteSelection}
             onDuplicateSelection={onDuplicateSelection}
             multiSelectionFurniture={multiSelectionFurniture}
+            onAlignSelection={onAlignSelection}
+            onDistributeSelection={onDistributeSelection}
           />
         ) : (
           <Typography variant="caption" color="text.secondary">

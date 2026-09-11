@@ -1,14 +1,22 @@
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import AlignHorizontalCenterRoundedIcon from "@mui/icons-material/AlignHorizontalCenterRounded";
+import AlignHorizontalLeftRoundedIcon from "@mui/icons-material/AlignHorizontalLeftRounded";
+import AlignHorizontalRightRoundedIcon from "@mui/icons-material/AlignHorizontalRightRounded";
+import AlignVerticalBottomRoundedIcon from "@mui/icons-material/AlignVerticalBottomRounded";
+import AlignVerticalCenterRoundedIcon from "@mui/icons-material/AlignVerticalCenterRounded";
+import AlignVerticalTopRoundedIcon from "@mui/icons-material/AlignVerticalTopRounded";
 import {
   Button,
   Divider,
   FormControl,
+  IconButton,
   InputAdornment,
   InputLabel,
   MenuItem,
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from "@mui/material";
 import {
@@ -55,6 +63,10 @@ import {
   ProjectStairSelectionDetails
 } from "./ProjectStairSelectionDetails";
 import type { ProjectSelectionCapabilities } from "../../../editor-2d/selection/project-selection-transforms";
+import type {
+  FurnitureAlignment,
+  FurnitureDistribution
+} from "../../../editor-2d/selection/project-selection-transforms";
 
 /** Dispatches Edit-mode selection details by runtime geometry kind. */
 export function ProjectSelectionDetails({
@@ -229,7 +241,9 @@ export function ProjectPropertiesDetails({
   selectionCapabilities,
   onDeleteSelection,
   onDuplicateSelection,
-  multiSelectionFurniture
+  multiSelectionFurniture,
+  onAlignSelection,
+  onDistributeSelection
 }: {
   readonly model?: GeometryPresentationModel2D;
   readonly selectionState: GeometrySelectionState;
@@ -282,6 +296,10 @@ export function ProjectPropertiesDetails({
   readonly onDeleteSelection?: () => void;
   readonly onDuplicateSelection?: () => void;
   readonly multiSelectionFurniture?: readonly FurnitureItem[];
+  readonly onAlignSelection?: (alignment: FurnitureAlignment) => void;
+  readonly onDistributeSelection?: (
+    distribution: FurnitureDistribution
+  ) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   if (openingAuthoring) {
@@ -311,6 +329,8 @@ export function ProjectPropertiesDetails({
         onDelete={onDeleteSelection}
         onDuplicate={onDuplicateSelection}
         furniture={multiSelectionFurniture}
+        onAlign={onAlignSelection}
+        onDistribute={onDistributeSelection}
       />
     );
   }
@@ -475,13 +495,17 @@ function ProjectMultiSelectionDetails({
   capabilities,
   onDelete,
   onDuplicate,
-  furniture
+  furniture,
+  onAlign,
+  onDistribute
 }: {
   readonly selectionState: GeometrySelectionState;
   readonly capabilities?: ProjectSelectionCapabilities;
   readonly onDelete?: () => void;
   readonly onDuplicate?: () => void;
   readonly furniture?: readonly FurnitureItem[];
+  readonly onAlign?: (alignment: FurnitureAlignment) => void;
+  readonly onDistribute?: (distribution: FurnitureDistribution) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const counts = new Map<string, number>();
@@ -572,6 +596,73 @@ function ProjectMultiSelectionDetails({
                     : `${furnitureRotation}°`}
                 </Typography>
               </Stack>
+            </Stack>
+          ) : null}
+          {furnitureRotation !== undefined &&
+          furniture &&
+          furniture.length > 1 ? (
+            <Stack spacing={0.75}>
+              <Typography variant="caption" color="text.secondary">
+                {t("selection.alignment")}
+              </Typography>
+              <Stack
+                direction="row"
+                spacing={0.5}
+                useFlexGap
+                sx={{ flexWrap: "wrap" }}
+              >
+                {(
+                  [
+                    ["left", "alignLeft", AlignHorizontalLeftRoundedIcon],
+                    [
+                      "center-x",
+                      "alignCenterX",
+                      AlignHorizontalCenterRoundedIcon
+                    ],
+                    ["right", "alignRight", AlignHorizontalRightRoundedIcon],
+                    ["top", "alignTop", AlignVerticalTopRoundedIcon],
+                    [
+                      "center-z",
+                      "alignCenterZ",
+                      AlignVerticalCenterRoundedIcon
+                    ],
+                    ["bottom", "alignBottom", AlignVerticalBottomRoundedIcon]
+                  ] as const
+                ).map(([alignment, label, Icon]) => (
+                  <Tooltip key={alignment} title={t(`selection.${label}`)}>
+                    <IconButton
+                      size="small"
+                      aria-label={t(`selection.${label}`)}
+                      onClick={() => onAlign?.(alignment)}
+                    >
+                      <Icon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                ))}
+              </Stack>
+              {furniture.length >= 3 ? (
+                <>
+                  <Typography variant="caption" color="text.secondary">
+                    {t("selection.distribution")}
+                  </Typography>
+                  <Stack direction="row" spacing={0.5}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => onDistribute?.("horizontal")}
+                    >
+                      {t("selection.distributeHorizontal")}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => onDistribute?.("vertical")}
+                    >
+                      {t("selection.distributeVertical")}
+                    </Button>
+                  </Stack>
+                </>
+              ) : null}
             </Stack>
           ) : null}
         </Stack>
