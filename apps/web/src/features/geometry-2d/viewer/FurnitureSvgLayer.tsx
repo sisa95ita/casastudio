@@ -57,14 +57,16 @@ export function FurnitureSvgLayer({
       "FURNITURE",
       item.id
     );
-    const color =
-      preview && !model.previewValid
-        ? "#bd4c42"
-        : selected || preview
-          ? "#246caf"
-          : hovered
-            ? "#3f80b6"
-            : "#343d3f";
+    const stateClass = preview
+      ? model.previewValid
+        ? " furniture-plan-symbol--preview"
+        : " furniture-plan-symbol--preview furniture-plan-symbol--invalid"
+      : selected
+        ? " furniture-plan-symbol--selected"
+        : hovered
+          ? " furniture-plan-symbol--hovered"
+          : "";
+    const strokeWidth = selected ? 1.7 : hovered || preview ? 1.25 : 1.05;
     const center = transform.worldToScreen(item.center);
     const handle = transform.worldToScreen(item.rotationHandle);
     return (
@@ -75,9 +77,8 @@ export function FurnitureSvgLayer({
         data-category={item.category}
         data-valid={preview ? model.previewValid : undefined}
         data-selected={selected}
+        className={`furniture-plan-symbol${stateClass}`}
         opacity={preview ? 0.8 : model.preview?.id === item.id ? 0.25 : 1}
-        stroke={color}
-        strokeWidth={selected ? 1.8 : 1.2}
         strokeLinejoin="round"
         pointerEvents={preview ? "none" : undefined}
       >
@@ -85,8 +86,11 @@ export function FurnitureSvgLayer({
         <FurnitureSymbolSvg
           model={item}
           project={(point) => transform.worldToScreen(point)}
-          stroke={color}
-          strokeWidth={selected ? 1.8 : hovered || preview ? 1.45 : 1.2}
+          stroke="currentColor"
+          surfaceFill="var(--casa-plan-furniture-surface)"
+          detailFill="var(--casa-plan-furniture-detail)"
+          strokeWidth={strokeWidth}
+          detailStrokeWidth={Math.max(0.75, strokeWidth - 0.2)}
         />
         {!preview ? (
           <polygon

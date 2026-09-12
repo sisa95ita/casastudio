@@ -9,7 +9,8 @@ export function FurnitureSymbolSvg({
   stroke = "currentColor",
   surfaceFill = "#f5f3ec",
   detailFill = "#e8e4da",
-  strokeWidth = 1.2
+  strokeWidth = 1.2,
+  detailStrokeWidth = strokeWidth
 }: {
   readonly model: FurniturePresentationModel2D;
   readonly project: (point: FurniturePresentationModel2D["center"]) => SvgPoint;
@@ -17,8 +18,11 @@ export function FurnitureSymbolSvg({
   readonly surfaceFill?: string;
   readonly detailFill?: string;
   readonly strokeWidth?: number;
+  readonly detailStrokeWidth?: number;
 }) {
-  const points = (vertices: readonly FurniturePresentationModel2D["center"][]) =>
+  const points = (
+    vertices: readonly FurniturePresentationModel2D["center"][]
+  ) =>
     vertices
       .map((vertex) => {
         const point = project(vertex);
@@ -45,7 +49,7 @@ export function FurnitureSymbolSvg({
             points={points(primitive.points)}
             fill={detailFill}
             stroke={stroke}
-            strokeWidth={strokeWidth}
+            strokeWidth={detailStrokeWidth}
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
             pointerEvents="none"
@@ -57,7 +61,7 @@ export function FurnitureSymbolSvg({
             points={points(primitive.points)}
             fill="none"
             stroke={stroke}
-            strokeWidth={strokeWidth}
+            strokeWidth={detailStrokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"

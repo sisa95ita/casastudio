@@ -21,6 +21,19 @@
   --casa-muted: #646b6c;
   --casa-border: #ddd7ce;
   --casa-shadow: 0 18px 50px rgba(57, 47, 37, 0.09);
+  --casa-plan-ink: #303837;
+  --casa-plan-structure: #2b3130;
+  --casa-plan-structure-edge: #1e2423;
+  --casa-plan-element: #424c4a;
+  --casa-plan-furniture: #596260;
+  --casa-plan-furniture-surface: #f5f2ea;
+  --casa-plan-furniture-detail: #e9e4da;
+  --casa-plan-room-fill: rgba(233, 224, 211, 0.42);
+  --casa-plan-elevated-fill: rgba(72, 102, 90, 0.11);
+  --casa-plan-elevated-edge: rgba(72, 102, 90, 0.78);
+  --casa-plan-selection: #246caf;
+  --casa-plan-hover: #3f80b6;
+  --casa-plan-invalid: #bd3e35;
 }
 
 * {
@@ -1138,7 +1151,7 @@ img {
 
 .geometry-polygon {
   cursor: pointer;
-  fill: rgba(233, 224, 211, 0.46);
+  fill: var(--casa-plan-room-fill);
   stroke: rgba(124, 111, 94, 0.14);
   stroke-width: 0.7;
   transition:
@@ -1147,15 +1160,15 @@ img {
 }
 
 .geometry-polygon--elevated {
-  fill: rgba(63, 117, 157, 0.1);
-  stroke: rgba(36, 103, 174, 0.82);
+  fill: var(--casa-plan-elevated-fill);
+  stroke: var(--casa-plan-elevated-edge);
   stroke-dasharray: 8 6;
   stroke-linecap: round;
   stroke-width: 1.6;
 }
 
 .geometry-polygon--elevated.geometry-entity-selected {
-  fill: rgba(36, 103, 174, 0.16);
+  fill: rgba(36, 108, 175, 0.13);
   stroke-dasharray: 8 5;
 }
 
@@ -1170,17 +1183,17 @@ img {
 }
 
 .architectural-wall-body {
-  fill: #242a2a;
-  stroke: #151a1a;
-  stroke-width: 0.65;
+  fill: var(--casa-plan-structure);
+  stroke: var(--casa-plan-structure-edge);
+  stroke-width: 0.55;
   pointer-events: none;
 }
 
 .architectural-wall-body.geometry-entity-hovered,
 .architectural-wall-body.geometry-entity-selected {
-  fill: #242a2a;
-  stroke: #246caf !important;
-  stroke-width: 2.2;
+  fill: var(--casa-plan-structure);
+  stroke: var(--casa-plan-selection) !important;
+  stroke-width: 1.8;
 }
 
 .architectural-wall-hit-target,
@@ -1195,7 +1208,7 @@ img {
 }
 
 .architectural-opening {
-  color: #343d3f;
+  color: var(--casa-plan-element);
 }
 
 .architectural-opening--draggable {
@@ -1212,7 +1225,7 @@ img {
 .architectural-opening path {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.25;
+  stroke-width: 1.45;
   vector-effect: non-scaling-stroke;
 }
 
@@ -1224,11 +1237,11 @@ img {
 
 .architectural-opening.geometry-entity-hovered,
 .architectural-opening.geometry-entity-selected {
-  color: #246caf;
+  color: var(--casa-plan-selection);
 }
 
 .architectural-opening-drag-handle {
-  color: #246caf;
+  color: var(--casa-plan-selection);
 }
 
 .architectural-opening-drag-handle__surface {
@@ -1243,20 +1256,24 @@ img {
 }
 
 .architectural-staircase {
-  color: #55615f;
+  color: var(--casa-plan-element);
 }
 
 .architectural-stair-flight__body,
 .architectural-stair-landing {
   fill: rgba(241, 238, 228, 0.94);
   stroke: currentColor;
-  stroke-width: 1.2;
+  stroke-width: 1.25;
   vector-effect: non-scaling-stroke;
 }
 
 .architectural-stair-flight__body {
   cursor: pointer;
   pointer-events: fill;
+}
+
+.architectural-stair-landing {
+  fill: rgba(232, 227, 215, 0.96);
 }
 
 .architectural-stair-flight__hit-target {
@@ -1271,12 +1288,40 @@ img {
   fill: none;
   pointer-events: none;
   stroke: currentColor;
-  stroke-width: 0.85;
+  stroke-width: 0.75;
   vector-effect: non-scaling-stroke;
 }
 
 .architectural-stair-direction {
-  stroke-width: 1.25;
+  stroke-width: 1.35;
+}
+
+.architectural-stair-flight--continuation:not(.geometry-entity-selected),
+.architectural-stair-landing--continuation:not(.geometry-entity-selected) {
+  opacity: 0.46;
+}
+
+.architectural-stair-continuation {
+  fill: rgba(253, 252, 249, 0.7);
+  pointer-events: none;
+  stroke: currentColor;
+  stroke-dasharray: 5 4;
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-stair-tread--continuation {
+  opacity: 0.42;
+  stroke-dasharray: 3 3;
+}
+
+.architectural-stair-break {
+  fill: none;
+  pointer-events: none;
+  stroke: var(--casa-plan-ink);
+  stroke-linecap: square;
+  stroke-width: 1.55;
+  vector-effect: non-scaling-stroke;
 }
 
 .architectural-staircase.geometry-entity-selected,
@@ -1285,16 +1330,16 @@ img {
 .architectural-stair-flight.geometry-entity-hovered,
 .architectural-stair-landing.geometry-entity-selected,
 .architectural-stair-landing.geometry-entity-hovered {
-  color: #246caf;
+  color: var(--casa-plan-selection);
 }
 
 .geometry-stair-preview {
-  color: #246caf;
+  color: var(--casa-plan-selection);
   pointer-events: none;
 }
 
 .geometry-stair-preview--invalid {
-  color: #bd3e35;
+  color: var(--casa-plan-invalid);
 }
 
 .geometry-stair-preview__body,
@@ -1314,6 +1359,26 @@ img {
   vector-effect: non-scaling-stroke;
 }
 
+.geometry-stair-preview__continuation,
+.geometry-stair-preview__landing--continuation,
+.geometry-stair-preview__tread--continuation {
+  opacity: 0.48;
+}
+
+.geometry-stair-preview__continuation-body {
+  fill: rgba(253, 252, 249, 0.68);
+  stroke: currentColor;
+  stroke-dasharray: 5 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-stair-preview__break {
+  stroke: currentColor;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
 .geometry-stair-adjustment-handle__hit-target {
   cursor: grab;
   fill: transparent;
@@ -1323,7 +1388,7 @@ img {
 .geometry-stair-adjustment-handle {
   fill: var(--casa-paper);
   pointer-events: none;
-  stroke: #246caf;
+  stroke: var(--casa-plan-selection);
   stroke-width: 2;
 }
 
@@ -1334,7 +1399,8 @@ img {
 
 .architectural-door-arc {
   stroke-dasharray: none;
-  opacity: 0.68;
+  opacity: 0.62;
+  stroke-width: 0.9 !important;
 }
 
 .architectural-door-hinge {
@@ -1342,7 +1408,7 @@ img {
 }
 
 .architectural-window-line {
-  stroke-width: 1.05 !important;
+  stroke-width: 1.1 !important;
 }
 
 .architectural-dimension-layer,
@@ -1389,7 +1455,7 @@ img {
 }
 
 .architectural-room-metric-layer {
-  color: #303838;
+  color: var(--casa-plan-ink);
 }
 
 .architectural-room-label__name {
@@ -1405,7 +1471,7 @@ img {
 }
 
 .architectural-room-label__elevation {
-  fill: #246caf;
+  fill: var(--casa-sage-dark);
   font-size: 8.5px;
   font-weight: 700;
 }
@@ -1424,8 +1490,26 @@ img {
 }
 
 .architectural-opening-preview--invalid {
-  color: #d32f2f;
+  color: var(--casa-plan-invalid);
   opacity: 0.78;
+}
+
+.furniture-plan-symbol {
+  color: var(--casa-plan-furniture);
+}
+
+.furniture-plan-symbol--hovered {
+  color: var(--casa-plan-hover);
+  filter: drop-shadow(0 0 2px rgba(36, 103, 174, 0.24));
+}
+
+.furniture-plan-symbol--selected,
+.furniture-plan-symbol--preview {
+  color: var(--casa-plan-selection);
+}
+
+.furniture-plan-symbol--invalid {
+  color: var(--casa-plan-invalid);
 }
 
 .project-workspace .geometry-edge {
@@ -1494,10 +1578,10 @@ img {
   stroke-width: 1;
 }
 .geometry-entity-hovered {
-  filter: drop-shadow(0 0 3px rgba(36, 103, 174, 0.3));
+  filter: drop-shadow(0 0 2px rgba(36, 103, 174, 0.28));
 }
 .geometry-entity-selected {
-  stroke: #246caf !important;
+  stroke: var(--casa-plan-selection) !important;
   stroke-width: 3;
 }
 
@@ -1512,7 +1596,7 @@ img {
 
 .geometry-editor-grid-line {
   fill: none;
-  stroke: rgba(83, 103, 86, 0.2);
+  stroke: rgba(83, 103, 86, 0.14);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -1626,8 +1710,8 @@ img {
 
 .geometry-precision-guide {
   fill: none;
-  stroke: color-mix(in srgb, var(--color-primary, #6f6256) 72%, transparent);
-  stroke-width: 1.25;
+  stroke: color-mix(in srgb, var(--casa-terracotta) 64%, transparent);
+  stroke-width: 1.1;
   stroke-dasharray: 5 4;
   vector-effect: non-scaling-stroke;
 }

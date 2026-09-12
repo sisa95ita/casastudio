@@ -26,12 +26,13 @@ export type RoomLabelPlacementOptions2D = {
   readonly elevationLabel?: string;
   readonly furnitureFootprints: readonly (readonly ScreenPoint[])[];
   readonly stairFootprints: readonly (readonly ScreenPoint[])[];
+  readonly architecturalFootprints?: readonly (readonly ScreenPoint[])[];
   readonly occupiedLabelBounds: readonly RoomLabelBounds2D[];
 };
 
 /**
  * Chooses the first deterministic compass candidate that remains inside its own
- * Room and clear of Furniture/labels, preferring candidates clear of Stairs.
+ * Room and clear of physical plan clutter, preferring candidates clear of Stairs.
  */
 export function placeRoomLabel2D({
   preferredAnchor,
@@ -41,6 +42,7 @@ export function placeRoomLabel2D({
   elevationLabel,
   furnitureFootprints,
   stairFootprints,
+  architecturalFootprints = [],
   occupiedLabelBounds
 }: RoomLabelPlacementOptions2D): RoomLabelPlacement2D {
   const dimensions = estimateLabelDimensions(
@@ -57,17 +59,19 @@ export function placeRoomLabel2D({
     Math.max(dimensions.height * 0.7, 20),
     roomBounds.height * 0.22
   );
-  const candidates: readonly ScreenPoint[] = [
+  const largerOffsetX = Math.min(
+    Math.max(dimensions.width * 1.35, 42),
+    roomBounds.width * 0.38
+  );
+  const largerOffsetY = Math.min(
+    Math.max(dimensions.height * 1.45, 38),
+    roomBounds.height * 0.38
+  );
+  const candidates = uniqueCandidates([
     preferredAnchor,
-    { x: preferredAnchor.x, y: preferredAnchor.y - offsetY },
-    { x: preferredAnchor.x, y: preferredAnchor.y + offsetY },
-    { x: preferredAnchor.x + offsetX, y: preferredAnchor.y },
-    { x: preferredAnchor.x - offsetX, y: preferredAnchor.y },
-    { x: preferredAnchor.x + offsetX, y: preferredAnchor.y - offsetY },
-    { x: preferredAnchor.x - offsetX, y: preferredAnchor.y - offsetY },
-    { x: preferredAnchor.x + offsetX, y: preferredAnchor.y + offsetY },
-    { x: preferredAnchor.x - offsetX, y: preferredAnchor.y + offsetY }
-  ];
+    ...candidateRing(preferredAnchor, offsetX, offsetY),
+    ...candidateRing(preferredAnchor, largerOffsetX, largerOffsetY)
+  ]);
   const usable = candidates.flatMap((anchor) => {
     const bounds = labelBounds(anchor, dimensions.width, dimensions.height);
     const footprint = boundsPolygon(bounds);
@@ -76,16 +80,21 @@ export function placeRoomLabel2D({
       furnitureFootprints.some((candidate) =>
         convexPolygonsOverlap(footprint, toWorldPolygon(candidate))
       ) ||
+      architecturalFootprints.some((candidate) =>
+        convexPolygonsOverlap(footprint, toWorldPolygon(candidate))
+      ) ||
       occupiedLabelBounds.some((candidate) =>
         convexPolygonsOverlap(footprint, boundsPolygon(candidate))
       )
-    ) return [];
+    )
+      return [];
     const stairOverlap = stairFootprints.some((candidate) =>
       convexPolygonsOverlap(footprint, toWorldPolygon(candidate))
     );
     return [{ anchor, bounds, stairOverlap }];
   });
-  const chosen = usable.find((candidate) => !candidate.stairOverlap) ?? usable[0];
+  const chosen =
+    usable.find((candidate) => !candidate.stairOverlap) ?? usable[0];
   if (chosen)
     return {
       anchor: Object.freeze(chosen.anchor),
@@ -99,6 +108,35 @@ export function placeRoomLabel2D({
     ),
     fallback: true
   };
+}
+
+function candidateRing(
+  anchor: ScreenPoint,
+  offsetX: number,
+  offsetY: number
+): readonly ScreenPoint[] {
+  return [
+    { x: anchor.x, y: anchor.y - offsetY },
+    { x: anchor.x, y: anchor.y + offsetY },
+    { x: anchor.x + offsetX, y: anchor.y },
+    { x: anchor.x - offsetX, y: anchor.y },
+    { x: anchor.x + offsetX, y: anchor.y - offsetY },
+    { x: anchor.x - offsetX, y: anchor.y - offsetY },
+    { x: anchor.x + offsetX, y: anchor.y + offsetY },
+    { x: anchor.x - offsetX, y: anchor.y + offsetY }
+  ];
+}
+
+function uniqueCandidates(
+  candidates: readonly ScreenPoint[]
+): readonly ScreenPoint[] {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.x}:${candidate.y}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function estimateLabelDimensions(

@@ -22,8 +22,14 @@ import {
 
 import type { ProjectDimensionDisplayState } from "../../editor-2d/state/project-editor-slice";
 import type { GeometryPresentationModel2D } from "./geometry-presentation-model-2d";
-import type { ScreenPoint, ViewportTransform2D } from "../viewport/viewport-transform-2d";
-import { createStairFootprints2D } from "./plan-footprints-2d";
+import type {
+  ScreenPoint,
+  ViewportTransform2D
+} from "../viewport/viewport-transform-2d";
+import {
+  createStairFootprints2D,
+  createWallFootprints2D
+} from "./plan-footprints-2d";
 import {
   placeRoomLabel2D,
   type RoomLabelBounds2D
@@ -38,9 +44,15 @@ export type DimensionPresentationLine2D = {
 /** Screen-projected dimension retaining its authoritative physical value. */
 export type LinearDimensionPresentation2D = {
   readonly kind: "linear";
-  readonly extensionLines: readonly [DimensionPresentationLine2D, DimensionPresentationLine2D];
+  readonly extensionLines: readonly [
+    DimensionPresentationLine2D,
+    DimensionPresentationLine2D
+  ];
   readonly dimensionLine: DimensionPresentationLine2D;
-  readonly markers: readonly [DimensionPresentationLine2D, DimensionPresentationLine2D];
+  readonly markers: readonly [
+    DimensionPresentationLine2D,
+    DimensionPresentationLine2D
+  ];
   readonly labelAnchor: ScreenPoint;
   readonly physicalValue: number;
   readonly formattedValue: string;
@@ -108,20 +120,33 @@ export function createArchitecturalDimensionPresentationModel2D({
         exterior.overallVertical,
         ...exterior.horizontalChain,
         ...exterior.verticalChain
-      ].flatMap((dimension) => dimension ? [projectDimension(dimension, transform)] : [])
+      ].flatMap((dimension) =>
+        dimension ? [projectDimension(dimension, transform)] : []
+      )
     : [];
-  const selectedDimension = display.selectedDimensions && selectedWall
-    ? createWallDimension(selectedWall, units, scaleDenominator)
-    : undefined;
-  const selectedRoomDimensions = display.selectedDimensions && selectedRoom
-    ? createOrthogonalRoomDimensions(level, selectedRoom, units, scaleDenominator)
-    : [];
+  const selectedDimension =
+    display.selectedDimensions && selectedWall
+      ? createWallDimension(selectedWall, units, scaleDenominator)
+      : undefined;
+  const selectedRoomDimensions =
+    display.selectedDimensions && selectedRoom
+      ? createOrthogonalRoomDimensions(
+          level,
+          selectedRoom,
+          units,
+          scaleDenominator
+        )
+      : [];
   const temporary = temporaryMeasurement
     ? createLinearDimension({
         start: temporaryMeasurement.start,
         end: temporaryMeasurement.end,
         offset: 0,
-        markerSize: documentDistanceToProjectUnits(0.05, scaleDenominator, units.length),
+        markerSize: documentDistanceToProjectUnits(
+          0.05,
+          scaleDenominator,
+          units.length
+        ),
         units
       })
     : undefined;
@@ -132,10 +157,15 @@ export function createArchitecturalDimensionPresentationModel2D({
   const projectedStairs = createStairFootprints2D(level).map((footprint) =>
     footprint.map((point) => transform.worldToScreen(point))
   );
+  const projectedArchitecture = createWallFootprints2D(level).map((footprint) =>
+    footprint.map((point) => transform.worldToScreen(point))
+  );
   const roomMetrics = display.roomMetrics
     ? level.rooms.flatMap((room) => {
         const measurement = measureRoom(level, room);
-        const polygon = geometryModel.polygons.find((candidate) => candidate.sourceRoomId === room.id);
+        const polygon = geometryModel.polygons.find(
+          (candidate) => candidate.sourceRoomId === room.id
+        );
         if (!measurement || !polygon) return [];
         const interiorAnchor = calculatePolygonInteriorAnchor(
           polygon.points.map((point) => point.world)
@@ -143,7 +173,10 @@ export function createArchitecturalDimensionPresentationModel2D({
         const preferredAnchor = interiorAnchor
           ? transform.worldToScreen(interiorAnchor)
           : polygon.centroid.screen;
-        const formattedArea = formatArchitecturalArea(measurement.area, units.length);
+        const formattedArea = formatArchitecturalArea(
+          measurement.area,
+          units.length
+        );
         const elevationLabel = room.elevation
           ? `+${formatArchitecturalLength(room.elevation, units.length)}`
           : undefined;
@@ -155,25 +188,32 @@ export function createArchitecturalDimensionPresentationModel2D({
           ...(elevationLabel ? { elevationLabel } : {}),
           furnitureFootprints: projectedFurniture,
           stairFootprints: projectedStairs,
+          architecturalFootprints: projectedArchitecture,
           occupiedLabelBounds
         });
         occupiedLabelBounds.push(placement.bounds);
-        return [{
-          roomId: room.id,
-          roomName: room.name,
-          roomType: room.type,
-          anchor: placement.anchor,
-          area: measurement.area,
-          formattedArea,
-          ...(elevationLabel ? { elevationLabel } : {})
-        }];
+        return [
+          {
+            roomId: room.id,
+            roomName: room.name,
+            roomType: room.type,
+            anchor: placement.anchor,
+            area: measurement.area,
+            formattedArea,
+            ...(elevationLabel ? { elevationLabel } : {})
+          }
+        ];
       })
     : [];
   return Object.freeze({
     automatic: Object.freeze(automatic),
     selected: Object.freeze([
-      ...(selectedDimension ? [projectDimension(selectedDimension, transform)] : []),
-      ...selectedRoomDimensions.map((dimension) => projectDimension(dimension, transform))
+      ...(selectedDimension
+        ? [projectDimension(selectedDimension, transform)]
+        : []),
+      ...selectedRoomDimensions.map((dimension) =>
+        projectDimension(dimension, transform)
+      )
     ]),
     roomMetrics: Object.freeze(roomMetrics),
     temporary: temporary ? projectDimension(temporary, transform) : undefined
@@ -207,5 +247,8 @@ function mapLine(
   line: DimensionLineSegment,
   transform: ViewportTransform2D
 ): DimensionPresentationLine2D {
-  return { start: transform.worldToScreen(line.start), end: transform.worldToScreen(line.end) };
+  return {
+    start: transform.worldToScreen(line.start),
+    end: transform.worldToScreen(line.end)
+  };
 }

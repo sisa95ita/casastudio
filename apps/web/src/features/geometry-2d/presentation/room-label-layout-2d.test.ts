@@ -23,18 +23,23 @@ describe("Room label layout", () => {
     const first = placeRoomLabel2D(base);
     const second = placeRoomLabel2D(base);
     expect(first).toEqual(second);
-    expect(first).toMatchObject({ anchor: base.preferredAnchor, fallback: false });
+    expect(first).toMatchObject({
+      anchor: base.preferredAnchor,
+      fallback: false
+    });
   });
 
   it("moves inside its Room when Furniture covers the preferred anchor", () => {
     const placement = placeRoomLabel2D({
       ...base,
-      furnitureFootprints: [[
-        { x: 94, y: 94 },
-        { x: 106, y: 94 },
-        { x: 106, y: 106 },
-        { x: 94, y: 106 }
-      ]]
+      furnitureFootprints: [
+        [
+          { x: 94, y: 94 },
+          { x: 106, y: 94 },
+          { x: 106, y: 106 },
+          { x: 94, y: 106 }
+        ]
+      ]
     });
     expect(placement.anchor).not.toEqual(base.preferredAnchor);
     expect(placement.fallback).toBe(false);
@@ -61,6 +66,36 @@ describe("Room label layout", () => {
     });
     expect(furniturePlacement.anchor).not.toEqual(base.preferredAnchor);
     expect(stairPlacement.anchor).not.toEqual(base.preferredAnchor);
+  });
+
+  it("avoids prior Room labels and architectural line clutter", () => {
+    const priorLabel = {
+      left: 90,
+      top: 90,
+      right: 110,
+      bottom: 110
+    };
+    const wallClutter = [
+      [
+        { x: 88, y: 45 },
+        { x: 112, y: 45 },
+        { x: 112, y: 78 },
+        { x: 88, y: 78 }
+      ]
+    ];
+    const placement = placeRoomLabel2D({
+      ...base,
+      occupiedLabelBounds: [priorLabel],
+      architecturalFootprints: wallClutter
+    });
+    expect(placement.anchor).not.toEqual(base.preferredAnchor);
+    expect(
+      placement.bounds.bottom <= priorLabel.top ||
+        placement.bounds.top >= priorLabel.bottom ||
+        placement.bounds.right <= priorLabel.left ||
+        placement.bounds.left >= priorLabel.right
+    ).toBe(true);
+    expect(placement.fallback).toBe(false);
   });
 
   it("keeps the readable deterministic fallback when no candidate fits", () => {

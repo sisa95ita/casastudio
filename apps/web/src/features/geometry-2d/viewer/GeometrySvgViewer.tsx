@@ -1431,10 +1431,12 @@ export function GeometrySvgViewer({
               {staircase.flights.map((flight) => (
                 <g
                   key={flight.geometryId}
-                  className={getEntityClassName(
+                  data-beyond-cut={flight.beyondCut ? "true" : "false"}
+                  data-has-plan-cut={flight.cut ? "true" : "false"}
+                  className={`${getEntityClassName(
                     "architectural-stair-flight",
                     flight
-                  )}
+                  )}${flight.beyondCut ? " architectural-stair-flight--continuation" : ""}`}
                 >
                   <polygon
                     className="architectural-stair-flight__body"
@@ -1479,10 +1481,23 @@ export function GeometrySvgViewer({
                     }
                     onMouseLeave={() => handleHoverChange(undefined)}
                   />
+                  {flight.cut ? (
+                    <polygon
+                      className="architectural-stair-continuation"
+                      points={flight.cut.continuationSvgPoints}
+                    />
+                  ) : null}
                   {flight.treadLines.map((line, index) => (
                     <line
                       key={index}
-                      className="architectural-stair-tread"
+                      className={`architectural-stair-tread${line.beyondCut ? " architectural-stair-tread--continuation" : ""}`}
+                      {...lineAttributes(line.start, line.end)}
+                    />
+                  ))}
+                  {flight.cut?.breakLines.map((line, index) => (
+                    <line
+                      key={`break-${index}`}
+                      className="architectural-stair-break"
                       {...lineAttributes(line.start, line.end)}
                     />
                   ))}
@@ -1505,10 +1520,11 @@ export function GeometrySvgViewer({
                   data-testid="architectural-stair-landing"
                   data-geometry-kind="STAIR_LANDING"
                   data-geometry-id={landing.geometryId}
-                  className={getEntityClassName(
+                  data-beyond-cut={landing.beyondCut ? "true" : "false"}
+                  className={`${getEntityClassName(
                     "architectural-stair-landing",
                     landing
-                  )}
+                  )}${landing.beyondCut ? " architectural-stair-landing--continuation" : ""}`}
                   points={landing.bodySvgPoints}
                   onPointerDown={(event) =>
                     handleStairTranslationPointerDown(
@@ -1572,6 +1588,7 @@ export function GeometrySvgViewer({
                 <line
                   data-testid="boundary-edge"
                   data-shared={isShared ? "true" : "false"}
+                  data-source-kind={edge.sourceKind}
                   className={className}
                   x1={formatSvgNumber(edge.start.screen.x)}
                   y1={formatSvgNumber(edge.start.screen.y)}
@@ -1870,13 +1887,6 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
-      {dimensionModel ? (
-        <ArchitecturalDimensionLayer
-          model={dimensionModel}
-          includeTemporary={false}
-        />
-      ) : null}
-
       {furnitureModel ? (
         <FurnitureSvgLayer
           model={furnitureModel}
@@ -1939,6 +1949,12 @@ export function GeometrySvgViewer({
       ) : null}
       {dimensionModel ? (
         <ArchitecturalRoomMetricLayer model={dimensionModel} />
+      ) : null}
+      {dimensionModel ? (
+        <ArchitecturalDimensionLayer
+          model={dimensionModel}
+          includeTemporary={false}
+        />
       ) : null}
       <GeometryEditorOverlayLayer
         overlay={editorOverlay}
@@ -2276,15 +2292,35 @@ function GeometryEditorOverlayLayer({
           aria-hidden="true"
         >
           {stairPreviewPresentation?.flights.map((flight) => (
-            <g key={flight.geometryId}>
+            <g
+              key={flight.geometryId}
+              className={
+                flight.beyondCut
+                  ? "geometry-stair-preview__continuation"
+                  : undefined
+              }
+            >
               <polygon
                 className="geometry-stair-preview__body"
                 points={flight.bodySvgPoints}
               />
+              {flight.cut ? (
+                <polygon
+                  className="geometry-stair-preview__continuation-body"
+                  points={flight.cut.continuationSvgPoints}
+                />
+              ) : null}
               {flight.treadLines.map((line, index) => (
                 <line
                   key={index}
-                  className="geometry-stair-preview__tread"
+                  className={`geometry-stair-preview__tread${line.beyondCut ? " geometry-stair-preview__tread--continuation" : ""}`}
+                  {...lineAttributes(line.start, line.end)}
+                />
+              ))}
+              {flight.cut?.breakLines.map((line, index) => (
+                <line
+                  key={`break-${index}`}
+                  className="geometry-stair-preview__break"
                   {...lineAttributes(line.start, line.end)}
                 />
               ))}
@@ -2304,7 +2340,7 @@ function GeometryEditorOverlayLayer({
           {stairPreviewPresentation?.landings.map((landing) => (
             <polygon
               key={landing.geometryId}
-              className="geometry-stair-preview__landing"
+              className={`geometry-stair-preview__landing${landing.beyondCut ? " geometry-stair-preview__landing--continuation" : ""}`}
               points={landing.bodySvgPoints}
             />
           ))}

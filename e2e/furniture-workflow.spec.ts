@@ -21,15 +21,16 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
       authorization ||= outgoing.headers().authorization ?? "";
   });
   try {
+    const projectName = `Furniture workshop ${Date.now()}`;
     await page.goto("/app");
     await page.locator("#username").fill("demo");
     await page.locator("#password").fill(password);
     await page.locator("#kc-login").click();
     await page.getByRole("button", { name: "New Project" }).click();
-    await page.getByLabel("Project name").fill("Furniture workshop");
+    await page.getByLabel("Project name").fill(projectName);
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: "Furniture workshop", level: 1 })
+      page.getByRole("heading", { name: projectName, level: 1 })
     ).toBeVisible();
     projectId = new URL(page.url()).pathname.split("/").at(-1)!;
     const url = `${apiBaseUrl}/api/v1/projects/${projectId}`;
@@ -83,8 +84,8 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
     await expect(
       page.getByRole("button", { name: "Furniture", exact: true })
     ).toHaveAttribute("aria-pressed", "true");
-    await move(page, -50, 150);
     await chooseCatalog(page, "SOFA · Sofa");
+    await move(page, -50, 150);
     await expect(page.getByRole("textbox", { name: "Room" })).toHaveValue(
       "No Room"
     );
@@ -308,9 +309,12 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
 });
 
 async function chooseCatalog(page: Page, name: string) {
-  await page.getByRole("combobox", { name: "Catalog" }).click();
-  await page.getByRole("option", { name, exact: true }).click();
-  await expect(page.locator('[role="listbox"]')).toHaveCount(0);
+  const itemName = name.split(" · ").at(-1) ?? name;
+  const item = page
+    .getByRole("radiogroup", { name: "Catalog" })
+    .getByRole("radio", { name: itemName, exact: true });
+  await item.click();
+  await expect(item).toHaveAttribute("aria-checked", "true");
 }
 async function number(page: Page, name: string, value: number) {
   const input = page.getByRole("spinbutton", { name, exact: true });

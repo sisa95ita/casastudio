@@ -24,10 +24,13 @@ import {
   selectWindow
 } from "../selection/geometry-selection-state";
 import type { ArchitecturalPresentationModel2D } from "../presentation/architectural-presentation-model-2d";
+import { createStaircasePresentation2D } from "../presentation/architectural-presentation-model-2d";
+import type { ArchitecturalDimensionPresentationModel2D } from "../presentation/architectural-dimension-presentation-model-2d";
 import {
   createFitViewportState,
   createViewportTransform2D,
   defaultViewportState,
+  ViewportTransform2D,
   type ViewportState
 } from "../viewport/viewport-transform-2d";
 
@@ -644,6 +647,179 @@ describe("GeometrySvgViewer", () => {
     expect(defaultGeometryDisplayOptions).not.toBe(
       projectGeometryDisplayOptions
     );
+  });
+
+  it("distinguishes overlapping elevated Room fill and FREE extent from physical Walls", () => {
+    const viewerProps = createViewerProps(getPlaygroundLevel());
+    const lower = viewerProps.presentationModel.polygons[0]!;
+    const freeEdge = viewerProps.presentationModel.boundaryEdges[0]!;
+    render(
+      <GeometrySvgViewer
+        {...viewerProps}
+        presentationModel={{
+          ...viewerProps.presentationModel,
+          polygons: [
+            lower,
+            {
+              ...lower,
+              geometryId: "elevated-polygon",
+              sourceRoomId: "elevated-room",
+              floorElevation: 180,
+              elevated: true
+            }
+          ],
+          boundaryEdges: [
+            {
+              ...freeEdge,
+              geometryId: "free-edge",
+              sourceWallId: undefined,
+              sourceKind: "FREE"
+            }
+          ]
+        }}
+        architecturalModel={{
+          ...architecturalPresentationModel,
+          walls: []
+        }}
+        options={projectGeometryDisplayOptions}
+      />
+    );
+    const rooms = screen.getAllByTestId("geometry-polygon");
+    expect(rooms[0]?.classList).not.toContain("geometry-polygon--elevated");
+    expect(rooms[1]?.classList).toContain("geometry-polygon--elevated");
+    const edge = screen.getByTestId("boundary-edge");
+    expect(edge.getAttribute("data-source-kind")).toBe("FREE");
+    expect(edge.classList).toContain("geometry-edge");
+    expect(edge.classList).not.toContain("architectural-wall-body");
+    expect(screen.queryByTestId("architectural-wall-body")).toBeNull();
+  });
+
+  it("renders semantic Stair cut, continuation, treads, direction, and landing geometry", () => {
+    const transform = new ViewportTransform2D({
+      scale: 1,
+      offsetX: 0,
+      offsetY: 500
+    });
+    const staircase = createStaircasePresentation2D(
+      {
+        id: "vertical-stair",
+        fromLevelId: "ground",
+        toLevelId: "upper",
+        width: 90,
+        flights: [
+          {
+            id: "flight",
+            start: { x: 80, z: 200 },
+            end: { x: 380, z: 200 },
+            width: 90,
+            stepCount: 12,
+            startElevation: 0,
+            endElevation: 300
+          }
+        ],
+        landings: [
+          {
+            id: "landing",
+            position: { x: 380, z: 200 },
+            width: 90,
+            depth: 90,
+            elevation: 300
+          }
+        ]
+      },
+      transform,
+      createGeometrySelectionState(),
+      120
+    );
+    const { container } = render(
+      <GeometrySvgViewer
+        {...createViewerProps(getPlaygroundLevel())}
+        architecturalModel={{
+          ...architecturalPresentationModel,
+          staircases: [staircase]
+        }}
+        options={defaultGeometryDisplayOptions}
+      />
+    );
+    expect(
+      container.querySelectorAll(".architectural-stair-tread")
+    ).toHaveLength(12);
+    expect(
+      container.querySelector(".architectural-stair-direction")
+    ).toBeTruthy();
+    expect(
+      container.querySelector(".architectural-stair-continuation")
+    ).toBeTruthy();
+    expect(
+      container.querySelectorAll(".architectural-stair-break")
+    ).toHaveLength(2);
+    expect(
+      screen
+        .getByTestId("architectural-stair-landing")
+        .getAttribute("data-beyond-cut")
+    ).toBe("true");
+  });
+
+  it("keeps the critical plan and transient layers in architectural order", () => {
+    const level = getPlaygroundLevel();
+    const item = createFurniturePresentation2D({
+      id: "chair",
+      roomId: "living-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      width: 50,
+      depth: 50,
+      height: 90,
+      rotation: 0
+    });
+    const dimensionModel: ArchitecturalDimensionPresentationModel2D = {
+      automatic: [],
+      selected: [],
+      roomMetrics: [
+        {
+          roomId: "living-room",
+          roomName: "Living Room",
+          roomType: "LIVING_ROOM",
+          anchor: { x: 200, y: 200 },
+          area: 20_000,
+          formattedArea: "2.00 m²"
+        }
+      ]
+    };
+    const { container } = render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        architecturalModel={architecturalPresentationModel}
+        dimensionModel={dimensionModel}
+        furnitureModel={{
+          items: [item],
+          previewValid: true,
+          editing: true
+        }}
+        options={defaultGeometryDisplayOptions}
+        editorOverlay={{
+          precisionGuides: [
+            {
+              kind: "line",
+              start: { x: 0, z: 0 },
+              end: { x: 100, z: 0 }
+            }
+          ]
+        }}
+      />
+    );
+    const layers = [...container.querySelectorAll("g[data-layer]")];
+    const index = (name: string) =>
+      layers.indexOf(container.querySelector(`[data-layer="${name}"]`)!);
+    expect(index("polygons")).toBeLessThan(index("architectural-walls"));
+    expect(index("polygons")).toBeLessThan(index("furniture"));
+    expect(index("architectural-walls")).toBeLessThan(
+      index("architectural-openings")
+    );
+    expect(index("furniture")).toBeLessThan(index("room-metrics"));
+    expect(index("room-metrics")).toBeLessThan(index("automatic-dimensions"));
+    expect(index("automatic-dimensions")).toBeLessThan(index("editor-overlay"));
+    expect(container.querySelector('[data-layer="furniture"] text')).toBeNull();
   });
 
   it("renders a stable empty state for levels with no runtime geometry", () => {

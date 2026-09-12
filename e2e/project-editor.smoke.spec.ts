@@ -305,9 +305,11 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await expect(page.getByRole("combobox", { name: "Method" })).toContainText(
     "Shape"
   );
-  await expect(page.getByRole("combobox", { name: "Shape" })).toContainText(
-    "Rectangle"
-  );
+  await expect(
+    page
+      .getByRole("radiogroup", { name: "Shape" })
+      .getByRole("radio", { name: "Rectangle" })
+  ).toHaveAttribute("aria-checked", "true");
   await page.getByRole("spinbutton", { name: "Width" }).fill("400");
   await page.getByRole("spinbutton", { name: "Depth" }).fill("300");
 
@@ -787,8 +789,10 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await page.getByRole("option", { name: /same Level/ }).click();
   await page.getByRole("combobox", { name: "Target Room (optional)" }).click();
   await page.getByRole("option", { name: "Room 2", exact: true }).click();
-  await page.getByRole("combobox", { name: "Initial template" }).click();
-  await page.getByRole("option", { name: "L-shaped" }).click();
+  await page
+    .getByRole("radiogroup", { name: "Initial template" })
+    .getByRole("radio", { name: "L-shaped" })
+    .click();
   await expect(
     inspector.getByTestId("stair-authoring-inspector")
   ).toBeVisible();
@@ -1043,7 +1047,7 @@ test("accepts precision Walls, vertices, pending Opening properties, and compact
   await page.getByRole("button", { name: "Room", exact: true }).click();
   await expect(inspector.getByTestId("room-authoring-inspector")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Method" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Shape" })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Shape" })).toBeVisible();
 
   await test.info().attach("precision-browser-console-errors", {
     body: Buffer.from(JSON.stringify(consoleErrors, null, 2)),
