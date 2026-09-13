@@ -224,9 +224,9 @@
       "uShaped": "U-shaped"
     },
     "parameters": "Assisted parameters",
-    "placeHint": "Move the complete Staircase preview, then click once to create it.",
-    "ready": "Preview is valid. Click the canvas to create the Staircase.",
-    "confirm": "Create Staircase",
+    "placeHint": "Move the complete Stair preview, then click once to create it.",
+    "ready": "Preview is valid. Click the canvas to create the Stair.",
+    "confirm": "Create Stair",
     "cancel": "Cancel",
     "invalid": {
       "NO_RISE": "The destination must be above the stair start. Choose a higher Level or an elevated Room.",
@@ -492,8 +492,8 @@
       "windows_other": "{{count}} Windows",
       "openings_one": "{{count}} Wall Opening",
       "openings_other": "{{count}} Wall Openings",
-      "stairs_one": "{{count}} Staircase",
-      "stairs_other": "{{count}} Staircases",
+      "stairs_one": "{{count}} Stair",
+      "stairs_other": "{{count}} Stairs",
       "furniture_one": "{{count}} Furniture item",
       "furniture_other": "{{count}} Furniture items",
       "junctions_one": "{{count}} Junction",
@@ -562,13 +562,13 @@
   "stair": {
     "selectionTitle": "Stair",
     "propertiesTitle": "Stair properties",
-    "delete": "Delete Staircase",
+    "delete": "Delete Stair",
     "ownedPart": "Owned by {{staircase}}",
     "steps": "steps",
     "totalSteps": "{{count}} total steps",
     "derivedHelp": "Total rise {{rise}} and riser height {{riser}} are derived from the selected destination.",
     "types": {
-      "staircase": "Staircase",
+      "staircase": "Stair",
       "flight": "Flight",
       "landing": "Landing"
     },
@@ -614,7 +614,7 @@
     "ambiguous": "Rooms overlap here. Choose the intended Room and floor.",
     "wallIntersection": "Furniture intersects a Wall. Move or resize it clear of the Wall.",
     "furnitureIntersection": "Furniture overlaps another item on the same floor.",
-    "stairWarning": "Furniture overlaps a Staircase in plan. Vertical clearance is not validated.",
+    "stairWarning": "Furniture overlaps a Stair in plan. Vertical clearance is not validated.",
     "ready": "Room resolved. Click to place; Escape cancels.",
     "confirmHint": "Confirm the move to the chosen Room.",
     "invalid": "The edit could not be committed. Choose a valid Room and positive dimensions.",

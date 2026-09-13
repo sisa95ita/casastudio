@@ -1,6 +1,6 @@
 # Furniture authoring in the 2D editor
 
-Furniture is a top-level tool between Stair and Measure. Its catalog lives in Inspector Properties and reads `builtinFurnitureDefinitions` from the schema package. The catalog shows the canonical semantic category and display name. There is no additional product catalog or canvas form. Furniture has no keyboard shortcut: F is already assigned to fit the viewport, and the remaining letters do not offer a clear unused mnemonic.
+Furniture is a top-level tool between Stair and Measure. Its catalog lives in Inspector Properties and reads `builtinFurnitureDefinitions` from the schema package. The catalog shows the canonical semantic category and display name. There is no additional product catalog or canvas form. U activates Furniture; F remains assigned to fit the viewport. Shortcuts do not intercept typing in editable fields.
 
 Choose a definition, move the pointer into a Room, and click to place. The definition supplies initial width, depth, and height; rotation starts at zero. The instance follows the pointer in canonical Project X/Z centimeters with bounded smart snapping and the independently controlled grid snap. After confirmation the tool retains the definition and effective parameters for another placement. Escape or Cancel removes the proposal; changing tool or Level, undo/redo, and session boundaries clear transient state without implicitly creating anything.
 

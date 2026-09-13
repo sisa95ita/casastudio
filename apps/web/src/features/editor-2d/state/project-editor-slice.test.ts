@@ -834,6 +834,41 @@ describe("Project editor state", () => {
     }
     expect(state.history.past).toHaveLength(projectEditorHistoryLimit);
     expect(state.history.past[0]?.name).toBe("Edit 4");
+    for (let index = 0; index < projectEditorHistoryLimit; index += 1) {
+      state = projectEditorReducer(state, editorUndoRequested());
+    }
+    expect(state.draft?.name).toBe("Edit 4");
+    expect(state.history.past).toHaveLength(0);
+    expect(state.dirty).toBe(true);
+    expect(projectEditorReducer(state, cleanEditingSessionLeft())).toBe(state);
+  });
+
+  it("compares commits and history against the authoritative base when edits are reversed", () => {
+    let state = projectEditorReducer(undefined, editingSessionEntered({
+      project: demoProjectFixture, baseRevision: demoProjectFixture.revision
+    }));
+    state = projectEditorReducer(state, editingDraftReplaced({ ...demoProjectFixture, name: "Temporary name" }));
+    state = projectEditorReducer(state, editingDraftReplaced(demoProjectFixture));
+    expect(state.dirty).toBe(false);
+    state = projectEditorReducer(state, editorUndoRequested());
+    expect(state.dirty).toBe(true);
+    state = projectEditorReducer(state, editorRedoRequested());
+    expect(state.dirty).toBe(false);
+  });
+
+  it("keeps the active Level valid when history removes the selected Level", () => {
+    let state = projectEditorReducer(undefined, editingSessionEntered({
+      project: demoProjectFixture, baseRevision: demoProjectFixture.revision
+    }));
+    const project = structuredClone(demoProjectFixture);
+    project.building.levels.push({ id: "upper", name: "Upper", elevation: 300, rooms: [], walls: [], staircases: [] });
+    state = projectEditorReducer(state, editingDraftReplaced(project));
+    state = projectEditorReducer(state, editorActiveLevelChanged("upper"));
+    state = projectEditorReducer(state, editorUndoRequested());
+    expect(state.activeLevelId).toBe(demoProjectFixture.building.levels[0]!.id);
+    expect(state.dirty).toBe(false);
+    state = projectEditorReducer(state, editorRedoRequested());
+    expect(state.draft?.building.levels.some((level) => level.id === state.activeLevelId)).toBe(true);
   });
 
   it("rejects a draft replacement that changes a server-owned field", () => {

@@ -69,6 +69,7 @@ import {
   selectWallOpening,
   selectWindow,
   selectStaircase,
+  type GeometrySelection,
   type GeometrySelectionState
 } from "../../geometry-2d/selection/geometry-selection-state";
 import { isEditableShortcutTarget } from "../../geometry-2d/viewport/geometry-viewer-shortcuts";
@@ -253,6 +254,29 @@ import { useProjectPersistence } from "./persistence/useProjectPersistence";
 import { createInitialViewportState } from "./project-workspace-viewport";
 
 const emptySelectionState = createGeometrySelectionState();
+
+/** Matches selectable plan content to the currently visible product Layers. */
+function isSelectionLayerVisible(
+  selection: GeometrySelection,
+  options: GeometryDisplayOptions
+): boolean {
+  switch (selection.kind) {
+    case "FURNITURE":
+      return options.furniture !== false;
+    case "POLYGON":
+      return options.polygons;
+    case "WALL":
+    case "BOUNDARY_EDGE":
+    case "VERTEX":
+      return options.architecturalWalls;
+    case "DOOR":
+    case "WINDOW":
+    case "OPENING":
+      return options.openings;
+    default:
+      return true;
+  }
+}
 /** Lazily loaded Three.js workspace kept out of the default 2D route chunk. */
 const Project3DViewer = lazy(() =>
   import("../../project-3d/Project3DViewer").then((module) => ({
@@ -390,7 +414,7 @@ export function ProjectWorkspacePage() {
   }, [saveInteractionBlocked, shortcutsOpen, workspaceMode]);
   const viewLevels = geometryResponse?.geometry.levels ?? [];
   const selectedViewLevel =
-    viewLevels.find((level) => level.id === selectedViewLevelId) ??
+    viewLevels.find((level) => level.sourceLevelId === selectedViewLevelId) ??
     viewLevels[0];
   const activeLevelId3D = selectedViewLevel?.sourceLevelId;
   const resolvedSelection3D = useMemo(
@@ -471,19 +495,26 @@ export function ProjectWorkspacePage() {
     gridSpacing: editor.precision.gridSpacing
   });
   useEffect(() => {
+    const selected = selectionState.selected.filter((entry) =>
+      isSelectionLayerVisible(entry, displayOptions)
+    );
+    const hovered = selectionState.hovered &&
+      isSelectionLayerVisible(selectionState.hovered, displayOptions)
+      ? selectionState.hovered
+      : undefined;
     if (
-      displayOptions.furniture === false &&
-      selectionState.selected.some((entry) => entry.kind === "FURNITURE")
+      selected.length !== selectionState.selected.length ||
+      hovered !== selectionState.hovered
     ) {
       dispatch(
         workspaceMode === "edit"
-          ? editorSelectionCleared()
-          : geometrySelectionReset()
+          ? editorSelectionChanged({ selected, hovered })
+          : geometrySelectionChanged({ selected, hovered })
       );
     }
   }, [
-    displayOptions.furniture,
-    selectionState.selected,
+    displayOptions,
+    selectionState,
     dispatch,
     workspaceMode
   ]);
@@ -529,7 +560,7 @@ export function ProjectWorkspacePage() {
       control,
       turnDirection: stairPlacement.turnDirection,
       identifiers: stairPlacement.identifiers,
-      name: `Staircase ${(activeProjectLevel?.staircases.length ?? 0) + 1}`
+      name: `Stair ${(activeProjectLevel?.staircases.length ?? 0) + 1}`
     });
   }, [activeProject, activeProjectLevel?.staircases.length, stairPlacement]);
   const activeRoomShapeKind = roomShapePlacement?.shape.kind;
@@ -595,7 +626,13 @@ export function ProjectWorkspacePage() {
   ]);
   const resolvedDisplayOptions: GeometryDisplayOptions =
     workspaceMode === "edit"
-      ? { ...displayOptions, ...editor.presentation.dimensions }
+      ? {
+          ...displayOptions,
+          ...editor.presentation.dimensions,
+          boundaryEdges: displayOptions.boundaryEdges && displayOptions.architecturalWalls,
+          vertices: displayOptions.vertices && displayOptions.architecturalWalls,
+          centroids: displayOptions.centroids && displayOptions.polygons
+        }
       : {
           ...displayOptions,
           boundaryEdges: false,
@@ -655,8 +692,10 @@ export function ProjectWorkspacePage() {
       activeProject.building.furniture.filter((item) =>
         visibleFurnitureIds.has(item.id)
       )
+    ).filter((footprint) =>
+      isSelectionLayerVisible(footprint.selection, displayOptions)
     );
-  }, [activeProject, activeProjectLevel, furniture.model, presentationResult]);
+  }, [activeProject, activeProjectLevel, furniture.model, presentationResult, displayOptions]);
   const selectionRoots = useMemo(
     () =>
       activeProject && activeProjectLevel && presentationResult?.ok
@@ -1116,9 +1155,20 @@ export function ProjectWorkspacePage() {
 
   useEffect(() => {
     if (
+      workspaceMode === "edit" &&
+      editor.activeTool === "openings" &&
+      !editor.transient.interaction
+    ) {
+      dispatch(
+        editorOpeningPlacementChanged(createOpeningAuthoringInteraction("DOOR"))
+      );
+    }
+  }, [dispatch, workspaceMode, editor.activeTool, editor.transient.interaction]);
+
+  useEffect(() => {
+    if (
       editor.activeTool !== "stair" ||
-      !stairPlacement ||
-      stairPlacement.template ||
+      stairPlacement?.template ||
       !editor.draft ||
       !editor.activeLevelId
     )
@@ -1450,6 +1500,15 @@ export function ProjectWorkspacePage() {
     setViewportOwnerKey("");
     setWorkspaceRepresentation("2d");
     setLevelVisibility3D("all");
+    setSelectedViewLevelId("");
+    setDisplayOptions(projectGeometryDisplayOptions);
+    setRoomPreset("CUSTOM");
+    setRoomShapeDimensions(defaultRoomShapeDimensions);
+    setRoomElevationDraft("0");
+    setRoomDetectionActive(false);
+    setEditingError(undefined);
+    setSaveFeedback(undefined);
+    setShortcutsOpen(false);
 
     return () => {
       dispatch(projectRouteExited(projectId));
@@ -1475,11 +1534,15 @@ export function ProjectWorkspacePage() {
       return;
     }
 
-    const firstLevel = viewLevels[0];
-    setSelectedViewLevelId(firstLevel?.id ?? "");
     dispatch(geometrySelectionReset());
     setSelectionOwnerSnapshot(geometryResponse?.geometry);
   }, [dispatch, geometryIdentity, geometryResponse, viewLevels]);
+
+  useEffect(() => {
+    if (ownsEditingSession && editor.activeLevelId) {
+      setSelectedViewLevelId(editor.activeLevelId);
+    }
+  }, [ownsEditingSession, editor.activeLevelId]);
 
   useEffect(() => {
     if (!selectedLevel || viewportOwnerKey === viewportKey) {
@@ -3347,7 +3410,11 @@ export function ProjectWorkspacePage() {
               })
             )}
             activeEditLevelId={editor.activeLevelId}
-            onViewLevelChange={setSelectedViewLevelId}
+            onViewLevelChange={(levelId) =>
+              setSelectedViewLevelId(
+                viewLevels.find((level) => level.id === levelId)?.sourceLevelId ?? ""
+              )
+            }
             onEditLevelChange={(levelId) =>
               dispatch(editorActiveLevelChanged(levelId))
             }

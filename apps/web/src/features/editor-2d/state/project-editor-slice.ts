@@ -221,6 +221,8 @@ export type ProjectEditorState = {
   readonly projectId: string | null;
   readonly draft: Project | null;
   readonly baseRevision: number | null;
+  /** Serialized authoritative editing base, independent of bounded Undo history. */
+  readonly baseSnapshot: string | null;
   readonly dirty: boolean;
   readonly activeLevelId: string | null;
   readonly activeTool: ProjectEditorTool | null;
@@ -260,6 +262,7 @@ export const initialProjectEditorState: ProjectEditorState = {
   projectId: null,
   draft: null,
   baseRevision: null,
+  baseSnapshot: null,
   dirty: false,
   activeLevelId: null,
   activeTool: null,
@@ -338,6 +341,7 @@ const projectEditorSlice = createSlice({
         state.projectId = action.payload.projectId;
         state.draft = action.payload.draft;
         state.baseRevision = action.payload.baseRevision;
+        state.baseSnapshot = JSON.stringify(action.payload.draft);
         state.dirty = false;
         state.activeLevelId = activeLevelId;
         state.activeTool = "select";
@@ -402,7 +406,7 @@ const projectEditorSlice = createSlice({
         )
       )
         state.hover = undefined;
-      state.dirty = true;
+      state.dirty = JSON.stringify(nextDraft) !== state.baseSnapshot;
       if (
         state.transient.interaction?.kind === "place-opening" ||
         state.transient.interaction?.kind === "place-room-shape" ||
@@ -436,7 +440,12 @@ const projectEditorSlice = createSlice({
       ].slice(0, projectEditorHistoryLimit);
       state.history.past = state.history.past.slice(0, -1);
       state.draft = cloneProject(previous);
-      state.dirty = state.history.past.length > 0;
+      state.dirty = JSON.stringify(previous) !== state.baseSnapshot;
+      if (
+        !previous.building.levels.some((level) => level.id === state.activeLevelId)
+      ) {
+        state.activeLevelId = previous.building.levels[0]?.id ?? null;
+      }
       state.selection = [];
       state.hover = undefined;
       state.transient = { interaction: null };
@@ -456,7 +465,12 @@ const projectEditorSlice = createSlice({
       ].slice(-projectEditorHistoryLimit);
       state.history.future = state.history.future.slice(1);
       state.draft = cloneProject(next);
-      state.dirty = true;
+      state.dirty = JSON.stringify(next) !== state.baseSnapshot;
+      if (
+        !next.building.levels.some((level) => level.id === state.activeLevelId)
+      ) {
+        state.activeLevelId = next.building.levels[0]?.id ?? null;
+      }
       state.selection = [];
       state.hover = undefined;
       state.transient = { interaction: null };
@@ -762,6 +776,19 @@ const projectEditorSlice = createSlice({
         Partial<Omit<PlaceStairInteraction, "kind" | "owningLevelId">>
       >
     ) {
+      if (
+        state.mode === "edit" &&
+        state.activeTool === "stair" &&
+        state.activeLevelId &&
+        !state.transient.interaction
+      ) {
+        state.transient.interaction = {
+          kind: "place-stair",
+          owningLevelId: state.activeLevelId,
+          parameters: { ...defaultStairAuthoringParameters },
+          turnDirection: "LEFT"
+        };
+      }
       const interaction = state.transient.interaction;
       if (
         state.mode !== "edit" ||

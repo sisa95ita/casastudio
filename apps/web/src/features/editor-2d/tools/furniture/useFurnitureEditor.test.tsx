@@ -12,6 +12,7 @@ import { createGeometrySelectionState } from "../../../geometry-2d/selection/geo
 import {
   editingSessionEntered,
   editorActiveToolChanged,
+  editorActiveLevelChanged,
   editorSelectionChanged,
   editorUndoRequested,
   editorRedoRequested,
@@ -44,7 +45,7 @@ function useEditorHarness(initialProject = furnitureProjectFixture()) {
   });
   const controller = useFurnitureEditor({
     project: editor.draft,
-    levelId: "ground",
+    levelId: editor.activeLevelId ?? undefined,
     editor,
     dispatch: dispatch as AppDispatch,
     selection: createGeometrySelectionState(editor.selection, editor.hover),
@@ -55,6 +56,28 @@ function useEditorHarness(initialProject = furnitureProjectFixture()) {
 }
 
 describe("Furniture controller and Properties", () => {
+  it("clears obsolete errors and canvas anchors when changing Level or tool", () => {
+    const project = furnitureProjectFixture();
+    project.building.levels.push({ id: "upper", name: "Upper", elevation: 300, walls: [], rooms: [], staircases: [] });
+    const { result } = renderHook(() => useEditorHarness(project));
+    const c = () => result.current.controller;
+    act(() => result.current.dispatch(editorActiveToolChanged("furniture")));
+    act(() => c().chooseDefinition("generic-chair"));
+    act(() => c().pointerMove(pointer(150, 150), 1));
+    act(() => c().update({ width: -1 }));
+    expect(c().error).toBe("EDIT_FAILED");
+    act(() => result.current.dispatch(editorActiveLevelChanged("upper")));
+    expect(c().error).toBeUndefined();
+    act(() => c().chooseDefinition("generic-chair"));
+    expect(c().preview).toBeUndefined();
+    expect(c().transient?.positioned).toBe(false);
+    act(() => c().update({ width: -1 }));
+    act(() => result.current.dispatch(editorActiveToolChanged("select")));
+    expect(c().error).toBeUndefined();
+    expect(result.current.editor.dirty).toBe(false);
+    expect(result.current.editor.history.past).toHaveLength(0);
+  });
+
   it("creates a visible preview before any click and commits the final transient geometry once", () => {
     const { result } = renderHook(useEditorHarness);
     const c = () => result.current.controller;

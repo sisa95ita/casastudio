@@ -15,6 +15,16 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
   let authorization = "",
     projectId = "";
   const errors: string[] = [];
+  const consoleErrors: string[] = [];
+  const failedRequests: string[] = [];
+  const apiFailures: number[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("requestfailed", (outgoing) => failedRequests.push(`${outgoing.url()}: ${outgoing.failure()?.errorText}`));
+  page.on("response", (response) => {
+    if (response.url().startsWith(apiBaseUrl) && response.status() >= 400) apiFailures.push(response.status());
+  });
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (outgoing) => {
     if (outgoing.url().startsWith(apiBaseUrl))
@@ -84,6 +94,10 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
     await expect(
       page.getByRole("button", { name: "Furniture", exact: true })
     ).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Sofa", exact: true }).click();
+    await expect(page.getByRole("radiogroup", { name: "Catalog" }).getByRole("radio")).toHaveCount(1);
+    await page.getByRole("button", { name: "All", exact: true }).click();
+    await expect(page.getByRole("radiogroup", { name: "Catalog" }).getByRole("radio")).toHaveCount(8);
     await chooseCatalog(page, "SOFA · Sofa");
     await move(page, -50, 150);
     await expect(page.getByRole("textbox", { name: "Room" })).toHaveValue(
@@ -228,9 +242,20 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
     await expect(
       page.locator('[data-testid="furniture-properties"]:visible')
     ).toHaveCount(0);
+    await page.getByRole("button", { name: "Furniture", exact: true }).click();
+    await chooseCatalog(page, "Chair");
+    await move(page, 350, 350);
+    await page.getByRole("combobox", { name: "Room", exact: true }).click();
+    await page.getByRole("option", { name: "Living Room · 0.00 m" }).click();
+    await expect(page.getByTestId("furniture-preview")).toHaveAttribute("data-valid", "false");
+    await expect(page.getByTestId("furniture-symbol")).toHaveCount(0);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.getByRole("tab", { name: "Layers", exact: true }).click();
     await page.getByRole("switch", { name: "Furniture", exact: true }).click();
     await expect(page.getByTestId("furniture-symbol")).toHaveCount(3);
+    await page.getByRole("button", { name: "Furniture", exact: true }).click();
+    await page.getByRole("button", { name: "Chair", exact: true }).click();
+    await expect(page.getByRole("radiogroup", { name: "Catalog" }).getByRole("radio")).toHaveCount(1);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Edit plan", exact: true })
@@ -278,6 +303,8 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
       savedProject.building.furniture
     );
     await page.getByRole("button", { name: "Edit plan", exact: true }).click();
+    await page.keyboard.press("u");
+    await expect(page.getByRole("radiogroup", { name: "Catalog" }).getByRole("radio")).toHaveCount(8);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.getByTestId("furniture-hit-target").last().click();
     await page.keyboard.press("Delete");
@@ -297,6 +324,9 @@ test("authors Furniture in ordinary and overlapping elevated Rooms and persists 
       savedProject.building.furniture
     );
     expect(errors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+    expect(failedRequests).toEqual([]);
+    expect(apiFailures).toEqual([]);
   } finally {
     if (projectId && authorization) {
       const deleted = await request.delete(

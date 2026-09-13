@@ -696,6 +696,61 @@ describe("ProjectViewerPage", () => {
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
+  it("returns from an edited Level through View and 3D to the same clean Level", async () => {
+    const { store } = renderConnectedRoute(createApiClient(multiLevel3DFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: Ground Floor" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
+    const levelId = store.getState().projectEditor.activeLevelId;
+    fireEvent.click(screen.getByRole("button", { name: "Back to project" }));
+    expect(await screen.findByRole("button", { name: "Level: Upper Level" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit in 2D" }));
+    expect(store.getState().projectEditor.activeLevelId).toBe(levelId);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+  });
+
+  it.each(["Openings", "Stair"])("keeps %s authoring usable after Level changes and Undo", async (tool) => {
+    const { store } = renderConnectedRoute(createApiClient(multiLevel3DFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: tool }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: Ground Floor" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
+    const kind = tool === "Stair" ? "place-stair" : "place-opening";
+    await waitFor(() => expect(store.getState().projectEditor.transient.interaction?.kind).toBe(kind));
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    act(() => store.dispatch(editingDraftReplaced({ ...store.getState().projectEditor.draft!, name: "Temporary change" })));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(store.getState().projectEditor.transient.interaction?.kind).toBe(kind));
+    expect(screen.getByRole("combobox", { name: tool === "Stair" ? "Target Level" : "Type" })).toBeTruthy();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+  });
+
+  it("clears hidden architectural selections without dirtying or deleting their canonical content", async () => {
+    const { store } = renderConnectedRoute(createApiClient(successFetch()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    const original = store.getState().projectEditor.draft;
+    for (const [layer, selector] of [
+      ["Rooms", '[data-testid="geometry-polygon"]'],
+      ["Walls", '.architectural-wall-hit-target']
+    ]) {
+      fireEvent.click(document.querySelector(selector!)!);
+      expect(store.getState().projectEditor.selection).toHaveLength(1);
+      fireEvent.click(screen.getByRole("tab", { name: "Layers" }));
+      fireEvent.click(screen.getByRole("switch", { name: layer! }));
+      expect(store.getState().projectEditor.selection).toEqual([]);
+      expect(document.querySelector(selector!)).toBeNull();
+      if (layer === "Walls") {
+        expect(document.querySelector(".geometry-edge-hit-target")).toBeNull();
+        expect(screen.queryAllByTestId("geometry-vertex")).toHaveLength(0);
+      } else {
+        expect(screen.queryAllByTestId("polygon-centroid")).toHaveLength(0);
+      }
+      expect(store.getState().projectEditor.draft).toBe(original);
+      expect(store.getState().projectEditor.dirty).toBe(false);
+    }
+  });
+
   it("filters real multi-Level references as presentation-only 3D state", async () => {
     const { store } = renderConnectedRoute(
       createApiClient(multiLevel3DFetch())
@@ -2118,7 +2173,7 @@ describe("ProjectViewerPage", () => {
     fireEvent.change(firstSteps, { target: { value: "4" } });
     fireEvent.change(secondSteps, { target: { value: "13" } });
     const confirm = within(inspector).getByRole("button", {
-      name: "Create Staircase"
+      name: "Create Stair"
     });
     expect(screen.getByTestId("stair-preview").getAttribute("data-valid")).toBe(
       "true"
@@ -5036,7 +5091,7 @@ describe("ProjectViewerPage", () => {
     expect(screen.queryByTestId("geometry-polygon")).toBeNull();
   });
 
-  it("clears selection when the active Project route changes", async () => {
+  it("clears selection, Layers, and Room defaults when the active Project route changes", async () => {
     const fetchImplementation = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       const projectId = url.includes("project-two")
@@ -5063,6 +5118,13 @@ describe("ProjectViewerPage", () => {
       "geometry-entity-selected"
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Elevation above Level" }), { target: { value: "180" } });
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Layers" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Walls" }));
+
     fireEvent.click(screen.getByRole("link", { name: "Open project two" }));
     expect(
       await screen.findByRole("heading", { name: "Project Two" })
@@ -5070,6 +5132,11 @@ describe("ProjectViewerPage", () => {
     expect(
       (await screen.findByTestId("geometry-polygon")).getAttribute("class")
     ).not.toContain("geometry-entity-selected");
+    fireEvent.click(screen.getByRole("tab", { name: "Layers" }));
+    expect((screen.getByRole("switch", { name: "Walls" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    expect((screen.getByRole("spinbutton", { name: "Elevation above Level" }) as HTMLInputElement).value).toBe("0");
   });
 
   it("keeps late data from an old project ID out of the new route", async () => {

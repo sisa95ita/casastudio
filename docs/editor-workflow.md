@@ -1,0 +1,17 @@
+# Project editing workflow
+
+A new Project opens in View with an empty Ground Floor at elevation zero. Edit plan creates an independent draft of the authoritative Project. Levels, Walls, Rooms, Openings, Stairs, and Room-owned Furniture are saved together; switching Levels keeps the same draft and cancels selection and unfinished authoring. Active Opening and Stair tools restore usable default Properties after cancellation without restoring a positioned preview. Project changes reset Room authoring defaults and obsolete feedback; Furniture drops old canvas anchors and feedback across Level and tool changes.
+
+Room shapes and Wall-first detection both produce ordered canonical Room boundaries. Elevated Rooms have local elevation above their Level and may use free floor extents without creating physical Walls. Stairs reference source/destination Levels and optional Rooms. Furniture derives its Level and floor elevation from its owning Room.
+
+Save replaces the whole Project using its editing base revision, refreshes both Project and Geometry responses, and returns to View. The active Level is retained through Save, Back to project, and the 3D → Edit in 2D transition when that Level still exists. Reloading the browser starts a fresh View on the default Level.
+
+Dirty state compares the current draft with the authoritative editing base. Returning to that exact base is clean, even if Undo history still exists. History retains at most 50 actions; exhausting that bounded history does not imply that the draft matches the saved Project. Undo/Redo clears transient interactions and selection and always targets a Level present in the resulting draft.
+
+Discard removes the editing session and its history and returns to authoritative data. Dirty navigation offers Save, Discard changes, or Keep editing; browser unload is also guarded. Switching Levels stays within the session. The 3D representation is available in View, with an explicit Edit in 2D action.
+
+A stale save receives a revision conflict and retains the local draft. It cannot overwrite newer server data. Reload latest requires confirmation before discarding local work. A successful save whose authoritative refresh fails is retried as a read, without repeating the write.
+
+Layers affect presentation and selection only. Hidden Walls, Rooms, Openings, and Furniture are excluded from selection and overlap cycling; collision validation continues to use canonical data. Layer preferences reset on Project changes. Selection, hover, previews, guides, catalog category filters, label placement, and snap candidates are never persisted in the Project.
+
+Current 3D supports Walls, Room Floors (including elevated Rooms), Openings, Level visibility, architectural selection, and fit/reset camera controls. Stair and Furniture rendering remain deferred.

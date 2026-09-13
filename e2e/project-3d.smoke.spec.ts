@@ -328,7 +328,7 @@ async function createRoomShape(
     await roomButton.click();
   }
   await roomButton.click();
-  await page.getByRole("menuitem", { name: shape }).click();
+  await page.getByRole("radiogroup", { name: "Shape" }).getByRole("radio", { name: shape, exact: true }).click();
   const labels: Readonly<Record<string, string>> = {
     width: "Width",
     depth: "Depth",

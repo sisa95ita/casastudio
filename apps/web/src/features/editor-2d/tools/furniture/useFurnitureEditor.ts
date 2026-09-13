@@ -67,16 +67,17 @@ export function useFurnitureEditor({
     undefined
   );
   const furnitureAuthoringActive = editable && editor.activeTool === "furniture";
-  const previousAuthoringActiveRef = useRef(false);
-  useEffect(() => {
-    if (furnitureAuthoringActive && !previousAuthoringActiveRef.current) {
-      lastCanvasPointerRef.current = undefined;
-    }
-    previousAuthoringActiveRef.current = furnitureAuthoringActive;
-  }, [furnitureAuthoringActive]);
   const [error, setError] = useState<
     FurniturePlacementIssue | "EDIT_FAILED" | undefined
   >();
+  const selectedIdentity = selection.selected[0]?.geometryId;
+  useEffect(() => {
+    lastCanvasPointerRef.current = undefined;
+    setError(undefined);
+  }, [project?.id, levelId, editable, editor.activeTool]);
+  useEffect(() => {
+    setError(undefined);
+  }, [selectedIdentity]);
   return useMemo(() => {
     const transient =
       editable && editor.transient.interaction?.kind === "furniture"

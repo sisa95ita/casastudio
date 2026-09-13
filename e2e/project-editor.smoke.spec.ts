@@ -860,7 +860,7 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
     inspector.getByRole("spinbutton", { name: "Flight 2 steps" })
   ).toHaveValue("13");
   await expect(
-    inspector.getByRole("button", { name: "Delete Staircase" })
+    inspector.getByRole("button", { name: "Delete Stair" })
   ).toBeVisible();
 });
 
