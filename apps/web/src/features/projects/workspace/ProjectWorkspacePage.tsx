@@ -2,7 +2,6 @@ import { useFurnitureEditor } from "../../editor-2d/tools/furniture/useFurniture
 import {
   GeometryEngine,
   LevelGeometry,
-  calculatePolygonInteriorAnchor,
   measureLevel,
   measureRoom,
   projectPointOntoWall
@@ -10,43 +9,25 @@ import {
 import {
   canCollapseWallJunction,
   createConnectedWall,
-  createStaircase,
   createRoomFromShape,
   createFreeBoundaryRoomFromShape,
-  classifyLevelRoomTopology,
   deriveRoomShapeVertices,
   moveOpening,
   moveJunction,
   moveWallEndpoint,
   splitWall,
-  formatArchitecturalLength,
-  deleteStaircase,
   updateStaircase,
-  type WallEndpoint,
-  type Opening,
-  type RoomShapeKind
+  type WallEndpoint
 } from "@casastudio/schema";
 import {
-  Alert,
-  Box,
   CircularProgress,
-  Paper,
-  Snackbar,
   Stack,
   Typography,
   useMediaQuery,
   useTheme
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
-import LockOutlineRoundedIcon from "@mui/icons-material/LockOutlineRounded";
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBlocker, useParams } from "react-router-dom";
 
 import { useCasaStudioApi } from "../../../core/api/ApiProvider";
@@ -54,13 +35,11 @@ import type {
   GeometryLevel,
   GeometrySnapshot
 } from "../../../core/api/api-types";
-import { useAppShellContent } from "../../../shell/AppShellContext";
 import { createArchitecturalPresentationModel2D } from "../../geometry-2d/presentation/architectural-presentation-model-2d";
 import { createArchitecturalDimensionPresentationModel2D } from "../../geometry-2d/presentation/architectural-dimension-presentation-model-2d";
 import { createProjectSelectionFootprints } from "../../geometry-2d/selection/project-selection-footprints";
 import { createStairFootprints2D } from "../../geometry-2d/presentation/plan-footprints-2d";
 import { createRuntimeGeometryPresentationModel2D } from "../../geometry-2d/presentation/geometry-presentation-model-2d";
-import { GeometryViewerPanel } from "../../geometry-2d/viewer/GeometryViewerPanel";
 import { createGeometrySnapshotPresentationModel2D } from "../../geometry-2d/adapters/geometry-snapshot-presentation-adapter";
 import {
   createGeometrySelectionState,
@@ -68,16 +47,13 @@ import {
   selectPolygon,
   selectWallOpening,
   selectWindow,
-  selectStaircase,
   type GeometrySelection,
   type GeometrySelectionState
 } from "../../geometry-2d/selection/geometry-selection-state";
-import { isEditableShortcutTarget } from "../../geometry-2d/viewport/geometry-viewer-shortcuts";
 import {
   geometrySvgViewport,
   projectGeometryDisplayOptions,
   type GeometryDisplayOptions,
-  type GeometryEditorOverlay,
   type SvgViewportPointer
 } from "../../geometry-2d/viewer/GeometrySvgViewer";
 import {
@@ -96,7 +72,6 @@ import {
 } from "../../project-3d/interaction/architectural-selection-3d";
 import {
   createArchitecturalScene3DModel,
-  getVisibleLevelReferences3D,
   type LevelVisibility3D
 } from "../../project-3d/model/architectural-scene-3d-model";
 import { useProjectGeometryQuery } from "../data/geometry-queries";
@@ -108,7 +83,6 @@ import {
   createOpeningAuthoringInteraction,
   editingDraftReplaced,
   editingSessionEntered,
-  editorActiveLevelChanged,
   editorActiveToolChanged,
   editorToolToggled,
   editorDrawWallPointerMoved,
@@ -116,36 +90,24 @@ import {
   editorDocumentScaleChanged,
   editorDimensionDisplayChanged,
   editorEndpointDragStarted,
-  editorGridSnappingChanged,
-  editorGridSpacingChanged,
-  editorGridVisibilityChanged,
   editorJunctionDragStarted,
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
-  editorRoomShapePlacementChanged,
-  editorRoomAuthoringTypeChanged,
-  editorRoomShapeElevationChanged,
   editorRoomShapePlacementPointerMoved,
-  editorRoomShapePlacementStarted,
   editorStairAuthoringChanged,
   editorStairPlacementPointerMoved,
-  editorStairAdjustmentStarted,
   editorStairAdjustmentPointerMoved,
-  editorStairTranslationStarted,
   editorStairTranslationPointerMoved,
   editorOpeningDragThresholdCrossed,
   editorOpeningDragPreviewChanged,
   editorOpeningDragStarted,
   editorOpeningPlacementChanged,
   editorWallVertexPlacementChanged,
-  editorRedoRequested,
   editorSelectionChanged,
   editorSelectionCleared,
   editorSelectionTranslationPointerMoved,
-  editorSelectionTranslationStarted,
   editorTransientInteractionCleared,
   editorTransientPointerMoved,
-  editorUndoRequested,
   projectRouteChanged,
   projectRouteExited,
   selectEditorGeometrySelection,
@@ -155,14 +117,9 @@ import {
 } from "../../editor-2d/state/project-editor-slice";
 import { getProjectEditorInteraction } from "../../editor-2d/state/project-editor-tools";
 import {
-  alignFurnitureSelection,
-  deleteProjectSelection,
-  distributeFurnitureSelection,
   getProjectSelectionCapabilities,
   resolveProjectSelectionRoots,
-  translateProjectSelection,
-  type FurnitureAlignment,
-  type FurnitureDistribution
+  translateProjectSelection
 } from "../../editor-2d/selection/project-selection-transforms";
 import {
   resolveAggregatePrecisionTranslation,
@@ -195,51 +152,23 @@ import {
   geometrySelectionReset,
   selectGeometrySelection
 } from "../../editor-2d/state/viewer-slice";
-import { ProjectEditorStatusBar } from "../../editor-2d/components/ProjectEditorStatusBar";
-import { collectActionableRoomFaces } from "../../editor-2d/tools/room/project-room-authoring";
-import {
-  ProjectPersistenceDialogs,
-  type ProjectPersistenceDialog
-} from "./components/ProjectPersistenceDialogs";
+import type { ProjectPersistenceDialog } from "./components/ProjectPersistenceDialogs";
 import { normalizeEditorMeasurement } from "../../editor-2d/tools/measure/editor-measurement";
 import {
   defaultRoomShapeDimensions,
-  formatRoomShapePreviewLabel,
-  getDefaultRoomShapeDimensions,
-  getRoomEditingErrorKey,
-  parseRoomShapeDefinition,
-  getRoomAuthoringPresetValues,
-  type RoomAuthoringPreset,
-  type RoomShapeDimensionDraft
+  getRoomEditingErrorKey
 } from "../../editor-2d/tools/room/room-shape-authoring";
-import { EditorToolbar } from "../../editor-2d/components/EditorToolbar";
-import {
-  createStairIdentifiers,
-  createStairProposal,
-  findProjectStaircase,
-  getStairAuthoringParameters,
-  getSuggestedStairParameters,
-  inferStairTemplate,
-  translateStaircase,
-  updateStaircaseParameters,
-  type StairAuthoringParameters,
-  type StairParameterChanges,
-  type StairTemplate
-} from "../../editor-2d/tools/stair/project-stair-authoring";
+import { translateStaircase } from "../../editor-2d/tools/stair/project-stair-authoring";
 import { useEditorKeyboardShortcuts } from "../../editor-2d/hooks/useEditorKeyboardShortcuts";
 import {
   useEditorSelectionActions,
   type EditingErrorKey
 } from "../../editor-2d/hooks/useEditorSelectionActions";
-import {
-  ProjectEditHeaderActions,
-  ProjectViewEditAction
-} from "./components/ProjectHeaderActions";
-import { ProjectLevelControl } from "./components/ProjectLevelControl";
-import {
-  WorkspaceRepresentationControl,
-  type ProjectWorkspaceRepresentation
-} from "./components/WorkspaceRepresentationControl";
+import { useEditorSelectionTransformActions } from "../../editor-2d/hooks/useEditorSelectionTransformActions";
+import { useRoomAuthoring } from "../../editor-2d/hooks/useRoomAuthoring";
+import { useStairAuthoring } from "../../editor-2d/hooks/useStairAuthoring";
+import { useSelectedStairActions } from "../../editor-2d/hooks/useSelectedStairActions";
+import type { ProjectWorkspaceRepresentation } from "./components/WorkspaceRepresentationControl";
 import { ProjectWorkspaceInspector } from "./inspector/ProjectWorkspaceInspector";
 import {
   ProjectAuthoritativeRefreshError,
@@ -252,6 +181,11 @@ import {
 } from "./persistence/project-errors";
 import { useProjectPersistence } from "./persistence/useProjectPersistence";
 import { createInitialViewportState } from "./project-workspace-viewport";
+import { createProjectWorkspaceOverlay } from "./project-workspace-overlay";
+import { ProjectWorkspaceCanvas } from "./components/ProjectWorkspaceCanvas";
+import { ProjectWorkspaceFeedback } from "./components/ProjectWorkspaceFeedback";
+import { useProjectWorkspaceShell } from "./useProjectWorkspaceShell";
+import { useViewportPanModifier } from "./useViewportPanModifier";
 
 const emptySelectionState = createGeometrySelectionState();
 
@@ -277,13 +211,6 @@ function isSelectionLayerVisible(
       return true;
   }
 }
-/** Lazily loaded Three.js workspace kept out of the default 2D route chunk. */
-const Project3DViewer = lazy(() =>
-  import("../../project-3d/Project3DViewer").then((module) => ({
-    default: module.Project3DViewer
-  }))
-);
-
 /** Renders the authoritative View and local-draft Edit workspace for one Project. */
 export function ProjectWorkspacePage() {
   const { projectId = "" } = useParams<{ projectId: string }>();
@@ -327,14 +254,7 @@ export function ProjectWorkspacePage() {
   >();
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [viewportPanModifierActive, setViewportPanModifierActive] =
-    useState(false);
   const [editingError, setEditingError] = useState<EditingErrorKey>();
-  const [roomDetectionActive, setRoomDetectionActive] = useState(false);
-  const [roomPreset, setRoomPreset] = useState<RoomAuthoringPreset>("CUSTOM");
-  const [roomShapeDimensions, setRoomShapeDimensions] =
-    useState<RoomShapeDimensionDraft>(defaultRoomShapeDimensions);
-  const [roomElevationDraft, setRoomElevationDraft] = useState("0");
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
@@ -352,6 +272,12 @@ export function ProjectWorkspacePage() {
     ownsEditingSession && !isPhone ? "edit" : "view";
   const saveInteractionBlocked =
     replaceProjectMutation.isPending || refreshingAuthoritativeState;
+  const [viewportPanModifierActive, setViewportPanModifierActive] =
+    useViewportPanModifier(
+      workspaceMode,
+      shortcutsOpen,
+      saveInteractionBlocked
+    );
   const scene3DResult = useMemo(() => {
     if (!projectResponse || !geometryResponse || consistencyFailure)
       return undefined;
@@ -368,50 +294,6 @@ export function ProjectWorkspacePage() {
     }
   }, [consistencyFailure, geometryResponse, projectResponse]);
 
-  useEffect(() => {
-    const enabled =
-      workspaceMode === "edit" && !shortcutsOpen && !saveInteractionBlocked;
-    if (!enabled) {
-      setViewportPanModifierActive(false);
-      return;
-    }
-
-    const handleSpaceDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const roomDimensionInput =
-        typeof target?.matches === "function" &&
-        target.matches('input[type="number"]') &&
-        target.closest('[data-room-authoring-parameters="true"]') !== null;
-      if (
-        (event.key !== " " && event.code !== "Space") ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        (isEditableShortcutTarget(event.target) && !roomDimensionInput)
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      if (roomDimensionInput) target?.blur();
-      setViewportPanModifierActive(true);
-    };
-    const handleSpaceUp = (event: KeyboardEvent) => {
-      if (event.key !== " " && event.code !== "Space") return;
-      event.preventDefault();
-      setViewportPanModifierActive(false);
-    };
-    const handleWindowBlur = () => setViewportPanModifierActive(false);
-
-    window.addEventListener("keydown", handleSpaceDown, true);
-    window.addEventListener("keyup", handleSpaceUp, true);
-    window.addEventListener("blur", handleWindowBlur);
-    return () => {
-      window.removeEventListener("keydown", handleSpaceDown, true);
-      window.removeEventListener("keyup", handleSpaceUp, true);
-      window.removeEventListener("blur", handleWindowBlur);
-    };
-  }, [saveInteractionBlocked, shortcutsOpen, workspaceMode]);
   const viewLevels = geometryResponse?.geometry.levels ?? [];
   const selectedViewLevel =
     viewLevels.find((level) => level.sourceLevelId === selectedViewLevelId) ??
@@ -498,10 +380,11 @@ export function ProjectWorkspacePage() {
     const selected = selectionState.selected.filter((entry) =>
       isSelectionLayerVisible(entry, displayOptions)
     );
-    const hovered = selectionState.hovered &&
+    const hovered =
+      selectionState.hovered &&
       isSelectionLayerVisible(selectionState.hovered, displayOptions)
-      ? selectionState.hovered
-      : undefined;
+        ? selectionState.hovered
+        : undefined;
     if (
       selected.length !== selectionState.selected.length ||
       hovered !== selectionState.hovered
@@ -512,125 +395,16 @@ export function ProjectWorkspacePage() {
           : geometrySelectionChanged({ selected, hovered })
       );
     }
-  }, [
-    displayOptions,
-    selectionState,
-    dispatch,
-    workspaceMode
-  ]);
-  const roomShapePlacement =
-    editor.transient.interaction?.kind === "place-room-shape"
-      ? editor.transient.interaction
-      : undefined;
-  const stairPlacement =
-    editor.transient.interaction?.kind === "place-stair"
-      ? editor.transient.interaction
-      : undefined;
-  const stairProposal = useMemo(() => {
-    if (
-      !activeProject ||
-      !stairPlacement?.toLevelId ||
-      !stairPlacement.template ||
-      !stairPlacement.identifiers ||
-      !stairPlacement.start
-    )
-      return undefined;
-    const firstStepCount =
-      stairPlacement.parameters.kind === "STRAIGHT"
-        ? stairPlacement.parameters.flightStepCount
-        : stairPlacement.parameters.firstFlightStepCount;
-    const control = {
-      x:
-        stairPlacement.start.x +
-        firstStepCount * stairPlacement.parameters.treadDepth,
-      z: stairPlacement.start.z
-    };
-    return createStairProposal({
-      project: activeProject,
-      owningLevelId: stairPlacement.owningLevelId,
-      destination: {
-        toLevelId: stairPlacement.toLevelId,
-        ...(stairPlacement.toRoomId
-          ? { toRoomId: stairPlacement.toRoomId }
-          : {})
-      },
-      template: stairPlacement.template,
-      parameters: stairPlacement.parameters,
-      start: stairPlacement.start,
-      control,
-      turnDirection: stairPlacement.turnDirection,
-      identifiers: stairPlacement.identifiers,
-      name: `Stair ${(activeProjectLevel?.staircases.length ?? 0) + 1}`
-    });
-  }, [activeProject, activeProjectLevel?.staircases.length, stairPlacement]);
-  const activeRoomShapeKind = roomShapePlacement?.shape.kind;
-  const activeRoomBoundaryKind = roomShapePlacement?.boundaryKind;
-  const parsedRoomElevation = Number(roomElevationDraft);
-  const validRoomElevation =
-    Number.isFinite(parsedRoomElevation) && parsedRoomElevation >= 0
-      ? parsedRoomElevation
-      : undefined;
-  const validatedRoomShape = useMemo(
-    () =>
-      activeRoomShapeKind
-        ? parseRoomShapeDefinition(activeRoomShapeKind, roomShapeDimensions)
-        : undefined,
-    [activeRoomShapeKind, roomShapeDimensions]
-  );
-  const roomPlacementValidation = useMemo(() => {
-    if (
-      !editor.draft ||
-      !editor.activeLevelId ||
-      !roomShapePlacement?.origin ||
-      !validatedRoomShape
-    )
-      return undefined;
-    const room = {
-      id: "room-authoring-preview",
-      name: "Room preview",
-      type: roomShapePlacement.roomType,
-      ...(roomShapePlacement.boundaryKind === "FREE"
-        ? { elevation: roomShapePlacement.elevation }
-        : {})
-    };
-    return roomShapePlacement.boundaryKind === "FREE"
-      ? createFreeBoundaryRoomFromShape(editor.draft, {
-          levelId: editor.activeLevelId,
-          origin: roomShapePlacement.origin,
-          shape: validatedRoomShape,
-          room
-        })
-      : createRoomFromShape(editor.draft, {
-          levelId: editor.activeLevelId,
-          origin: roomShapePlacement.origin,
-          shape: validatedRoomShape,
-          room,
-          wallIds: Array.from(
-            {
-              length:
-                deriveRoomShapeVertices(
-                  roomShapePlacement.origin,
-                  validatedRoomShape
-                )?.length ?? 0
-            },
-            (_, index) => `room-authoring-preview-wall-${index + 1}`
-          ),
-          wallHeight: newWallDefaults.height,
-          wallThickness: newWallDefaults.thickness
-        });
-  }, [
-    editor.activeLevelId,
-    editor.draft,
-    roomShapePlacement,
-    validatedRoomShape
-  ]);
+  }, [displayOptions, selectionState, dispatch, workspaceMode]);
   const resolvedDisplayOptions: GeometryDisplayOptions =
     workspaceMode === "edit"
       ? {
           ...displayOptions,
           ...editor.presentation.dimensions,
-          boundaryEdges: displayOptions.boundaryEdges && displayOptions.architecturalWalls,
-          vertices: displayOptions.vertices && displayOptions.architecturalWalls,
+          boundaryEdges:
+            displayOptions.boundaryEdges && displayOptions.architecturalWalls,
+          vertices:
+            displayOptions.vertices && displayOptions.architecturalWalls,
           centroids: displayOptions.centroids && displayOptions.polygons
         }
       : {
@@ -695,7 +469,13 @@ export function ProjectWorkspacePage() {
     ).filter((footprint) =>
       isSelectionLayerVisible(footprint.selection, displayOptions)
     );
-  }, [activeProject, activeProjectLevel, furniture.model, presentationResult, displayOptions]);
+  }, [
+    activeProject,
+    activeProjectLevel,
+    furniture.model,
+    presentationResult,
+    displayOptions
+  ]);
   const selectionRoots = useMemo(
     () =>
       activeProject && activeProjectLevel && presentationResult?.ok
@@ -794,74 +574,27 @@ export function ProjectWorkspacePage() {
       (room) => room.id === polygon?.sourceRoomId
     );
   }, [activeProjectLevel, presentationResult, selectionState.selected]);
-  const selectedStair = useMemo(() => {
-    const selected =
-      selectionState.selected.length === 1
-        ? selectionState.selected[0]
-        : undefined;
-    if (
-      !selected ||
-      (selected.kind !== "STAIRCASE" &&
-        selected.kind !== "STAIR_FLIGHT" &&
-        selected.kind !== "STAIR_LANDING")
-    )
-      return undefined;
-    return findProjectStaircase(activeProjectLevel, selected.geometryId);
-  }, [activeProjectLevel, selectionState.selected]);
-  const stairAdjustmentProposal = useMemo(() => {
-    const adjustment =
-      editor.transient.interaction?.kind === "move-stair-adjustment"
-        ? editor.transient.interaction
-        : undefined;
-    if (
-      !activeProject ||
-      !selectedStair ||
-      !adjustment ||
-      adjustment.staircaseId !== selectedStair.staircase.id
-    )
-      return undefined;
-    const staircase = selectedStair.staircase;
-    const proposal = createStairProposal({
-      project: activeProject,
-      owningLevelId: adjustment.owningLevelId,
-      destination: {
-        toLevelId: staircase.toLevelId,
-        ...(staircase.toRoomId ? { toRoomId: staircase.toRoomId } : {})
-      },
-      template: inferStairTemplate(staircase),
-      parameters: getStairAuthoringParameters(staircase),
-      start: staircase.flights[0]?.start ?? adjustment.control,
-      control: adjustment.control,
-      identifiers: {
-        staircaseId: staircase.id,
-        flightIds: staircase.flights.map((flight) => flight.id),
-        landingIds: staircase.landings.map((landing) => landing.id)
-      },
-      name: staircase.name
-    });
-    return proposal && staircase.fromRoomId
-      ? {
-          ...proposal,
-          staircase: { ...proposal.staircase, fromRoomId: staircase.fromRoomId }
-        }
-      : proposal;
-  }, [activeProject, editor.transient.interaction, selectedStair]);
-  const translatedStaircase = useMemo(() => {
-    const move =
-      editor.transient.interaction?.kind === "move-stair-translation"
-        ? editor.transient.interaction
-        : undefined;
-    if (
-      !move ||
-      !selectedStair ||
-      move.staircaseId !== selectedStair.staircase.id
-    )
-      return undefined;
-    return translateStaircase(selectedStair.staircase, {
-      x: move.currentPointer.x - move.startPointer.x,
-      z: move.currentPointer.z - move.startPointer.z
-    });
-  }, [editor.transient.interaction, selectedStair]);
+  const {
+    selectedStair,
+    stairAdjustmentProposal,
+    translatedStaircase,
+    handleStairAdjustmentPointerDown,
+    handleStairTranslationPointerDown,
+    handleStairTranslationPointerUp,
+    handleStairTranslationPointerCancel,
+    handleStairAdjustmentPointerUp,
+    handleStairAdjustmentPointerCancel,
+    handleDeleteSelectedStair,
+    handleUpdateSelectedStair
+  } = useSelectedStairActions({
+    activeProject,
+    activeProjectLevel,
+    selectionState,
+    editor,
+    dispatch,
+    saveInteractionBlocked,
+    setEditingError
+  });
   const selectedRoomMeasurement = useMemo(
     () =>
       activeProjectLevel && selectedRoom
@@ -951,207 +684,30 @@ export function ProjectWorkspacePage() {
       ),
     [editor.activeLevelId, editor.draft, selectedEditVertex]
   );
-  const roomTopology = useMemo(
-    () =>
-      editor.draft && editor.activeLevelId
-        ? classifyLevelRoomTopology(editor.draft, editor.activeLevelId)
-        : undefined,
-    [editor.activeLevelId, editor.draft]
-  );
-  const actionableRoomFaces = useMemo(() => {
-    if (!roomTopology) return [];
-    return collectActionableRoomFaces(roomTopology);
-  }, [roomTopology]);
 
-  useEffect(() => {
-    if (workspaceMode === "edit" && editor.activeTool === "room") return;
-    setRoomDetectionActive(false);
-  }, [editor.activeTool, workspaceMode]);
-
-  const handleDetectRoom = useCallback(() => {
-    dispatch(editorTransientInteractionCleared());
-    setRoomDetectionActive(true);
-  }, [dispatch]);
-
-  const handleSelectRoomShape = useCallback(
-    (
-      kind: RoomShapeKind,
-      boundaryKind: "WALLS" | "FREE" = Number(roomElevationDraft) === 0
-        ? "WALLS"
-        : "FREE",
-      roomType = "OTHER" as const
-    ) => {
-      if (!editor.activeLevelId) return;
-      const dimensions = getDefaultRoomShapeDimensions(kind);
-      const shape = parseRoomShapeDefinition(kind, dimensions);
-      if (!shape) return;
-      setRoomShapeDimensions(dimensions);
-      setRoomDetectionActive(false);
-      dispatch(editorActiveToolChanged("room"));
-      if (roomShapePlacement?.levelId === editor.activeLevelId) {
-        dispatch(editorRoomShapePlacementChanged(shape));
-      } else {
-        dispatch(
-          editorRoomShapePlacementStarted({
-            levelId: editor.activeLevelId,
-            shape,
-            boundaryKind,
-            elevation: boundaryKind === "FREE" ? (validRoomElevation ?? 0) : 0,
-            roomType
-          })
-        );
-      }
-    },
-    [
-      dispatch,
-      editor.activeLevelId,
-      roomElevationDraft,
-      roomShapePlacement,
-      validRoomElevation
-    ]
-  );
-
-  const handleRoomMethodChange = useCallback(
-    (method: "DETECT" | "SHAPE") => {
-      if (method === "DETECT") handleDetectRoom();
-      else handleSelectRoomShape(activeRoomShapeKind ?? "RECTANGLE");
-    },
-    [activeRoomShapeKind, handleDetectRoom, handleSelectRoomShape]
-  );
-
-  const handleRoomPresetChange = useCallback(
-    (preset: RoomAuthoringPreset) => {
-      const values = getRoomAuthoringPresetValues(preset);
-      setRoomPreset(preset);
-      setRoomShapeDimensions(values.dimensions);
-      setRoomDetectionActive(false);
-      const shape = parseRoomShapeDefinition(values.shape, values.dimensions);
-      if (!shape || !editor.activeLevelId) return;
-      if (roomShapePlacement?.levelId === editor.activeLevelId) {
-        dispatch(editorRoomShapePlacementChanged(shape));
-        dispatch(editorRoomAuthoringTypeChanged(values.roomType));
-      } else {
-        dispatch(
-          editorRoomShapePlacementStarted({
-            levelId: editor.activeLevelId,
-            shape,
-            boundaryKind: Number(roomElevationDraft) === 0 ? "WALLS" : "FREE",
-            elevation: Number(roomElevationDraft) || 0,
-            roomType: values.roomType
-          })
-        );
-      }
-    },
-    [dispatch, editor.activeLevelId, roomElevationDraft, roomShapePlacement]
-  );
-
-  const handleRoomElevationChange = useCallback(
-    (value: string) => {
-      setRoomElevationDraft(value);
-      const elevation = Number(value);
-      if (Number.isFinite(elevation) && elevation >= 0) {
-        dispatch(editorRoomShapeElevationChanged(elevation));
-      }
-    },
-    [dispatch]
-  );
-
-  const handleRoomShapeDimensionChange = useCallback(
-    (field: keyof RoomShapeDimensionDraft, value: string) => {
-      if (!activeRoomShapeKind) return;
-      const nextDimensions = { ...roomShapeDimensions, [field]: value };
-      setRoomShapeDimensions(nextDimensions);
-      const shape = parseRoomShapeDefinition(
-        activeRoomShapeKind,
-        nextDimensions
-      );
-      if (shape) dispatch(editorRoomShapePlacementChanged(shape));
-    },
-    [activeRoomShapeKind, dispatch, roomShapeDimensions]
-  );
-
-  const handleCancelRoomAuthoring = useCallback(() => {
-    dispatch(editorTransientInteractionCleared());
-    dispatch(editorActiveToolChanged("select"));
-    setRoomDetectionActive(false);
-  }, [dispatch]);
-
-  const handleStairDestinationChange = useCallback(
-    (toLevelId: string, toRoomId?: string) => {
-      if (!editor.draft || !editor.activeLevelId) return;
-      const parameters = getSuggestedStairParameters(
-        editor.draft,
-        editor.activeLevelId,
-        {
-          toLevelId,
-          ...(toRoomId ? { toRoomId } : {})
-        },
-        stairPlacement?.template ?? "STRAIGHT"
-      );
-      dispatch(
-        editorStairAuthoringChanged({ toLevelId, toRoomId, parameters })
-      );
-    },
-    [dispatch, editor.activeLevelId, editor.draft, stairPlacement?.template]
-  );
-
-  const handleStairTemplateChange = useCallback(
-    (template: StairTemplate) => {
-      if (!editor.draft || !editor.activeLevelId || !stairPlacement?.toLevelId)
-        return;
-      const parameters = getSuggestedStairParameters(
-        editor.draft,
-        editor.activeLevelId,
-        {
-          toLevelId: stairPlacement.toLevelId,
-          ...(stairPlacement.toRoomId
-            ? { toRoomId: stairPlacement.toRoomId }
-            : {})
-        },
-        template
-      );
-      dispatch(
-        editorStairAuthoringChanged({
-          template,
-          parameters,
-          identifiers: createStairIdentifiers(template)
-        })
-      );
-    },
-    [
-      dispatch,
-      editor.activeLevelId,
-      editor.draft,
-      stairPlacement?.toLevelId,
-      stairPlacement?.toRoomId
-    ]
-  );
-
-  const handleStairParametersChange = useCallback(
-    (parameters: StairAuthoringParameters) => {
-      dispatch(editorStairAuthoringChanged({ parameters }));
-    },
-    [dispatch]
-  );
-
-  const handleCancelStairAuthoring = useCallback(() => {
-    dispatch(editorActiveToolChanged("select"));
-  }, [dispatch]);
-
-  useEffect(() => {
-    if (
-      editor.activeTool === "room" &&
-      !roomShapePlacement &&
-      !roomDetectionActive
-    ) {
-      handleSelectRoomShape("RECTANGLE");
-    }
-  }, [
-    editor.activeTool,
-    handleSelectRoomShape,
+  const {
     roomDetectionActive,
-    roomShapePlacement
-  ]);
+    setRoomDetectionActive,
+    roomPreset,
+    setRoomPreset,
+    roomShapeDimensions,
+    setRoomShapeDimensions,
+    roomElevationDraft,
+    setRoomElevationDraft,
+    roomShapePlacement,
+    activeRoomShapeKind,
+    activeRoomBoundaryKind,
+    validRoomElevation,
+    validatedRoomShape,
+    roomPlacementValidation,
+    actionableRoomFaces,
+    handleSelectRoomShape,
+    handleRoomMethodChange,
+    handleRoomPresetChange,
+    handleRoomElevationChange,
+    handleRoomShapeDimensionChange,
+    handleCancelRoomAuthoring
+  } = useRoomAuthoring({ dispatch, editor, workspaceMode });
 
   useEffect(() => {
     if (
@@ -1163,335 +719,74 @@ export function ProjectWorkspacePage() {
         editorOpeningPlacementChanged(createOpeningAuthoringInteraction("DOOR"))
       );
     }
-  }, [dispatch, workspaceMode, editor.activeTool, editor.transient.interaction]);
-
-  useEffect(() => {
-    if (
-      editor.activeTool !== "stair" ||
-      stairPlacement?.template ||
-      !editor.draft ||
-      !editor.activeLevelId
-    )
-      return;
-    const owningLevel = editor.draft.building.levels.find(
-      (level) => level.id === editor.activeLevelId
-    );
-    const higherLevel = editor.draft.building.levels
-      .filter((level) => level.elevation > (owningLevel?.elevation ?? 0))
-      .sort((first, second) => first.elevation - second.elevation)[0];
-    const elevatedRoom = owningLevel?.rooms.find(
-      (room) => (room.elevation ?? 0) > 0
-    );
-    const toLevelId = higherLevel?.id ?? owningLevel?.id;
-    const toRoomId = higherLevel ? undefined : elevatedRoom?.id;
-    if (!toLevelId) return;
-    const destination = { toLevelId, ...(toRoomId ? { toRoomId } : {}) };
-    dispatch(
-      editorStairAuthoringChanged({
-        ...destination,
-        template: "STRAIGHT",
-        parameters: getSuggestedStairParameters(
-          editor.draft,
-          editor.activeLevelId,
-          destination
-        ),
-        identifiers: createStairIdentifiers("STRAIGHT")
-      })
-    );
   }, [
     dispatch,
-    editor.activeLevelId,
+    workspaceMode,
     editor.activeTool,
-    editor.draft,
-    stairPlacement
+    editor.transient.interaction
   ]);
 
-  const handleConfirmStairAuthoring = useCallback(() => {
-    if (!editor.draft || !stairPlacement || !stairProposal?.valid) return;
-    const result = createStaircase(editor.draft, {
-      owningLevelId: stairPlacement.owningLevelId,
-      staircase: stairProposal.staircase
-    });
-    if (!result.ok) {
-      setEditingError("errors.stair.invalid");
-      return;
-    }
-    setEditingError(undefined);
-    dispatch(editingDraftReplaced(result.project));
-    dispatch(editorActiveToolChanged("select"));
-    dispatch(
-      editorSelectionChanged(
-        createGeometrySelectionState([
-          selectStaircase(stairProposal.staircase.id)
-        ])
-      )
-    );
-  }, [dispatch, editor.draft, stairPlacement, stairProposal]);
-
-  const editorOverlay = useMemo<GeometryEditorOverlay | undefined>(() => {
-    if (workspaceMode !== "edit") return undefined;
-    const transient = editor.transient.interaction;
-    const selectedWall = selectedEditWall
-      ? {
-          wallId: selectedEditWall.id,
-          endpointEditingAvailable: {
-            start: selectedWallEndpointAvailability?.start.draggable ?? false,
-            end: selectedWallEndpointAvailability?.end.draggable ?? false
-          },
-          start:
-            transient?.kind === "move-wall-endpoint" &&
-            transient.wallId === selectedEditWall.id &&
-            transient.endpoint === "start"
-              ? transient.currentPointerPoint
-              : transient?.kind === "move-junction" &&
-                  selectedEditWall.start.x === transient.position.x &&
-                  selectedEditWall.start.z === transient.position.z
-                ? transient.currentPointerPoint
-                : selectedEditWall.start,
-          end:
-            transient?.kind === "move-wall-endpoint" &&
-            transient.wallId === selectedEditWall.id &&
-            transient.endpoint === "end"
-              ? transient.currentPointerPoint
-              : transient?.kind === "move-junction" &&
-                  selectedEditWall.end.x === transient.position.x &&
-                  selectedEditWall.end.z === transient.position.z
-                ? transient.currentPointerPoint
-                : selectedEditWall.end,
-          draggingEndpoint:
-            transient?.kind === "move-wall-endpoint" &&
-            transient.wallId === selectedEditWall.id
-              ? transient.endpoint
-              : undefined
-        }
-      : undefined;
-    const placementCandidate =
-      transient?.kind === "place-opening" ? transient.candidate : undefined;
-    const placementWall = placementCandidate
-      ? findProjectWall(
-          editor.draft,
-          editor.activeLevelId,
-          placementCandidate.wallId
-        )
-      : undefined;
-    const draggedOpening =
-      transient?.kind === "move-opening" &&
-      transient.dragging &&
-      selectedEditOpening
-        ? ({
-            ...selectedEditOpening.opening,
-            offsetFromStart: transient.currentOffsetFromStart
-          } as Opening)
-        : undefined;
-    const selectionTranslation =
-      transient?.kind === "translate-selection"
-        ? (() => {
-            const selectedKeys = new Set(
-              selectionState.selected.map(
-                (selection) => `${selection.kind}:${selection.geometryId}`
-              )
-            );
-            const points = selectionFootprints
-              .filter((footprint) =>
-                selectedKeys.has(
-                  `${footprint.selection.kind}:${footprint.selection.geometryId}`
-                )
-              )
-              .flatMap((footprint) =>
-                footprint.polygons.flatMap((polygon) => polygon)
-              );
-            if (points.length === 0) return undefined;
-            return {
-              min: {
-                x: Math.min(...points.map((point) => point.x)),
-                z: Math.min(...points.map((point) => point.z))
-              },
-              max: {
-                x: Math.max(...points.map((point) => point.x)),
-                z: Math.max(...points.map((point) => point.z))
-              },
-              delta: {
-                x: transient.currentPointer.x - transient.startPointer.x,
-                z: transient.currentPointer.z - transient.startPointer.z
-              }
-            };
-          })()
-        : undefined;
-    const previewShape =
-      transient?.kind === "place-room-shape" &&
-      (transient.boundaryKind === "WALLS" || validRoomElevation !== undefined)
-        ? transient.shape
-        : undefined;
-    const shapeVertices =
-      previewShape &&
-      transient?.kind === "place-room-shape" &&
-      transient.origin &&
-      validatedRoomShape
-        ? deriveRoomShapeVertices(transient.origin, previewShape)
-        : undefined;
-    const shapeLabelAnchor = shapeVertices
-      ? calculatePolygonInteriorAnchor(shapeVertices)
-      : undefined;
-
-    return {
-      precisionGuides:
-        transient?.kind === "translate-selection"
-          ? transient.precision?.guides
-          : transient?.kind === "move-stair-translation"
-            ? transient.precision?.guides
-            : transient?.kind === "furniture"
-              ? transient.precision?.guides
-              : undefined,
-      stairPreview:
-        (translatedStaircase ?? stairAdjustmentProposal ?? stairProposal)
-          ? {
-              staircase:
-                translatedStaircase ??
-                (stairAdjustmentProposal ?? stairProposal)!.staircase,
-              valid: translatedStaircase
-                ? true
-                : (stairAdjustmentProposal ?? stairProposal)!.valid,
-              locked: Boolean(translatedStaircase || stairAdjustmentProposal)
-            }
-          : undefined,
-      selectedStair:
-        selectedStair && selectionState.selected[0]?.kind === "STAIRCASE"
-          ? {
-              staircaseId: selectedStair.staircase.id,
-              adjustmentPoint:
-                editor.transient.interaction?.kind === "move-stair-adjustment"
-                  ? editor.transient.interaction.control
-                  : inferStairTemplate(selectedStair.staircase) === "STRAIGHT"
-                    ? (selectedStair.staircase.flights.at(-1)?.end ?? {
-                        x: 0,
-                        z: 0
-                      })
-                    : (selectedStair.staircase.flights[0]?.end ?? {
-                        x: 0,
-                        z: 0
-                      })
-            }
-          : undefined,
-      roomFaceCandidates:
-        editor.activeTool === "room" && roomDetectionActive
-          ? actionableRoomFaces.map((face) => ({
-              faceKey: face.key,
-              vertices: face.vertices,
-              selected: false
-            }))
-          : undefined,
-      roomShapePreview:
-        shapeVertices &&
-        shapeLabelAnchor &&
-        activeProject &&
-        previewShape &&
-        roomShapePlacement
-          ? {
-              vertices: shapeVertices,
-              labelAnchor: shapeLabelAnchor,
-              label: formatRoomShapePreviewLabel(
-                previewShape,
-                activeProject.units.length,
-                roomShapePlacement.boundaryKind === "FREE"
-                  ? roomShapePlacement.elevation
-                  : undefined
-              ),
-              kind: previewShape.kind,
-              elevated: roomShapePlacement.boundaryKind === "FREE",
-              elevation: roomShapePlacement.elevation,
-              valid: roomPlacementValidation?.ok ?? false
-            }
-          : undefined,
-      drawWall:
-        transient?.kind === "draw-wall"
-          ? {
-              start: transient.startPoint,
-              end: transient.currentPointerPoint,
-              lengthLabel:
-                activeProject &&
-                (transient.currentPointerPoint.x !== transient.startPoint.x ||
-                  transient.currentPointerPoint.z !== transient.startPoint.z)
-                  ? formatArchitecturalLength(
-                      Math.hypot(
-                        transient.currentPointerPoint.x -
-                          transient.startPoint.x,
-                        transient.currentPointerPoint.z - transient.startPoint.z
-                      ),
-                      activeProject.units.length
-                    )
-                  : undefined
-            }
-          : undefined,
-      snapCandidate: editor.transient.snapCandidate,
-      snapMarkerPurpose:
-        editor.activeTool === "measure" ? "measurement" : "authoring",
-      selectedWall,
-      selectedJunction:
-        selectedEditVertex && selectedJunctionWallIds.length > 1
-          ? {
-              position: selectedEditVertex.coordinates,
-              previewPosition:
-                transient?.kind === "move-junction"
-                  ? transient.currentPointerPoint
-                  : selectedEditVertex.coordinates
-            }
-          : undefined,
-      wallVertexPreview:
-        transient?.kind === "add-wall-vertex"
-          ? transient.splitPoint
-          : undefined,
-      openingPreview:
-        placementCandidate && placementWall
-          ? {
-              wall: placementWall,
-              opening: placementCandidate.opening,
-              valid: placementCandidate.valid
-            }
-          : draggedOpening && selectedEditOpening
-            ? {
-                wall: selectedEditOpening.wall,
-                opening: draggedOpening,
-                valid:
-                  transient?.kind === "move-opening" ? transient.valid : false
-              }
-            : undefined,
-      activeOpeningDragId:
-        transient?.kind === "move-opening" && transient.dragging
-          ? transient.openingId
-          : undefined,
-      grid: {
-        visible: editor.precision.gridVisible,
-        spacing: editor.precision.gridSpacing
-      },
-      selectionTranslation
-    };
-  }, [
-    editor.transient.interaction,
-    editor.transient.snapCandidate,
-    selectedEditWall,
-    selectedEditVertex,
-    selectedEditOpening,
-    selectedJunctionWallIds,
-    selectedWallEndpointAvailability,
-    editor.precision,
-    editor.activeTool,
-    actionableRoomFaces,
-    activeProject,
-    roomDetectionActive,
-    roomPreset,
+  const {
     stairPlacement,
     stairProposal,
-    stairAdjustmentProposal,
-    translatedStaircase,
-    selectedStair,
-    selectionState.selected,
-    selectionFootprints,
-    t,
-    validatedRoomShape,
-    roomPlacementValidation,
-    validRoomElevation,
-    workspaceMode
-  ]);
+    handleStairDestinationChange,
+    handleStairTemplateChange,
+    handleStairParametersChange,
+    handleCancelStairAuthoring,
+    handleConfirmStairAuthoring
+  } = useStairAuthoring({
+    activeProject,
+    activeProjectLevel,
+    editor,
+    dispatch,
+    setEditingError
+  });
+
+  const editorOverlay = useMemo(
+    () =>
+      createProjectWorkspaceOverlay({
+        workspaceMode,
+        editor,
+        selectedEditWall,
+        selectedEditOpening,
+        selectedEditVertex,
+        selectedJunctionWallIds,
+        selectedWallEndpointAvailability,
+        actionableRoomFaces,
+        activeProject,
+        roomDetectionActive,
+        stairProposal,
+        stairAdjustmentProposal,
+        translatedStaircase,
+        selectedStair,
+        selectionState,
+        selectionFootprints,
+        validatedRoomShape,
+        roomPlacementValid: roomPlacementValidation?.ok ?? false,
+        validRoomElevation
+      }),
+    [
+      workspaceMode,
+      editor,
+      selectedEditWall,
+      selectedEditOpening,
+      selectedEditVertex,
+      selectedJunctionWallIds,
+      selectedWallEndpointAvailability,
+      actionableRoomFaces,
+      activeProject,
+      roomDetectionActive,
+      stairProposal,
+      stairAdjustmentProposal,
+      translatedStaircase,
+      selectedStair,
+      selectionState,
+      selectionFootprints,
+      validatedRoomShape,
+      roomPlacementValidation,
+      validRoomElevation
+    ]
+  );
 
   useEffect(() => {
     dispatch(projectRouteChanged(projectId));
@@ -2556,367 +1851,24 @@ export function ProjectWorkspacePage() {
     [dispatch, editor.transient.interaction]
   );
 
-  const handleSelectionTranslationPointerDown = useCallback(
-    (_selection: unknown, point: WorldPointXZ, pointerId: number) => {
-      if (
-        saveInteractionBlocked ||
-        workspaceMode !== "edit" ||
-        editor.activeTool !== "select"
-      )
-        return;
-      if (!selectionCapabilities.translate.supported) {
-        setEditingError("errors.selection.invalid");
-        return;
-      }
-      setEditingError(undefined);
-      dispatch(
-        editorSelectionTranslationStarted({ pointerId, startPointer: point })
-      );
-    },
-    [
-      dispatch,
-      editor.activeTool,
-      saveInteractionBlocked,
-      selectionCapabilities.translate,
-      workspaceMode
-    ]
-  );
-
-  const handleSelectionTranslationPointerUp = useCallback(
-    (pointerId: number, dragged: boolean) => {
-      const interaction = editor.transient.interaction;
-      if (
-        interaction?.kind !== "translate-selection" ||
-        interaction.pointerId !== pointerId
-      )
-        return;
-      dispatch(editorTransientInteractionCleared());
-      if (!dragged || !editor.draft || !activeProjectLevel) return;
-      const result = translateProjectSelection(
-        editor.draft,
-        activeProjectLevel,
-        selectionRoots,
-        {
-          x: interaction.currentPointer.x - interaction.startPointer.x,
-          z: interaction.currentPointer.z - interaction.startPointer.z
-        }
-      );
-      if (!result.ok) {
-        setEditingError("errors.selection.invalid");
-        return;
-      }
-      setEditingError(undefined);
-      dispatch(editingDraftReplaced(result.project));
-    },
-    [
-      activeProjectLevel,
-      dispatch,
-      editor.draft,
-      editor.transient.interaction,
-      selectionRoots
-    ]
-  );
-
-  const handleSelectionTranslationPointerCancel = useCallback(
-    (pointerId: number) => {
-      if (
-        editor.transient.interaction?.kind === "translate-selection" &&
-        editor.transient.interaction.pointerId === pointerId
-      )
-        dispatch(editorTransientInteractionCleared());
-    },
-    [dispatch, editor.transient.interaction]
-  );
-
-  const handleNudgeSelection = useCallback(
-    (delta: WorldPointXZ) => {
-      if (
-        !editor.draft ||
-        !activeProjectLevel ||
-        saveInteractionBlocked ||
-        workspaceMode !== "edit"
-      )
-        return;
-      const result = translateProjectSelection(
-        editor.draft,
-        activeProjectLevel,
-        selectionRoots,
-        delta
-      );
-      if (!result.ok) {
-        setEditingError("errors.selection.invalid");
-        return;
-      }
-      setEditingError(undefined);
-      dispatch(editingDraftReplaced(result.project));
-    },
-    [
-      activeProjectLevel,
-      dispatch,
-      editor.draft,
-      saveInteractionBlocked,
-      selectionRoots,
-      workspaceMode
-    ]
-  );
-
-  const handleAlignSelection = useCallback(
-    (alignment: FurnitureAlignment) => {
-      if (!editor.draft || !activeProjectLevel || saveInteractionBlocked)
-        return;
-      const result = alignFurnitureSelection(
-        editor.draft,
-        activeProjectLevel,
-        selectionRoots,
-        alignment
-      );
-      if (!result.ok) {
-        setEditingError("errors.selection.invalid");
-        return;
-      }
-      setEditingError(undefined);
-      dispatch(editingDraftReplaced(result.project));
-    },
-    [
-      activeProjectLevel,
-      dispatch,
-      editor.draft,
-      saveInteractionBlocked,
-      selectionRoots
-    ]
-  );
-
-  const handleDistributeSelection = useCallback(
-    (distribution: FurnitureDistribution) => {
-      if (!editor.draft || !activeProjectLevel || saveInteractionBlocked)
-        return;
-      const result = distributeFurnitureSelection(
-        editor.draft,
-        activeProjectLevel,
-        selectionRoots,
-        distribution
-      );
-      if (!result.ok) {
-        setEditingError("errors.selection.invalid");
-        return;
-      }
-      setEditingError(undefined);
-      dispatch(editingDraftReplaced(result.project));
-    },
-    [
-      activeProjectLevel,
-      dispatch,
-      editor.draft,
-      saveInteractionBlocked,
-      selectionRoots
-    ]
-  );
-
-  const handleDeleteSelection = useCallback(() => {
-    if (
-      !editor.draft ||
-      !activeProjectLevel ||
-      saveInteractionBlocked ||
-      workspaceMode !== "edit"
-    )
-      return;
-    const result = deleteProjectSelection(
-      editor.draft,
-      activeProjectLevel,
-      selectionRoots
-    );
-    if (!result.ok) {
-      setEditingError("errors.selection.invalid");
-      return;
-    }
-    setEditingError(undefined);
-    dispatch(editorSelectionCleared());
-    dispatch(editingDraftReplaced(result.project));
-  }, [
-    activeProjectLevel,
+  const {
+    handleSelectionTranslationPointerDown,
+    handleSelectionTranslationPointerUp,
+    handleSelectionTranslationPointerCancel,
+    handleNudgeSelection,
+    handleAlignSelection,
+    handleDistributeSelection,
+    handleDeleteSelection
+  } = useEditorSelectionTransformActions({
     dispatch,
-    editor.draft,
-    saveInteractionBlocked,
+    editor,
+    activeProjectLevel,
     selectionRoots,
-    workspaceMode
-  ]);
-
-  const handleStairAdjustmentPointerDown = useCallback(
-    (staircaseId: string, pointerId: number) => {
-      if (
-        !editor.activeLevelId ||
-        editor.activeTool !== "select" ||
-        !selectedStair ||
-        selectedStair.staircase.id !== staircaseId ||
-        saveInteractionBlocked
-      )
-        return;
-      const staircase = selectedStair.staircase;
-      const control =
-        inferStairTemplate(staircase) === "STRAIGHT"
-          ? staircase.flights.at(-1)?.end
-          : staircase.flights[0]?.end;
-      if (!control) return;
-      dispatch(
-        editorStairAdjustmentStarted({
-          owningLevelId: editor.activeLevelId,
-          staircaseId,
-          pointerId,
-          control
-        })
-      );
-    },
-    [
-      dispatch,
-      editor.activeLevelId,
-      editor.activeTool,
-      saveInteractionBlocked,
-      selectedStair
-    ]
-  );
-
-  const handleStairTranslationPointerDown = useCallback(
-    (staircaseId: string, point: WorldPointXZ, pointerId: number) => {
-      if (
-        !editor.activeLevelId ||
-        editor.activeTool !== "select" ||
-        !selectedStair ||
-        selectedStair.staircase.id !== staircaseId ||
-        saveInteractionBlocked
-      )
-        return;
-      dispatch(
-        editorStairTranslationStarted({
-          owningLevelId: editor.activeLevelId,
-          staircaseId,
-          pointerId,
-          startPointer: point
-        })
-      );
-    },
-    [
-      dispatch,
-      editor.activeLevelId,
-      editor.activeTool,
-      saveInteractionBlocked,
-      selectedStair
-    ]
-  );
-
-  const handleStairTranslationPointerUp = useCallback(
-    (pointerId: number) => {
-      const interaction = editor.transient.interaction;
-      if (
-        interaction?.kind !== "move-stair-translation" ||
-        interaction.pointerId !== pointerId ||
-        !editor.draft ||
-        !translatedStaircase
-      )
-        return;
-      const result = updateStaircase(editor.draft, {
-        owningLevelId: interaction.owningLevelId,
-        staircaseId: interaction.staircaseId,
-        staircase: translatedStaircase
-      });
-      dispatch(editorTransientInteractionCleared());
-      if (!result.ok) {
-        setEditingError("errors.stair.invalid");
-        return;
-      }
-      setEditingError(undefined);
-      dispatch(editingDraftReplaced(result.project));
-      dispatch(
-        editorSelectionChanged(
-          createGeometrySelectionState([
-            selectStaircase(interaction.staircaseId)
-          ])
-        )
-      );
-    },
-    [dispatch, editor.draft, editor.transient.interaction, translatedStaircase]
-  );
-
-  const handleStairTranslationPointerCancel = useCallback(
-    (pointerId: number) => {
-      if (
-        editor.transient.interaction?.kind === "move-stair-translation" &&
-        editor.transient.interaction.pointerId === pointerId
-      ) {
-        dispatch(editorTransientInteractionCleared());
-      }
-    },
-    [dispatch, editor.transient.interaction]
-  );
-
-  const handleStairAdjustmentPointerUp = useCallback(
-    (control: WorldPointXZ, pointerId: number) => {
-      const interaction = editor.transient.interaction;
-      if (
-        interaction?.kind !== "move-stair-adjustment" ||
-        interaction.pointerId !== pointerId ||
-        !editor.draft ||
-        !selectedStair
-      )
-        return;
-      const staircase = selectedStair.staircase;
-      const proposal = createStairProposal({
-        project: editor.draft,
-        owningLevelId: interaction.owningLevelId,
-        destination: {
-          toLevelId: staircase.toLevelId,
-          ...(staircase.toRoomId ? { toRoomId: staircase.toRoomId } : {})
-        },
-        template: inferStairTemplate(staircase),
-        parameters: getStairAuthoringParameters(staircase),
-        start: staircase.flights[0]?.start ?? control,
-        control,
-        identifiers: {
-          staircaseId: staircase.id,
-          flightIds: staircase.flights.map((flight) => flight.id),
-          landingIds: staircase.landings.map((landing) => landing.id)
-        },
-        name: staircase.name
-      });
-      dispatch(editorTransientInteractionCleared());
-      if (!proposal?.valid) {
-        setEditingError("errors.stair.invalid");
-        return;
-      }
-      const editedStaircase = staircase.fromRoomId
-        ? { ...proposal.staircase, fromRoomId: staircase.fromRoomId }
-        : proposal.staircase;
-      const result = updateStaircase(editor.draft, {
-        owningLevelId: interaction.owningLevelId,
-        staircaseId: staircase.id,
-        staircase: editedStaircase
-      });
-      if (!result.ok) {
-        setEditingError("errors.stair.invalid");
-        return;
-      }
-      setEditingError(undefined);
-      dispatch(editingDraftReplaced(result.project));
-      dispatch(
-        editorSelectionChanged(
-          createGeometrySelectionState([selectStaircase(staircase.id)])
-        )
-      );
-    },
-    [dispatch, editor.draft, editor.transient.interaction, selectedStair]
-  );
-
-  const handleStairAdjustmentPointerCancel = useCallback(
-    (pointerId: number) => {
-      const interaction = editor.transient.interaction;
-      if (
-        interaction?.kind === "move-stair-adjustment" &&
-        interaction.pointerId === pointerId
-      ) {
-        dispatch(editorTransientInteractionCleared());
-      }
-    },
-    [dispatch, editor.transient.interaction]
-  );
+    selectionCapabilities,
+    saveInteractionBlocked,
+    workspaceMode,
+    setEditingError
+  });
 
   const {
     handleDeleteSelectedWall,
@@ -2944,78 +1896,11 @@ export function ProjectWorkspacePage() {
     setEditingError
   });
 
-  const handleDeleteSelectedStair = useCallback(() => {
-    if (
-      !editor.draft ||
-      !editor.activeLevelId ||
-      !selectedStair ||
-      saveInteractionBlocked
-    )
-      return;
-    const result = deleteStaircase(editor.draft, {
-      owningLevelId: editor.activeLevelId,
-      staircaseId: selectedStair.staircase.id
-    });
-    if (!result.ok) {
-      setEditingError("errors.stair.invalid");
-      return;
-    }
-    setEditingError(undefined);
-    dispatch(editorSelectionCleared());
-    dispatch(editingDraftReplaced(result.project));
-  }, [
-    dispatch,
-    editor.activeLevelId,
-    editor.draft,
-    saveInteractionBlocked,
-    selectedStair
-  ]);
-
-  const handleUpdateSelectedStair = useCallback(
-    (changes: StairParameterChanges): boolean => {
-      if (
-        !editor.draft ||
-        !editor.activeLevelId ||
-        !selectedStair ||
-        saveInteractionBlocked
-      )
-        return false;
-      const staircase = updateStaircaseParameters(
-        selectedStair.staircase,
-        changes
-      );
-      if (!staircase) return false;
-      const result = updateStaircase(editor.draft, {
-        owningLevelId: editor.activeLevelId,
-        staircaseId: staircase.id,
-        staircase
-      });
-      if (!result.ok) {
-        setEditingError("errors.stair.invalid");
-        return false;
-      }
-      setEditingError(undefined);
-      dispatch(editingDraftReplaced(result.project));
-      dispatch(
-        editorSelectionChanged(
-          createGeometrySelectionState([selectStaircase(staircase.id)])
-        )
-      );
-      return true;
-    },
-    [
-      dispatch,
-      editor.activeLevelId,
-      editor.draft,
-      saveInteractionBlocked,
-      selectedStair
-    ]
-  );
-
   const handleOpeningAuthoringTypeChange = useCallback(
     (openingType: "DOOR" | "WINDOW" | "OPENING") => {
       const interaction = editor.transient.interaction;
-      const properties = createOpeningAuthoringInteraction(openingType).properties;
+      const properties =
+        createOpeningAuthoringInteraction(openingType).properties;
       const candidate =
         interaction?.kind === "place-opening" &&
         interaction.candidate &&
@@ -3381,166 +2266,44 @@ export function ProjectWorkspacePage() {
     resolvedSelection3D
   ]);
 
-  const shellContent = useMemo(
-    () => ({
-      title: projectResponse?.project.name ?? t("shell.title"),
-      breadcrumb:
-        workspaceMode === "edit"
-          ? t("workspace.editingLevel", {
-              level: activeProjectLevel?.name ?? ""
-            })
-          : t("shell.breadcrumb"),
-      headerContextAccessory:
-        !isPhone && projectResponse && !consistencyFailure ? (
-          <ProjectLevelControl
-            mode={workspaceMode}
-            viewLevels={viewLevels}
-            selectedViewLevel={selectedViewLevel}
-            draftLevelIds={
-              editor.draft?.building.levels.map((level) => ({
-                id: level.id,
-                name: level.name,
-                elevation: level.elevation
-              })) ?? []
-            }
-            projectLevelNames={projectResponse.project.building.levels.map(
-              (level) => ({
-                id: level.id,
-                name: level.name
-              })
-            )}
-            activeEditLevelId={editor.activeLevelId}
-            onViewLevelChange={(levelId) =>
-              setSelectedViewLevelId(
-                viewLevels.find((level) => level.id === levelId)?.sourceLevelId ?? ""
-              )
-            }
-            onEditLevelChange={(levelId) =>
-              dispatch(editorActiveLevelChanged(levelId))
-            }
-            onCreateLevel={handleCreateLevel}
-            onUpdateActiveLevel={handleUpdateActiveLevel}
-          />
-        ) : undefined,
-      headerCenter:
-        !isPhone &&
-        projectResponse &&
-        !consistencyFailure &&
-        workspaceMode === "view" ? (
-          <WorkspaceRepresentationControl
-            representation={workspaceRepresentation}
-            disabled={saveInteractionBlocked}
-            threeDDisabled={false}
-            onChange={handleRepresentationChange}
-          />
-        ) : undefined,
-      headerAccessory:
-        !isPhone && projectResponse && !consistencyFailure ? (
-          workspaceMode === "view" ? (
-            <ProjectViewEditAction
-              fromThreeD={workspaceRepresentation === "3d"}
-              disabled={saveInteractionBlocked}
-              onEdit={() => handleModeChange("edit")}
-            />
-          ) : (
-            <ProjectEditHeaderActions
-              dirty={editor.dirty}
-              disabled={saveInteractionBlocked}
-              canUndo={editor.history.past.length > 0}
-              canRedo={editor.history.future.length > 0}
-              onBack={() => handleModeChange("view")}
-              onUndo={() => dispatch(editorUndoRequested())}
-              onRedo={() => dispatch(editorRedoRequested())}
-              onDiscard={() => setPersistenceDialog("discard")}
-              onSave={handleSave}
-            />
-          )
-        ) : undefined,
-      inspector: isTablet || isPhone ? undefined : inspector,
-      status:
-        workspaceRepresentation === "3d" && scene3DResult?.ok ? (
-          t("threeD.status", {
-            count: getVisibleLevelReferences3D(
-              scene3DResult.model,
-              levelVisibility3D,
-              activeLevelId3D
-            ).length
-          })
-        ) : selectedLevel && activeProject ? (
-          <ProjectEditorStatusBar
-            scale={
-              workspaceMode === "edit"
-                ? editor.presentation.scaleDenominator
-                : 75
-            }
-            units={activeProject.units}
-            gridVisible={
-              workspaceMode === "edit" && editor.precision.gridVisible
-            }
-            snapToGrid={workspaceMode === "edit" && editor.precision.snapToGrid}
-            gridSpacing={editor.precision.gridSpacing}
-            zoom={activeViewport.zoom}
-            editing={workspaceMode === "edit"}
-            onScaleChange={(scale) =>
-              dispatch(editorDocumentScaleChanged(scale))
-            }
-            onGridVisibleChange={(visible) =>
-              dispatch(editorGridVisibilityChanged(visible))
-            }
-            onSnapToGridChange={(enabled) =>
-              dispatch(editorGridSnappingChanged(enabled))
-            }
-            onGridSpacingChange={(spacing) =>
-              dispatch(editorGridSpacingChanged(spacing))
-            }
-            onZoom={handleZoomViewport}
-            onFit={handleFitViewport}
-          />
-        ) : (
-          t("status.unavailable")
-        ),
-      immersiveWorkspace: true
-    }),
-    [
-      activeProject,
-      activeProjectLevel?.name,
-      activeViewport.zoom,
-      consistencyFailure,
-      dispatch,
-      editor.activeLevelId,
-      editor.dirty,
-      editor.draft,
-      editor.history.future.length,
-      editor.history.past.length,
-      editor.precision.gridSpacing,
-      editor.precision.gridVisible,
-      editor.precision.snapToGrid,
-      editor.presentation.scaleDenominator,
-      handleFitViewport,
-      handleModeChange,
-      handleRepresentationChange,
-      handleSave,
-      handleZoomViewport,
-      inspector,
-      isPhone,
-      isTablet,
-      projectResponse,
-      saveInteractionBlocked,
-      selectedLevel,
-      selectedViewLevel,
-      shortcutsOpen,
-      t,
-      viewLevels,
-      handleCreateLevel,
-      handleUpdateActiveLevel,
-      workspaceMode,
-      workspaceRepresentation,
-      scene3DResult,
-      levelVisibility3D,
-      activeLevelId3D
-    ]
+  const handleViewLevelChange = useCallback(
+    (levelId: string) =>
+      setSelectedViewLevelId(
+        viewLevels.find((level) => level.id === levelId)?.sourceLevelId ?? ""
+      ),
+    [viewLevels]
   );
-  useAppShellContent(shellContent);
+  useProjectWorkspaceShell({
+    project: projectResponse?.project,
+    consistencyFailure: Boolean(consistencyFailure),
+    mode: workspaceMode,
+    viewLevels,
+    selectedViewLevel,
+    selectedLevel,
+    editor,
+    activeProject,
+    activeProjectLevel,
+    viewport: activeViewport,
+    representation: workspaceRepresentation,
+    scene3D: scene3DResult?.ok ? scene3DResult.model : undefined,
+    levelVisibility3D,
+    activeLevelId3D,
+    saveInteractionBlocked,
+    isPhone,
+    isTablet,
+    inspector,
+    dispatch,
+    onViewLevelChange: handleViewLevelChange,
+    onCreateLevel: handleCreateLevel,
+    onUpdateActiveLevel: handleUpdateActiveLevel,
+    onModeChange: handleModeChange,
+    onRepresentationChange: handleRepresentationChange,
+    onSave: handleSave,
+    onFitViewport: handleFitViewport,
+    onZoomViewport: handleZoomViewport,
+    onPersistenceDialogChange: setPersistenceDialog,
+    t
+  });
 
   const activePersistenceDialog =
     persistenceDialog !== "none"
@@ -3599,219 +2362,145 @@ export function ProjectWorkspacePage() {
       <Typography component="h1" className="project-workspace__title">
         {projectResponse.project.name}
       </Typography>
-      <ProjectPersistenceDialogs
+      <ProjectWorkspaceFeedback
         dialog={activePersistenceDialog}
         saving={saveInteractionBlocked}
+        editingError={editingError}
+        saveFeedback={saveFeedback}
+        onDismissEditingError={() => setEditingError(undefined)}
+        onDismissSaveFeedback={() => setSaveFeedback(undefined)}
         onKeepEditing={handleKeepEditing}
         onConfirmDiscard={handleConfirmDiscard}
         onSave={handleSave}
         onReloadLatest={() => setPersistenceDialog("reload-conflict")}
         onCancelReload={() => setPersistenceDialog("conflict")}
         onConfirmReload={handleConfirmReloadLatest}
+        t={t}
       />
-      <Snackbar
-        open={Boolean(editingError)}
-        autoHideDuration={5000}
-        onClose={() => setEditingError(undefined)}
-      >
-        <Alert
-          severity="error"
-          variant="filled"
-          onClose={() => setEditingError(undefined)}
-        >
-          {editingError ? t(editingError) : ""}
-        </Alert>
-      </Snackbar>
-      <Snackbar
-        open={Boolean(saveFeedback)}
-        autoHideDuration={7000}
-        onClose={() => setSaveFeedback(undefined)}
-      >
-        <Alert
-          severity="error"
-          variant="filled"
-          onClose={() => setSaveFeedback(undefined)}
-        >
-          {saveFeedback ? t(`persistence.feedback.${saveFeedback}`) : ""}
-        </Alert>
-      </Snackbar>
-
-      {workspaceRepresentation === "2d" && workspaceMode === "edit" ? (
-        <EditorToolbar
-          activeTool={editor.activeTool}
-          disabled={saveInteractionBlocked}
-          onToolToggle={(tool) => dispatch(editorToolToggled(tool))}
-          shortcutsOpen={shortcutsOpen}
-          onOpenShortcuts={() => setShortcutsOpen(true)}
-          onCloseShortcuts={() => setShortcutsOpen(false)}
-        />
-      ) : null}
-
-      {workspaceRepresentation === "3d" ? (
-        scene3DResult?.ok ? (
-          <Suspense
-            fallback={
-              <Stack
-                role="status"
-                spacing={1.5}
-                sx={{ alignItems: "center", py: 8 }}
-              >
-                <CircularProgress size={28} />
-                <Typography>{t("threeD.loading")}</Typography>
-              </Stack>
-            }
-          >
-            <Project3DViewer
-              model={scene3DResult.model}
-              activeLevelId={activeLevelId3D}
-              visibility={levelVisibility3D}
-              onVisibilityChange={setLevelVisibility3D}
-              selection={selection3D}
-              onSelectionChange={setSelection3D}
-            />
-          </Suspense>
-        ) : (
-          <Alert className="project-workspace__geometry-error" severity="error">
-            <Typography component="h2" variant="h3">
-              {t("threeD.errors.derivationTitle")}
-            </Typography>
-            <Typography variant="body2">
-              {t("threeD.errors.derivationDetail")}
-            </Typography>
-          </Alert>
-        )
-      ) : editBuildFailed ? (
-        <Alert className="project-workspace__geometry-error" severity="error">
-          <Typography component="h2" variant="h3">
-            {t("errors.editGeometry.title")}
-          </Typography>
-          <Typography variant="body2">
-            {t("errors.editGeometry.detail")}
-          </Typography>
-        </Alert>
-      ) : presentationFailed ? (
-        <ProjectWorkspaceError error={presentationResult.error} />
-      ) : selectedLevel && presentationResult?.ok ? (
-        <GeometryViewerPanel
-          workspaceCanvas
-          title={t("viewer.title")}
-          headingId="project-geometry-viewer-heading"
-          presentationModel={presentationResult.model}
-          architecturalModel={presentationResult.architecturalModel}
-          dimensionModel={dimensionModel}
-          options={resolvedDisplayOptions}
-          viewport={activeViewport}
-          selectionState={selectionState}
-          selectionFootprints={selectionFootprints}
-          onSelectionStateChange={handleSelectionStateChange}
-          onSelectionTranslationPointerDown={
-            handleSelectionTranslationPointerDown
-          }
-          onSelectionTranslationPointerUp={handleSelectionTranslationPointerUp}
-          onSelectionTranslationPointerCancel={
-            handleSelectionTranslationPointerCancel
-          }
-          onViewportChange={setViewport}
-          onFitViewport={handleFitViewport}
-          onResetViewport={handleResetViewport}
-          onZoomViewport={handleZoomViewport}
-          documentScaleDenominator={
-            workspaceMode === "edit" ? editor.presentation.scaleDenominator : 75
-          }
-          onDocumentScaleChange={
-            workspaceMode === "edit"
-              ? (denominator) =>
-                  dispatch(editorDocumentScaleChanged(denominator))
-              : undefined
-          }
-          levelMeasurement={activeLevelMeasurement}
-          units={activeProject?.units}
-          statusLabel={t(
-            workspaceMode === "edit"
-              ? "workspace.editing"
-              : "workspace.readOnly"
-          )}
-          interaction={
-            workspaceMode === "edit"
-              ? getProjectEditorInteraction(
-                  editor.activeTool,
-                  viewportPanModifierActive
-                )
-              : undefined
-          }
-          editorOverlay={editorOverlay}
-          furnitureModel={{
-            items: furniture.model,
-            preview: furniture.preview,
-            previewValid: furniture.previewValid,
-            editing: workspaceMode === "edit" && !saveInteractionBlocked
-          }}
-          onFurniturePointerDown={furniture.beginGesture}
-          onFurniturePointerUp={furniture.endGesture}
-          onFurniturePointerCancel={furniture.cancel}
-          onEditorCanvasClick={(pointer) => {
-            if (editor.activeTool === "furniture")
-              furniture.canvasClick(pointer);
-            else handleEditorCanvasClick(pointer);
-          }}
-          onEditorPointerMove={(pointer, pointerId) => {
-            if (viewportPanModifierActive) return;
-            furniture.pointerMove(pointer, pointerId);
-            if (!furniture.transient)
-              handleEditorPointerMove(pointer, pointerId);
-          }}
-          onWallEndpointPointerDown={handleWallEndpointPointerDown}
-          onWallEndpointPointerUp={handleWallEndpointPointerUp}
-          onWallEndpointPointerCancel={handleWallEndpointPointerCancel}
-          onJunctionPointerDown={handleJunctionPointerDown}
-          onOpeningPointerDown={handleOpeningPointerDown}
-          onOpeningDragThresholdCrossed={handleOpeningDragThresholdCrossed}
-          onOpeningPointerUp={handleOpeningPointerUp}
-          onOpeningPointerCancel={handleOpeningPointerCancel}
-          onStairAdjustmentPointerDown={handleStairAdjustmentPointerDown}
-          onStairAdjustmentPointerUp={handleStairAdjustmentPointerUp}
-          onStairAdjustmentPointerCancel={handleStairAdjustmentPointerCancel}
-          onStairTranslationPointerDown={handleStairTranslationPointerDown}
-          onStairTranslationPointerUp={handleStairTranslationPointerUp}
-          onStairTranslationPointerCancel={handleStairTranslationPointerCancel}
-          onRoomFaceCandidateClick={
-            viewportPanModifierActive
-              ? undefined
-              : (faceKey) => {
-                  dispatch(editorSelectionCleared());
-                  handleCreateRoom(faceKey);
-                }
-          }
-        />
-      ) : (
-        <Paper className="geometry-empty-state" role="status" sx={{ p: 2 }}>
-          {t("viewer.noLevels")}
-        </Paper>
-      )}
-
-      {isTablet && inspector ? (
-        <Paper
-          className="project-workspace__tablet-inspector"
-          variant="outlined"
-        >
-          {inspector}
-        </Paper>
-      ) : null}
-
-      {isPhone ? (
-        <Paper className="mobile-project-overview" variant="outlined">
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-            <LockOutlineRoundedIcon color="primary" />
-            <Box>
-              <Typography variant="subtitle2">{t("mobile.title")}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {t("mobile.description")}
-              </Typography>
-            </Box>
-          </Stack>
-          <Typography variant="body2">{t("mobile.editRestriction")}</Typography>
-        </Paper>
-      ) : null}
+      <ProjectWorkspaceCanvas
+        representation={workspaceRepresentation}
+        editorToolbarProps={
+          workspaceRepresentation === "2d" && workspaceMode === "edit"
+            ? {
+                activeTool: editor.activeTool,
+                disabled: saveInteractionBlocked,
+                onToolToggle: (tool) => dispatch(editorToolToggled(tool)),
+                shortcutsOpen,
+                onOpenShortcuts: () => setShortcutsOpen(true),
+                onCloseShortcuts: () => setShortcutsOpen(false)
+              }
+            : undefined
+        }
+        scene3D={scene3DResult?.ok ? scene3DResult.model : undefined}
+        activeLevelId3D={activeLevelId3D}
+        levelVisibility3D={levelVisibility3D}
+        onLevelVisibility3DChange={setLevelVisibility3D}
+        selection3D={selection3D}
+        onSelection3DChange={setSelection3D}
+        editBuildFailed={Boolean(editBuildFailed)}
+        presentationFailed={Boolean(presentationFailed)}
+        presentationError={
+          presentationFailed ? presentationResult.error : undefined
+        }
+        viewerProps={
+          selectedLevel && presentationResult?.ok
+            ? {
+                workspaceCanvas: true,
+                title: t("viewer.title"),
+                headingId: "project-geometry-viewer-heading",
+                presentationModel: presentationResult.model,
+                architecturalModel: presentationResult.architecturalModel,
+                dimensionModel,
+                options: resolvedDisplayOptions,
+                viewport: activeViewport,
+                selectionState,
+                selectionFootprints,
+                onSelectionStateChange: handleSelectionStateChange,
+                onSelectionTranslationPointerDown:
+                  handleSelectionTranslationPointerDown,
+                onSelectionTranslationPointerUp:
+                  handleSelectionTranslationPointerUp,
+                onSelectionTranslationPointerCancel:
+                  handleSelectionTranslationPointerCancel,
+                onViewportChange: setViewport,
+                onFitViewport: handleFitViewport,
+                onResetViewport: handleResetViewport,
+                onZoomViewport: handleZoomViewport,
+                documentScaleDenominator:
+                  workspaceMode === "edit"
+                    ? editor.presentation.scaleDenominator
+                    : 75,
+                onDocumentScaleChange:
+                  workspaceMode === "edit"
+                    ? (denominator) =>
+                        dispatch(editorDocumentScaleChanged(denominator))
+                    : undefined,
+                levelMeasurement: activeLevelMeasurement,
+                units: activeProject?.units,
+                statusLabel: t(
+                  workspaceMode === "edit"
+                    ? "workspace.editing"
+                    : "workspace.readOnly"
+                ),
+                interaction:
+                  workspaceMode === "edit"
+                    ? getProjectEditorInteraction(
+                        editor.activeTool,
+                        viewportPanModifierActive
+                      )
+                    : undefined,
+                editorOverlay,
+                furnitureModel: {
+                  items: furniture.model,
+                  preview: furniture.preview,
+                  previewValid: furniture.previewValid,
+                  editing: workspaceMode === "edit" && !saveInteractionBlocked
+                },
+                onFurniturePointerDown: furniture.beginGesture,
+                onFurniturePointerUp: furniture.endGesture,
+                onFurniturePointerCancel: furniture.cancel,
+                onEditorCanvasClick: (pointer) => {
+                  if (editor.activeTool === "furniture")
+                    furniture.canvasClick(pointer);
+                  else handleEditorCanvasClick(pointer);
+                },
+                onEditorPointerMove: (pointer, pointerId) => {
+                  if (viewportPanModifierActive) return;
+                  furniture.pointerMove(pointer, pointerId);
+                  if (!furniture.transient)
+                    handleEditorPointerMove(pointer, pointerId);
+                },
+                onWallEndpointPointerDown: handleWallEndpointPointerDown,
+                onWallEndpointPointerUp: handleWallEndpointPointerUp,
+                onWallEndpointPointerCancel: handleWallEndpointPointerCancel,
+                onJunctionPointerDown: handleJunctionPointerDown,
+                onOpeningPointerDown: handleOpeningPointerDown,
+                onOpeningDragThresholdCrossed:
+                  handleOpeningDragThresholdCrossed,
+                onOpeningPointerUp: handleOpeningPointerUp,
+                onOpeningPointerCancel: handleOpeningPointerCancel,
+                onStairAdjustmentPointerDown: handleStairAdjustmentPointerDown,
+                onStairAdjustmentPointerUp: handleStairAdjustmentPointerUp,
+                onStairAdjustmentPointerCancel:
+                  handleStairAdjustmentPointerCancel,
+                onStairTranslationPointerDown:
+                  handleStairTranslationPointerDown,
+                onStairTranslationPointerUp: handleStairTranslationPointerUp,
+                onStairTranslationPointerCancel:
+                  handleStairTranslationPointerCancel,
+                onRoomFaceCandidateClick: viewportPanModifierActive
+                  ? undefined
+                  : (faceKey) => {
+                      dispatch(editorSelectionCleared());
+                      handleCreateRoom(faceKey);
+                    }
+              }
+            : undefined
+        }
+        tabletInspector={isTablet ? inspector : undefined}
+        showMobileOverview={isPhone}
+        t={t}
+      />
     </Stack>
   );
 }
