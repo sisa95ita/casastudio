@@ -1,23 +1,23 @@
-import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import {
   Alert,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  IconButton,
-  InputLabel,
+  Divider,
+  ListItemIcon,
+  ListItemText,
+  Menu,
   MenuItem,
-  Select,
   Stack,
-  TextField,
-  Tooltip
+  TextField
 } from "@mui/material";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 
 import type { GeometryLevel } from "../../../../core/api/api-types";
 import { useCasaTranslation } from "../../../../core/i18n";
@@ -32,15 +32,24 @@ type ProjectLevelControlProps = {
     readonly name: string;
     readonly elevation: number;
   }[];
-  readonly projectLevelNames: readonly { readonly id: string; readonly name: string }[];
+  readonly projectLevelNames: readonly {
+    readonly id: string;
+    readonly name: string;
+  }[];
   readonly activeEditLevelId: string | null;
   readonly onViewLevelChange: (levelId: string) => void;
   readonly onEditLevelChange: (levelId: string) => void;
-  readonly onCreateLevel: (properties: { readonly name: string; readonly elevation: number }) => boolean;
-  readonly onUpdateActiveLevel: (properties: { readonly name: string; readonly elevation: number }) => boolean;
+  readonly onCreateLevel: (properties: {
+    readonly name: string;
+    readonly elevation: number;
+  }) => boolean;
+  readonly onUpdateActiveLevel: (properties: {
+    readonly name: string;
+    readonly elevation: number;
+  }) => boolean;
 };
 
-/** Renders the active Project level selector and level editing dialog. */
+/** Renders level selection with structural actions available only while editing. */
 export function ProjectLevelControl({
   mode,
   viewLevels,
@@ -54,6 +63,7 @@ export function ProjectLevelControl({
   onUpdateActiveLevel
 }: ProjectLevelControlProps) {
   const { t } = useCasaTranslation("project-viewer");
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
   const [name, setName] = useState("");
   const [elevation, setElevation] = useState("");
@@ -63,15 +73,27 @@ export function ProjectLevelControl({
       ? draftLevelIds
       : viewLevels.map((level) => ({
           id: level.id,
-          name: projectLevelNames.find((candidate) => candidate.id === level.sourceLevelId)?.name ??
-            level.sourceLevelId,
+          name:
+            projectLevelNames.find(
+              (candidate) => candidate.id === level.sourceLevelId
+            )?.name ?? level.sourceLevelId,
           elevation: level.elevation
         }));
   const value =
     mode === "edit" ? (activeEditLevelId ?? "") : (selectedViewLevel?.id ?? "");
-  const activeDraftLevel = draftLevelIds.find((level) => level.id === activeEditLevelId);
+  const activeLevel = levels.find((level) => level.id === value);
+  const activeDraftLevel = draftLevelIds.find(
+    (level) => level.id === activeEditLevelId
+  );
 
+  const closeMenu = () => setAnchorEl(null);
+  const selectLevel = (levelId: string) => {
+    if (mode === "edit") onEditLevelChange(levelId);
+    else onViewLevelChange(levelId);
+    closeMenu();
+  };
   const openDialog = (nextMode: "create" | "edit") => {
+    closeMenu();
     setDialogMode(nextMode);
     setInvalid(false);
     if (nextMode === "edit" && activeDraftLevel) {
@@ -86,7 +108,6 @@ export function ProjectLevelControl({
     );
     setElevation(String(highestElevation + 300));
   };
-
   const submit = () => {
     const parsedElevation = Number(elevation);
     const properties = { name: name.trim(), elevation: parsedElevation };
@@ -94,61 +115,85 @@ export function ProjectLevelControl({
       setInvalid(true);
       return;
     }
-    const accepted = dialogMode === "create"
+    const accepted =
+      dialogMode === "create"
       ? onCreateLevel(properties)
       : onUpdateActiveLevel(properties);
     setInvalid(!accepted);
     if (accepted) setDialogMode(null);
   };
 
-  if (!value) return null;
+  if (!value || !activeLevel) return null;
 
   return (
     <>
-      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-        {levels.length <= 1 ? (
-          <Chip label={levels[0]?.name ?? value} variant="outlined" />
-        ) : (
-          <FormControl size="small" className="project-level-selector" sx={{ minWidth: 136 }}>
-            <InputLabel id="project-geometry-level-selector-label">
-              {t("levelSelector.label")}
-            </InputLabel>
-            <Select
-              labelId="project-geometry-level-selector-label"
-              label={t("levelSelector.label")}
-              value={value}
-              onChange={(event) =>
-                mode === "edit"
-                  ? onEditLevelChange(event.target.value)
-                  : onViewLevelChange(event.target.value)
+      <Button
+        className="project-level-control"
+        variant="outlined"
+        color="inherit"
+        size="small"
+        endIcon={<ExpandMoreRoundedIcon />}
+        aria-label={t("levelSelector.current", { level: activeLevel.name })}
+        aria-haspopup="menu"
+        aria-expanded={Boolean(anchorEl)}
+        aria-controls={anchorEl ? "project-level-menu" : undefined}
+        onClick={(event: MouseEvent<HTMLButtonElement>) =>
+          setAnchorEl(event.currentTarget)
               }
+      >
+        {activeLevel.name}
+      </Button>
+      <Menu
+        id="project-level-menu"
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={closeMenu}
+        slotProps={{ list: { "aria-label": t("levelSelector.menuLabel") } }}
             >
               {levels.map((level) => (
-                <MenuItem key={level.id} value={level.id}>
-                  {level.name}
+          <MenuItem
+            key={level.id}
+            selected={level.id === value}
+            onClick={() => selectLevel(level.id)}
+          >
+            <ListItemIcon>
+              {level.id === value ? (
+                <CheckRoundedIcon fontSize="small" />
+              ) : null}
+            </ListItemIcon>
+            <ListItemText>{level.name}</ListItemText>
                 </MenuItem>
               ))}
-            </Select>
-          </FormControl>
-        )}
+        {mode === "edit" ? <Divider /> : null}
         {mode === "edit" ? (
-          <>
-            <Tooltip title={t("levelSelector.edit")}>
-              <IconButton size="small" aria-label={t("levelSelector.edit")} onClick={() => openDialog("edit")}>
-                <SettingsRoundedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={t("levelSelector.create")}>
-              <IconButton size="small" aria-label={t("levelSelector.create")} onClick={() => openDialog("create")}>
+          <MenuItem onClick={() => openDialog("create")}>
+            <ListItemIcon>
                 <AddRoundedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </>
+            </ListItemIcon>
+            <ListItemText>{t("levelSelector.add")}</ListItemText>
+          </MenuItem>
         ) : null}
-      </Stack>
-      <Dialog open={dialogMode !== null} onClose={() => setDialogMode(null)} maxWidth="xs" fullWidth>
+        {mode === "edit" ? (
+          <MenuItem onClick={() => openDialog("edit")}>
+            <ListItemIcon>
+              <SettingsRoundedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>{t("levelSelector.manage")}</ListItemText>
+          </MenuItem>
+        ) : null}
+      </Menu>
+      <Dialog
+        open={dialogMode !== null}
+        onClose={() => setDialogMode(null)}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>
-          {t(dialogMode === "create" ? "levelSelector.createTitle" : "levelSelector.editTitle")}
+          {t(
+            dialogMode === "create"
+              ? "levelSelector.createTitle"
+              : "levelSelector.editTitle"
+          )}
         </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
@@ -156,7 +201,10 @@ export function ProjectLevelControl({
               autoFocus
               label={t("levelSelector.name")}
               value={name}
-              onChange={(event) => { setName(event.target.value); setInvalid(false); }}
+              onChange={(event) => {
+                setName(event.target.value);
+                setInvalid(false);
+              }}
               error={invalid && !name.trim()}
               fullWidth
             />
@@ -164,18 +212,29 @@ export function ProjectLevelControl({
               label={t("levelSelector.elevation", { unit: "cm" })}
               type="number"
               value={elevation}
-              onChange={(event) => { setElevation(event.target.value); setInvalid(false); }}
+              onChange={(event) => {
+                setElevation(event.target.value);
+                setInvalid(false);
+              }}
               error={invalid && !Number.isFinite(Number(elevation))}
               slotProps={{ htmlInput: { step: "any" } }}
               fullWidth
             />
-            {invalid ? <Alert severity="error">{t("levelSelector.invalid")}</Alert> : null}
+            {invalid ? (
+              <Alert severity="error">{t("levelSelector.invalid")}</Alert>
+            ) : null}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogMode(null)}>{t("levelSelector.cancel")}</Button>
+          <Button onClick={() => setDialogMode(null)}>
+            {t("levelSelector.cancel")}
+          </Button>
           <Button variant="contained" onClick={submit}>
-            {t(dialogMode === "create" ? "levelSelector.createAction" : "levelSelector.saveAction")}
+            {t(
+              dialogMode === "create"
+                ? "levelSelector.createAction"
+                : "levelSelector.saveAction"
+            )}
           </Button>
         </DialogActions>
       </Dialog>

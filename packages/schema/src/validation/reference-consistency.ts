@@ -1,5 +1,6 @@
 import type { BaseImage, Viewpoint } from "../observation/index.js";
 import type { Level } from "../physical-building/index.js";
+import { isWallRoomBoundaryEdge } from "../physical-building/index.js";
 import type { Project } from "../project/index.js";
 import { ValidationErrorCode } from "./validation-error-code.js";
 import type { ValidationError, ValidationResult } from "./validation-result.js";
@@ -78,11 +79,14 @@ export const validateProjectReferenceConsistency = (project: Project): Validatio
     const roomsById = toIndexedLookup(level.rooms);
     const wallsById = toIndexedLookup(level.walls);
     const boundaryWallIdsByRoomId = new Map(
-      level.rooms.map((room) => [room.id, new Set(room.boundary.map((edge) => edge.wallId))])
+      level.rooms.map((room) => [room.id, new Set(
+        room.boundary.flatMap((edge) => isWallRoomBoundaryEdge(edge) ? [edge.wallId] : [])
+      )])
     );
 
     level.rooms.forEach((room, roomIndex) => {
       room.boundary.forEach((boundaryEdge, boundaryEdgeIndex) => {
+        if (!isWallRoomBoundaryEdge(boundaryEdge)) return;
         const wallEntry = wallsById.get(boundaryEdge.wallId);
 
         if (!wallEntry) {
@@ -102,7 +106,18 @@ export const validateProjectReferenceConsistency = (project: Project): Validatio
 
     level.walls.forEach((wall, wallIndex) => {
       const uniqueRoomIds = new Set(wall.roomIds);
-      const hasTooManyRoomIds = wall.roomIds.length > 2;
+      const roomIdsByFloorElevation = new Map<number, string[]>();
+      for (const roomId of wall.roomIds) {
+        const room = roomsById.get(roomId)?.item;
+        if (!room) continue;
+        const floorElevation = level.elevation + (room.elevation ?? 0);
+        const roomIds = roomIdsByFloorElevation.get(floorElevation) ?? [];
+        roomIds.push(roomId);
+        roomIdsByFloorElevation.set(floorElevation, roomIds);
+      }
+      const hasTooManyRoomIds = [...roomIdsByFloorElevation.values()].some(
+        (roomIds) => roomIds.length > 2
+      );
       const hasDuplicateRoomIds = uniqueRoomIds.size !== wall.roomIds.length;
 
       if (hasTooManyRoomIds) {
@@ -110,7 +125,7 @@ export const validateProjectReferenceConsistency = (project: Project): Validatio
           errors,
           ValidationErrorCode.NON_MANIFOLD_WALL_REFERENCE,
           `building.levels[${levelIndex}].walls[${wallIndex}].roomIds`,
-          `Wall "${wall.id}" references ${wall.roomIds.length} rooms, but a wall may reference at most two rooms.`
+          `Wall "${wall.id}" references more than two rooms at the same global floor elevation.`
         );
       }
 

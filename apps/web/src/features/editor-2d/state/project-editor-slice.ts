@@ -1,3 +1,4 @@
+import type { FurnitureInteraction } from "../tools/furniture/project-furniture-authoring";
 import {
   createSelector,
   createSlice,
@@ -9,6 +10,7 @@ import {
 } from "@casastudio/geometry";
 import type {
   Project,
+  RoomType,
   RoomShapeDefinition,
   WallEndpoint
 } from "@casastudio/schema";
@@ -18,10 +20,17 @@ import type {
   GeometrySelection,
   GeometrySelectionState
 } from "../../geometry-2d/selection/geometry-selection-state";
+import { createGeometrySelectionState } from "../../geometry-2d/selection/geometry-selection-state";
 import type { RootState } from "../../../app/store/store";
 import type { ProjectEditorTool } from "./project-editor-tools";
 import type { DrawWallSnapCandidate } from "../tools/wall/project-wall-snapping";
+import type { PrecisionTranslationResult } from "../../geometry-2d/precision/precision-assistance-2d";
 import type { OpeningPlacementCandidate } from "../tools/opening/project-opening-editing";
+import {
+  defaultStairAuthoringParameters,
+  type StairAuthoringParameters,
+  type StairTemplate
+} from "../tools/stair/project-stair-authoring";
 
 /** Mutually exclusive interaction modes for the 2D Project workspace. */
 export type ProjectWorkspaceMode = "view" | "edit";
@@ -106,16 +115,77 @@ export type MeasureInteraction = {
 export type PlaceRoomShapeInteraction = {
   readonly kind: "place-room-shape";
   readonly levelId: string;
+  readonly boundaryKind: "WALLS" | "FREE";
+  readonly elevation: number;
+  readonly roomType: RoomType;
   readonly shape: RoomShapeDefinition;
   readonly origin?: WorldPointXZ;
+};
+
+/** Complete pointer-following Staircase proposal that has not entered Project history. */
+export type PlaceStairInteraction = {
+  readonly kind: "place-stair";
+  readonly owningLevelId: string;
+  readonly toLevelId?: string;
+  readonly toRoomId?: string;
+  readonly template?: StairTemplate;
+  readonly parameters: StairAuthoringParameters;
+  readonly identifiers?: {
+    readonly staircaseId: string;
+    readonly flightIds: readonly string[];
+    readonly landingIds: readonly string[];
+  };
+  readonly start?: WorldPointXZ;
+  readonly control?: WorldPointXZ;
+  readonly turnDirection: "LEFT" | "RIGHT";
+};
+
+/** One root Staircase template adjustment preview committed on pointer release. */
+export type MoveStairAdjustmentInteraction = {
+  readonly kind: "move-stair-adjustment";
+  readonly owningLevelId: string;
+  readonly staircaseId: string;
+  readonly pointerId: number;
+  readonly control: WorldPointXZ;
+};
+
+/** Rigid plan translation preview for one committed Staircase aggregate. */
+export type MoveStairTranslationInteraction = {
+  readonly kind: "move-stair-translation";
+  readonly owningLevelId: string;
+  readonly staircaseId: string;
+  readonly pointerId: number;
+  readonly startPointer: WorldPointXZ;
+  readonly currentPointer: WorldPointXZ;
+  readonly precision?: PrecisionTranslationResult;
+};
+
+/** Rigid preview delta for one validated canonical selection. */
+export type TranslateSelectionInteraction = {
+  readonly kind: "translate-selection";
+  readonly pointerId: number;
+  readonly startPointer: WorldPointXZ;
+  readonly currentPointer: WorldPointXZ;
+  readonly precision?: PrecisionTranslationResult;
 };
 
 /** Editor-only pointer state cleared at stable session boundaries. */
 export type ProjectEditorTransientState = {
   readonly interaction:
-    DrawWallInteraction | MoveWallEndpointInteraction | MoveJunctionInteraction |
-    PlaceOpeningInteraction | AddWallVertexInteraction | MoveOpeningInteraction | MeasureInteraction |
-    PlaceRoomShapeInteraction | null;
+    | DrawWallInteraction
+    | MoveWallEndpointInteraction
+    | MoveJunctionInteraction
+    | PlaceOpeningInteraction
+    | AddWallVertexInteraction
+    | MoveOpeningInteraction
+    | MeasureInteraction
+    | PlaceRoomShapeInteraction
+    | PlaceStairInteraction
+    | MoveStairAdjustmentInteraction
+    | MoveStairTranslationInteraction
+    | TranslateSelectionInteraction
+    | FurnitureInteraction
+    | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
 };
 
@@ -151,6 +221,8 @@ export type ProjectEditorState = {
   readonly projectId: string | null;
   readonly draft: Project | null;
   readonly baseRevision: number | null;
+  /** Serialized authoritative editing base, independent of bounded Undo history. */
+  readonly baseSnapshot: string | null;
   readonly dirty: boolean;
   readonly activeLevelId: string | null;
   readonly activeTool: ProjectEditorTool | null;
@@ -166,21 +238,23 @@ export type ProjectEditorState = {
 export const projectEditorHistoryLimit = 50;
 
 /** Default precision assistance for a newly entered edit session. */
-export const defaultProjectEditorPrecision: ProjectEditorPrecisionState = Object.freeze({
-  gridVisible: false,
-  snapToGrid: false,
-  gridSpacing: 100
-});
+export const defaultProjectEditorPrecision: ProjectEditorPrecisionState =
+  Object.freeze({
+    gridVisible: false,
+    snapToGrid: false,
+    gridSpacing: 100
+  });
 
 /** Default architectural presentation for a newly entered edit session. */
-export const defaultProjectEditorPresentation: ProjectEditorPresentationState = Object.freeze({
-  scaleDenominator: 75,
-  dimensions: Object.freeze({
-    overallDimensions: true,
-    selectedDimensions: true,
-    roomMetrics: true
-  })
-});
+export const defaultProjectEditorPresentation: ProjectEditorPresentationState =
+  Object.freeze({
+    scaleDenominator: 75,
+    dimensions: Object.freeze({
+      overallDimensions: true,
+      selectedDimensions: true,
+      roomMetrics: true
+    })
+  });
 
 /** Initial editor state before an explicit local editing session begins. */
 export const initialProjectEditorState: ProjectEditorState = {
@@ -188,6 +262,7 @@ export const initialProjectEditorState: ProjectEditorState = {
   projectId: null,
   draft: null,
   baseRevision: null,
+  baseSnapshot: null,
   dirty: false,
   activeLevelId: null,
   activeTool: null,
@@ -212,17 +287,19 @@ export function createOpeningAuthoringInteraction(
   return {
     kind: "place-opening",
     openingType,
-    properties: openingType === "DOOR"
-      ? { width: 90, height: 210, elevation: 0, hingeSide: "START", swingSide: "LEFT" }
-      : openingType === "WINDOW"
-        ? { width: 120, height: 120, elevation: 90 }
-        : { width: 120, height: 210, elevation: 0 }
+    properties:
+      openingType === "DOOR"
+        ? {
+            width: 90,
+            height: 210,
+            elevation: 0,
+            hingeSide: "START",
+            swingSide: "LEFT"
+          }
+        : openingType === "WINDOW"
+          ? { width: 120, height: 120, elevation: 90 }
+          : { width: 120, height: 210, elevation: 0 }
   };
-}
-
-/** Maps an Opening authoring tool to its canonical Opening discriminator. */
-function getOpeningTypeForTool(tool: ProjectEditorTool | null): OpeningAuthoringType | undefined {
-  return tool === "door" ? "DOOR" : tool === "window" ? "WINDOW" : tool === "opening" ? "OPENING" : undefined;
 }
 
 const projectEditorSlice = createSlice({
@@ -264,9 +341,10 @@ const projectEditorSlice = createSlice({
         state.projectId = action.payload.projectId;
         state.draft = action.payload.draft;
         state.baseRevision = action.payload.baseRevision;
+        state.baseSnapshot = JSON.stringify(action.payload.draft);
         state.dirty = false;
         state.activeLevelId = activeLevelId;
-        state.activeTool = null;
+        state.activeTool = "select";
         state.selection = [];
         state.hover = undefined;
         state.transient = { interaction: null };
@@ -314,10 +392,25 @@ const projectEditorSlice = createSlice({
       ].slice(-projectEditorHistoryLimit);
       state.history.future = [];
       state.draft = cloneProject(nextDraft);
-      state.dirty = true;
+      state.selection = state.selection.filter(
+        (selection) =>
+          selection.kind !== "FURNITURE" ||
+          nextDraft.building.furniture.some(
+            (item) => item.id === selection.geometryId
+          )
+      );
+      if (
+        state.hover?.kind === "FURNITURE" &&
+        !nextDraft.building.furniture.some(
+          (item) => item.id === state.hover?.geometryId
+        )
+      )
+        state.hover = undefined;
+      state.dirty = JSON.stringify(nextDraft) !== state.baseSnapshot;
       if (
         state.transient.interaction?.kind === "place-opening" ||
-        state.transient.interaction?.kind === "place-room-shape"
+        state.transient.interaction?.kind === "place-room-shape" ||
+        state.transient.interaction?.kind === "place-stair"
       ) {
         state.transient = { interaction: null };
       }
@@ -333,27 +426,51 @@ const projectEditorSlice = createSlice({
       }
     },
     editorUndoRequested(state) {
-      if (state.mode !== "edit" || !state.draft || state.history.past.length === 0) return;
+      if (
+        state.mode !== "edit" ||
+        !state.draft ||
+        state.history.past.length === 0
+      )
+        return;
       const previous = state.history.past.at(-1);
       if (!previous) return;
-      state.history.future = [cloneProject(state.draft), ...state.history.future]
-        .slice(0, projectEditorHistoryLimit);
+      state.history.future = [
+        cloneProject(state.draft),
+        ...state.history.future
+      ].slice(0, projectEditorHistoryLimit);
       state.history.past = state.history.past.slice(0, -1);
       state.draft = cloneProject(previous);
-      state.dirty = state.history.past.length > 0;
+      state.dirty = JSON.stringify(previous) !== state.baseSnapshot;
+      if (
+        !previous.building.levels.some((level) => level.id === state.activeLevelId)
+      ) {
+        state.activeLevelId = previous.building.levels[0]?.id ?? null;
+      }
       state.selection = [];
       state.hover = undefined;
       state.transient = { interaction: null };
     },
     editorRedoRequested(state) {
-      if (state.mode !== "edit" || !state.draft || state.history.future.length === 0) return;
+      if (
+        state.mode !== "edit" ||
+        !state.draft ||
+        state.history.future.length === 0
+      )
+        return;
       const next = state.history.future[0];
       if (!next) return;
-      state.history.past = [...state.history.past, cloneProject(state.draft)]
-        .slice(-projectEditorHistoryLimit);
+      state.history.past = [
+        ...state.history.past,
+        cloneProject(state.draft)
+      ].slice(-projectEditorHistoryLimit);
       state.history.future = state.history.future.slice(1);
       state.draft = cloneProject(next);
-      state.dirty = true;
+      state.dirty = JSON.stringify(next) !== state.baseSnapshot;
+      if (
+        !next.building.levels.some((level) => level.id === state.activeLevelId)
+      ) {
+        state.activeLevelId = next.building.levels[0]?.id ?? null;
+      }
       state.selection = [];
       state.hover = undefined;
       state.transient = { interaction: null };
@@ -365,12 +482,22 @@ const projectEditorSlice = createSlice({
       if (state.mode === "edit") state.precision.snapToGrid = action.payload;
     },
     editorGridSpacingChanged(state, action: PayloadAction<number>) {
-      if (state.mode === "edit" && Number.isFinite(action.payload) && action.payload > 0) {
+      if (
+        state.mode === "edit" &&
+        Number.isFinite(action.payload) &&
+        action.payload > 0
+      ) {
         state.precision.gridSpacing = action.payload;
       }
     },
-    editorDocumentScaleChanged(state, action: PayloadAction<ArchitecturalScaleDenominator>) {
-      if (state.mode === "edit" && architecturalScaleDenominators.includes(action.payload)) {
+    editorDocumentScaleChanged(
+      state,
+      action: PayloadAction<ArchitecturalScaleDenominator>
+    ) {
+      if (
+        state.mode === "edit" &&
+        architecturalScaleDenominators.includes(action.payload)
+      ) {
         state.presentation.scaleDenominator = action.payload;
       }
     },
@@ -406,13 +533,55 @@ const projectEditorSlice = createSlice({
         state.activeTool = action.payload;
         state.selection = [];
         state.hover = undefined;
-        const openingType = getOpeningTypeForTool(action.payload);
+        const openingType = action.payload === "openings" ? "DOOR" : undefined;
         state.transient = {
           interaction: openingType
             ? createOpeningAuthoringInteraction(openingType)
-            : null
+            : action.payload === "stair" && state.activeLevelId
+              ? {
+                  kind: "place-stair",
+                  owningLevelId: state.activeLevelId,
+                  parameters: { ...defaultStairAuthoringParameters },
+                  turnDirection: "LEFT"
+                }
+              : null
         };
       }
+    },
+    editorToolToggled(state, action: PayloadAction<ProjectEditorTool>) {
+      if (state.mode !== "edit") return;
+      const requested = action.payload;
+      if (requested === "select") {
+        state.activeTool = "select";
+        state.transient = { interaction: null };
+        return;
+      }
+      if (state.activeTool === requested) {
+        state.activeTool = "select";
+        state.hover = undefined;
+        state.transient = { interaction: null };
+        return;
+      }
+      state.activeTool = requested;
+      state.selection = [];
+      state.hover = undefined;
+      state.transient = {
+        interaction:
+          requested === "openings"
+            ? createOpeningAuthoringInteraction("DOOR")
+            : requested === "stair" && state.activeLevelId
+              ? {
+                  kind: "place-stair",
+                  owningLevelId: state.activeLevelId,
+                  parameters: { ...defaultStairAuthoringParameters },
+                  turnDirection: "LEFT"
+                }
+              : null
+      };
+    },
+    editorFurnitureChanged(state, action: PayloadAction<FurnitureInteraction>) {
+      if (state.mode === "edit")
+        state.transient = { interaction: action.payload };
     },
     editorDrawWallStarted(
       state,
@@ -488,7 +657,8 @@ const projectEditorSlice = createSlice({
       const interaction = state.transient.interaction;
       if (
         interaction?.kind === "draw-wall" ||
-        ((interaction?.kind === "move-wall-endpoint" || interaction?.kind === "move-junction") &&
+        ((interaction?.kind === "move-wall-endpoint" ||
+          interaction?.kind === "move-junction") &&
           interaction.pointerId === action.payload.pointerId)
       ) {
         interaction.currentPointerPoint = action.payload.point;
@@ -550,6 +720,9 @@ const projectEditorSlice = createSlice({
       action: PayloadAction<{
         readonly levelId: string;
         readonly shape: RoomShapeDefinition;
+        readonly boundaryKind?: "WALLS" | "FREE";
+        readonly elevation?: number;
+        readonly roomType?: RoomType;
       }>
     ) {
       if (
@@ -563,6 +736,9 @@ const projectEditorSlice = createSlice({
           interaction: {
             kind: "place-room-shape",
             levelId: action.payload.levelId,
+            boundaryKind: action.payload.boundaryKind ?? "WALLS",
+            elevation: action.payload.elevation ?? 0,
+            roomType: action.payload.roomType ?? "OTHER",
             shape: action.payload.shape
           }
         };
@@ -576,12 +752,171 @@ const projectEditorSlice = createSlice({
         state.transient.interaction.shape = action.payload;
       }
     },
+    editorRoomShapeElevationChanged(state, action: PayloadAction<number>) {
+      if (
+        state.transient.interaction?.kind === "place-room-shape" &&
+        Number.isFinite(action.payload)
+      ) {
+        state.transient.interaction.elevation = action.payload;
+        state.transient.interaction.boundaryKind =
+          action.payload === 0 ? "WALLS" : "FREE";
+      }
+    },
     editorRoomShapePlacementPointerMoved(
       state,
       action: PayloadAction<WorldPointXZ>
     ) {
       if (state.transient.interaction?.kind === "place-room-shape") {
         state.transient.interaction.origin = action.payload;
+      }
+    },
+    editorStairAuthoringChanged(
+      state,
+      action: PayloadAction<
+        Partial<Omit<PlaceStairInteraction, "kind" | "owningLevelId">>
+      >
+    ) {
+      if (
+        state.mode === "edit" &&
+        state.activeTool === "stair" &&
+        state.activeLevelId &&
+        !state.transient.interaction
+      ) {
+        state.transient.interaction = {
+          kind: "place-stair",
+          owningLevelId: state.activeLevelId,
+          parameters: { ...defaultStairAuthoringParameters },
+          turnDirection: "LEFT"
+        };
+      }
+      const interaction = state.transient.interaction;
+      if (
+        state.mode !== "edit" ||
+        state.activeTool !== "stair" ||
+        interaction?.kind !== "place-stair"
+      )
+        return;
+      Object.assign(interaction, action.payload);
+    },
+    editorStairPlacementPointSet(state, action: PayloadAction<WorldPointXZ>) {
+      const interaction = state.transient.interaction;
+      if (
+        state.mode !== "edit" ||
+        state.activeTool !== "stair" ||
+        interaction?.kind !== "place-stair" ||
+        !interaction.toLevelId ||
+        !interaction.template ||
+        !interaction.identifiers
+      )
+        return;
+      interaction.start = action.payload;
+      interaction.control = action.payload;
+    },
+    editorStairPlacementPointerMoved(
+      state,
+      action: PayloadAction<WorldPointXZ>
+    ) {
+      const interaction = state.transient.interaction;
+      if (interaction?.kind === "place-stair") {
+        interaction.start = action.payload;
+        interaction.control = action.payload;
+      }
+    },
+    editorStairAdjustmentStarted(
+      state,
+      action: PayloadAction<{
+        readonly owningLevelId: string;
+        readonly staircaseId: string;
+        readonly pointerId: number;
+        readonly control: WorldPointXZ;
+      }>
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-stair-adjustment",
+          ...action.payload
+        };
+      }
+    },
+    editorStairAdjustmentPointerMoved(
+      state,
+      action: PayloadAction<{
+        readonly pointerId: number;
+        readonly control: WorldPointXZ;
+      }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (
+        interaction?.kind === "move-stair-adjustment" &&
+        interaction.pointerId === action.payload.pointerId
+      ) {
+        interaction.control = action.payload.control;
+      }
+    },
+    editorStairTranslationStarted(
+      state,
+      action: PayloadAction<
+        Omit<MoveStairTranslationInteraction, "kind" | "currentPointer">
+      >
+    ) {
+      if (state.mode === "edit" && state.activeTool === "select") {
+        state.transient.interaction = {
+          kind: "move-stair-translation",
+          ...action.payload,
+          currentPointer: action.payload.startPointer
+        };
+      }
+    },
+    editorStairTranslationPointerMoved(
+      state,
+      action: PayloadAction<{
+        readonly pointerId: number;
+        readonly point: WorldPointXZ;
+        readonly precision?: PrecisionTranslationResult;
+      }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (
+        interaction?.kind === "move-stair-translation" &&
+        interaction.pointerId === action.payload.pointerId
+      ) {
+        interaction.currentPointer = action.payload.point;
+        interaction.precision = action.payload.precision;
+      }
+    },
+    editorSelectionTranslationStarted(
+      state,
+      action: PayloadAction<
+        Omit<TranslateSelectionInteraction, "kind" | "currentPointer">
+      >
+    ) {
+      if (
+        state.mode === "edit" &&
+        state.activeTool === "select" &&
+        state.selection.length > 0
+      ) {
+        state.transient.interaction = {
+          kind: "translate-selection",
+          ...action.payload,
+          currentPointer: action.payload.startPointer
+        };
+      }
+    },
+    editorSelectionTranslationPointerMoved(
+      state,
+      action: PayloadAction<{
+        readonly pointerId: number;
+        readonly point: WorldPointXZ;
+        readonly precision?: PrecisionTranslationResult;
+      }>
+    ) {
+      const interaction = state.transient.interaction;
+      if (
+        interaction?.kind === "translate-selection" &&
+        interaction.pointerId === action.payload.pointerId
+      ) {
+        interaction.currentPointer = action.payload.point;
+        interaction.precision = action.payload.precision;
       }
     },
     editorOpeningPlacementChanged(
@@ -592,22 +927,34 @@ const projectEditorSlice = createSlice({
         readonly candidate?: OpeningPlacementCandidate;
       }>
     ) {
-      if (
-        state.mode === "edit" &&
-        ((state.activeTool === "door" && action.payload.openingType === "DOOR") ||
-          (state.activeTool === "window" && action.payload.openingType === "WINDOW") ||
-          (state.activeTool === "opening" && action.payload.openingType === "OPENING"))
-      ) {
+      if (state.mode === "edit" && state.activeTool === "openings") {
         const current = state.transient.interaction;
         state.transient.interaction = {
           kind: "place-opening",
           openingType: action.payload.openingType,
-          properties: action.payload.properties ??
-            (current?.kind === "place-opening" && current.openingType === action.payload.openingType
+          properties:
+            action.payload.properties ??
+            (current?.kind === "place-opening" &&
+            current.openingType === action.payload.openingType
               ? current.properties
-              : createOpeningAuthoringInteraction(action.payload.openingType).properties),
+              : createOpeningAuthoringInteraction(action.payload.openingType)
+                  .properties),
           candidate: action.payload.candidate
         };
+      }
+    },
+    editorOpeningAuthoringTypeChanged(
+      state,
+      action: PayloadAction<OpeningAuthoringType>
+    ) {
+      if (state.mode !== "edit" || state.activeTool !== "openings") return;
+      state.transient = {
+        interaction: createOpeningAuthoringInteraction(action.payload)
+      };
+    },
+    editorRoomAuthoringTypeChanged(state, action: PayloadAction<RoomType>) {
+      if (state.transient.interaction?.kind === "place-room-shape") {
+        state.transient.interaction.roomType = action.payload;
       }
     },
     editorOpeningAuthoringPropertiesChanged(
@@ -624,7 +971,10 @@ const projectEditorSlice = createSlice({
     },
     editorWallVertexPlacementStarted(
       state,
-      action: PayloadAction<{ readonly levelId: string; readonly wallId: string }>
+      action: PayloadAction<{
+        readonly levelId: string;
+        readonly wallId: string;
+      }>
     ) {
       if (state.mode === "edit" && state.activeTool === "select") {
         state.transient = {
@@ -672,16 +1022,26 @@ const projectEditorSlice = createSlice({
       action: PayloadAction<{ readonly pointerId: number }>
     ) {
       const interaction = state.transient.interaction;
-      if (interaction?.kind === "move-opening" && interaction.pointerId === action.payload.pointerId) {
+      if (
+        interaction?.kind === "move-opening" &&
+        interaction.pointerId === action.payload.pointerId
+      ) {
         interaction.dragging = true;
       }
     },
     editorOpeningDragPreviewChanged(
       state,
-      action: PayloadAction<{ readonly pointerId: number; readonly offsetFromStart: number; readonly valid: boolean }>
+      action: PayloadAction<{
+        readonly pointerId: number;
+        readonly offsetFromStart: number;
+        readonly valid: boolean;
+      }>
     ) {
       const interaction = state.transient.interaction;
-      if (interaction?.kind === "move-opening" && interaction.pointerId === action.payload.pointerId) {
+      if (
+        interaction?.kind === "move-opening" &&
+        interaction.pointerId === action.payload.pointerId
+      ) {
         interaction.currentOffsetFromStart = action.payload.offsetFromStart;
         interaction.valid = action.payload.valid;
       }
@@ -696,7 +1056,9 @@ const projectEditorSlice = createSlice({
       action: PayloadAction<GeometrySelectionState>
     ) {
       if (state.mode === "edit") {
-        state.selection = action.payload.selected.map((selection) => ({
+        state.selection = createGeometrySelectionState(
+          action.payload.selected
+        ).selected.map((selection) => ({
           ...selection
         }));
         state.hover = action.payload.hovered
@@ -753,6 +1115,7 @@ export const {
   editingSessionEnded,
   editingSessionMarkedDirty,
   editingDraftReplaced,
+  editorFurnitureChanged,
   editorUndoRequested,
   editorRedoRequested,
   editorGridVisibilityChanged,
@@ -762,15 +1125,28 @@ export const {
   editorDimensionDisplayChanged,
   editorActiveLevelChanged,
   editorActiveToolChanged,
+  editorToolToggled,
   editorDrawWallStarted,
   editorDrawWallPointerMoved,
   editorMeasurementPointSet,
   editorMeasurementPointerMoved,
   editorRoomShapePlacementStarted,
   editorRoomShapePlacementChanged,
+  editorRoomShapeElevationChanged,
   editorRoomShapePlacementPointerMoved,
+  editorStairAuthoringChanged,
+  editorStairPlacementPointSet,
+  editorStairPlacementPointerMoved,
+  editorStairAdjustmentStarted,
+  editorStairAdjustmentPointerMoved,
+  editorStairTranslationStarted,
+  editorStairTranslationPointerMoved,
+  editorSelectionTranslationStarted,
+  editorSelectionTranslationPointerMoved,
   editorOpeningPlacementChanged,
+  editorOpeningAuthoringTypeChanged,
   editorOpeningAuthoringPropertiesChanged,
+  editorRoomAuthoringTypeChanged,
   editorWallVertexPlacementStarted,
   editorWallVertexPlacementChanged,
   editorOpeningDragStarted,
@@ -795,11 +1171,13 @@ export const selectProjectEditor = (state: RootState): ProjectEditorState =>
 
 /** Whether the active edit session has a stable draft commit to undo. */
 export const selectCanUndoProjectEdit = (state: RootState): boolean =>
-  state.projectEditor.mode === "edit" && state.projectEditor.history.past.length > 0;
+  state.projectEditor.mode === "edit" &&
+  state.projectEditor.history.past.length > 0;
 
 /** Whether the active edit session has an undone draft commit to restore. */
 export const selectCanRedoProjectEdit = (state: RootState): boolean =>
-  state.projectEditor.mode === "edit" && state.projectEditor.history.future.length > 0;
+  state.projectEditor.mode === "edit" &&
+  state.projectEditor.history.future.length > 0;
 
 /** Selects edit-mode geometry interaction state without copying the draft. */
 export const selectEditorGeometrySelection = createSelector(

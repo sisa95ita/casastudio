@@ -1,19 +1,24 @@
-import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import {
   Alert,
   Box,
   Button,
   CircularProgress,
   IconButton,
+  InputAdornment,
   ListItemIcon,
   Menu,
   MenuItem,
   Paper,
+  Skeleton,
   Stack,
+  TextField,
   Typography
 } from "@mui/material";
 import { useMemo, useState, type MouseEvent } from "react";
@@ -23,6 +28,7 @@ import { useCasaTranslation } from "../../../core/i18n";
 import { useProjectsQuery } from "../data/project-queries";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
+import { ProjectPlanPreview } from "./ProjectPlanPreview";
 import type { ProjectSummary } from "../../../core/api/api-types";
 
 /** Renders the authenticated, backend-authoritative Projects entry surface. */
@@ -30,6 +36,7 @@ export function ProjectsPage() {
   const { t } = useCasaTranslation("common");
   const { t: navigationT } = useCasaTranslation("navigation");
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState("");
   const [projectToDelete, setProjectToDelete] = useState<ProjectSummary | null>(
     null
   );
@@ -39,6 +46,16 @@ export function ProjectsPage() {
   } | null>(null);
   const projectsQuery = useProjectsQuery();
   const projects = projectsQuery.data?.projects ?? [];
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visibleProjects = useMemo(
+    () =>
+      normalizedSearch.length === 0
+        ? projects
+        : projects.filter((project) =>
+            project.name.toLocaleLowerCase().includes(normalizedSearch)
+          ),
+    [normalizedSearch, projects]
+  );
   useAppShellContent(
     useMemo(
       () => ({
@@ -54,34 +71,93 @@ export function ProjectsPage() {
 
   return (
     <Box className="project-home">
-      <Box className="project-home__intro">
-        <Typography variant="overline" color="primary.dark">
-          {t("routes.home.eyebrow")}
-        </Typography>
-        <Stack
-          direction="row"
-          sx={{ justifyContent: "space-between", alignItems: "center", gap: 2 }}
-        >
+      <Box className="project-home__header">
+        <Box className="project-home__intro">
+          <Typography variant="overline" color="primary.dark">
+            {t("routes.home.eyebrow")}
+          </Typography>
           <Typography component="h1" variant="h2">
             {t("routes.home.heading")}
           </Typography>
+          <Typography color="text.secondary">
+            {t("routes.home.description")}
+          </Typography>
+        </Box>
+        <Stack
+          className="project-home__controls"
+          direction={{ xs: "column", sm: "row" }}
+          sx={{ alignItems: { sm: "center" }, gap: 1.25 }}
+        >
+          <TextField
+            className="project-home__search"
+            size="small"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            label={t("routes.home.searchLabel")}
+            placeholder={t("routes.home.searchPlaceholder")}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchRoundedIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: search ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      aria-label={t("routes.home.clearSearch")}
+                      onClick={() => setSearch("")}
+                    >
+                      <CloseRoundedIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : undefined
+              }
+            }}
+          />
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
             onClick={() => setCreating(true)}
+            sx={{ whiteSpace: "nowrap" }}
           >
             {t("routes.home.newProject")}
           </Button>
         </Stack>
-        <Typography color="text.secondary">
-          {t("routes.home.description")}
-        </Typography>
       </Box>
       {projectsQuery.isPending ? (
-        <Stack role="status" sx={{ alignItems: "center", py: 8 }}>
-          <CircularProgress size={28} />
-          <Typography>{t("routes.home.loading")}</Typography>
-        </Stack>
+        <Box
+          role="status"
+          aria-label={t("routes.home.loading")}
+          className="project-grid"
+        >
+          {[0, 1, 2].map((item) => (
+            <Paper
+              key={item}
+              variant="outlined"
+              className="project-card project-card--loading"
+            >
+              <Skeleton variant="rectangular" height={190} />
+              <Box sx={{ p: 2.25 }}>
+                <Skeleton width="65%" height={30} />
+                <Skeleton width="44%" />
+                <Skeleton width="52%" />
+              </Box>
+            </Paper>
+          ))}
+          <Box
+            sx={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              overflow: "hidden"
+            }}
+          >
+            <CircularProgress size={1} />
+          </Box>
+        </Box>
       ) : null}
       {projectsQuery.isError ? (
         <Alert
@@ -112,24 +188,41 @@ export function ProjectsPage() {
           </Button>
         </Paper>
       ) : null}
-      {projectsQuery.isSuccess && projects.length > 0 ? (
-        <Stack spacing={1.5} sx={{ mt: 4 }}>
-          {projects.map((project) => (
+      {projectsQuery.isSuccess &&
+      projects.length > 0 &&
+      visibleProjects.length === 0 ? (
+        <Paper variant="outlined" className="project-home__no-results">
+          <SearchRoundedIcon color="action" />
+          <Typography component="h2" variant="h3">
+            {t("routes.home.noMatches", { query: search.trim() })}
+          </Typography>
+          <Button onClick={() => setSearch("")}>
+            {t("routes.home.clearSearch")}
+          </Button>
+        </Paper>
+      ) : null}
+      {projectsQuery.isSuccess && visibleProjects.length > 0 ? (
+        <Box
+          className="project-grid"
+          aria-label={t("routes.home.availableProjects")}
+        >
+          {visibleProjects.map((project) => (
             <Paper
               key={project.id}
               component="article"
               variant="outlined"
-              sx={{ p: 2.5 }}
+              className="project-card"
             >
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                sx={{
-                  alignItems: { sm: "center" },
-                  justifyContent: "space-between",
-                  gap: 2
-                }}
+              <Box
+                component={RouterLink}
+                to={`/app/projects/${project.id}`}
+                className="project-card__open"
+                aria-label={t("routes.home.openProjectNamed", {
+                  name: project.name
+                })}
               >
-                <Box>
+                <ProjectPlanPreview preview={project.preview} />
+                <Box className="project-card__content">
                   <Typography component="h2" variant="h3">
                     {project.name}
                   </Typography>
@@ -140,49 +233,51 @@ export function ProjectsPage() {
                       }).format(new Date(project.updatedAt))
                     })}
                   </Typography>
-                </Box>
-                <Stack
-                  direction="row"
-                  spacing={0.5}
-                  sx={{ alignItems: "center" }}
-                >
-                  <Button
-                    component={RouterLink}
-                    to={`/app/projects/${project.id}`}
-                    endIcon={<ArrowForwardRoundedIcon />}
-                  >
-                    {t("routes.home.openProject")}
-                  </Button>
-                  <IconButton
-                    size="small"
-                    aria-label={t("routes.home.projectActions", {
-                      name: project.name
-                    })}
-                    aria-haspopup="menu"
-                    aria-controls={
-                      actionsMenu?.project.id === project.id
-                        ? "project-actions-menu"
-                        : undefined
-                    }
-                    aria-expanded={
-                      actionsMenu?.project.id === project.id
-                        ? "true"
-                        : undefined
-                    }
-                    onClick={(event: MouseEvent<HTMLElement>) =>
-                      setActionsMenu({
-                        anchor: event.currentTarget,
-                        project
+                  <Typography variant="body2" color="text.secondary">
+                    {t("routes.home.summary", {
+                      levels: t("routes.home.levelCount", {
+                        count: project.levelCount
+                      }),
+                      rooms: t("routes.home.roomCount", {
+                        count: project.roomCount
                       })
-                    }
-                  >
-                    <MoreHorizRoundedIcon />
-                  </IconButton>
-                </Stack>
-              </Stack>
+                    })}
+                  </Typography>
+                  <Box className="project-card__open-hint">
+                    <Typography component="span" variant="button">
+                      {t("routes.home.openProject")}
+                    </Typography>
+                    <ArrowForwardRoundedIcon fontSize="small" />
+                  </Box>
+                </Box>
+              </Box>
+              <IconButton
+                className="project-card__actions"
+                size="small"
+                aria-label={t("routes.home.projectActions", {
+                  name: project.name
+                })}
+                aria-haspopup="menu"
+                aria-controls={
+                  actionsMenu?.project.id === project.id
+                    ? "project-actions-menu"
+                    : undefined
+                }
+                aria-expanded={
+                  actionsMenu?.project.id === project.id ? "true" : undefined
+                }
+                onClick={(event: MouseEvent<HTMLElement>) =>
+                  setActionsMenu({
+                    anchor: event.currentTarget,
+                    project
+                  })
+                }
+              >
+                <MoreHorizRoundedIcon />
+              </IconButton>
             </Paper>
           ))}
-        </Stack>
+        </Box>
       ) : null}
       <Menu
         id="project-actions-menu"

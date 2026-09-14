@@ -76,17 +76,20 @@ export class GeometryVertexDto {
 }
 
 /**
- * Physical wall-like runtime boundary edge derived from one source Wall.
+ * Runtime boundary edge derived from a Wall or a directed free Room segment.
  *
- * The edge preserves the source Wall's canonical start-to-end direction.
- * Room-specific traversal direction is represented by `GeometryBoundaryEdgeUseDto`.
+ * `sourceKind` distinguishes the variants and `sourceWallId` is present only
+ * for Wall-backed geometry. Room traversal belongs to the edge-use DTO.
  */
 export class GeometryBoundaryEdgeDto {
   @ApiProperty({ type: String })
   readonly id!: string;
 
-  @ApiProperty({ type: String })
-  readonly sourceWallId!: string;
+  @ApiPropertyOptional({ type: String })
+  readonly sourceWallId?: string;
+
+  @ApiProperty({ enum: ["WALL", "FREE"], enumName: "GeometryBoundaryEdgeSourceKind" })
+  readonly sourceKind!: "WALL" | "FREE";
 
   @ApiProperty({ type: String })
   readonly startVertexId!: string;
@@ -120,8 +123,8 @@ export class GeometryBoundaryEdgeUseDto {
   @ApiProperty({ type: String })
   readonly boundaryEdgeId!: string;
 
-  @ApiProperty({ type: String })
-  readonly sourceWallId!: string;
+  @ApiPropertyOptional({ type: String })
+  readonly sourceWallId?: string;
 
   @ApiProperty({ enum: boundaryEdgeUseDirectionValues, enumName: "GeometryBoundaryEdgeUseDirection" })
   readonly direction!: (typeof boundaryEdgeUseDirectionValues)[number];
@@ -208,6 +211,9 @@ export class GeometryPolygonDto {
   @ApiProperty({ type: String })
   readonly sourceRoomId!: string;
 
+  @ApiProperty({ type: Number })
+  readonly floorElevation!: number;
+
   @ApiProperty({ type: String })
   readonly outerLoopId!: string;
 
@@ -228,6 +234,93 @@ export class GeometryPolygonDto {
 
   @ApiProperty({ type: () => GeometryPolygonMetricsDto })
   readonly metrics!: GeometryPolygonMetricsDto;
+}
+
+/** Renderer-neutral runtime geometry for one persisted StairFlight. */
+export class StairFlightGeometryDto {
+  @ApiProperty({ type: String })
+  readonly id!: string;
+
+  @ApiProperty({ type: String })
+  readonly sourceFlightId!: string;
+
+  @ApiProperty({ type: () => GeometryPoint2DDto })
+  readonly startPosition!: GeometryPoint2DDto;
+
+  @ApiProperty({ type: () => GeometryPoint2DDto })
+  readonly endPosition!: GeometryPoint2DDto;
+
+  @ApiProperty({ type: Number })
+  readonly width!: number;
+
+  @ApiProperty({ type: Number })
+  readonly stepCount!: number;
+
+  @ApiProperty({ type: Number })
+  readonly startElevation!: number;
+
+  @ApiProperty({ type: Number })
+  readonly endElevation!: number;
+
+  @ApiProperty({ type: Number })
+  readonly length!: number;
+
+  @ApiProperty({ type: Number })
+  readonly rise!: number;
+}
+
+/** Renderer-neutral runtime geometry for one persisted StairLanding. */
+export class StairLandingGeometryDto {
+  @ApiProperty({ type: String })
+  readonly id!: string;
+
+  @ApiProperty({ type: String })
+  readonly sourceLandingId!: string;
+
+  @ApiProperty({ type: () => GeometryPoint2DDto })
+  readonly position!: GeometryPoint2DDto;
+
+  @ApiProperty({ type: Number })
+  readonly width!: number;
+
+  @ApiProperty({ type: Number })
+  readonly depth!: number;
+
+  @ApiProperty({ type: Number })
+  readonly elevation!: number;
+}
+
+/** Root-owned derived geometry for one persisted architectural Staircase. */
+export class StairGeometryDto {
+  @ApiProperty({ type: String })
+  readonly id!: string;
+
+  @ApiProperty({ type: String })
+  readonly sourceStaircaseId!: string;
+
+  @ApiProperty({ type: String })
+  readonly owningLevelId!: string;
+
+  @ApiProperty({ type: String })
+  readonly fromLevelId!: string;
+
+  @ApiProperty({ type: String })
+  readonly toLevelId!: string;
+
+  @ApiPropertyOptional({ type: String })
+  readonly fromRoomId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  readonly toRoomId?: string;
+
+  @ApiProperty({ type: Number })
+  readonly width!: number;
+
+  @ApiProperty({ type: () => [StairFlightGeometryDto] })
+  readonly flights!: readonly StairFlightGeometryDto[];
+
+  @ApiProperty({ type: () => [StairLandingGeometryDto] })
+  readonly landings!: readonly StairLandingGeometryDto[];
 }
 
 /**
@@ -277,6 +370,9 @@ export class GeometrySnapshotDto {
 
   @ApiProperty({ type: () => [GeometryLevelDto] })
   readonly levels!: readonly GeometryLevelDto[];
+
+  @ApiProperty({ type: () => [StairGeometryDto] })
+  readonly staircases!: readonly StairGeometryDto[];
 }
 
 /**

@@ -2,7 +2,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentation/geometry-presentation-model-2d";
-import { ProjectPropertiesDetails, ProjectSelectionDetails } from "./ProjectSelectionDetails";
+import {
+  ProjectPropertiesDetails,
+  ProjectSelectionDetails
+} from "./ProjectSelectionDetails";
 
 afterEach(cleanup);
 
@@ -102,6 +105,65 @@ describe("ProjectSelectionDetails", () => {
     expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 
+  it("shows common actions and explicit mixed Furniture values for multi-selection", () => {
+    const onDeleteSelection = vi.fn();
+    const onAlignSelection = vi.fn();
+    render(
+      <ProjectPropertiesDetails
+        model={model}
+        selectionState={{
+          selected: [
+            { kind: "FURNITURE", geometryId: "chair-a" },
+            { kind: "FURNITURE", geometryId: "chair-b" }
+          ]
+        }}
+        units={{ length: "cm", angle: "deg" }}
+        onUpdateWallProperties={() => false}
+        selectionCapabilities={{
+          translate: { supported: true },
+          nudge: { supported: true },
+          duplicate: { supported: false, reason: "Unsupported" },
+          delete: { supported: true },
+          rotate: { supported: false, reason: "Unsupported" }
+        }}
+        multiSelectionFurniture={[
+          {
+            id: "chair-a",
+            roomId: "room",
+            definitionId: "generic-chair",
+            position: { x: 0, z: 0 },
+            rotation: 0,
+            width: 40,
+            depth: 40,
+            height: 80
+          },
+          {
+            id: "chair-b",
+            roomId: "room",
+            definitionId: "generic-chair",
+            position: { x: 100, z: 0 },
+            rotation: 45,
+            width: 40,
+            depth: 40,
+            height: 80
+          }
+        ]}
+        onDeleteSelection={onDeleteSelection}
+        onAlignSelection={onAlignSelection}
+      />
+    );
+    expect(screen.getByText("2 Furniture items")).toBeTruthy();
+    expect(screen.getByText("Common actions")).toBeTruthy();
+    expect(screen.getByText("Mixed")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Duplicate" }).hasAttribute("disabled")
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    expect(onDeleteSelection).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Left" }));
+    expect(onAlignSelection).toHaveBeenCalledWith("left");
+  });
+
   it("separates Room metrics and deletion from canonical metadata properties", () => {
     const onDeleteRoom = vi.fn();
     const onUpdateRoomProperties = vi.fn(() => true);
@@ -115,7 +177,9 @@ describe("ProjectSelectionDetails", () => {
         { wallId: "wall-c", direction: "FORWARD" as const }
       ]
     };
-    const selectionState = { selected: [{ kind: "POLYGON" as const, geometryId: "polygon-a" }] };
+    const selectionState = {
+      selected: [{ kind: "POLYGON" as const, geometryId: "polygon-a" }]
+    };
     const { rerender } = render(
       <ProjectSelectionDetails
         model={model}
@@ -143,18 +207,41 @@ describe("ProjectSelectionDetails", () => {
       <ProjectPropertiesDetails
         selectionState={selectionState}
         room={room}
+        roomMeasurement={{
+          roomId: room.id,
+          area: 98_000,
+          perimeter: 1_300,
+          boundaryPoints: []
+        }}
+        roomLevelElevation={20}
         units={{ length: "cm", angle: "deg" }}
         onUpdateWallProperties={vi.fn(() => true)}
         onUpdateRoomProperties={onUpdateRoomProperties}
+        onDeleteRoom={onDeleteRoom}
       />
     );
     const name = screen.getByLabelText("Name");
     fireEvent.change(name, { target: { value: "Dining Room" } });
     fireEvent.blur(name);
-    expect(onUpdateRoomProperties).toHaveBeenCalledWith({ name: "Dining Room" });
+    expect(onUpdateRoomProperties).toHaveBeenCalledWith({
+      name: "Dining Room"
+    });
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Type" }));
     fireEvent.click(screen.getByRole("option", { name: "Living room" }));
-    expect(onUpdateRoomProperties).toHaveBeenCalledWith({ type: "LIVING_ROOM" });
+    expect(onUpdateRoomProperties).toHaveBeenCalledWith({
+      type: "LIVING_ROOM"
+    });
+    const elevation = screen.getByRole("spinbutton", {
+      name: "Elevation above Level"
+    });
+    fireEvent.change(elevation, { target: { value: "175" } });
+    fireEvent.blur(elevation);
+    expect(onUpdateRoomProperties).toHaveBeenCalledWith({ elevation: 175 });
+    const globalElevation = screen.getByDisplayValue("20");
+    expect(globalElevation.hasAttribute("readonly")).toBe(true);
+    expect(globalElevation.parentElement?.textContent).toContain("cm");
+    expect(screen.getByText("9.80 m²")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete Room" })).toBeTruthy();
   });
 });
 

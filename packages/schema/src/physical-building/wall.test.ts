@@ -51,9 +51,9 @@ describe("WallSchema", () => {
     ]);
   });
 
-  it("rejects three room IDs", () => {
+  it("allows more than two unique room IDs for multi-elevation use", () => {
     expect(WallSchema.safeParse({ ...validWall, roomIds: ["living-room", "corridor", "kitchen"] }).success).toBe(
-      false
+      true
     );
   });
 

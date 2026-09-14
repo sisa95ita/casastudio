@@ -2,6 +2,7 @@ import { reverseWallDirection, type Project, type Wall } from "@casastudio/schem
 import { describe, expect, it } from "vitest";
 
 import { demoProjectFixture } from "../../../test/demo-project-fixture";
+import { createGeometrySnapshotFixture } from "../../../test/geometry-snapshot-fixture";
 import {
   collectVisibleSceneBounds3D,
   createArchitecturalScene3DModel,
@@ -264,6 +265,89 @@ describe("architectural 3D presentation model", () => {
     ]);
     expect(floors[0]!.triangles).toHaveLength(2);
     expect(floors.every((floor) => floor.y === 0)).toBe(true);
+  });
+
+  it("places elevated Room Floors at the same derived Y for local and Snapshot geometry paths", () => {
+    const project = structuredClone(demoProjectFixture);
+    const level = project.building.levels[0]!;
+    const room = level.rooms[0]!;
+    room.elevation = 175;
+    const fixture = createGeometrySnapshotFixture(project.id, project.revision);
+    const fixtureLevel = fixture.geometry.levels[0]!;
+    const fixturePolygon = fixtureLevel.polygons[0]!;
+    const snapshot = {
+      ...fixture.geometry,
+      levels: [{
+        ...fixtureLevel,
+        sourceLevelId: level.id,
+        polygons: [{
+          ...fixturePolygon,
+          sourceRoomId: room.id,
+          floorElevation: 175
+        }]
+      }]
+    };
+
+    const localFloor = createArchitecturalScene3DModel(project).levels[0]!.floors
+      .find((floor) => floor.roomId === room.id)!;
+    const snapshotFloor = createArchitecturalScene3DModel(project, snapshot).levels[0]!.floors[0]!;
+
+    expect(localFloor.y).toBe(1.75);
+    expect(snapshotFloor.y).toBe(localFloor.y);
+  });
+
+  it("keeps overlapping lower and elevated floor surfaces at independent Y elevations", () => {
+    const project = structuredClone(demoProjectFixture);
+    const level = project.building.levels[0]!;
+    const lowerRoom = level.rooms[0]!;
+    level.rooms.push({
+      id: "elevated-overlay",
+      name: "Elevated Overlay",
+      type: "STUDIO",
+      elevation: 450,
+      boundary: [
+        { kind: "FREE", start: { x: 100, z: 50 }, end: { x: 300, z: 50 } },
+        { kind: "FREE", start: { x: 300, z: 50 }, end: { x: 300, z: 250 } },
+        { kind: "FREE", start: { x: 300, z: 250 }, end: { x: 100, z: 250 } },
+        { kind: "FREE", start: { x: 100, z: 250 }, end: { x: 100, z: 50 } }
+      ]
+    });
+
+    const model = createArchitecturalScene3DModel(project);
+    const lowerFloor = model.levels[0]!.floors.find((floor) => floor.roomId === lowerRoom.id)!;
+    const elevatedFloor = model.levels[0]!.floors.find((floor) => floor.roomId === "elevated-overlay")!;
+
+    expect(lowerFloor.y).toBe(0);
+    expect(elevatedFloor.y).toBe(4.5);
+    expect(lowerFloor.contour).toEqual([
+      { x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: -3 }, { x: 0, z: -3 }
+    ]);
+    expect(elevatedFloor.contour).toEqual([
+      { x: 1, z: -0.5 }, { x: 3, z: -0.5 }, { x: 3, z: -2.5 }, { x: 1, z: -2.5 }
+    ]);
+    expect(model.bounds?.max.y).toBe(4.5);
+    expect(model).not.toHaveProperty("supports");
+    expect(model).not.toHaveProperty("railings");
+    expect(model.levels[0]).not.toHaveProperty("slabs");
+  });
+
+  it("includes elevated Floor Y in scene bounds without introducing Stair render entities", () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.levels[0]!.rooms[0]!.elevation = 450;
+    project.building.levels[0]!.staircases = [{
+      id: "draft-stair",
+      fromLevelId: project.building.levels[0]!.id,
+      toLevelId: project.building.levels[0]!.id,
+      width: 90,
+      flights: [],
+      landings: []
+    }];
+
+    const model = createArchitecturalScene3DModel(project);
+
+    expect(model.bounds?.max.y).toBe(4.5);
+    expect(model).not.toHaveProperty("staircases");
+    expect(model.levels[0]).not.toHaveProperty("staircases");
   });
 
   it("triangulates irregular and concave contours to their exact polygon area", () => {

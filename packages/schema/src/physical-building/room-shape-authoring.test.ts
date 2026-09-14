@@ -9,10 +9,12 @@ import {
 } from "../validation/index.js";
 import {
   createRoomFromShape,
+  createFreeBoundaryRoomFromShape,
   deriveRoomShapeVertices,
   validateRoomShapeDefinition,
   type RoomShapeDefinition
 } from "./room-shape-authoring.js";
+import { isFreeRoomBoundaryEdge } from "./room.js";
 
 describe("Room shape authoring", () => {
   it("creates one exact reciprocal rectangular Room without mutating its source", () => {
@@ -148,10 +150,149 @@ describe("Room shape authoring", () => {
     expect(JSON.stringify(result.project)).not.toContain("rotation");
     expectCanonicalProject(result.project);
   });
+
+  it("adds an overlapping elevated free-boundary Room without changing lower Room Walls", () => {
+    const lower = commit(createEmptyProject(), {
+      kind: "RECTANGLE",
+      dimensions: { width: 400, depth: 300 }
+    });
+    expect(lower.ok).toBe(true);
+    if (!lower.ok) return;
+    const lowerBefore = structuredClone(lower.project.building.levels[0]!.rooms[0]);
+    const wallsBefore = structuredClone(lower.project.building.levels[0]!.walls);
+    const result = createFreeBoundaryRoomFromShape(lower.project, {
+      levelId: "ground-level",
+      origin: { x: 200, z: 0 },
+      shape: { kind: "RECTANGLE", dimensions: { width: 200, depth: 250 } },
+      room: { id: "elevated-room", name: "Studio", type: "STUDIO", elevation: 180 }
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const level = result.project.building.levels[0]!;
+    expect(level.rooms[0]).toEqual(lowerBefore);
+    expect(level.walls).toEqual(wallsBefore);
+    expect(level.rooms[1]).toMatchObject({ id: "elevated-room", elevation: 180 });
+    expect(level.rooms[1]!.boundary).toHaveLength(4);
+    expect(level.rooms[1]!.boundary.every(isFreeRoomBoundaryEdge)).toBe(true);
+    expectCanonicalProject(result.project);
+  });
+
+  it("creates an exact elevated free-boundary L-shaped footprint without fake Walls", () => {
+    const result = createFreeBoundaryRoomFromShape(createEmptyProject(), {
+      levelId: "ground-level",
+      origin: { x: 25, z: 475 },
+      shape: {
+        kind: "L_SHAPE",
+        dimensions: { width: 500, depth: 400, notchWidth: 200, notchDepth: 150 }
+      },
+      room: { id: "elevated-l-room", name: "Upper Studio", type: "STUDIO", elevation: 220 }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const level = result.project.building.levels[0]!;
+    expect(level.walls).toEqual([]);
+    expect(level.rooms[0]!.boundary).toHaveLength(6);
+    expect(measure(level.rooms[0]!.boundary.map((edge) => {
+      if (!("kind" in edge)) throw new Error("Expected a free boundary edge.");
+      return edge.start;
+    }))).toEqual({ area: 170_000, perimeter: 1_800 });
+    expectCanonicalProject(result.project);
+  });
+
+  it("derives deterministic U- and T-shaped architecture from compact parameters", () => {
+    const uShape: RoomShapeDefinition = {
+      kind: "U_SHAPE",
+      dimensions: {
+        width: 520, depth: 420, leftWingWidth: 140,
+        rightWingWidth: 140, notchDepth: 260
+      }
+    };
+    const tShape: RoomShapeDefinition = {
+      kind: "T_SHAPE",
+      dimensions: { width: 500, depth: 420, stemWidth: 180, stemDepth: 260 }
+    };
+    expect(validateRoomShapeDefinition(uShape)).toBe(true);
+    expect(validateRoomShapeDefinition(tShape)).toBe(true);
+    expect(measure(deriveRoomShapeVertices({ x: 0, z: 0 }, uShape)!)).toEqual({
+      area: 156_000,
+      perimeter: 2_400
+    });
+    expect(measure(deriveRoomShapeVertices({ x: 0, z: 0 }, tShape)!)).toEqual({
+      area: 126_800,
+      perimeter: 1_840
+    });
+    expect(commit(createEmptyProject(), uShape).ok).toBe(true);
+    expect(commit(createEmptyProject(), tShape).ok).toBe(true);
+  });
+
+  it("creates in free space on a populated Level and reuses one exact shared Wall", () => {
+    const lower = commit(createEmptyProject(), {
+      kind: "RECTANGLE",
+      dimensions: { width: 400, depth: 300 }
+    });
+    expect(lower.ok).toBe(true);
+    if (!lower.ok) return;
+
+    const freeArea = createRoomFromShape(lower.project, {
+      levelId: "ground-level",
+      origin: { x: 1_000, z: 475 },
+      shape: { kind: "RECTANGLE", dimensions: { width: 200, depth: 200 } },
+      room: { id: "free-room", name: "Free room", type: "OTHER" },
+      wallIds: ["free-1", "free-2", "free-3", "free-4"],
+      wallHeight: 300,
+      wallThickness: 20
+    });
+    expect(freeArea.ok).toBe(true);
+    if (!freeArea.ok) return;
+    expect(freeArea.project.building.levels[0]!.walls).toHaveLength(8);
+
+    const adjacent = createRoomFromShape(lower.project, {
+      levelId: "ground-level",
+      origin: { x: 425, z: 475 },
+      shape: { kind: "RECTANGLE", dimensions: { width: 200, depth: 300 } },
+      room: { id: "adjacent-room", name: "Adjacent room", type: "BEDROOM" },
+      wallIds: ["adjacent-1", "adjacent-2", "adjacent-3", "adjacent-4"],
+      wallHeight: 300,
+      wallThickness: 20
+    });
+    expect(adjacent.ok).toBe(true);
+    if (!adjacent.ok) return;
+    const level = adjacent.project.building.levels[0]!;
+    expect(level.walls).toHaveLength(7);
+    const shared = level.walls.find((wall) => wall.roomIds.length === 2);
+    expect(shared?.roomIds).toEqual(["shape-room", "adjacent-room"]);
+    expect(level.rooms[1]!.boundary[0]).toEqual({ wallId: shared?.id, direction: "REVERSE" });
+    expectCanonicalProject(adjacent.project);
+  });
+
+  it("blocks an ambiguous populated-Level crossing without mutating the Project", () => {
+    const lower = commit(createEmptyProject(), {
+      kind: "RECTANGLE",
+      dimensions: { width: 400, depth: 300 }
+    });
+    expect(lower.ok).toBe(true);
+    if (!lower.ok) return;
+    const before = structuredClone(lower.project);
+    const result = createRoomFromShape(lower.project, {
+      levelId: "ground-level",
+      origin: { x: 225, z: 575 },
+      shape: { kind: "RECTANGLE", dimensions: { width: 200, depth: 300 } },
+      room: { id: "crossing-room", name: "Crossing", type: "OTHER" },
+      wallIds: ["cross-1", "cross-2", "cross-3", "cross-4"],
+      wallHeight: 300,
+      wallThickness: 20
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      errors: [{ code: ValidationErrorCode.STALE_ROOM_TOPOLOGY }]
+    });
+    expect(lower.project).toEqual(before);
+  });
 });
 
 function commit(project: Project, shape: RoomShapeDefinition) {
-  const wallCount = shape.kind === "RECTANGLE" ? 4 : 6;
+  const wallCount = deriveRoomShapeVertices({ x: 25, z: 475 }, shape)?.length ?? 0;
   return createRoomFromShape(project, {
     levelId: "ground-level",
     origin: { x: 25, z: 475 },
@@ -184,12 +325,13 @@ function createEmptyProject(): Project {
   return {
     id: "shape-authoring-project",
     name: "Shape Authoring Project",
-    schemaVersion: "2.0.0",
+    schemaVersion: "4.0.0",
     revision: 1,
     createdAt: "2026-08-26T10:00:00+02:00",
     updatedAt: "2026-08-26T10:00:00+02:00",
     units: { length: "cm", angle: "deg" },
     building: {
+      furniture: [],
       id: "building",
       name: "Building",
       type: "HOUSE",

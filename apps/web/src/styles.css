@@ -21,6 +21,19 @@
   --casa-muted: #646b6c;
   --casa-border: #ddd7ce;
   --casa-shadow: 0 18px 50px rgba(57, 47, 37, 0.09);
+  --casa-plan-ink: #303837;
+  --casa-plan-structure: #2b3130;
+  --casa-plan-structure-edge: #1e2423;
+  --casa-plan-element: #424c4a;
+  --casa-plan-furniture: #596260;
+  --casa-plan-furniture-surface: #f5f2ea;
+  --casa-plan-furniture-detail: #e9e4da;
+  --casa-plan-room-fill: rgba(233, 224, 211, 0.42);
+  --casa-plan-elevated-fill: rgba(72, 102, 90, 0.11);
+  --casa-plan-elevated-edge: rgba(72, 102, 90, 0.78);
+  --casa-plan-selection: #246caf;
+  --casa-plan-hover: #3f80b6;
+  --casa-plan-invalid: #bd3e35;
 }
 
 * {
@@ -403,6 +416,10 @@ img {
   min-width: 0;
 }
 
+.app-shell__layout--without-inspector {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
 .app-shell__navigation-slot {
   display: contents;
 }
@@ -567,14 +584,31 @@ img {
 
 .project-home {
   margin: 0 auto;
-  max-width: 1180px;
+  max-width: 1440px;
   padding: clamp(18px, 4vw, 52px);
+}
+
+.project-home__header {
+  align-items: end;
+  display: flex;
+  gap: 32px;
+  justify-content: space-between;
 }
 
 .project-home__intro {
   display: grid;
   gap: 12px;
   max-width: 680px;
+}
+
+.project-home__controls {
+  flex: 0 1 520px;
+  justify-content: flex-end;
+}
+
+.project-home__search {
+  flex: 1 1 280px;
+  max-width: 360px;
 }
 
 .project-home__intro > p:last-child {
@@ -586,6 +620,124 @@ img {
   display: flex;
   justify-content: space-between;
   margin: 44px 0 15px;
+}
+
+.project-grid {
+  display: grid;
+  gap: clamp(16px, 2vw, 24px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 36px;
+  position: relative;
+}
+
+.project-card {
+  background: var(--casa-paper) !important;
+  border-radius: 10px !important;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.project-card:hover,
+.project-card:focus-within {
+  border-color: rgba(158, 63, 37, 0.48);
+  box-shadow: 0 9px 24px rgba(57, 47, 37, 0.07);
+  transform: translateY(-1px);
+}
+
+.project-card__open {
+  color: inherit;
+  display: block;
+  height: 100%;
+  text-decoration: none;
+}
+
+.project-card__open:focus-visible {
+  outline: 3px solid rgba(199, 85, 50, 0.42);
+  outline-offset: -3px;
+}
+
+.project-card__preview {
+  align-items: center;
+  background: #f1ede5;
+  border-bottom: 1px solid var(--casa-border);
+  display: flex;
+  justify-content: center;
+  min-height: 190px;
+  overflow: hidden;
+}
+
+.project-card__plan {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.project-card__wall-shapes {
+  fill: var(--casa-plan-structure);
+  stroke: var(--casa-plan-structure-edge);
+  stroke-linejoin: round;
+  stroke-width: 0.65;
+}
+
+.project-card__empty-preview {
+  align-items: center;
+  color: var(--casa-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-card__empty-preview svg {
+  color: rgba(72, 102, 90, 0.62);
+  font-size: 32px;
+}
+
+.project-card__content {
+  display: grid;
+  gap: 5px;
+  min-height: 156px;
+  padding: 19px 56px 18px 20px;
+}
+
+.project-card__content .MuiTypography-h3 {
+  overflow-wrap: anywhere;
+}
+
+.project-card__open-hint {
+  align-items: center;
+  align-self: end;
+  color: var(--casa-terracotta-dark);
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.project-card__actions {
+  bottom: 14px;
+  position: absolute !important;
+  right: 14px;
+  z-index: 1;
+}
+
+.project-card--loading:hover {
+  border-color: var(--casa-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.project-home__no-results {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 36px;
+  padding: 48px 24px;
+  text-align: center;
 }
 
 .project-entry-card {
@@ -701,14 +853,14 @@ img {
   width: 1px;
 }
 
-.project-level-selector {
-  min-width: 150px !important;
-}
-
-.project-workspace__mode-control .MuiToggleButton-root {
-  gap: 6px;
-  min-width: 92px;
-  padding-block: 7px;
+.project-level-control {
+  border-color: var(--casa-border) !important;
+  color: var(--casa-ink) !important;
+  max-width: 190px;
+  min-width: 136px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-workspace__representation-control .MuiToggleButton-root {
@@ -719,11 +871,6 @@ img {
 .project-workspace__representation-control .Mui-selected {
   background: var(--casa-paper-muted) !important;
   color: var(--casa-terracotta-dark) !important;
-}
-
-.project-workspace__mode-control .Mui-selected {
-  background: var(--casa-terracotta) !important;
-  color: #fff !important;
 }
 
 .project-editor-toolbar {
@@ -737,11 +884,18 @@ img {
   min-height: 54px;
   overflow-x: auto;
   padding: 6px 18px;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: nowrap;
 }
 
+.project-editor-toolbar__group {
+  display: flex;
+  gap: 4px;
+}
+
 .project-editor-toolbar .MuiToggleButton-root {
+  border: 1px solid transparent;
+  border-radius: 7px !important;
   gap: 7px;
   min-height: 40px;
   padding-inline: 14px;
@@ -753,30 +907,17 @@ img {
   color: var(--casa-terracotta-dark);
 }
 
-.project-room-authoring-menu {
-  border: 1px solid var(--casa-border);
-  margin-top: 5px;
-  width: min(620px, calc(100vw - 32px));
-  overflow: hidden;
+.project-editor-toolbar > .MuiDivider-root {
+  border-color: var(--casa-border);
+  margin-block: 7px;
 }
 
-.project-room-authoring-menu__layout {
-  display: grid;
-  grid-template-columns: minmax(170px, 0.75fr) minmax(360px, 1.75fr);
-  padding: 8px !important;
-}
-
-.project-room-authoring-menu__existing {
-  border-right: 1px solid var(--casa-border);
-  padding-right: 8px;
-}
-
-.project-room-authoring-menu__shapes {
-  padding-left: 8px;
-}
-
-.project-room-authoring-menu__shapes .MuiMenuItem-root {
+.project-editor-toolbar__spacer {
   flex: 1;
+}
+
+.project-editor-toolbar__shortcuts {
+  color: var(--casa-muted) !important;
 }
 
 .geometry-wall-preview-length {
@@ -792,64 +933,6 @@ img {
   fill: var(--casa-ink);
   font-size: 11px;
   font-weight: 700;
-}
-
-.project-room-authoring-menu .MuiListSubheader-root {
-  background: transparent;
-  color: var(--casa-ink-muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 30px;
-  text-transform: uppercase;
-}
-
-.project-room-authoring-menu__thumbnail {
-  fill: rgba(36, 108, 175, 0.08);
-  margin-right: 10px;
-  stroke: #246caf;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.project-room-authoring-menu__help {
-  margin: 6px 16px 10px;
-  max-width: 238px;
-}
-
-.project-room-authoring-menu__dimensions {
-  padding: 8px 8px 6px;
-}
-
-.project-room-authoring-menu__dimension-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-@media (max-width: 760px) {
-  .project-room-authoring-menu {
-    width: min(320px, calc(100vw - 24px));
-  }
-
-  .project-room-authoring-menu__layout {
-    display: block;
-  }
-
-  .project-room-authoring-menu__existing {
-    border-bottom: 1px solid var(--casa-border);
-    border-right: 0;
-    padding-bottom: 6px;
-    padding-right: 0;
-  }
-
-  .project-room-authoring-menu__shapes {
-    padding-left: 0;
-  }
-
-  .project-room-authoring-menu__dimension-grid {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 .project-workspace > .MuiAlert-root {
@@ -1141,6 +1224,36 @@ img {
   cursor: grabbing;
 }
 
+.geometry-selection-box {
+  fill: rgba(36, 108, 175, 0.08);
+  pointer-events: none;
+  stroke: #246caf;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-selection-box--crossing {
+  fill: rgba(47, 125, 91, 0.08);
+  stroke: #2f7d5b;
+  stroke-dasharray: 6 4;
+}
+
+.geometry-selection-translation-source,
+.geometry-selection-translation-destination {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(36, 108, 175, 0.45);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-selection-translation-destination {
+  fill: rgba(36, 108, 175, 0.07);
+  stroke: #246caf;
+  stroke-width: 1.5;
+}
+
 .geometry-svg--pan,
 .geometry-svg--pan * {
   cursor: grab !important;
@@ -1177,12 +1290,25 @@ img {
 
 .geometry-polygon {
   cursor: pointer;
-  fill: rgba(233, 224, 211, 0.46);
+  fill: var(--casa-plan-room-fill);
   stroke: rgba(124, 111, 94, 0.14);
   stroke-width: 0.7;
   transition:
     fill 130ms ease,
     stroke 130ms ease;
+}
+
+.geometry-polygon--elevated {
+  fill: var(--casa-plan-elevated-fill);
+  stroke: var(--casa-plan-elevated-edge);
+  stroke-dasharray: 8 6;
+  stroke-linecap: round;
+  stroke-width: 1.6;
+}
+
+.geometry-polygon--elevated.geometry-entity-selected {
+  fill: rgba(36, 108, 175, 0.13);
+  stroke-dasharray: 8 5;
 }
 
 .geometry-room-contour {
@@ -1196,17 +1322,17 @@ img {
 }
 
 .architectural-wall-body {
-  fill: #242a2a;
-  stroke: #151a1a;
-  stroke-width: 0.65;
+  fill: var(--casa-plan-structure);
+  stroke: var(--casa-plan-structure-edge);
+  stroke-width: 0.55;
   pointer-events: none;
 }
 
 .architectural-wall-body.geometry-entity-hovered,
 .architectural-wall-body.geometry-entity-selected {
-  fill: #242a2a;
-  stroke: #246caf !important;
-  stroke-width: 2.2;
+  fill: var(--casa-plan-structure);
+  stroke: var(--casa-plan-selection) !important;
+  stroke-width: 1.8;
 }
 
 .architectural-wall-hit-target,
@@ -1221,7 +1347,7 @@ img {
 }
 
 .architectural-opening {
-  color: #343d3f;
+  color: var(--casa-plan-element);
 }
 
 .architectural-opening--draggable {
@@ -1238,7 +1364,7 @@ img {
 .architectural-opening path {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.25;
+  stroke-width: 1.45;
   vector-effect: non-scaling-stroke;
 }
 
@@ -1250,11 +1376,11 @@ img {
 
 .architectural-opening.geometry-entity-hovered,
 .architectural-opening.geometry-entity-selected {
-  color: #246caf;
+  color: var(--casa-plan-selection);
 }
 
 .architectural-opening-drag-handle {
-  color: #246caf;
+  color: var(--casa-plan-selection);
 }
 
 .architectural-opening-drag-handle__surface {
@@ -1268,6 +1394,143 @@ img {
   pointer-events: none;
 }
 
+.architectural-staircase {
+  color: var(--casa-plan-element);
+}
+
+.architectural-stair-flight__body,
+.architectural-stair-landing {
+  fill: rgba(241, 238, 228, 0.94);
+  stroke: currentColor;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-stair-flight__body {
+  cursor: pointer;
+  pointer-events: fill;
+}
+
+.architectural-stair-landing {
+  fill: rgba(232, 227, 215, 0.96);
+}
+
+.architectural-stair-flight__hit-target {
+  cursor: pointer;
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: 10;
+}
+
+.architectural-stair-tread,
+.architectural-stair-direction {
+  fill: none;
+  pointer-events: none;
+  stroke: currentColor;
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-stair-direction {
+  stroke-width: 1.35;
+}
+
+.architectural-stair-flight--continuation:not(.geometry-entity-selected),
+.architectural-stair-landing--continuation:not(.geometry-entity-selected) {
+  opacity: 0.46;
+}
+
+.architectural-stair-continuation {
+  fill: rgba(253, 252, 249, 0.7);
+  pointer-events: none;
+  stroke: currentColor;
+  stroke-dasharray: 5 4;
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-stair-tread--continuation {
+  opacity: 0.42;
+  stroke-dasharray: 3 3;
+}
+
+.architectural-stair-break {
+  fill: none;
+  pointer-events: none;
+  stroke: var(--casa-plan-ink);
+  stroke-linecap: square;
+  stroke-width: 1.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-staircase.geometry-entity-selected,
+.architectural-staircase.geometry-entity-hovered,
+.architectural-stair-flight.geometry-entity-selected,
+.architectural-stair-flight.geometry-entity-hovered,
+.architectural-stair-landing.geometry-entity-selected,
+.architectural-stair-landing.geometry-entity-hovered {
+  color: var(--casa-plan-selection);
+}
+
+.geometry-stair-preview {
+  color: var(--casa-plan-selection);
+  pointer-events: none;
+}
+
+.geometry-stair-preview--invalid {
+  color: var(--casa-plan-invalid);
+}
+
+.geometry-stair-preview__body,
+.geometry-stair-preview__landing {
+  fill: color-mix(in srgb, currentColor 14%, transparent);
+  stroke: currentColor;
+  stroke-dasharray: 5 3;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-stair-preview__tread,
+.geometry-stair-preview__direction {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-stair-preview__continuation,
+.geometry-stair-preview__landing--continuation,
+.geometry-stair-preview__tread--continuation {
+  opacity: 0.48;
+}
+
+.geometry-stair-preview__continuation-body {
+  fill: rgba(253, 252, 249, 0.68);
+  stroke: currentColor;
+  stroke-dasharray: 5 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-stair-preview__break {
+  stroke: currentColor;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-stair-adjustment-handle__hit-target {
+  cursor: grab;
+  fill: transparent;
+  pointer-events: all;
+}
+
+.geometry-stair-adjustment-handle {
+  fill: var(--casa-paper);
+  pointer-events: none;
+  stroke: var(--casa-plan-selection);
+  stroke-width: 2;
+}
+
 .architectural-opening .architectural-opening-drag-handle__icon path {
   fill: currentColor;
   stroke: none;
@@ -1275,7 +1538,8 @@ img {
 
 .architectural-door-arc {
   stroke-dasharray: none;
-  opacity: 0.68;
+  opacity: 0.62;
+  stroke-width: 0.9 !important;
 }
 
 .architectural-door-hinge {
@@ -1283,7 +1547,7 @@ img {
 }
 
 .architectural-window-line {
-  stroke-width: 1.05 !important;
+  stroke-width: 1.1 !important;
 }
 
 .architectural-dimension-layer,
@@ -1330,7 +1594,7 @@ img {
 }
 
 .architectural-room-metric-layer {
-  color: #303838;
+  color: var(--casa-plan-ink);
 }
 
 .architectural-room-label__name {
@@ -1343,6 +1607,12 @@ img {
   fill: #596160;
   font-size: 9px;
   font-weight: 600;
+}
+
+.architectural-room-label__elevation {
+  fill: var(--casa-sage-dark);
+  font-size: 8.5px;
+  font-weight: 700;
 }
 
 .architectural-opening-preview {
@@ -1359,8 +1629,26 @@ img {
 }
 
 .architectural-opening-preview--invalid {
-  color: #d32f2f;
+  color: var(--casa-plan-invalid);
   opacity: 0.78;
+}
+
+.furniture-plan-symbol {
+  color: var(--casa-plan-furniture);
+}
+
+.furniture-plan-symbol--hovered {
+  color: var(--casa-plan-hover);
+  filter: drop-shadow(0 0 2px rgba(36, 103, 174, 0.24));
+}
+
+.furniture-plan-symbol--selected,
+.furniture-plan-symbol--preview {
+  color: var(--casa-plan-selection);
+}
+
+.furniture-plan-symbol--invalid {
+  color: var(--casa-plan-invalid);
 }
 
 .project-workspace .geometry-edge {
@@ -1429,10 +1717,10 @@ img {
   stroke-width: 1;
 }
 .geometry-entity-hovered {
-  filter: drop-shadow(0 0 3px rgba(36, 103, 174, 0.3));
+  filter: drop-shadow(0 0 2px rgba(36, 103, 174, 0.28));
 }
 .geometry-entity-selected {
-  stroke: #246caf !important;
+  stroke: var(--casa-plan-selection) !important;
   stroke-width: 3;
 }
 
@@ -1447,7 +1735,7 @@ img {
 
 .geometry-editor-grid-line {
   fill: none;
-  stroke: rgba(83, 103, 86, 0.2);
+  stroke: rgba(83, 103, 86, 0.14);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -1490,6 +1778,23 @@ img {
   stroke-linejoin: round;
   stroke-width: 7;
   vector-effect: non-scaling-stroke;
+}
+
+.geometry-room-shape-preview--elevated .geometry-room-shape-preview__fill {
+  fill: rgba(36, 108, 175, 0.08);
+}
+
+.geometry-room-shape-preview--elevated .geometry-room-shape-preview__walls {
+  stroke-dasharray: 9 7;
+  stroke-width: 2;
+}
+
+.geometry-room-shape-preview--invalid .geometry-room-shape-preview__fill {
+  fill: rgba(189, 62, 53, 0.12);
+}
+
+.geometry-room-shape-preview--invalid .geometry-room-shape-preview__walls {
+  stroke: #bd3e35;
 }
 
 .geometry-room-shape-preview__label {
@@ -1536,6 +1841,22 @@ img {
 .geometry-wall-snap-marker__inner {
   fill: var(--casa-terracotta);
   pointer-events: none;
+}
+
+.geometry-precision-guides {
+  pointer-events: none;
+}
+
+.geometry-precision-guide {
+  fill: none;
+  stroke: color-mix(in srgb, var(--casa-terracotta) 64%, transparent);
+  stroke-width: 1.1;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.geometry-precision-guide--segment {
+  stroke-dasharray: none;
 }
 
 .geometry-wall-vertex-preview-hit-target {
@@ -1693,6 +2014,14 @@ img {
     grid-template-columns: 72px minmax(0, 1fr);
   }
 
+  .app-shell__layout--without-inspector {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .app-shell__layout > .inspector-panel {
     display: none;
   }
@@ -1714,12 +2043,16 @@ img {
     padding-inline: 16px;
   }
 
+  .app-shell--immersive .workspace-header__brand .product-brand__name {
+    display: none;
+  }
+
   .app-shell--immersive .workspace-header__context {
     min-width: 120px;
   }
 
-  .app-shell--immersive .project-level-selector {
-    min-width: 130px !important;
+  .app-shell--immersive .project-level-control {
+    min-width: 118px !important;
   }
 
   .app-shell--immersive .project-editor-status__item {
@@ -1811,6 +2144,10 @@ img {
   .project-editor-toolbar .MuiToggleButton-root span,
   .project-editor-toolbar .MuiButton-root {
     font-size: 0.74rem;
+  }
+
+  .project-editor-toolbar .MuiToggleButton-root {
+    padding-inline: 10px;
   }
 
   .app-shell--immersive .workspace-header {
@@ -1974,6 +2311,10 @@ img {
     grid-template-rows: minmax(0, 1fr) 62px;
   }
 
+  .app-shell__layout--without-inspector {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .main-workspace {
     grid-column: 1;
     grid-row: 1;
@@ -2014,6 +2355,16 @@ img {
     padding: 22px 4px 36px;
   }
 
+  .project-home__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-home__controls {
+    flex-basis: auto;
+    justify-content: flex-start;
+  }
+
   .project-home__section-heading {
     margin-top: 34px;
   }
@@ -2040,8 +2391,8 @@ img {
     min-height: 100%;
   }
 
-  .project-level-selector {
-    min-width: 130px !important;
+  .project-level-control {
+    min-width: 120px !important;
   }
 
   .geometry-viewer-panel {
@@ -2090,6 +2441,21 @@ img {
   .mobile-project-overview__facts > div:first-child {
     border-left: 0;
     padding-left: 0;
+  }
+}
+
+@media (max-width: 599px) {
+  .project-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-home__search {
+    max-width: none;
+    width: 100%;
+  }
+
+  .project-home__controls .MuiButton-root {
+    min-height: 42px;
   }
 }
 

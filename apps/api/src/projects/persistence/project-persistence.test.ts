@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 
-import { ProjectSchema, type Project } from "@casastudio/schema";
+import {
+  createInitialProject,
+  ProjectSchema,
+  type Project
+} from "@casastudio/schema";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -98,6 +102,142 @@ describeWithDatabase("relational Project persistence", () => {
     await prisma.$disconnect();
   });
 
+  it("round-trips normalized Furniture, replacements, same-Project Room FKs and cascades", async () => {
+    const project = createInitialProject({
+      projectId: testProjectId,
+      buildingId: "furniture-building",
+      levelId: "ground",
+      name: "Generic Furniture test",
+      createdAt: "2026-09-06T00:00:00Z"
+    });
+    const ground = project.building.levels[0]!;
+    ground.rooms.push({
+      id: "living-room",
+      name: "Living Room",
+      type: "LIVING_ROOM",
+      boundary: []
+    });
+    ground.rooms.push({
+      id: "raised-study",
+      name: "Raised Study",
+      type: "STUDIO",
+      elevation: 200,
+      boundary: []
+    });
+    const sofa = {
+      id: "generic-sofa-instance",
+      roomId: ground.rooms[0]!.id,
+      definitionId: "generic-sofa",
+      position: { x: 100, z: 100 },
+      rotation: 27.5,
+      width: 200,
+      depth: 90,
+      height: 85,
+      name: "Sofa",
+      description: "Generic example"
+    };
+    project.building.furniture = [
+      sofa,
+      {
+        ...sofa,
+        id: "desk-instance",
+        roomId: "raised-study",
+        definitionId: "custom-provider:desk",
+        width: 120,
+        depth: 60,
+        height: 75
+      },
+      { ...sofa, id: "second-sofa" }
+    ];
+    await repository.createProject(project, testOwnerSubject);
+    expect(await repository.findByDomainId(project.id)).toEqual(project);
+    const root = await prisma.project.findUniqueOrThrow({
+      where: { domainId: project.id }
+    });
+    const stored = await prisma.furnitureItem.findMany({
+      where: { projectId: root.id },
+      orderBy: { position: "asc" }
+    });
+    expect(stored.map((item) => item.domainId)).toEqual(
+      project.building.furniture.map((item) => item.id)
+    );
+    expect(stored[1]).toMatchObject({
+      definitionId: "custom-provider:desk",
+      width: 120,
+      pointX: 100,
+      pointZ: 100
+    });
+    await expect(
+      prisma.furnitureItem.update({
+        where: { id: stored[0]!.id },
+        data: { roomId: "00000000-0000-0000-0000-000000000000" }
+      })
+    ).rejects.toMatchObject({ code: "P2003" });
+    const foreign = {
+      ...structuredClone(project),
+      id: "furniture-foreign-project",
+      name: "Furniture foreign Project"
+    };
+    try {
+      await repository.createProject(foreign, testOwnerSubject);
+      const foreignRoom = await prisma.room.findFirstOrThrow({
+        where: { project: { domainId: foreign.id } }
+      });
+      await expect(
+        prisma.furnitureItem.update({
+          where: { id: stored[0]!.id },
+          data: { roomId: foreignRoom.id }
+        })
+      ).rejects.toMatchObject({ code: "P2003" });
+    } finally {
+      await prisma.project.deleteMany({ where: { domainId: foreign.id } });
+    }
+    const proposed = structuredClone(project);
+    proposed.building.furniture = [
+      {
+        ...project.building.furniture[1]!,
+        rotation: -725.5,
+        position: { x: 120, z: 80 },
+        width: 155,
+        description: "Updated desk"
+      },
+      { ...sofa, roomId: "raised-study" }
+    ];
+    const updated = await repository.replaceProject({
+      projectId: project.id,
+      baseRevision: project.revision,
+      project: proposed,
+      actorSubject: testOwnerSubject,
+      requiredOwnerSubject: testOwnerSubject
+    });
+    expect(updated.status).toBe("updated");
+    expect(
+      (await repository.findByDomainId(project.id))?.building.furniture
+    ).toEqual(proposed.building.furniture);
+    const raised = await prisma.room.findFirstOrThrow({
+      where: { projectId: root.id, domainId: "raised-study" }
+    });
+    await prisma.room.delete({ where: { id: raised.id } });
+    expect(
+      await prisma.furnitureItem.count({ where: { projectId: root.id } })
+    ).toBe(0);
+    // Aggregate replacement recreates Room/Furniture rows before checking Project cascade.
+    await writeProject(project);
+    expect(
+      await prisma.furnitureItem.count({
+        where: { project: { domainId: project.id } }
+      })
+    ).toBe(3);
+    await prisma.project.delete({ where: { domainId: project.id } });
+    expect(
+      await prisma.furnitureItem.count({
+        where: {
+          domainId: { in: project.building.furniture.map((item) => item.id) }
+        }
+      })
+    ).toBe(0);
+  });
+
   it("returns null for a missing project domain ID", async () => {
     await expect(
       repository.findByDomainId("missing-project")
@@ -119,6 +259,99 @@ describeWithDatabase("relational Project persistence", () => {
       wallId: "living-kitchen-partition",
       direction: "REVERSE"
     });
+  });
+
+  it("round-trips Wall-only, elevated free, and mixed Room boundaries without information loss", async () => {
+    const project = createTestProject();
+    const ground = project.building.levels[0]!;
+    const sourceRoom = ground.rooms[1]!;
+    ground.rooms.push(
+      {
+        id: "raised-room",
+        name: "Raised Room",
+        type: "STUDIO",
+        elevation: 180,
+        boundary: freeBoundary([
+          { x: 100, z: 100 },
+          { x: 300, z: 100 },
+          { x: 300, z: 250 },
+          { x: 100, z: 250 }
+        ])
+      },
+      {
+        id: "mixed-room",
+        name: "Mixed Room",
+        type: "OTHER",
+        elevation: 220,
+        boundary: [
+          { wallId: "ground-north-wall", direction: "FORWARD" },
+          { kind: "FREE", start: { x: 600, z: 0 }, end: { x: 600, z: 400 } },
+          { wallId: "living-kitchen-partition", direction: "FORWARD" },
+          { wallId: "living-west-wall", direction: "FORWARD" }
+        ]
+      }
+    );
+    for (const wallId of [
+      "ground-north-wall",
+      "living-kitchen-partition",
+      "living-west-wall"
+    ]) {
+      ground.walls
+        .find((wall) => wall.id === wallId)!
+        .roomIds.push("mixed-room");
+    }
+    ground.staircases.push({
+      id: "raised-room-stair",
+      fromLevelId: ground.id,
+      toLevelId: ground.id,
+      fromRoomId: sourceRoom.id,
+      toRoomId: "raised-room",
+      width: 85,
+      flights: [
+        {
+          id: "raised-room-flight",
+          start: { x: 50, z: 50 },
+          end: { x: 50, z: 190 },
+          width: 80,
+          stepCount: 8,
+          startElevation: 0,
+          endElevation: 180
+        }
+      ],
+      landings: [
+        {
+          id: "raised-room-landing",
+          position: { x: 50, z: 190 },
+          width: 90,
+          depth: 100,
+          elevation: 180
+        }
+      ]
+    });
+
+    await writeProject(project);
+
+    const loadedProject = await repository.findByDomainId(project.id);
+
+    expect(loadedProject).toEqual(project);
+    expect(loadedProject?.building.levels[0]?.rooms.at(-2)).toMatchObject({
+      id: "raised-room",
+      elevation: 180,
+      boundary: ground.rooms.at(-2)!.boundary
+    });
+    expect(loadedProject?.building.levels[0]?.rooms.at(-1)).toMatchObject({
+      id: "mixed-room",
+      elevation: 220,
+      boundary: ground.rooms.at(-1)!.boundary
+    });
+    expect(
+      loadedProject?.building.levels[0]?.staircases.map(
+        (staircase) => staircase.id
+      )
+    ).toEqual(["main-stair", "raised-room-stair"]);
+    expect(loadedProject?.building.levels[0]?.staircases.at(-1)).toEqual(
+      ground.staircases.at(-1)
+    );
   });
 
   it("stores owner metadata with the stable Keycloak subject", async () => {
@@ -166,6 +399,7 @@ describeWithDatabase("relational Project persistence", () => {
 
   it("lists lightweight owner-scoped summaries in deterministic update order", async () => {
     const project = createTestProject();
+    project.building.levels.reverse();
     await repository.createProject(project, testOwnerSubject);
 
     const ownerSummaries =
@@ -178,7 +412,24 @@ describeWithDatabase("relational Project persistence", () => {
       name: project.name,
       revision: project.revision,
       updatedAt: project.updatedAt,
-      ownerSubject: testOwnerSubject
+      ownerSubject: testOwnerSubject,
+      levelCount: project.building.levels.length,
+      roomCount: project.building.levels.reduce(
+        (count, level) => count + level.rooms.length,
+        0
+      ),
+      preview: {
+        levelId: "ground-floor",
+        elevation: 0,
+        walls: project.building.levels
+          .find((level) => level.id === "ground-floor")!
+          .walls.map((wall) => ({
+            id: wall.id,
+            start: wall.start,
+            end: wall.end,
+            thickness: wall.thickness
+          }))
+      }
     });
     expect(otherSummaries).not.toContainEqual(
       expect.objectContaining({ id: project.id })
@@ -688,4 +939,14 @@ function withWriterWall(project: Project, wallId: string): Project {
   });
 
   return ProjectSchema.parse(candidate);
+}
+
+function freeBoundary(
+  points: readonly { readonly x: number; readonly z: number }[]
+) {
+  return points.map((start, index) => ({
+    kind: "FREE" as const,
+    start,
+    end: points[(index + 1) % points.length]!
+  }));
 }

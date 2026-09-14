@@ -146,7 +146,7 @@ const getSelectionItems = (
     return [
       { label: t("selection.labels.type"), value: t("selection.types.boundaryEdge") },
       { label: t("selection.labels.geometryId"), value: entity.geometryId },
-      { label: t("selection.labels.sourceWallId"), value: entity.sourceWallId },
+      { label: t("selection.labels.sourceWallId"), value: entity.sourceWallId ?? "—" },
       { label: t("selection.labels.startVertex"), value: entity.startVertexId },
       { label: t("selection.labels.endVertex"), value: entity.endVertexId },
       { label: t("selection.labels.sharedUsageCount"), value: `${entity.sharedUsageCount}` }

@@ -209,9 +209,9 @@ This direction is important for:
 - future side-specific metadata;
 - deterministic 2D and 3D generation.
 
-Walls are the authoritative source describing room boundaries.
+Walls are authoritative for physical wall-backed boundary segments.
 
-Room outlines are derived from the Room's persisted ordered and oriented boundary references and the referenced Level-scoped Walls.
+Room outlines are derived from the Room's persisted ordered boundary: oriented references resolve through Level-scoped Walls, while free segments contribute their explicit directed X/Z endpoints.
 
 ## 10. Opening Coordinate Space
 
@@ -304,6 +304,11 @@ Staircases define their connection intent through:
 
 The Geometry Engine may use those references, together with coordinate and elevation data, to generate stair geometry.
 
+Persisted `StairFlight.startElevation`, `StairFlight.endElevation`, and
+`StairLanding.elevation` use building-space vertical elevation in Project length
+units. They therefore match Level elevation plus an optional referenced Room's
+local elevation at Staircase endpoints; they are not Level-relative offsets.
+
 ## 12. Rotation Conventions
 
 Persisted rotations are expressed in degrees.
@@ -330,9 +335,13 @@ For example:
 
 - a Wall's orientation is derived from its start and end points;
 - an Opening's orientation is derived from its Wall;
-- a Room boundary is derived from ordered and oriented references to Walls.
+- a Room boundary is reconstructed from ordered Wall references and/or directed free geometric segments.
 
 Persist rotation only when the domain concept requires independent orientation, such as a Viewpoint camera orientation or future object placement.
+
+A Room footprint remains level-local X/Z geometry. Its global floor elevation is
+`Level.elevation + (Room.elevation ?? 0)`. Footprints at different global floor
+elevations may overlap without subtraction or planar-topology conflict.
 
 ## 13. Precision Rules
 
@@ -508,3 +517,7 @@ Keep generated geometry derived and reproducible.
 Avoid storing duplicate coordinates that can drift from their authoritative source.
 
 Use `docs/11-domain-model.md` for conceptual entity meaning and this document for spatial conventions.
+
+## Furniture placement
+
+Furniture position is the center of its width-by-depth footprint in Project X/Z centimeters. At zero rotation, width follows local X and depth follows local Z. Arbitrary finite degrees rotate the footprint about positive Y using the right-hand rule; angles are not normalized. Height extends upward from `Level.elevation + (Room.elevation ?? 0)`. No Furniture Y/elevation or direct Level ownership is persisted. Vertically stacked Room-owned items may share X/Z. Anchor and footprint containment are not canonical geometry constraints. See [Furniture domain and persistence](furniture-domain.md).

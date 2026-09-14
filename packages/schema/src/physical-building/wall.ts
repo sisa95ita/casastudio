@@ -9,7 +9,7 @@ import {
   PositiveMeasurementSchema
 } from "./shared.js";
 
-const WallRoomIdsSchema = IdentifierArraySchema.max(2, "A wall may reference at most two rooms.").refine(
+const WallRoomIdsSchema = IdentifierArraySchema.refine(
   (roomIds) => new Set(roomIds).size === roomIds.length,
   {
     message: "A wall must not reference the same room more than once."
@@ -19,9 +19,9 @@ const WallRoomIdsSchema = IdentifierArraySchema.max(2, "A wall may reference at 
 /**
  * Represents a physical wall segment in Level coordinate space.
  *
- * Walls are the authoritative boundary elements for Rooms. `roomIds` is locally
- * constrained to at most two unique adjacent Rooms, while cross-reference and
- * bidirectional Room boundary consistency are handled by validation layers.
+ * Walls may back Room boundaries at more than one floor elevation. `roomIds`
+ * therefore preserves every unique reference, while semantic validation limits
+ * adjacency to at most two Rooms within each global floor-elevation stratum.
  */
 export const WallSchema = z
   .strictObject({

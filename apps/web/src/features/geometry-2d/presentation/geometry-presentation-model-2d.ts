@@ -41,6 +41,8 @@ export type GeometryPresentationPolygon2D = GeometryPresentationInteractionState
   readonly kind: "POLYGON";
   readonly geometryId: Polygon["id"];
   readonly sourceRoomId: Polygon["sourceRoomId"];
+  readonly floorElevation?: Polygon["floorElevation"];
+  readonly elevated?: boolean;
   readonly points: readonly GeometryPresentationPoint2D[];
   readonly svgPoints: string;
   readonly area: Polygon["area"];
@@ -62,6 +64,7 @@ export type GeometryPresentationBoundaryEdge2D = GeometryPresentationInteraction
   readonly kind: "BOUNDARY_EDGE";
   readonly geometryId: BoundaryEdge["id"];
   readonly sourceWallId: BoundaryEdge["sourceWallId"];
+  readonly sourceKind?: BoundaryEdge["sourceKind"];
   readonly startVertexId: Vertex["id"];
   readonly endVertexId: Vertex["id"];
   readonly start: GeometryPresentationPoint2D;
@@ -78,6 +81,7 @@ export type GeometryPresentationVertex2D = GeometryPresentationInteractionState 
   readonly geometryId: Vertex["id"];
   readonly coordinates: WorldPointXZ;
   readonly point: ScreenPoint;
+  readonly wallBacked?: boolean;
 };
 
 /**
@@ -125,7 +129,9 @@ export const createRuntimeGeometryPresentationModel2D = ({
     sourceLevelId: level.sourceLevelId,
     bounds: collectLevelBounds(level),
     polygons: Object.freeze(
-      level.polygons.map((polygon) => createPresentationPolygon(polygon, transform, selected, hovered))
+      level.polygons.map((polygon) =>
+        createPresentationPolygon(polygon, level.elevation, transform, selected, hovered)
+      )
     ),
     boundaryEdges: Object.freeze(
       level.boundaryEdges.map((edge) =>
@@ -140,6 +146,7 @@ export const createRuntimeGeometryPresentationModel2D = ({
 
 const createPresentationPolygon = (
   polygon: Polygon,
+  levelElevation: number,
   transform: ViewportTransform2D,
   selected: readonly GeometrySelection[],
   hover: GeometryHoverState
@@ -152,6 +159,8 @@ const createPresentationPolygon = (
     kind: "POLYGON",
     geometryId: polygon.id,
     sourceRoomId: polygon.sourceRoomId,
+    floorElevation: polygon.floorElevation,
+    elevated: polygon.floorElevation !== levelElevation,
     points: Object.freeze(points),
     svgPoints: points.map((point) => `${formatSvgNumber(point.screen.x)},${formatSvgNumber(point.screen.y)}`).join(" "),
     area: polygon.area,
@@ -178,6 +187,7 @@ const createPresentationBoundaryEdge = (
     kind: "BOUNDARY_EDGE",
     geometryId: edge.id,
     sourceWallId: edge.sourceWallId,
+    sourceKind: edge.sourceKind,
     startVertexId: edge.startVertex.id,
     endVertexId: edge.endVertex.id,
     start,
@@ -203,6 +213,7 @@ const createPresentationVertex = (
     geometryId: vertex.id,
     coordinates: Object.freeze({ x: vertex.x, z: vertex.z }),
     point: transform.worldToScreen(vertex),
+    wallBacked: vertex.incidentEdges.some((edge) => edge.sourceKind === "WALL"),
     selected: isGeometrySelectionMatch(selected, "VERTEX", vertex.id),
     hovered: isGeometrySelectionMatch(hover, "VERTEX", vertex.id)
   });

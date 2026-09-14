@@ -27,9 +27,14 @@ export function AppShell() {
     }),
     [t]
   );
-  const [content, setContent] = useState<AppShellContent>(defaultAppShellContent);
+  const [content, setContent] = useState<AppShellContent>(
+    defaultAppShellContent
+  );
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const resetContent = useCallback(() => setContent(localizedDefaultContent), [localizedDefaultContent]);
+  const resetContent = useCallback(
+    () => setContent(localizedDefaultContent),
+    [localizedDefaultContent]
+  );
   const contextValue = useMemo(
     () => ({ setContent, resetContent }),
     [resetContent]
@@ -41,7 +46,13 @@ export function AppShell() {
 
   return (
     <AppShellContentContext.Provider value={contextValue}>
-      <Box className={content.immersiveWorkspace ? "app-shell app-shell--immersive" : "app-shell"}>
+      <Box
+        className={
+          content.immersiveWorkspace
+            ? "app-shell app-shell--immersive"
+            : "app-shell"
+        }
+      >
         <AppHeader
           title={content.title || localizedDefaultContent.title}
           breadcrumb={content.breadcrumb ?? localizedDefaultContent.breadcrumb}
@@ -57,30 +68,42 @@ export function AppShell() {
           }
         />
 
-        <Box className="app-shell__layout">
+        <Box
+          className={
+            content.inspector
+              ? "app-shell__layout"
+              : "app-shell__layout app-shell__layout--without-inspector"
+          }
+        >
           <Box className="app-shell__navigation-slot">
             <NavigationRail />
           </Box>
           <MainWorkspace>
             <Outlet />
           </MainWorkspace>
-          <InspectorPanel>{content.inspector}</InspectorPanel>
+          {content.inspector ? (
+            <InspectorPanel>{content.inspector}</InspectorPanel>
+          ) : null}
         </Box>
 
-        <StatusBar>{content.status ?? localizedDefaultContent.status}</StatusBar>
+        <StatusBar>
+          {content.status ?? localizedDefaultContent.status}
+        </StatusBar>
       </Box>
 
-      <Drawer
-        anchor="right"
-        open={inspectorOpen}
-        onClose={() => setInspectorOpen(false)}
-        className="inspector-drawer"
-        ModalProps={{ keepMounted: true }}
-      >
-        <InspectorPanel compact onClose={() => setInspectorOpen(false)}>
-          {content.inspector}
-        </InspectorPanel>
-      </Drawer>
+      {content.inspector ? (
+        <Drawer
+          anchor="right"
+          open={inspectorOpen}
+          onClose={() => setInspectorOpen(false)}
+          className="inspector-drawer"
+          ModalProps={{ keepMounted: true }}
+        >
+          <InspectorPanel compact onClose={() => setInspectorOpen(false)}>
+            {content.inspector}
+          </InspectorPanel>
+        </Drawer>
+      ) : null}
     </AppShellContentContext.Provider>
   );
 }

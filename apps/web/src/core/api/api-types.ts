@@ -24,6 +24,21 @@ export type ProjectResponse = {
   readonly sourceRevision: number;
 };
 
+/** Lightweight wall geometry used by a Project library preview. */
+export type ProjectPreviewWall = {
+  readonly id: string;
+  readonly start: { readonly x: number; readonly z: number };
+  readonly end: { readonly x: number; readonly z: number };
+  readonly thickness: number;
+};
+
+/** Lowest canonical Level geometry used by a Project library preview. */
+export type ProjectPreview = {
+  readonly levelId: string;
+  readonly elevation: number;
+  readonly walls: readonly ProjectPreviewWall[];
+};
+
 /** Lightweight authoritative Project metadata used by the workspace list. */
 export type ProjectSummary = {
   readonly id: string;
@@ -31,6 +46,9 @@ export type ProjectSummary = {
   readonly revision: number;
   readonly updatedAt: string;
   readonly ownedByCurrentUser: boolean;
+  readonly levelCount: number;
+  readonly roomCount: number;
+  readonly preview?: ProjectPreview;
 };
 
 /** Authenticated Project list response. */
@@ -67,7 +85,8 @@ export type GeometryVertex = GeometryPoint2D & {
 /** Serialized physical boundary edge. */
 export type GeometryBoundaryEdge = {
   readonly id: string;
-  readonly sourceWallId: string;
+  readonly sourceWallId?: string;
+  readonly sourceKind: "WALL" | "FREE";
   readonly startVertexId: string;
   readonly endVertexId: string;
   readonly start: GeometryPoint2D;
@@ -80,7 +99,7 @@ export type GeometryBoundaryEdge = {
 export type GeometryBoundaryEdgeUse = {
   readonly id: string;
   readonly boundaryEdgeId: string;
-  readonly sourceWallId: string;
+  readonly sourceWallId?: string;
   readonly direction: "FORWARD" | "REVERSE";
   readonly index: number;
   readonly loopId: string;
@@ -104,6 +123,7 @@ export type GeometryLoop = {
 export type GeometryPolygon = {
   readonly id: string;
   readonly sourceRoomId: string;
+  readonly floorElevation: number;
   readonly outerLoopId: string;
   readonly innerLoopIds: readonly string[];
   readonly loopIds: readonly string[];
@@ -117,6 +137,44 @@ export type GeometryPolygon = {
     readonly bounds: GeometryBounds;
     readonly centroid: GeometryPoint2D;
   };
+};
+
+/** Serialized renderer-neutral geometry for one stair flight. */
+export type StairFlightGeometry = {
+  readonly id: string;
+  readonly sourceFlightId: string;
+  readonly startPosition: GeometryPoint2D;
+  readonly endPosition: GeometryPoint2D;
+  readonly width: number;
+  readonly stepCount: number;
+  readonly startElevation: number;
+  readonly endElevation: number;
+  readonly length: number;
+  readonly rise: number;
+};
+
+/** Serialized renderer-neutral geometry for one stair landing. */
+export type StairLandingGeometry = {
+  readonly id: string;
+  readonly sourceLandingId: string;
+  readonly position: GeometryPoint2D;
+  readonly width: number;
+  readonly depth: number;
+  readonly elevation: number;
+};
+
+/** Serialized root-owned geometry for one architectural staircase. */
+export type StairGeometry = {
+  readonly id: string;
+  readonly sourceStaircaseId: string;
+  readonly owningLevelId: string;
+  readonly fromLevelId: string;
+  readonly toLevelId: string;
+  readonly fromRoomId?: string;
+  readonly toRoomId?: string;
+  readonly width: number;
+  readonly flights: readonly StairFlightGeometry[];
+  readonly landings: readonly StairLandingGeometry[];
 };
 
 /** Serialized geometry derived for one source level. */
@@ -136,6 +194,7 @@ export type GeometrySnapshot = {
   readonly id: string;
   readonly units: { readonly length: "cm"; readonly angle: "deg" };
   readonly levels: readonly GeometryLevel[];
+  readonly staircases: readonly StairGeometry[];
 };
 
 /** Authoritative geometry response envelope for one Project revision. */
@@ -183,11 +242,72 @@ export function parseProjectListResponse(value: unknown): ProjectListResponse {
         ownedByCurrentUser: requireBoolean(
           project.ownedByCurrentUser,
           `Project summary ${index} ownedByCurrentUser`
-        )
+        ),
+        levelCount: requireNumber(
+          project.levelCount,
+          `Project summary ${index} levelCount`
+        ),
+        roomCount: requireNumber(
+          project.roomCount,
+          `Project summary ${index} roomCount`
+        ),
+        preview:
+          project.preview === undefined
+            ? undefined
+            : parseProjectPreview(project.preview, index)
       };
     }
   );
   return { projects };
+}
+
+function parseProjectPreview(
+  value: unknown,
+  projectIndex: number
+): ProjectPreview {
+  const preview = requireRecord(
+    value,
+    `Project summary ${projectIndex} preview`
+  );
+  return {
+    levelId: requireString(
+      preview.levelId,
+      `Project summary ${projectIndex} preview levelId`
+    ),
+    elevation: requireNumber(
+      preview.elevation,
+      `Project summary ${projectIndex} preview elevation`
+    ),
+    walls: requireArray(
+      preview.walls,
+      `Project summary ${projectIndex} preview walls`
+    ).map((value, wallIndex) => {
+      const wall = requireRecord(
+        value,
+        `Project summary ${projectIndex} preview wall ${wallIndex}`
+      );
+      const start = requireRecord(
+        wall.start,
+        `Preview wall ${wallIndex} start`
+      );
+      const end = requireRecord(wall.end, `Preview wall ${wallIndex} end`);
+      return {
+        id: requireString(wall.id, `Preview wall ${wallIndex} id`),
+        start: {
+          x: requireNumber(start.x, `Preview wall ${wallIndex} start x`),
+          z: requireNumber(start.z, `Preview wall ${wallIndex} start z`)
+        },
+        end: {
+          x: requireNumber(end.x, `Preview wall ${wallIndex} end x`),
+          z: requireNumber(end.z, `Preview wall ${wallIndex} end z`)
+        },
+        thickness: requireNumber(
+          wall.thickness,
+          `Preview wall ${wallIndex} thickness`
+        )
+      };
+    })
+  };
 }
 
 /** Defensively validates the geometry response envelope used by the Project viewer. */
@@ -239,6 +359,12 @@ export function parseProjectGeometryResponse(
       } satisfies GeometryLevel;
     }
   );
+  const staircases = requireArray(
+    geometry.staircases,
+    "Geometry staircases"
+  ).map((staircase, index) =>
+    parseStairGeometry(staircase, `Geometry staircase ${index}`)
+  );
 
   const sourceProjectId = requireString(
     response.sourceProjectId,
@@ -258,7 +384,8 @@ export function parseProjectGeometryResponse(
         length: requireLiteral(units.length, "cm", "Geometry length unit"),
         angle: requireLiteral(units.angle, "deg", "Geometry angle unit")
       },
-      levels
+      levels,
+      staircases
     }
   };
 }
@@ -285,7 +412,12 @@ function parseGeometryBoundaryEdge(
 
   return {
     id: requireString(item.id, `${label} id`),
-    sourceWallId: requireString(item.sourceWallId, `${label} sourceWallId`),
+    sourceWallId: optionalString(item.sourceWallId, `${label} sourceWallId`),
+    sourceKind: requireOneOf(
+      item.sourceKind,
+      ["WALL", "FREE"] as const,
+      `${label} sourceKind`
+    ),
     startVertexId: requireString(item.startVertexId, `${label} startVertexId`),
     endVertexId: requireString(item.endVertexId, `${label} endVertexId`),
     start: parseGeometryPoint(item.start, `${label} start`),
@@ -307,7 +439,7 @@ function parseGeometryBoundaryEdgeUse(
       item.boundaryEdgeId,
       `${label} boundaryEdgeId`
     ),
-    sourceWallId: requireString(item.sourceWallId, `${label} sourceWallId`),
+    sourceWallId: optionalString(item.sourceWallId, `${label} sourceWallId`),
     direction: requireOneOf(
       item.direction,
       ["FORWARD", "REVERSE"] as const,
@@ -348,6 +480,10 @@ function parseGeometryPolygon(value: unknown, label: string): GeometryPolygon {
   return {
     id: requireString(item.id, `${label} id`),
     sourceRoomId: requireString(item.sourceRoomId, `${label} sourceRoomId`),
+    floorElevation: requireNumber(
+      item.floorElevation,
+      `${label} floorElevation`
+    ),
     outerLoopId: requireString(item.outerLoopId, `${label} outerLoopId`),
     innerLoopIds: requireStringArray(
       item.innerLoopIds,
@@ -374,6 +510,80 @@ function parseGeometryPolygon(value: unknown, label: string): GeometryPolygon {
       bounds: parseGeometryBounds(metrics.bounds, `${label} bounds`),
       centroid: parseGeometryPoint(metrics.centroid, `${label} centroid`)
     }
+  };
+}
+
+function parseStairGeometry(value: unknown, label: string): StairGeometry {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceStaircaseId: requireString(
+      item.sourceStaircaseId,
+      `${label} sourceStaircaseId`
+    ),
+    owningLevelId: requireString(item.owningLevelId, `${label} owningLevelId`),
+    fromLevelId: requireString(item.fromLevelId, `${label} fromLevelId`),
+    toLevelId: requireString(item.toLevelId, `${label} toLevelId`),
+    fromRoomId: optionalString(item.fromRoomId, `${label} fromRoomId`),
+    toRoomId: optionalString(item.toRoomId, `${label} toRoomId`),
+    width: requireNumber(item.width, `${label} width`),
+    flights: requireArray(item.flights, `${label} flights`).map(
+      (flight, index) =>
+        parseStairFlightGeometry(flight, `${label} flight ${index}`)
+    ),
+    landings: requireArray(item.landings, `${label} landings`).map(
+      (landing, index) =>
+        parseStairLandingGeometry(landing, `${label} landing ${index}`)
+    )
+  };
+}
+
+function parseStairFlightGeometry(
+  value: unknown,
+  label: string
+): StairFlightGeometry {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceFlightId: requireString(
+      item.sourceFlightId,
+      `${label} sourceFlightId`
+    ),
+    startPosition: parseGeometryPoint(
+      item.startPosition,
+      `${label} startPosition`
+    ),
+    endPosition: parseGeometryPoint(item.endPosition, `${label} endPosition`),
+    width: requireNumber(item.width, `${label} width`),
+    stepCount: requireNumber(item.stepCount, `${label} stepCount`),
+    startElevation: requireNumber(
+      item.startElevation,
+      `${label} startElevation`
+    ),
+    endElevation: requireNumber(item.endElevation, `${label} endElevation`),
+    length: requireNumber(item.length, `${label} length`),
+    rise: requireNumber(item.rise, `${label} rise`)
+  };
+}
+
+function parseStairLandingGeometry(
+  value: unknown,
+  label: string
+): StairLandingGeometry {
+  const item = requireRecord(value, label);
+
+  return {
+    id: requireString(item.id, `${label} id`),
+    sourceLandingId: requireString(
+      item.sourceLandingId,
+      `${label} sourceLandingId`
+    ),
+    position: parseGeometryPoint(item.position, `${label} position`),
+    width: requireNumber(item.width, `${label} width`),
+    depth: requireNumber(item.depth, `${label} depth`),
+    elevation: requireNumber(item.elevation, `${label} elevation`)
   };
 }
 
@@ -444,6 +654,10 @@ function requireString(value: unknown, label: string): string {
   }
 
   return value;
+}
+
+function optionalString(value: unknown, label: string): string | undefined {
+  return value === undefined ? undefined : requireString(value, label);
 }
 
 function requireNumber(value: unknown, label: string): number {

@@ -1,7 +1,7 @@
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import FlipRoundedIcon from "@mui/icons-material/FlipRounded";
-import { Button, Divider, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Button, Divider, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
 import {
   formatArchitecturalLength,
   getDoorHingeSide,
@@ -15,18 +15,23 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { useCasaTranslation } from "../../../../core/i18n";
 import { formatEditorMeasurement, normalizeEditorMeasurement } from "../../../editor-2d/tools/measure/editor-measurement";
+import type { OpeningPlacementCandidate } from "../../../editor-2d/tools/opening/project-opening-editing";
 import type { OpeningAuthoringProperties, OpeningAuthoringType } from "../../../editor-2d/state/project-editor-slice";
 
 /** Renders editable defaults for an Opening before it is placed. */
 export function ProjectNewOpeningPropertiesDetails({
   openingType,
   properties,
+  candidate,
   units,
+  onTypeChange = () => undefined,
   onChange
 }: {
   readonly openingType: OpeningAuthoringType;
   readonly properties: OpeningAuthoringProperties;
+  readonly candidate?: OpeningPlacementCandidate;
   readonly units: Project["units"];
+  readonly onTypeChange?: (openingType: OpeningAuthoringType) => void;
   readonly onChange: (properties: Partial<OpeningAuthoringProperties>) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
@@ -36,6 +41,19 @@ export function ProjectNewOpeningPropertiesDetails({
   return (
     <Stack component="section" spacing={1.5}>
       <Typography variant="subtitle2">{t(title)}</Typography>
+      <FormControl size="small">
+        <InputLabel id="new-opening-type-label">{t("opening.labels.type")}</InputLabel>
+        <Select
+          labelId="new-opening-type-label"
+          label={t("opening.labels.type")}
+          value={openingType}
+          onChange={(event) => onTypeChange(event.target.value as OpeningAuthoringType)}
+        >
+          <MenuItem value="DOOR">{t("opening.door")}</MenuItem>
+          <MenuItem value="WINDOW">{t("opening.window")}</MenuItem>
+          <MenuItem value="OPENING">{t("opening.wallOpening")}</MenuItem>
+        </Select>
+      </FormControl>
       <OpeningMeasurementField label={t("opening.labels.width")} unit={units.length} value={properties.width} onCommit={(width) => { onChange({ width }); return true; }} />
       <OpeningMeasurementField label={t("opening.labels.height")} unit={units.length} value={properties.height} onCommit={(height) => { onChange({ height }); return true; }} />
       <OpeningMeasurementField label={t(openingType === "WINDOW" ? "opening.labels.sillHeight" : "opening.labels.elevation")} unit={units.length} value={properties.elevation} onCommit={(elevation) => { onChange({ elevation }); return true; }} />
@@ -57,6 +75,13 @@ export function ProjectNewOpeningPropertiesDetails({
           </FormControl>
         </>
       ) : null}
+      <Alert severity={!candidate ? "info" : candidate.valid ? "success" : "warning"}>
+        {!candidate
+          ? t("opening.authoring.moveHint")
+          : candidate.valid
+            ? t("opening.authoring.validCandidate", { wall: candidate.wallId })
+            : t("opening.authoring.invalidCandidate", { wall: candidate.wallId })}
+      </Alert>
     </Stack>
   );
 }

@@ -1,5 +1,5 @@
 /** Tools available to the manual 2D Project editor. */
-export type ProjectEditorTool = "select" | "draw-wall" | "door" | "window" | "opening" | "room" | "measure";
+export type ProjectEditorTool = "select" | "draw-wall" | "openings" | "room" | "stair" | "furniture" | "measure";
 
 /** Interaction capabilities consumed by the shared geometry viewer. */
 export type ProjectEditorInteraction = {
@@ -14,6 +14,10 @@ export type ProjectEditorInteraction = {
   readonly measurementEnabled?: boolean;
   /** Whether the canvas accepts and preserves Room shape placement input. */
   readonly roomShapePlacementEnabled?: boolean;
+  /** Whether the canvas accepts the connection-first Stair placement gesture. */
+  readonly stairPlacementEnabled?: boolean;
+  /** Whether the canvas accepts unsnapped Furniture anchor placement. */
+  readonly furniturePlacementEnabled?: boolean;
 };
 
 /** Durable UI and interaction contract for one editor tool. */
@@ -51,7 +55,7 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
       }
     },
     {
-      id: "door",
+      id: "openings",
       enabled: true,
       interaction: {
         selectionEnabled: false,
@@ -60,32 +64,6 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         drawWallEnabled: false,
         wallEndpointEditingEnabled: false,
         openingPlacement: "DOOR",
-        openingEditingEnabled: false
-      }
-    },
-    {
-      id: "window",
-      enabled: true,
-      interaction: {
-        selectionEnabled: false,
-        panEnabled: true,
-        panAnywhere: false,
-        drawWallEnabled: false,
-        wallEndpointEditingEnabled: false,
-        openingPlacement: "WINDOW",
-        openingEditingEnabled: false
-      }
-    },
-    {
-      id: "opening",
-      enabled: true,
-      interaction: {
-        selectionEnabled: false,
-        panEnabled: true,
-        panAnywhere: false,
-        drawWallEnabled: false,
-        wallEndpointEditingEnabled: false,
-        openingPlacement: "OPENING",
         openingEditingEnabled: false
       }
     },
@@ -100,6 +78,28 @@ export const projectEditorTools: readonly ProjectEditorToolDefinition[] =
         wallEndpointEditingEnabled: false,
         openingEditingEnabled: false,
         roomShapePlacementEnabled: true
+      }
+    },
+    {
+      id: "stair",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false,
+        panEnabled: true,
+        panAnywhere: false,
+        drawWallEnabled: false,
+        wallEndpointEditingEnabled: false,
+        openingEditingEnabled: false,
+        stairPlacementEnabled: true
+      }
+    },
+    {
+      id: "furniture",
+      enabled: true,
+      interaction: {
+        selectionEnabled: false, panEnabled: true, panAnywhere: false,
+        drawWallEnabled: false, wallEndpointEditingEnabled: false,
+        furniturePlacementEnabled: true
       }
     },
     {
@@ -138,7 +138,8 @@ export function getProjectEditorInteraction(
       wallEndpointEditingEnabled: false,
       openingEditingEnabled: false,
       measurementEnabled: false,
-      roomShapePlacementEnabled: tool === "room"
+      roomShapePlacementEnabled: tool === "room",
+      stairPlacementEnabled: tool === "stair"
     };
   }
 

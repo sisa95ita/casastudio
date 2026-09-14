@@ -60,9 +60,13 @@ Stop the prerequisite containers when finished with `pnpm e2e:infra:down`.
 
 ## Smoke coverage and failure artifacts
 
-The smoke test authenticates, reaches the Projects workspace, opens the seeded `Demo Project`, verifies the real SVG editor, and sends a native mouse wheel event over its viewport. It verifies that the rendered viewport changes and records browser `console.error` messages. Unexpected console errors and uncaught page errors fail the test.
+The Project editor smoke tests authenticate through Keycloak and cover Project creation/deletion, viewport input, responsive layouts, Room shapes, elevated Rooms, Stairs, Openings, and architectural presentation. Unexpected console errors and uncaught page errors fail the instrumented workflows, including the native wheel check.
 
-The known passive wheel-listener diagnostic is recorded separately so the existing browser bug remains reproducible without preventing the browser foundation from running. This E2E foundation does not fix that product bug.
+The complete-house workflow authors a generic multi-Level plan through the editor, subdivides Rooms with Walls and detection, edits topology and Openings, adds an elevated study and same-Level/cross-Level Stairs, furnishes Rooms, and exercises atomic alignment/distribution/history. It compares authoritative Project data across saves and reloads, visits the current 3D representation, returns to the selected Level in 2D, discards edits, and tests real revision conflicts. Expected conflict responses are checked separately from unexpected browser/network errors.
+
+The Furniture workflow covers preview-first placement, collision rejection, explicit overlapping-Room ownership, exact instance properties, dragging, rotation, duplication, Layers, persistence, and discard. The 3D smoke checks current Wall/Floor/Opening geometry, selection, camera controls, and Level visibility. Stair and Furniture geometry remain outside current 3D support.
+
+Successful broad scenarios also write a small set of screenshots under `test-results/` for visual review. These are disposable test artifacts, not product assets. Run browser workflows after production edits have settled: Vite reloads during a test can interrupt an unsaved draft.
 
 On failure, Playwright writes screenshots and retained traces under `test-results/` and an HTML report under `playwright-report/`. Open a trace directly with:
 

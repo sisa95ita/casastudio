@@ -446,9 +446,10 @@ Vertex adjacency is populated internally by the Geometry Engine during construct
 
 # BoundaryEdge
 
-Represents one physical geometric boundary segment.
+Represents one geometric Room boundary segment.
 
-A `BoundaryEdge` commonly derives from one domain `Wall`, but it remains a runtime geometric object.
+A `BoundaryEdge` may derive from one domain `Wall` or from one persisted free
+Room boundary segment. It remains renderer-neutral runtime geometry.
 
 ## Responsibilities
 
@@ -456,8 +457,8 @@ A `BoundaryEdge` commonly derives from one domain `Wall`, but it remains a runti
 - represent one physical boundary only once;
 - reference adjacent polygons;
 - provide geometric measurements;
-- expose renderer-neutral wall dimensions;
-- preserve traceability to the source wall;
+- expose renderer-neutral wall dimensions when Wall-backed;
+- preserve its Wall/free source kind and optional source-Wall traceability;
 - provide access to opening geometry associated with the boundary.
 
 ## Typical Properties
@@ -469,6 +470,7 @@ endVertex
 leftPolygon
 rightPolygon
 sourceWallId
+sourceKind
 height
 thickness
 openings
@@ -485,7 +487,9 @@ The exact interpretation of mathematical left and right follows the project's co
 
 An exterior boundary has only one adjacent polygon.
 
-A shared interior boundary may have two adjacent polygons.
+A shared Wall-backed interior boundary may have two adjacent polygons per floor
+elevation. A free edge belongs only to its explicit Room loop and does not
+participate in wall-derived bounded-face discovery.
 
 ## Expected API
 
@@ -514,6 +518,8 @@ thickness()
 
 sourceWallId()
 
+sourceKind()
+
 openings()
 ```
 
@@ -535,7 +541,7 @@ A `BoundaryEdge`:
 - must not be duplicated merely because different loops traverse it in different directions;
 - must not be split solely because it contains a door or window;
 - must reference exactly two valid endpoint vertices;
-- must contain zero, one, or two adjacent polygons in the initial manifold model.
+- must contain no more than two adjacent polygons at one floor elevation in the initial manifold model.
 
 Future extensions may include:
 
@@ -855,6 +861,7 @@ id
 outerLoop
 innerLoops
 sourceRoomId
+floorElevation
 level
 ```
 
@@ -887,6 +894,8 @@ level()
 
 sourceRoomId()
 
+floorElevation()
+
 containsPoint(point)
 
 area()
@@ -908,6 +917,14 @@ Unless otherwise specified by a later algorithm contract:
 - the method assumes the polygon has already passed runtime geometry validation.
 
 `area()` returns the outer-loop area minus all inner-loop areas.
+
+`floorElevation` is the source Room's global floor elevation in Project length
+units. The Geometry Engine derives it as the owning Level elevation plus the
+Room's optional local elevation, treating an omitted Room elevation as zero.
+
+Every persisted Room produces its own polygon. Different-elevation polygons may
+overlap in level-local X/Z and remain independent surfaces with independent
+areas; the Geometry Engine does not subtract one from the other.
 
 Future extensions may include:
 
@@ -939,10 +956,12 @@ Staircases are independent geometric elements and do not participate in room bou
 ```text
 id
 sourceStaircaseId
+owningLevelId
 fromLevelId
 toLevelId
 fromRoomId
 toRoomId
+width
 flights
 landings
 ```
@@ -954,6 +973,8 @@ landings
 ```text
 sourceStaircaseId()
 
+owningLevelId()
+
 fromLevelId()
 
 toLevelId()
@@ -961,6 +982,8 @@ toLevelId()
 fromRoomId()
 
 toRoomId()
+
+width()
 
 flights()
 
@@ -1685,3 +1708,7 @@ The following invariants must hold for a valid Geometry Model:
 23. Rebuilding a `GeometryModel` invalidates all runtime object references from the previous model.
 24. Debug serialization of the runtime graph is explicit and ID-based.
 25. Geometry construction must not silently alter persisted coordinates or topology.
+
+## Canonical Furniture boundary
+
+Furniture remains Room-owned Project data and is not part of GeometryModel or Geometry Snapshot. Its global floor elevation and Level are derived by the schema-owned `resolveFurnitureRoom` helper. No current geometry consumer requires a Furniture runtime object, so runtime topology and snapshot contracts remain unchanged. See [Furniture domain and persistence](../furniture-domain.md).

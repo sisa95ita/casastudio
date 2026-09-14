@@ -26,12 +26,30 @@ export type LoadedProject = {
 };
 
 /** Lightweight authoritative metadata used for Project discovery. */
+export type ProjectPreviewWall = {
+  readonly id: string;
+  readonly start: { readonly x: number; readonly z: number };
+  readonly end: { readonly x: number; readonly z: number };
+  readonly thickness: number;
+};
+
+/** Lowest canonical Level geometry carried by one Project discovery item. */
+export type ProjectPreview = {
+  readonly levelId: string;
+  readonly elevation: number;
+  readonly walls: readonly ProjectPreviewWall[];
+};
+
+/** Lightweight authoritative metadata used for Project discovery. */
 export type ProjectSummary = {
   readonly id: string;
   readonly name: string;
   readonly revision: number;
   readonly updatedAt: string;
   readonly ownerSubject: string;
+  readonly levelCount: number;
+  readonly roomCount: number;
+  readonly preview?: ProjectPreview;
 };
 
 /** Parameters for an atomic complete-aggregate Project replacement. */
@@ -78,8 +96,13 @@ export type DeleteProjectResult =
 export interface ProjectsRepository {
   findByDomainId(projectId: string): Promise<Project | null>;
   findLoadedByDomainId(projectId: string): Promise<LoadedProject | null>;
-  listProjectSummaries(ownerSubject?: string): Promise<readonly ProjectSummary[]>;
-  projectNameExists(ownerSubject: string, normalizedName: string): Promise<boolean>;
+  listProjectSummaries(
+    ownerSubject?: string
+  ): Promise<readonly ProjectSummary[]>;
+  projectNameExists(
+    ownerSubject: string,
+    normalizedName: string
+  ): Promise<boolean>;
   createProject(project: Project, ownerSubject: string): Promise<LoadedProject>;
   replaceProject(input: ReplaceProjectInput): Promise<ReplaceProjectResult>;
   deleteProject(input: DeleteProjectInput): Promise<DeleteProjectResult>;

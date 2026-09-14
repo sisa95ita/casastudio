@@ -23,7 +23,12 @@
     "view": "View",
     "edit": "Edit",
     "editing": "Editing",
+    "editingLevel": "Editing · {{level}}",
+    "editPlan": "Edit plan",
+    "editIn2D": "Edit in 2D",
+    "backToProject": "Back to project",
     "clean": "No unsaved changes",
+    "saving": "Saving…",
     "saved": "Saved",
     "unsaved": "Unsaved changes",
     "readOnly": "Read-only"
@@ -139,11 +144,13 @@
   "tools": {
     "label": "Editing tools",
     "select": "Select",
-    "draw-wall": "Draw Wall",
+    "draw-wall": "Wall",
+    "openings": "Openings",
     "door": "Door",
     "window": "Window",
     "opening": "Wall Opening",
     "room": "Room",
+    "stair": "Stair",
     "measure": "Measure",
     "undo": "Undo",
     "redo": "Redo",
@@ -151,28 +158,84 @@
     "comingSoon": "{{tool}} — coming soon",
     "help": {
       "select": "Select elements in the plan.",
-      "draw-wall": "Draw connected walls as a continuous chain.",
+      "draw-wall": "Draw architectural walls.",
+      "openings": "Place a Door, Window, or Wall Opening.",
       "door": "Place a door on a wall.",
       "window": "Place a window on a wall.",
       "opening": "Place an unadorned opening through a wall.",
       "room": "Create a Room from existing walls or a predefined shape.",
-      "measure": "Measure between snapped points without changing the project."
-    }
+      "stair": "Connect a Level or elevated Room with an assisted staircase.",
+      "measure": "Measure between snapped points without changing the project.",
+      "furniture": "Place Furniture in a Room"
+    },
+    "furniture": "Furniture"
   },
   "roomAuthoring": {
-    "menuLabel": "Room authoring",
-    "existingSection": "Create from existing walls",
+    "propertiesTitle": "Room authoring",
+    "chooseModeHint": "Choose Detect or Shape above.",
+    "method": "Method",
+    "shapeMethod": "Shape",
+    "shape": "Shape",
+    "preset": "Preset",
+    "roomType": "Room type: {{type}}",
+    "presets": {
+      "CUSTOM": "Custom",
+      "BEDROOM": "Bedroom",
+      "BATHROOM": "Bathroom",
+      "KITCHEN": "Kitchen",
+      "LIVING_ROOM": "Living Room"
+    },
+    "detectHint": "Select a highlighted bounded region in the plan.",
+    "placeHint": "Move the preview in the plan, then click to create the Room.",
+    "invalidParameters": "Enter valid positive dimensions before placing the Room.",
+    "topologyConflict": "This footprint conflicts with existing Walls and cannot be reconciled safely here.",
+    "cancel": "Cancel",
     "detectRoom": "Detect room",
-    "shapeSection": "Start from a shape",
     "rectangle": "Rectangle",
     "lShape": "L-shape",
-    "emptyLevelOnly": "Room shapes are currently available only on an empty level.",
+    "uShape": "U-shape",
+    "tShape": "T-shape",
+    "elevation": "Elevation above Level",
     "dimensions": "Physical dimensions",
     "width": "Width",
     "depth": "Depth",
     "notchWidth": "Notch width",
     "notchDepth": "Notch depth",
+    "leftWingWidth": "Left wing width",
+    "rightWingWidth": "Right wing width",
+    "stemWidth": "Stem width",
+    "stemDepth": "Stem depth",
     "rotation": "Rotation"
+  },
+  "stairAuthoring": {
+    "title": "Stair authoring",
+    "targetLevel": "Target Level",
+    "targetRoom": "Target Room (optional)",
+    "noTargetRoom": "Level floor",
+    "sameLevel": "same Level",
+    "template": "Initial template",
+    "turn": "Turn",
+    "left": "Left",
+    "right": "Right",
+    "connectionSummary": "From {{from}} to {{to}}",
+    "templates": {
+      "straight": "Straight",
+      "lShaped": "L-shaped",
+      "uShaped": "U-shaped"
+    },
+    "parameters": "Assisted parameters",
+    "placeHint": "Move the complete Stair preview, then click once to create it.",
+    "ready": "Preview is valid. Click the canvas to create the Stair.",
+    "confirm": "Create Stair",
+    "cancel": "Cancel",
+    "invalid": {
+      "NO_RISE": "The destination must be above the stair start. Choose a higher Level or an elevated Room.",
+      "TOO_SHORT": "The run is too short for the selected step count and tread depth. Extend the preview.",
+      "INVALID_PARAMETERS": "Width, Flight step counts, and tread depth must be positive valid values."
+    }
+  },
+  "openingAuthoring": {
+    "menuLabel": "Opening tools"
   },
   "precision": {
     "grid": "Grid",
@@ -219,6 +282,10 @@
   },
   "levelSelector": {
     "label": "Level",
+    "current": "Level: {{level}}",
+    "menuLabel": "Project levels",
+    "add": "Add level",
+    "manage": "Manage levels…",
     "create": "Create level",
     "edit": "Edit level",
     "createTitle": "Create level",
@@ -266,7 +333,8 @@
       "rooms": "Rooms",
       "openings": "Openings",
       "dimensions": "Dimensions",
-      "annotations": "Annotations"
+      "annotations": "Annotations",
+      "furniture": "Furniture"
     }
   },
   "planSummary": {
@@ -277,6 +345,7 @@
   },
   "properties": {
     "title": "Properties",
+    "activeTool": "Active tool",
     "selectObject": "Select an object to edit its available properties.",
     "multipleUnsupported": "This selection has no safe shared property operation.",
     "unavailable": "The selected object has no editable properties.",
@@ -340,11 +409,17 @@
       "referenced": "This room is used by another project entity and cannot be deleted.",
       "dissolutionAmbiguous": "This room does not have one uniquely adjacent room to absorb its region.",
       "dissolutionInvalid": "This room cannot be dissolved into one valid architectural boundary.",
-      "metadata": "The room name or type is invalid. The previous values were kept.",
+      "metadata": "The Room properties are invalid. The previous values were kept.",
       "invalid": "The room could not be created from the available boundary."
     },
     "opening": {
       "invalid": "The opening cannot be placed or changed because it would violate wall clearance, collision, or dimension constraints."
+    },
+    "selection": {
+      "invalid": "The selected entities cannot complete that operation together."
+    },
+    "stair": {
+      "invalid": "The staircase could not be created or changed because its connection or geometry is invalid."
     }
   },
   "wall": {
@@ -394,7 +469,9 @@
       "name": "Name",
       "type": "Type",
       "area": "Area",
-      "perimeter": "Perimeter"
+      "perimeter": "Perimeter",
+      "floorOffset": "Elevation above Level",
+      "globalFloorElevation": "Global floor elevation"
     }
   },
   "selection": {
@@ -415,10 +492,31 @@
       "windows_other": "{{count}} Windows",
       "openings_one": "{{count}} Wall Opening",
       "openings_other": "{{count}} Wall Openings",
+      "stairs_one": "{{count}} Stair",
+      "stairs_other": "{{count}} Stairs",
+      "furniture_one": "{{count}} Furniture item",
+      "furniture_other": "{{count}} Furniture items",
       "junctions_one": "{{count}} Junction",
       "junctions_other": "{{count}} Junctions"
     },
     "moveJunction": "Move junction",
+    "commonActions": "Common actions",
+    "moveHint": "Move by dragging a selected object or using the arrow keys",
+    "duplicate": "Duplicate",
+    "delete": "Delete selected",
+    "sharedProperties": "Shared properties",
+    "rotation": "Rotation",
+    "mixed": "Mixed",
+    "alignment": "Alignment",
+    "alignLeft": "Left",
+    "alignCenterX": "Center",
+    "alignRight": "Right",
+    "alignTop": "Top",
+    "alignCenterZ": "Middle",
+    "alignBottom": "Bottom",
+    "distribution": "Distribution",
+    "distributeHorizontal": "Horizontal",
+    "distributeVertical": "Vertical",
     "selectRoomRegion": "Select room region",
     "labels": {
       "type": "Type",
@@ -444,6 +542,11 @@
     "delete": "Delete Opening",
     "left": "Left",
     "right": "Right",
+    "authoring": {
+      "moveHint": "Move the pointer over a Wall to preview the Opening.",
+      "validCandidate": "Wall candidate: {{wall}}. Click to create the Opening.",
+      "invalidCandidate": "The Opening does not fit at the current position on {{wall}}."
+    },
     "labels": {
       "type": "Type",
       "wall": "Owning wall",
@@ -455,5 +558,70 @@
       "swingSide": "Swing side",
       "offset": "Position from wall start"
     }
+  },
+  "stair": {
+    "selectionTitle": "Stair",
+    "propertiesTitle": "Stair properties",
+    "delete": "Delete Stair",
+    "ownedPart": "Owned by {{staircase}}",
+    "steps": "steps",
+    "totalSteps": "{{count}} total steps",
+    "derivedHelp": "Total rise {{rise}} and riser height {{riser}} are derived from the selected destination.",
+    "types": {
+      "staircase": "Stair",
+      "flight": "Flight",
+      "landing": "Landing"
+    },
+    "templates": {
+      "STRAIGHT": "Straight",
+      "L_SHAPED": "L-shaped",
+      "U_SHAPED": "U-shaped"
+    },
+    "labels": {
+      "type": "Type",
+      "template": "Template",
+      "width": "Width",
+      "stepCount": "Step count",
+      "flight1Steps": "Flight 1 steps",
+      "flight2Steps": "Flight 2 steps",
+      "riserHeight": "Riser height",
+      "treadDepth": "Tread depth",
+      "totalRise": "Total rise",
+      "totalRun": "Total run",
+      "startElevation": "Start elevation",
+      "endElevation": "End elevation"
+    }
+  },
+  "furniture": {
+    "catalog": "Catalog",
+    "room": "Room",
+    "noRoom": "No Room",
+    "chooseRoom": "Choose Room",
+    "position": "Position",
+    "dimensions": "Dimensions",
+    "x": "X",
+    "z": "Z",
+    "width": "Width",
+    "depth": "Depth",
+    "height": "Height",
+    "rotation": "Rotation",
+    "definition": "Definition",
+    "floor": "Room floor elevation",
+    "unknown": "Unknown Furniture",
+    "selectHint": "Choose an item from the catalog.",
+    "placeHint": "Move the pointer into a Room, then click to place.",
+    "outside": "The center must be inside a Room. Placement is unavailable here.",
+    "ambiguous": "Rooms overlap here. Choose the intended Room and floor.",
+    "wallIntersection": "Furniture intersects a Wall. Move or resize it clear of the Wall.",
+    "furnitureIntersection": "Furniture overlaps another item on the same floor.",
+    "stairWarning": "Furniture overlaps a Stair in plan. Vertical clearance is not validated.",
+    "ready": "Room resolved. Click to place; Escape cancels.",
+    "confirmHint": "Confirm the move to the chosen Room.",
+    "invalid": "The edit could not be committed. Choose a valid Room and positive dimensions.",
+    "cancel": "Cancel Furniture authoring",
+    "confirm": "Confirm move",
+    "duplicate": "Duplicate Furniture",
+    "delete": "Delete Furniture",
+    "gestureHint": "Release to apply the change. Escape cancels."
   }
 }

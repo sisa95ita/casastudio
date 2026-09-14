@@ -42,8 +42,9 @@ The JSON document is the Project.
 {
   "id": "casa-simone",
   "name": "Casa Simone",
-  "schemaVersion": "2.0.0",
-  "building": {}
+  "schemaVersion": "4.0.0",
+  "building": {
+    "furniture": [],}
 }
 ```
 
@@ -312,7 +313,7 @@ renderResults
 {
   "id": "casa-simone",
   "name": "Casa Simone",
-  "schemaVersion": "2.0.0",
+  "schemaVersion": "4.0.0",
   "revision": 1,
   "createdAt": "2026-07-11T15:30:00+02:00",
   "updatedAt": "2026-07-11T15:30:00+02:00",
@@ -320,7 +321,8 @@ renderResults
     "length": "cm",
     "angle": "deg"
   },
-  "building": {},
+  "building": {
+    "furniture": [],},
   "viewpoints": [],
   "baseImages": [],
   "designBriefs": [],
@@ -333,7 +335,7 @@ renderResults
 
 - The JSON document represents exactly one Project.
 - A Project contains exactly one Building in the MVP.
-- `schemaVersion` is required and the canonical version is `2.0.0`.
+- `schemaVersion` is required and the canonical version is `4.0.0`.
 - Legacy `1.0.0` projects require explicit migration before canonical parsing.
 - `revision` is required.
 - identifiers must be unique across the entire Project.
@@ -341,9 +343,9 @@ renderResults
 
 ### 5.4 Schema version and migration
 
-`ProjectSchema` accepts only canonical version `2.0.0`.
+`ProjectSchema` accepts only canonical version `4.0.0`.
 
-Legacy version `1.0.0` used `Room.wallIds` and is accepted only through the explicit migration entry point. Migration reconstructs deterministic ordered and oriented `Room.boundary` entries from legacy wall references and may perform migration-only winding normalization.
+Legacy version `1.0.0` used `Room.wallIds`; version `2.0.0` used Wall-only ordered Room boundaries; version `3.0.0` introduced generalized boundaries without Furniture. All require the explicit migration entry point. Migration reconstructs or preserves deterministic boundaries and initializes an empty Building Furniture collection.
 
 Migration preserves `revision`, `createdAt`, and `updatedAt`. Expected migration failures are returned as structured results rather than thrown exceptions.
 
@@ -356,6 +358,7 @@ id
 name
 type
 levels
+furniture
 ```
 
 ### 6.2 Building type
@@ -489,15 +492,23 @@ Building → Level → Room
 
 ### 8.6 Persisted room boundary
 
-The canonical schema version `2.0.0` represents a Room boundary as ordered and oriented wall references.
+The canonical schema version `4.0.0` represents a Room boundary as an ordered sequence of Wall-backed or free segments.
 
 ```ts
 type RoomBoundaryDirection = "FORWARD" | "REVERSE";
 
-type RoomBoundaryEdge = {
+type WallRoomBoundaryEdge = {
   wallId: Identifier;
   direction: RoomBoundaryDirection;
 };
+
+type FreeRoomBoundaryEdge = {
+  kind: "FREE";
+  start: Point2D;
+  end: Point2D;
+};
+
+type RoomBoundaryEdge = WallRoomBoundaryEdge | FreeRoomBoundaryEdge;
 
 type Room = {
   boundary: RoomBoundaryEdge[];
@@ -506,18 +517,22 @@ type Room = {
 
 Array order is the canonical traversal order of the persisted room boundary.
 
-Direction is relative to the referenced Wall:
+For a Wall-backed segment, direction is relative to the referenced Wall:
 
 ```text
 FORWARD = Wall.start -> Wall.end
 REVERSE = Wall.end -> Wall.start
 ```
 
+For a free segment, `start -> end` is its canonical traversal. It closes the
+Room floor footprint without creating or implying a Wall, Opening, railing,
+slab, or structural support.
+
 `boundary: []` represents a draft room. A geometry-buildable room requires at least three boundary edges. One- and two-edge non-empty boundaries are structurally invalid.
 
 A Room boundary must not reference the same Wall more than once in the MVP simple-loop model.
 
-Boundary Walls must belong to the Room's owning Level. Cross-level Room boundaries are invalid.
+Referenced boundary Walls must belong to the Room's owning Level. Cross-level Room boundaries are invalid.
 
 Outer Room boundaries must be persisted counter-clockwise in the owning Level's XZ plane. Canonical validation does not reorder, reverse, or normalize persisted boundaries.
 
@@ -531,7 +546,16 @@ Room.boundary contains Wall.id
 Wall.roomIds contains Room.id
 ```
 
-Any mismatch is rejected by reference-consistency validation.
+Any mismatch is rejected by reference-consistency validation. Free segments do
+not participate in this reciprocal association.
+
+### 8.8 Vertical strata and area
+
+The global Room floor elevation is derived as `Level.elevation +
+(Room.elevation ?? 0)` and is never persisted redundantly. Rooms at different
+global floor elevations may overlap in X/Z without modifying either boundary.
+Area totals therefore represent summed walkable Room floor area and may exceed
+the Level's unique plan footprint.
 
 
 ## 9. Wall
@@ -578,15 +602,16 @@ description
 
 ### 9.5 Room associations
 
-A shared Wall is represented once and may reference two Rooms.
+A shared Wall is represented once and may reference at most two Rooms at one global floor elevation.
 
 The MVP does not introduce an explicit `EXTERIOR` spatial reference.
 
-`Wall.roomIds` contains at most two unique Room identifiers:
+`Wall.roomIds` contains unique Room identifiers. Reference-consistency validation permits at most two references in each global floor-elevation stratum:
 
 - zero Room IDs is valid for an unassigned or draft Wall;
 - one Room ID is valid for an exterior Wall;
-- two Room IDs is valid for a shared Wall.
+- two Room IDs at one elevation is valid for a shared Wall;
+- additional Room IDs at different elevations are valid when the Wall participates in those Room boundaries.
 
 Reference-consistency validation enforces reciprocal agreement between `Wall.roomIds` and `Room.boundary`.
 
@@ -733,6 +758,13 @@ endElevation
 }
 ```
 
+`startElevation` and `endElevation` are building-space vertical elevations in
+the Project length unit. They are not offsets relative to the owning Level.
+For a completed ordered Staircase, the first Flight starts at the source floor,
+the last Flight ends at the destination floor, and adjacent Flights share the
+same transition elevation. A referenced Room contributes its optional local
+elevation to its Level elevation when determining either endpoint.
+
 ## 13. Stair Landing
 StairLanding represents an architectural landing as part of the staircase layout stored in the Project Model. Generated geometry derived from the landing remains the responsibility of the Geometry Engine.
 
@@ -759,6 +791,10 @@ elevation
 ```
 
 The landing is modelled explicitly.
+
+`elevation` uses the same building-space vertical reference frame as StairFlight
+elevations. Its exact XZ anchor and attachment semantics remain unspecified;
+consumers must not infer orientation or Flight attachment from `position` alone.
 
 ## 14. Viewpoint
 
@@ -1193,3 +1229,7 @@ It must be:
 - independent from persistence and rendering technologies.
 
 The Project Schema translates the conceptual Domain Model into a concrete data contract without allowing implementation details to redefine the domain.
+
+## Furniture contract
+
+The Building requires an ordered `furniture` array. Each item persists a stable `id`, mandatory same-Project `roomId`, opaque `definitionId`, centered `{ x, z }` position, finite degree `rotation`, positive finite `width`, `depth`, `height`, and optional common `name`/`description` metadata. Cross-reference and identifier validators enforce sole Room ownership and per-Project identity uniqueness. There is no direct `levelId` or Y/elevation. Unknown catalog IDs remain acceptable. Catalog definitions are separate product data; effective dimensions belong to the instance. Migration from v3 initializes an empty collection without altering existing architectural content and older migrations chain to v4. See [Furniture domain and persistence](furniture-domain.md).

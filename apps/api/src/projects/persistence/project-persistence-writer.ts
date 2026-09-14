@@ -1,4 +1,5 @@
 import { normalizeProjectName, type Project } from "@casastudio/schema";
+import { isWallRoomBoundaryEdge } from "@casastudio/schema";
 import type { Prisma } from "@prisma/client";
 
 import { validateProjectForPersistence } from "./project-aggregate.mapper";
@@ -146,6 +147,7 @@ export class ProjectPersistenceWriter {
     await tx.stairLanding.deleteMany({ where });
     await tx.staircase.deleteMany({ where });
     await tx.wall.deleteMany({ where });
+    await tx.furnitureItem.deleteMany({ where });
     await tx.room.deleteMany({ where });
     await tx.level.deleteMany({ where });
     await tx.building.deleteMany({ where: { projectId: persistenceProjectId } });
@@ -235,13 +237,25 @@ export class ProjectPersistenceWriter {
           boundaryEdge
         ] of room.boundary.entries()) {
           await tx.roomBoundaryEdge.create({
-            data: {
-              projectId: persistenceProjectId,
-              roomId: dbRoom.id,
-              wallId: getRequired(walls, boundaryEdge.wallId, "Wall").id,
-              position: boundaryPosition,
-              direction: boundaryEdge.direction
-            }
+            data: isWallRoomBoundaryEdge(boundaryEdge)
+              ? {
+                  projectId: persistenceProjectId,
+                  roomId: dbRoom.id,
+                  wallId: getRequired(walls, boundaryEdge.wallId, "Wall").id,
+                  position: boundaryPosition,
+                  kind: "WALL",
+                  direction: boundaryEdge.direction
+                }
+              : {
+                  projectId: persistenceProjectId,
+                  roomId: dbRoom.id,
+                  position: boundaryPosition,
+                  kind: "FREE",
+                  startX: boundaryEdge.start.x,
+                  startZ: boundaryEdge.start.z,
+                  endX: boundaryEdge.end.x,
+                  endZ: boundaryEdge.end.z
+                }
           });
         }
       }
@@ -352,6 +366,16 @@ export class ProjectPersistenceWriter {
           });
         }
       }
+    }
+
+    for (const [position, item] of project.building.furniture.entries()) {
+      await tx.furnitureItem.create({ data: {
+        projectId: persistenceProjectId, roomId: getRequired(rooms, item.roomId, "Room").id,
+        domainId: item.id, position, definitionId: item.definitionId,
+        pointX: item.position.x, pointZ: item.position.z, rotation: item.rotation,
+        width: item.width, depth: item.depth, height: item.height,
+        name: item.name, description: item.description
+      } });
     }
 
     for (const [viewpointPosition, viewpoint] of project.viewpoints.entries()) {

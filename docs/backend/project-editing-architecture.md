@@ -49,17 +49,36 @@ All endpoints require a valid Keycloak bearer token.
       "id": "project-domain-id",
       "name": "Apartment",
       "revision": 4,
-      "updatedAt": "2026-08-13T10:30:00.000Z"
+      "updatedAt": "2026-08-13T10:30:00.000Z",
+      "ownedByCurrentUser": true,
+      "levelCount": 2,
+      "roomCount": 8,
+      "preview": {
+        "levelId": "ground-floor",
+        "elevation": 0,
+        "walls": [
+          {
+            "id": "north-wall",
+            "start": { "x": 0, "z": 0 },
+            "end": { "x": 600, "z": 0 },
+            "thickness": 20
+          }
+        ]
+      }
     }
   ]
 }
 ```
 
-This query reads only root Project metadata. Normal users receive Projects
-whose persisted owner subject equals their authenticated Keycloak `sub`.
-Administrators receive all Projects under the existing admin override. Results
-are ordered by the database update timestamp descending and then domain ID
-ascending for deterministic ties.
+This query reads root Project metadata, aggregate Level/Room counts, and the
+minimum geometry needed for a library thumbnail. `preview` contains only Wall
+segments from the lowest Level by elevation, with canonical Level position as
+the tie-breaker; it is omitted when a Project has no Level. It does not contain
+the complete Project aggregate, Room boundaries, Openings, or editor state.
+Normal users receive Projects whose persisted owner subject equals their
+authenticated Keycloak `sub`. Administrators receive all Projects under the
+existing admin override. Results are ordered by the database update timestamp
+descending and then domain ID ascending for deterministic ties.
 
 ### Create a Project
 

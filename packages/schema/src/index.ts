@@ -7,3 +7,5 @@ export * from "./project/index.js";
 export * from "./migrations/index.js";
 export * from "./staircase/index.js";
 export * from "./validation/index.js";
+
+export * from "./furniture/index.js";

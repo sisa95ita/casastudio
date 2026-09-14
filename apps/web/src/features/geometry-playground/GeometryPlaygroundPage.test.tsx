@@ -122,7 +122,7 @@ describe("GeometryPlaygroundPage", () => {
 
     const fittedPoints = polygon.getAttribute("points");
 
-    fireEvent.keyDown(window, { key: "r" });
+    fireEvent.keyDown(window, { key: "r", shiftKey: true });
     expect(polygon.getAttribute("points")).not.toBe(fittedPoints);
 
     fireEvent.keyDown(window, { key: "f" });

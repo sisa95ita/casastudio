@@ -94,18 +94,55 @@ export class PrismaProjectRepository implements ProjectsRepository {
           name: true,
           revision: true,
           domainUpdatedAt: true,
-          ownerSubject: true
+          ownerSubject: true,
+          _count: { select: { levels: true, rooms: true } },
+          levels: {
+            take: 1,
+            orderBy: [{ elevation: "asc" }, { position: "asc" }],
+            select: {
+              domainId: true,
+              elevation: true,
+              walls: {
+                orderBy: { position: "asc" },
+                select: {
+                  domainId: true,
+                  startX: true,
+                  startZ: true,
+                  endX: true,
+                  endZ: true,
+                  thickness: true
+                }
+              }
+            }
+          }
         },
         orderBy: [{ updatedAt: "desc" }, { domainId: "asc" }]
       });
 
-      return projects.map((project) => ({
-        id: project.domainId,
-        name: project.name,
-        revision: project.revision,
-        updatedAt: project.domainUpdatedAt,
-        ownerSubject: project.ownerSubject
-      }));
+      return projects.map((project) => {
+        const previewLevel = project.levels[0];
+        return {
+          id: project.domainId,
+          name: project.name,
+          revision: project.revision,
+          updatedAt: project.domainUpdatedAt,
+          ownerSubject: project.ownerSubject,
+          levelCount: project._count.levels,
+          roomCount: project._count.rooms,
+          preview: previewLevel
+            ? {
+                levelId: previewLevel.domainId,
+                elevation: previewLevel.elevation,
+                walls: previewLevel.walls.map((wall) => ({
+                  id: wall.domainId,
+                  start: { x: wall.startX, z: wall.startZ },
+                  end: { x: wall.endX, z: wall.endZ },
+                  thickness: wall.thickness
+                }))
+              }
+            : undefined
+        };
+      });
     } catch (error) {
       throw new ProjectPersistenceError("Failed to list Projects.", {
         cause: error
@@ -135,7 +172,10 @@ export class PrismaProjectRepository implements ProjectsRepository {
   /**
    * Persists a new normalized Project owned by the supplied Keycloak subject.
    */
-  async createProject(project: Project, ownerSubject: string): Promise<LoadedProject> {
+  async createProject(
+    project: Project,
+    ownerSubject: string
+  ): Promise<LoadedProject> {
     try {
       return await this.prismaService.$transaction(async (tx) => {
         await this.writer.createProjectInTransaction(tx, project, {
@@ -151,7 +191,10 @@ export class PrismaProjectRepository implements ProjectsRepository {
         return this.toLoadedProject(aggregate);
       });
     } catch (error) {
-      if (error instanceof ProjectPersistenceError || error instanceof ProjectReconstructionError) {
+      if (
+        error instanceof ProjectPersistenceError ||
+        error instanceof ProjectReconstructionError
+      ) {
         throw error;
       }
 
@@ -159,7 +202,10 @@ export class PrismaProjectRepository implements ProjectsRepository {
         throw new ProjectNameConflictPersistenceError({ cause: error });
       }
 
-      throw new ProjectPersistenceError(`Failed to create project "${project.id}".`, { cause: error });
+      throw new ProjectPersistenceError(
+        `Failed to create project "${project.id}".`,
+        { cause: error }
+      );
     }
   }
 
@@ -170,7 +216,9 @@ export class PrismaProjectRepository implements ProjectsRepository {
    * A waiting writer re-reads the committed revision before it can mutate any
    * subordinate row, so two writers with one base revision cannot both commit.
    */
-  async replaceProject(input: ReplaceProjectInput): Promise<ReplaceProjectResult> {
+  async replaceProject(
+    input: ReplaceProjectInput
+  ): Promise<ReplaceProjectResult> {
     try {
       return await this.prismaService.$transaction(async (tx) => {
         const rows = await tx.$queryRaw<readonly LockedProjectRow[]>`
@@ -185,7 +233,10 @@ export class PrismaProjectRepository implements ProjectsRepository {
           return { status: "not-found" };
         }
 
-        if (input.requiredOwnerSubject && current.ownerSubject !== input.requiredOwnerSubject) {
+        if (
+          input.requiredOwnerSubject &&
+          current.ownerSubject !== input.requiredOwnerSubject
+        ) {
           return { status: "forbidden" };
         }
 
@@ -221,11 +272,17 @@ export class PrismaProjectRepository implements ProjectsRepository {
         };
       });
     } catch (error) {
-      if (error instanceof ProjectPersistenceError || error instanceof ProjectReconstructionError) {
+      if (
+        error instanceof ProjectPersistenceError ||
+        error instanceof ProjectReconstructionError
+      ) {
         throw error;
       }
 
-      throw new ProjectPersistenceError(`Failed to replace project "${input.projectId}".`, { cause: error });
+      throw new ProjectPersistenceError(
+        `Failed to replace project "${input.projectId}".`,
+        { cause: error }
+      );
     }
   }
 

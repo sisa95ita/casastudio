@@ -1,4 +1,8 @@
 import {
+  FurnitureSvgLayer,
+  type FurnitureViewerModel
+} from "./FurnitureSvgLayer";
+import {
   useEffect,
   useRef,
   useState,
@@ -9,7 +13,10 @@ import {
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 
 import { useCasaTranslation } from "../../../core/i18n";
-import type { ArchitecturalPresentationModel2D } from "../presentation/architectural-presentation-model-2d";
+import {
+  createStaircasePresentation2D,
+  type ArchitecturalPresentationModel2D
+} from "../presentation/architectural-presentation-model-2d";
 import type {
   ArchitecturalDimensionPresentationModel2D,
   LinearDimensionPresentation2D
@@ -20,6 +27,7 @@ import {
   applyGeometrySelectionClick,
   clearGeometrySelection,
   createGeometrySelectionState,
+  isGeometrySelectionMatch,
   selectBoundaryEdge,
   selectDoor,
   selectWallOpening,
@@ -27,11 +35,23 @@ import {
   selectVertex,
   selectWall,
   selectWindow,
+  selectStaircase,
+  selectStairFlight,
+  selectStairLanding,
   type GeometryHoverState,
   type GeometrySelection,
   type GeometrySelectionState,
-  setGeometryHover
+  setGeometryHover,
+  unionGeometrySelection
 } from "../selection/geometry-selection-state";
+import {
+  createGeometrySelectionBox,
+  cycleGeometryHitCandidate,
+  getGeometryHitCandidates,
+  selectGeometryFootprintsInBox,
+  type GeometryHitCycleState,
+  type GeometrySelectionFootprint
+} from "../selection/geometry-selection-spatial";
 import { formatSvgNumber } from "../viewport/geometry-svg-helpers";
 import {
   createViewportTransform2D,
@@ -44,12 +64,14 @@ import {
 } from "../viewport/viewport-transform-2d";
 import type { WallEndpoint } from "@casastudio/schema";
 import type { Opening, Wall } from "@casastudio/schema";
+import type { RoomShapeKind, Staircase } from "@casastudio/schema";
 import {
   createDoorPlanGeometry,
   createWallOpeningPlanGeometry,
   createWindowPlanGeometry
 } from "@casastudio/geometry";
 import type { DrawWallSnapCandidate } from "../../editor-2d/tools/wall/project-wall-snapping";
+import type { PrecisionGuide2D } from "../precision/precision-assistance-2d";
 
 /**
  * Fixed internal SVG viewport dimensions for the technical geometry viewer.
@@ -82,6 +104,8 @@ export type GeometryDisplayOptions = {
   readonly roomMetrics: boolean;
   /** Whether persisted product annotations are visible when available. */
   readonly annotations: boolean;
+  /** Committed Furniture visibility; authoring proposals remain visible independently. */
+  readonly furniture?: boolean;
 };
 
 /**
@@ -89,6 +113,7 @@ export type GeometryDisplayOptions = {
  */
 export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
   Object.freeze({
+    furniture: true,
     architecturalWalls: true,
     openings: true,
     polygons: true,
@@ -112,6 +137,7 @@ export const defaultGeometryDisplayOptions: GeometryDisplayOptions =
  */
 export const projectGeometryDisplayOptions: GeometryDisplayOptions =
   Object.freeze({
+    furniture: true,
     architecturalWalls: true,
     openings: true,
     polygons: true,
@@ -131,15 +157,35 @@ export const projectGeometryDisplayOptions: GeometryDisplayOptions =
  * Props for the interactive geometry SVG viewer.
  */
 export type GeometrySvgViewerProps = {
+  readonly furnitureModel?: FurnitureViewerModel;
+  readonly onFurniturePointerDown?: (
+    id: string,
+    intent: "move" | "rotate",
+    pointer: SvgViewportPointer,
+    pointerId: number
+  ) => void;
+  readonly onFurniturePointerUp?: (dragged: boolean) => void;
+  readonly onFurniturePointerCancel?: () => void;
   readonly presentationModel: GeometryPresentationModel2D;
   readonly architecturalModel?: ArchitecturalPresentationModel2D;
   readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
   readonly selectionState?: GeometrySelectionState;
+  readonly selectionFootprints?: readonly GeometrySelectionFootprint[];
   readonly onSelectionStateChange?: (
     selectionState: GeometrySelectionState
   ) => void;
+  readonly onSelectionTranslationPointerDown?: (
+    selection: GeometrySelection,
+    point: WorldPointXZ,
+    pointerId: number
+  ) => void;
+  readonly onSelectionTranslationPointerUp?: (
+    pointerId: number,
+    dragged: boolean
+  ) => void;
+  readonly onSelectionTranslationPointerCancel?: (pointerId: number) => void;
   readonly onViewportChange?: (viewport: ViewportState) => void;
   readonly interaction?: ProjectEditorInteraction;
   readonly editorOverlay?: GeometryEditorOverlay;
@@ -167,6 +213,22 @@ export type GeometrySvgViewerProps = {
   readonly onOpeningPointerUp?: (pointerId: number, dragged: boolean) => void;
   readonly onOpeningPointerCancel?: (pointerId: number) => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
+  readonly onStairAdjustmentPointerDown?: (
+    staircaseId: string,
+    pointerId: number
+  ) => void;
+  readonly onStairAdjustmentPointerUp?: (
+    point: WorldPointXZ,
+    pointerId: number
+  ) => void;
+  readonly onStairAdjustmentPointerCancel?: (pointerId: number) => void;
+  readonly onStairTranslationPointerDown?: (
+    staircaseId: string,
+    point: WorldPointXZ,
+    pointerId: number
+  ) => void;
+  readonly onStairTranslationPointerUp?: (pointerId: number) => void;
+  readonly onStairTranslationPointerCancel?: (pointerId: number) => void;
 };
 
 /** Pointer normalized into both SVG viewBox and canonical world coordinates. */
@@ -174,7 +236,25 @@ export type SvgViewportPointer = {
   readonly svgPoint: ScreenPoint;
   readonly worldPoint: WorldPointXZ;
   readonly cssPixelsPerSvgUnit: number;
+  /** Active gesture-only precision bypass; never changes editor preferences. */
+  readonly altKey?: boolean;
 };
+
+/** Prevents a final out-of-bounds move from relocating passive authoring previews. */
+export function isClientPointInsideCanvas(
+  point: Pick<PointerEvent<SVGSVGElement>, "clientX" | "clientY">,
+  canvas: Pick<SVGSVGElement, "getBoundingClientRect">
+): boolean {
+  const bounds = canvas.getBoundingClientRect();
+  // Layout-less DOMs (including jsdom) cannot provide meaningful bounds.
+  if (bounds.width <= 0 || bounds.height <= 0) return true;
+  return (
+    point.clientX >= bounds.left &&
+    point.clientX <= bounds.right &&
+    point.clientY >= bounds.top &&
+    point.clientY <= bounds.bottom
+  );
+}
 
 /** Screen-local state for distinguishing an Opening click from a drag. */
 type OpeningPointerInteraction = {
@@ -194,11 +274,31 @@ type ViewportPanInteraction = {
   lastPoint: ScreenPoint;
 };
 
+type SelectionBoxPointerInteraction = {
+  readonly pointerId: number;
+  readonly startSvg: ScreenPoint;
+  readonly startWorld: WorldPointXZ;
+  readonly cssPixelsPerSvgUnit: number;
+  readonly additive: boolean;
+  currentSvg: ScreenPoint;
+  currentWorld: WorldPointXZ;
+  dragStarted: boolean;
+};
+
+type SelectionTranslationPointerInteraction = {
+  readonly pointerId: number;
+  readonly start: ScreenPoint;
+  readonly cssPixelsPerSvgUnit: number;
+  dragged: boolean;
+};
+
 /** Minimum pointer travel required before an Opening interaction becomes a drag. */
 const openingDragThresholdCssPixels = 5;
 
 /** Editor-only geometry rendered above the stable presentation model. */
 export type GeometryEditorOverlay = {
+  /** Transient, non-interactive geometry explaining the active precision result. */
+  readonly precisionGuides?: readonly PrecisionGuide2D[];
   readonly roomFaceCandidates?: readonly {
     readonly faceKey: string;
     readonly vertices: readonly WorldPointXZ[];
@@ -215,7 +315,21 @@ export type GeometryEditorOverlay = {
     readonly vertices: readonly WorldPointXZ[];
     readonly labelAnchor: WorldPointXZ;
     readonly label: string;
-    readonly kind: "RECTANGLE" | "L_SHAPE";
+    readonly kind: RoomShapeKind;
+    readonly elevated?: boolean;
+    readonly elevation?: number;
+    readonly valid: boolean;
+  };
+  /** Complete canonical Staircase proposal rendered without entering history. */
+  readonly stairPreview?: {
+    readonly staircase: Staircase;
+    readonly valid: boolean;
+    readonly locked: boolean;
+  };
+  /** Direct-manipulation handle for the selected root Staircase. */
+  readonly selectedStair?: {
+    readonly staircaseId: string;
+    readonly adjustmentPoint: WorldPointXZ;
   };
   readonly selectedWall?: {
     readonly wallId: string;
@@ -246,6 +360,12 @@ export type GeometryEditorOverlay = {
     readonly visible: boolean;
     readonly spacing: number;
   };
+  /** Lightweight honest preview of one rigid group translation. */
+  readonly selectionTranslation?: {
+    readonly min: WorldPointXZ;
+    readonly max: WorldPointXZ;
+    readonly delta: WorldPointXZ;
+  };
 };
 
 const defaultViewerInteraction: ProjectEditorInteraction = Object.freeze({
@@ -265,13 +385,21 @@ const defaultViewerInteraction: ProjectEditorInteraction = Object.freeze({
  * Wall hit targets, and handled entity clicks stop before the background layer.
  */
 export function GeometrySvgViewer({
+  furnitureModel,
+  onFurniturePointerDown,
+  onFurniturePointerUp,
+  onFurniturePointerCancel,
   presentationModel,
   architecturalModel,
   dimensionModel,
   options,
   viewport,
   selectionState,
+  selectionFootprints = [],
   onSelectionStateChange,
+  onSelectionTranslationPointerDown,
+  onSelectionTranslationPointerUp,
+  onSelectionTranslationPointerCancel,
   onViewportChange,
   interaction = defaultViewerInteraction,
   editorOverlay,
@@ -285,19 +413,46 @@ export function GeometrySvgViewer({
   onOpeningDragThresholdCrossed,
   onOpeningPointerUp,
   onOpeningPointerCancel,
-  onRoomFaceCandidateClick
+  onRoomFaceCandidateClick,
+  onStairAdjustmentPointerDown,
+  onStairAdjustmentPointerUp,
+  onStairAdjustmentPointerCancel,
+  onStairTranslationPointerDown,
+  onStairTranslationPointerUp,
+  onStairTranslationPointerCancel
 }: GeometrySvgViewerProps) {
   const { t } = useCasaTranslation("geometry-playground");
   const bounds = presentationModel.bounds;
-  const panInteractionRef = useRef<ViewportPanInteraction | undefined>(undefined);
+  const panInteractionRef = useRef<ViewportPanInteraction | undefined>(
+    undefined
+  );
+  const selectionBoxPointerRef = useRef<
+    SelectionBoxPointerInteraction | undefined
+  >(undefined);
+  const selectionTranslationPointerRef = useRef<
+    SelectionTranslationPointerInteraction | undefined
+  >(undefined);
+  const hitCycleRef = useRef<GeometryHitCycleState | undefined>(undefined);
   const [isPanning, setIsPanning] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<
+    SelectionBoxPointerInteraction | undefined
+  >(undefined);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const currentViewportRef = useRef<ViewportState>(viewport);
   const viewportTransformRef = useRef(createViewportTransform2D(viewport));
   const onViewportChangeRef = useRef(onViewportChange);
   const suppressNextBackgroundClickRef = useRef(false);
   const endpointPointerIdRef = useRef<number | undefined>(undefined);
-  const openingPointerInteractionRef = useRef<OpeningPointerInteraction | undefined>(undefined);
+  const openingPointerInteractionRef = useRef<
+    OpeningPointerInteraction | undefined
+  >(undefined);
+  const furniturePointerRef = useRef<
+    | { pointerId: number; start: ScreenPoint; scale: number; dragged: boolean }
+    | undefined
+  >(undefined);
+  const furnitureClickHandledRef = useRef(false);
+  const stairAdjustmentPointerIdRef = useRef<number | undefined>(undefined);
+  const stairTranslationPointerIdRef = useRef<number | undefined>(undefined);
 
   currentViewportRef.current = viewport;
   viewportTransformRef.current = createViewportTransform2D(viewport);
@@ -309,8 +464,14 @@ export function GeometrySvgViewer({
   const centroidRadius = Math.max(4, Math.min(7, viewport.zoom * 6));
 
   const rendersSvgViewport = Boolean(
-    bounds || interaction.drawWallEnabled || interaction.measurementEnabled ||
-      interaction.roomShapePlacementEnabled
+    bounds ||
+    architecturalModel?.staircases.length ||
+    interaction.drawWallEnabled ||
+    interaction.measurementEnabled ||
+    interaction.roomShapePlacementEnabled ||
+    interaction.stairPlacementEnabled ||
+    interaction.furniturePlacementEnabled ||
+    furnitureModel?.items.length
   );
 
   useEffect(() => {
@@ -346,10 +507,7 @@ export function GeometrySvgViewer({
 
   useEffect(() => {
     const panInteraction = panInteractionRef.current;
-    if (
-      interaction.panAnywhere ||
-      panInteraction?.extent !== "viewport"
-    ) {
+    if (interaction.panAnywhere || panInteraction?.extent !== "viewport") {
       return;
     }
 
@@ -360,6 +518,28 @@ export function GeometrySvgViewer({
     panInteractionRef.current = undefined;
     setIsPanning(false);
   }, [interaction.panAnywhere]);
+
+  useEffect(() => {
+    if (
+      !interaction.selectionEnabled ||
+      resolvedSelectionState.selected.length === 0
+    ) {
+      hitCycleRef.current = undefined;
+    }
+  }, [interaction.selectionEnabled, resolvedSelectionState.selected.length]);
+
+  useEffect(() => {
+    const cancelSelectionBox = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || !selectionBoxPointerRef.current) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      selectionBoxPointerRef.current = undefined;
+      setSelectionBox(undefined);
+    };
+    window.addEventListener("keydown", cancelSelectionBox, true);
+    return () =>
+      window.removeEventListener("keydown", cancelSelectionBox, true);
+  }, []);
 
   if (!rendersSvgViewport) {
     return (
@@ -373,6 +553,7 @@ export function GeometrySvgViewer({
     readonly clientX: number;
     readonly clientY: number;
     readonly currentTarget: SVGSVGElement;
+    readonly altKey?: boolean;
   }): SvgViewportPointer => {
     const normalized = normalizeClientPointToSvgViewport({
       clientX: event.clientX,
@@ -384,7 +565,8 @@ export function GeometrySvgViewer({
     return {
       svgPoint: normalized.point,
       worldPoint: transform.screenToWorld(normalized.point),
-      cssPixelsPerSvgUnit: normalized.cssPixelsPerSvgUnit
+      cssPixelsPerSvgUnit: normalized.cssPixelsPerSvgUnit,
+      altKey: Boolean(event.altKey)
     };
   };
   const getEventPoint = (event: {
@@ -394,8 +576,32 @@ export function GeometrySvgViewer({
   }): ScreenPoint => getEventPointer(event).svgPoint;
 
   const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    // Suppression belongs to the preceding gesture's synthetic click only.
+    suppressNextBackgroundClickRef.current = false;
+    furnitureClickHandledRef.current = false;
     if (openingPointerInteractionRef.current?.completed) {
       openingPointerInteractionRef.current = undefined;
+    }
+    if (
+      interaction.selectionEnabled &&
+      editorOverlay !== undefined &&
+      !interaction.panAnywhere &&
+      event.button === 0 &&
+      isBackgroundPanEvent(event)
+    ) {
+      const pointer = getEventPointer(event);
+      selectionBoxPointerRef.current = {
+        pointerId: event.pointerId,
+        startSvg: pointer.svgPoint,
+        startWorld: pointer.worldPoint,
+        currentSvg: pointer.svgPoint,
+        currentWorld: pointer.worldPoint,
+        cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+        additive: event.metaKey || event.ctrlKey,
+        dragStarted: false
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
     }
     if (
       !interaction.panEnabled ||
@@ -418,12 +624,56 @@ export function GeometrySvgViewer({
 
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
     const pointer = getEventPointer(event);
+    const boxInteraction = selectionBoxPointerRef.current;
+    if (boxInteraction?.pointerId === event.pointerId) {
+      boxInteraction.currentSvg = pointer.svgPoint;
+      boxInteraction.currentWorld = pointer.worldPoint;
+      if (!boxInteraction.dragStarted) {
+        boxInteraction.dragStarted =
+          Math.hypot(
+            pointer.svgPoint.x - boxInteraction.startSvg.x,
+            pointer.svgPoint.y - boxInteraction.startSvg.y
+          ) *
+            boxInteraction.cssPixelsPerSvgUnit >=
+          openingDragThresholdCssPixels;
+      }
+      if (boxInteraction.dragStarted) setSelectionBox({ ...boxInteraction });
+      return;
+    }
+    const selectionTranslation = selectionTranslationPointerRef.current;
+    if (selectionTranslation?.pointerId === event.pointerId) {
+      selectionTranslation.dragged ||=
+        Math.hypot(
+          pointer.svgPoint.x - selectionTranslation.start.x,
+          pointer.svgPoint.y - selectionTranslation.start.y
+        ) *
+          selectionTranslation.cssPixelsPerSvgUnit >=
+        openingDragThresholdCssPixels;
+      if (selectionTranslation.dragged)
+        onEditorPointerMove?.(pointer, event.pointerId);
+      return;
+    }
+    const furnitureGesture = furniturePointerRef.current;
+    if (furnitureGesture?.pointerId === event.pointerId) {
+      const distanceInCssPixels =
+        Math.hypot(
+          pointer.svgPoint.x - furnitureGesture.start.x,
+          pointer.svgPoint.y - furnitureGesture.start.y
+        ) * furnitureGesture.scale;
+      if (
+        distanceInCssPixels < openingDragThresholdCssPixels &&
+        !furnitureGesture.dragged
+      )
+        return;
+      furnitureGesture.dragged = true;
+    }
     const openingInteraction = openingPointerInteractionRef.current;
     if (openingInteraction?.pointerId === event.pointerId) {
-      const distanceInCssPixels = Math.hypot(
-        pointer.svgPoint.x - openingInteraction.startPoint.x,
-        pointer.svgPoint.y - openingInteraction.startPoint.y
-      ) * openingInteraction.cssPixelsPerSvgUnit;
+      const distanceInCssPixels =
+        Math.hypot(
+          pointer.svgPoint.x - openingInteraction.startPoint.x,
+          pointer.svgPoint.y - openingInteraction.startPoint.y
+        ) * openingInteraction.cssPixelsPerSvgUnit;
       if (
         !openingInteraction.dragStarted &&
         distanceInCssPixels >= openingDragThresholdCssPixels
@@ -436,7 +686,19 @@ export function GeometrySvgViewer({
 
     const panInteraction = panInteractionRef.current;
     if (!panInteraction || panInteraction.pointerId !== event.pointerId) {
-      onEditorPointerMove?.(pointer, event.pointerId);
+      const capturedEditorGesture =
+        furnitureGesture?.pointerId === event.pointerId ||
+        openingInteraction?.pointerId === event.pointerId ||
+        selectionTranslationPointerRef.current?.pointerId === event.pointerId ||
+        stairAdjustmentPointerIdRef.current === event.pointerId ||
+        stairTranslationPointerIdRef.current === event.pointerId ||
+        endpointPointerIdRef.current === event.pointerId;
+      if (
+        capturedEditorGesture ||
+        isClientPointInsideCanvas(event, event.currentTarget)
+      ) {
+        onEditorPointerMove?.(pointer, event.pointerId);
+      }
     }
 
     if (
@@ -466,11 +728,81 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    const boxInteraction = selectionBoxPointerRef.current;
+    if (boxInteraction?.pointerId === event.pointerId) {
+      if (boxInteraction.dragStarted) {
+        const box = createGeometrySelectionBox(
+          boxInteraction.startWorld,
+          boxInteraction.currentWorld,
+          boxInteraction.currentSvg.x >= boxInteraction.startSvg.x
+        );
+        const selected = selectGeometryFootprintsInBox(
+          selectionFootprints,
+          box
+        );
+        onSelectionStateChange?.(
+          boxInteraction.additive
+            ? unionGeometrySelection(resolvedSelectionState, selected)
+            : createGeometrySelectionState(
+                selected,
+                resolvedSelectionState.hovered
+              )
+        );
+        suppressNextBackgroundClickRef.current = true;
+        hitCycleRef.current = undefined;
+      }
+      selectionBoxPointerRef.current = undefined;
+      setSelectionBox(undefined);
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
+    const selectionTranslation = selectionTranslationPointerRef.current;
+    if (selectionTranslation?.pointerId === event.pointerId) {
+      onSelectionTranslationPointerUp?.(
+        event.pointerId,
+        selectionTranslation.dragged
+      );
+      suppressNextBackgroundClickRef.current = selectionTranslation.dragged;
+      selectionTranslationPointerRef.current = undefined;
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
+    const furnitureGesture = furniturePointerRef.current;
+    if (furnitureGesture?.pointerId === event.pointerId) {
+      onFurniturePointerUp?.(furnitureGesture.dragged);
+      furniturePointerRef.current = undefined;
+      furnitureClickHandledRef.current = true;
+      suppressNextBackgroundClickRef.current = true;
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
+    if (stairAdjustmentPointerIdRef.current === event.pointerId) {
+      onStairAdjustmentPointerUp?.(
+        getEventPointer(event).worldPoint,
+        event.pointerId
+      );
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      stairAdjustmentPointerIdRef.current = undefined;
+      return;
+    }
+    if (stairTranslationPointerIdRef.current === event.pointerId) {
+      onStairTranslationPointerUp?.(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      stairTranslationPointerIdRef.current = undefined;
+      suppressNextBackgroundClickRef.current = true;
+      return;
+    }
     const openingInteraction = openingPointerInteractionRef.current;
     if (openingInteraction?.pointerId === event.pointerId) {
       openingInteraction.completed = true;
       onOpeningPointerUp?.(event.pointerId, openingInteraction.dragStarted);
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
     if (endpointPointerIdRef.current === event.pointerId) {
@@ -495,9 +827,40 @@ export function GeometrySvgViewer({
   };
 
   const handlePointerCancel = (event: PointerEvent<SVGSVGElement>) => {
+    if (selectionBoxPointerRef.current?.pointerId === event.pointerId) {
+      selectionBoxPointerRef.current = undefined;
+      setSelectionBox(undefined);
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (selectionTranslationPointerRef.current?.pointerId === event.pointerId) {
+      onSelectionTranslationPointerCancel?.(event.pointerId);
+      selectionTranslationPointerRef.current = undefined;
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (furniturePointerRef.current?.pointerId === event.pointerId) {
+      onFurniturePointerCancel?.();
+      furniturePointerRef.current = undefined;
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (stairAdjustmentPointerIdRef.current === event.pointerId) {
+      onStairAdjustmentPointerCancel?.(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      stairAdjustmentPointerIdRef.current = undefined;
+    }
+    if (stairTranslationPointerIdRef.current === event.pointerId) {
+      onStairTranslationPointerCancel?.(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      stairTranslationPointerIdRef.current = undefined;
+    }
     if (openingPointerInteractionRef.current?.pointerId === event.pointerId) {
       onOpeningPointerCancel?.(event.pointerId);
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
       openingPointerInteractionRef.current = undefined;
     }
     if (endpointPointerIdRef.current === event.pointerId) {
@@ -517,6 +880,14 @@ export function GeometrySvgViewer({
   };
 
   const handleLostPointerCapture = (event: PointerEvent<SVGSVGElement>) => {
+    if (selectionBoxPointerRef.current?.pointerId === event.pointerId) {
+      selectionBoxPointerRef.current = undefined;
+      setSelectionBox(undefined);
+    }
+    if (selectionTranslationPointerRef.current?.pointerId === event.pointerId) {
+      onSelectionTranslationPointerCancel?.(event.pointerId);
+      selectionTranslationPointerRef.current = undefined;
+    }
     if (panInteractionRef.current?.pointerId !== event.pointerId) return;
     panInteractionRef.current = undefined;
     setIsPanning(false);
@@ -532,7 +903,9 @@ export function GeometrySvgViewer({
       interaction.drawWallEnabled ||
       interaction.openingPlacement ||
       interaction.measurementEnabled ||
-      interaction.roomShapePlacementEnabled
+      interaction.roomShapePlacementEnabled ||
+      interaction.stairPlacementEnabled ||
+      interaction.furniturePlacementEnabled
     ) {
       onEditorCanvasClick?.(getEventPointer(event));
     }
@@ -543,6 +916,8 @@ export function GeometrySvgViewer({
     selection: GeometrySelection,
     wallId: string
   ) => {
+    if (handleSelectionTranslationPointerDown(event, selection)) return;
+    if (event.metaKey || event.ctrlKey) return;
     if (!interaction.openingEditingEnabled) return;
     event.preventDefault();
     event.stopPropagation();
@@ -563,7 +938,9 @@ export function GeometrySvgViewer({
       completed: false
     };
     svg.setPointerCapture(event.pointerId);
-    onSelectionStateChange?.(createGeometrySelectionState([selection], resolvedSelectionState.hovered));
+    onSelectionStateChange?.(
+      createGeometrySelectionState([selection], resolvedSelectionState.hovered)
+    );
     onOpeningPointerDown?.(selection.geometryId, wallId, event.pointerId);
   };
 
@@ -595,6 +972,89 @@ export function GeometrySvgViewer({
     onJunctionPointerDown?.(event.pointerId);
   };
 
+  const handleStairTranslationPointerDown = (
+    event: PointerEvent<SVGElement>,
+    staircaseId: string
+  ) => {
+    if (
+      handleSelectionTranslationPointerDown(event, selectStaircase(staircaseId))
+    )
+      return;
+    if (event.metaKey || event.ctrlKey) return;
+    if (
+      !interaction.selectionEnabled ||
+      !resolvedSelectionState.selected.some(
+        (selection) =>
+          selection.kind === "STAIRCASE" && selection.geometryId === staircaseId
+      )
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    const pointer = getEventPointer({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      currentTarget: svg
+    });
+    stairTranslationPointerIdRef.current = event.pointerId;
+    svg.setPointerCapture(event.pointerId);
+    onStairTranslationPointerDown?.(
+      staircaseId,
+      pointer.worldPoint,
+      event.pointerId
+    );
+  };
+
+  const handleSelectionTranslationPointerDown = (
+    event: PointerEvent<SVGElement>,
+    selection: GeometrySelection
+  ): boolean => {
+    const selected = isGeometrySelectionMatch(
+      resolvedSelectionState.selected,
+      selection.kind,
+      selection.geometryId
+    );
+    const genericTranslation =
+      resolvedSelectionState.selected.length > 1 ||
+      selection.kind === "WALL" ||
+      selection.kind === "POLYGON";
+    if (
+      !selected ||
+      !genericTranslation ||
+      !interaction.selectionEnabled ||
+      interaction.panAnywhere ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      !onSelectionTranslationPointerDown
+    )
+      return false;
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return false;
+    const pointer = getEventPointer({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      currentTarget: svg
+    });
+    event.preventDefault();
+    event.stopPropagation();
+    selectionTranslationPointerRef.current = {
+      pointerId: event.pointerId,
+      start: pointer.svgPoint,
+      cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+      dragged: false
+    };
+    svg.setPointerCapture(event.pointerId);
+    onSelectionTranslationPointerDown(
+      selection,
+      pointer.worldPoint,
+      event.pointerId
+    );
+    return true;
+  };
+
   const handleBackgroundClick = (event: MouseEvent<SVGRectElement>) => {
     if (
       suppressNextBackgroundClickRef.current ||
@@ -612,7 +1072,44 @@ export function GeometrySvgViewer({
     }
 
     event.stopPropagation();
+    if (event.metaKey || event.ctrlKey) return;
+    hitCycleRef.current = undefined;
     onSelectionStateChange?.(clearGeometrySelection(resolvedSelectionState));
+  };
+
+  const resolveClickSelection = (
+    event: MouseEvent<SVGElement>,
+    fallback: GeometrySelection
+  ): GeometrySelection => {
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg || selectionFootprints.length === 0) return fallback;
+    const bounds = svg.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return fallback;
+    const pointer = getEventPointer({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      currentTarget: svg
+    });
+    const candidates = [
+      ...getGeometryHitCandidates(selectionFootprints, pointer.worldPoint)
+    ];
+    if (
+      !candidates.some(
+        (candidate) =>
+          candidate.kind === fallback.kind &&
+          candidate.geometryId === fallback.geometryId
+      )
+    ) {
+      hitCycleRef.current = undefined;
+      return fallback;
+    }
+    const cycled = cycleGeometryHitCandidate(
+      hitCycleRef.current,
+      pointer.svgPoint,
+      candidates
+    );
+    hitCycleRef.current = cycled.state;
+    return cycled.selection ?? fallback;
   };
 
   const handleEntityClick = (
@@ -628,11 +1125,13 @@ export function GeometrySvgViewer({
       const svg = event.currentTarget.ownerSVGElement;
       event.stopPropagation();
       if (svg) {
-        onEditorCanvasClick?.(getEventPointer({
-          clientX: event.clientX,
-          clientY: event.clientY,
-          currentTarget: svg
-        }));
+        onEditorCanvasClick?.(
+          getEventPointer({
+            clientX: event.clientX,
+            clientY: event.clientY,
+            currentTarget: svg
+          })
+        );
       }
       return;
     }
@@ -649,11 +1148,20 @@ export function GeometrySvgViewer({
     }
 
     event.stopPropagation();
+    const canonicalSelection =
+      nextSelection.kind === "BOUNDARY_EDGE"
+        ? (() => {
+            const wallId = presentationModel.boundaryEdges.find(
+              (edge) => edge.geometryId === nextSelection.geometryId
+            )?.sourceWallId;
+            return wallId ? selectWall(wallId) : nextSelection;
+          })()
+        : nextSelection;
     onSelectionStateChange?.(
       applyGeometrySelectionClick(
         resolvedSelectionState,
-        nextSelection,
-        event.shiftKey
+        resolveClickSelection(event, canonicalSelection),
+        event.metaKey || event.ctrlKey
       )
     );
   };
@@ -670,12 +1178,17 @@ export function GeometrySvgViewer({
     if (!interaction.selectionEnabled) return;
     event.stopPropagation();
     const pointerInteraction = openingPointerInteractionRef.current;
-    const completedMatchingInteraction = pointerInteraction?.completed === true &&
+    const completedMatchingInteraction =
+      pointerInteraction?.completed === true &&
       pointerInteraction.openingId === selection.geometryId;
     openingPointerInteractionRef.current = undefined;
     if (completedMatchingInteraction && pointerInteraction.dragStarted) return;
     onSelectionStateChange?.(
-      createGeometrySelectionState([selection], resolvedSelectionState.hovered)
+      applyGeometrySelectionClick(
+        resolvedSelectionState,
+        resolveClickSelection(event, selection),
+        event.metaKey || event.ctrlKey
+      )
     );
   };
 
@@ -691,15 +1204,15 @@ export function GeometrySvgViewer({
     <svg
       ref={svgRef}
       className={`geometry-svg geometry-svg--${
-        interaction.drawWallEnabled
+        interaction.drawWallEnabled || interaction.furniturePlacementEnabled
           ? "draw-wall"
           : interaction.measurementEnabled
             ? "measure"
-          : interaction.selectionEnabled
-            ? "select"
-            : interaction.panAnywhere
-              ? "pan"
-              : "neutral"
+            : interaction.selectionEnabled
+              ? "select"
+              : interaction.panAnywhere
+                ? "pan"
+                : "neutral"
       }${editorOverlay ? " geometry-svg--authoring" : " geometry-svg--presentation"}${editorOverlay?.activeOpeningDragId ? " geometry-svg--opening-drag" : ""}${isPanning ? " geometry-svg--panning" : ""}`}
       viewBox={`0 0 ${geometrySvgViewport.width} ${geometrySvgViewport.height}`}
       role="img"
@@ -724,8 +1237,40 @@ export function GeometrySvgViewer({
         onClick={handleBackgroundClick}
       />
 
+      {selectionBox?.dragStarted ? (
+        <rect
+          data-testid="geometry-selection-box"
+          data-mode={
+            selectionBox.currentSvg.x >= selectionBox.startSvg.x
+              ? "containment"
+              : "crossing"
+          }
+          className={`geometry-selection-box geometry-selection-box--${
+            selectionBox.currentSvg.x >= selectionBox.startSvg.x
+              ? "containment"
+              : "crossing"
+          }`}
+          x={formatSvgNumber(
+            Math.min(selectionBox.startSvg.x, selectionBox.currentSvg.x)
+          )}
+          y={formatSvgNumber(
+            Math.min(selectionBox.startSvg.y, selectionBox.currentSvg.y)
+          )}
+          width={formatSvgNumber(
+            Math.abs(selectionBox.currentSvg.x - selectionBox.startSvg.x)
+          )}
+          height={formatSvgNumber(
+            Math.abs(selectionBox.currentSvg.y - selectionBox.startSvg.y)
+          )}
+          aria-hidden="true"
+        />
+      ) : null}
+
       {editorOverlay?.grid?.visible && editorOverlay.grid.spacing > 0 ? (
-        <GeometryGridLayer spacing={editorOverlay.grid.spacing} transform={transform} />
+        <GeometryGridLayer
+          spacing={editorOverlay.grid.spacing}
+          transform={transform}
+        />
       ) : null}
 
       {options.bounds ? (
@@ -756,7 +1301,9 @@ export function GeometrySvgViewer({
       {options.polygons ? (
         <g data-layer="polygons">
           {presentationModel.polygons.map((polygon) => {
-            const className = getEntityClassName("geometry-polygon", polygon);
+            const className = `${getEntityClassName("geometry-polygon", polygon)}${
+              polygon.elevated ? " geometry-polygon--elevated" : ""
+            }`;
 
             return (
               <g key={polygon.geometryId}>
@@ -764,8 +1311,17 @@ export function GeometrySvgViewer({
                   data-testid="geometry-polygon"
                   data-geometry-kind={polygon.kind}
                   data-geometry-id={polygon.geometryId}
+                  data-source-room-id={polygon.sourceRoomId}
+                  data-floor-elevation={polygon.floorElevation}
+                  data-elevated={polygon.elevated ? "true" : "false"}
                   points={polygon.svgPoints}
                   className={className}
+                  onPointerDown={(event) =>
+                    handleSelectionTranslationPointerDown(
+                      event,
+                      selectPolygon(polygon.geometryId)
+                    )
+                  }
                   onClick={(event) =>
                     handleEntityClick(event, selectPolygon(polygon.geometryId))
                   }
@@ -825,7 +1381,10 @@ export function GeometrySvgViewer({
                   data-testid="architectural-wall-body"
                   data-source-wall-id={wall.geometryId}
                   points={points}
-                  className={getEntityClassName("architectural-wall-body", wall)}
+                  className={getEntityClassName(
+                    "architectural-wall-body",
+                    wall
+                  )}
                 />
               ))}
               <line
@@ -837,10 +1396,154 @@ export function GeometrySvgViewer({
                 x2={formatSvgNumber(wall.end.x)}
                 y2={formatSvgNumber(wall.end.y)}
                 strokeWidth={formatSvgNumber(wall.hitWidth)}
-                onClick={(event) => handleEntityClick(event, selectWall(wall.geometryId))}
-                onMouseEnter={() => handleHoverChange(selectWall(wall.geometryId))}
+                onPointerDown={(event) =>
+                  handleSelectionTranslationPointerDown(
+                    event,
+                    selectWall(wall.geometryId)
+                  )
+                }
+                onClick={(event) =>
+                  handleEntityClick(event, selectWall(wall.geometryId))
+                }
+                onMouseEnter={() =>
+                  handleHoverChange(selectWall(wall.geometryId))
+                }
                 onMouseLeave={() => handleHoverChange(undefined)}
               />
+            </g>
+          ))}
+        </g>
+      ) : null}
+
+      {architecturalModel ? (
+        <g data-layer="architectural-stairs">
+          {architecturalModel.staircases.map((staircase) => (
+            <g
+              key={staircase.geometryId}
+              data-testid="architectural-staircase"
+              data-geometry-kind="STAIRCASE"
+              data-geometry-id={staircase.geometryId}
+              className={getEntityClassName(
+                "architectural-staircase",
+                staircase
+              )}
+            >
+              {staircase.flights.map((flight) => (
+                <g
+                  key={flight.geometryId}
+                  data-beyond-cut={flight.beyondCut ? "true" : "false"}
+                  data-has-plan-cut={flight.cut ? "true" : "false"}
+                  className={`${getEntityClassName(
+                    "architectural-stair-flight",
+                    flight
+                  )}${flight.beyondCut ? " architectural-stair-flight--continuation" : ""}`}
+                >
+                  <polygon
+                    className="architectural-stair-flight__body"
+                    points={flight.bodySvgPoints}
+                    onPointerDown={(event) =>
+                      handleStairTranslationPointerDown(
+                        event,
+                        staircase.geometryId
+                      )
+                    }
+                    onClick={(event) =>
+                      handleEntityClick(
+                        event,
+                        selectStaircase(staircase.geometryId)
+                      )
+                    }
+                    onMouseEnter={() =>
+                      handleHoverChange(selectStaircase(staircase.geometryId))
+                    }
+                    onMouseLeave={() => handleHoverChange(undefined)}
+                  />
+                  <line
+                    className="architectural-stair-flight__hit-target"
+                    data-testid="architectural-stair-flight"
+                    data-geometry-kind="STAIR_FLIGHT"
+                    data-geometry-id={flight.geometryId}
+                    {...lineAttributes(flight.start, flight.end)}
+                    onPointerDown={(event) =>
+                      handleStairTranslationPointerDown(
+                        event,
+                        staircase.geometryId
+                      )
+                    }
+                    onClick={(event) =>
+                      handleEntityClick(
+                        event,
+                        selectStaircase(staircase.geometryId)
+                      )
+                    }
+                    onMouseEnter={() =>
+                      handleHoverChange(selectStairFlight(flight.geometryId))
+                    }
+                    onMouseLeave={() => handleHoverChange(undefined)}
+                  />
+                  {flight.cut ? (
+                    <polygon
+                      className="architectural-stair-continuation"
+                      points={flight.cut.continuationSvgPoints}
+                    />
+                  ) : null}
+                  {flight.treadLines.map((line, index) => (
+                    <line
+                      key={index}
+                      className={`architectural-stair-tread${line.beyondCut ? " architectural-stair-tread--continuation" : ""}`}
+                      {...lineAttributes(line.start, line.end)}
+                    />
+                  ))}
+                  {flight.cut?.breakLines.map((line, index) => (
+                    <line
+                      key={`break-${index}`}
+                      className="architectural-stair-break"
+                      {...lineAttributes(line.start, line.end)}
+                    />
+                  ))}
+                  <path
+                    className="architectural-stair-direction"
+                    d={flight.directionArrow}
+                  />
+                  <line
+                    className="architectural-stair-direction"
+                    {...lineAttributes(
+                      flight.directionLine.start,
+                      flight.directionLine.end
+                    )}
+                  />
+                </g>
+              ))}
+              {staircase.landings.map((landing) => (
+                <polygon
+                  key={landing.geometryId}
+                  data-testid="architectural-stair-landing"
+                  data-geometry-kind="STAIR_LANDING"
+                  data-geometry-id={landing.geometryId}
+                  data-beyond-cut={landing.beyondCut ? "true" : "false"}
+                  className={`${getEntityClassName(
+                    "architectural-stair-landing",
+                    landing
+                  )}${landing.beyondCut ? " architectural-stair-landing--continuation" : ""}`}
+                  points={landing.bodySvgPoints}
+                  onPointerDown={(event) =>
+                    handleStairTranslationPointerDown(
+                      event,
+                      staircase.geometryId
+                    )
+                  }
+                  onClick={(event) =>
+                    handleEntityClick(
+                      event,
+                      selectStaircase(staircase.geometryId)
+                    )
+                  }
+                  onMouseEnter={() =>
+                    handleHoverChange(selectStairLanding(landing.geometryId))
+                  }
+                  onMouseLeave={() => handleHoverChange(undefined)}
+                />
+              ))}
             </g>
           ))}
         </g>
@@ -885,6 +1588,7 @@ export function GeometrySvgViewer({
                 <line
                   data-testid="boundary-edge"
                   data-shared={isShared ? "true" : "false"}
+                  data-source-kind={edge.sourceKind}
                   className={className}
                   x1={formatSvgNumber(edge.start.screen.x)}
                   y1={formatSvgNumber(edge.start.screen.y)}
@@ -982,19 +1686,55 @@ export function GeometrySvgViewer({
               data-geometry-kind="DOOR"
               data-geometry-id={door.geometryId}
               className={`${getEntityClassName("architectural-opening architectural-door", door)}${interaction.openingEditingEnabled ? " architectural-opening--draggable" : ""}${editorOverlay?.activeOpeningDragId === door.geometryId ? " architectural-opening--dragging" : ""}`}
-              data-dragging={editorOverlay?.activeOpeningDragId === door.geometryId ? "true" : undefined}
-              onClick={(event) => handleOpeningClick(event, selectDoor(door.geometryId))}
-              onMouseEnter={() => handleHoverChange(selectDoor(door.geometryId))}
+              data-dragging={
+                editorOverlay?.activeOpeningDragId === door.geometryId
+                  ? "true"
+                  : undefined
+              }
+              onClick={(event) =>
+                handleOpeningClick(event, selectDoor(door.geometryId))
+              }
+              onMouseEnter={() =>
+                handleHoverChange(selectDoor(door.geometryId))
+              }
               onMouseLeave={() => handleHoverChange(undefined)}
-              onPointerDown={(event) => handleOpeningPointerDown(event, selectDoor(door.geometryId), door.wallId)}
+              onPointerDown={(event) =>
+                handleOpeningPointerDown(
+                  event,
+                  selectDoor(door.geometryId),
+                  door.wallId
+                )
+              }
             >
-              <line className="architectural-opening-hit-target" {...lineAttributes(door.spanStart, door.spanEnd)} />
-              <line className="architectural-opening-hit-target" {...lineAttributes(door.hinge, door.leafEnd)} />
-              <path className="architectural-opening-hit-target" d={door.arcPath} />
-              {door.jambs.map((line, index) => <line key={`jamb-${index}`} {...lineAttributes(line[0], line[1])} />)}
-              <line className="architectural-door-leaf" {...lineAttributes(door.hinge, door.leafEnd)} />
+              <line
+                className="architectural-opening-hit-target"
+                {...lineAttributes(door.spanStart, door.spanEnd)}
+              />
+              <line
+                className="architectural-opening-hit-target"
+                {...lineAttributes(door.hinge, door.leafEnd)}
+              />
+              <path
+                className="architectural-opening-hit-target"
+                d={door.arcPath}
+              />
+              {door.jambs.map((line, index) => (
+                <line
+                  key={`jamb-${index}`}
+                  {...lineAttributes(line[0], line[1])}
+                />
+              ))}
+              <line
+                className="architectural-door-leaf"
+                {...lineAttributes(door.hinge, door.leafEnd)}
+              />
               <path className="architectural-door-arc" d={door.arcPath} />
-              <circle className="architectural-door-hinge" cx={formatSvgNumber(door.hinge.x)} cy={formatSvgNumber(door.hinge.y)} r="2.5" />
+              <circle
+                className="architectural-door-hinge"
+                cx={formatSvgNumber(door.hinge.x)}
+                cy={formatSvgNumber(door.hinge.y)}
+                r="2.5"
+              />
               {door.selected && resolvedSelectionState.selected.length === 1 ? (
                 <g
                   className="architectural-opening-drag-handle"
@@ -1002,8 +1742,17 @@ export function GeometrySvgViewer({
                   aria-hidden="true"
                   transform={`translate(${formatSvgNumber((door.spanStart.x + door.spanEnd.x) / 2)} ${formatSvgNumber((door.spanStart.y + door.spanEnd.y) / 2)})`}
                 >
-                  <circle className="architectural-opening-drag-handle__surface" r="8" />
-                  <DragIndicatorRoundedIcon className="architectural-opening-drag-handle__icon" x="-6" y="-6" width="12" height="12" />
+                  <circle
+                    className="architectural-opening-drag-handle__surface"
+                    r="8"
+                  />
+                  <DragIndicatorRoundedIcon
+                    className="architectural-opening-drag-handle__icon"
+                    x="-6"
+                    y="-6"
+                    width="12"
+                    height="12"
+                  />
                 </g>
               ) : null}
             </g>
@@ -1015,24 +1764,62 @@ export function GeometrySvgViewer({
               data-geometry-kind="WINDOW"
               data-geometry-id={window.geometryId}
               className={`${getEntityClassName("architectural-opening architectural-window", window)}${interaction.openingEditingEnabled ? " architectural-opening--draggable" : ""}${editorOverlay?.activeOpeningDragId === window.geometryId ? " architectural-opening--dragging" : ""}`}
-              data-dragging={editorOverlay?.activeOpeningDragId === window.geometryId ? "true" : undefined}
-              onClick={(event) => handleOpeningClick(event, selectWindow(window.geometryId))}
-              onMouseEnter={() => handleHoverChange(selectWindow(window.geometryId))}
+              data-dragging={
+                editorOverlay?.activeOpeningDragId === window.geometryId
+                  ? "true"
+                  : undefined
+              }
+              onClick={(event) =>
+                handleOpeningClick(event, selectWindow(window.geometryId))
+              }
+              onMouseEnter={() =>
+                handleHoverChange(selectWindow(window.geometryId))
+              }
               onMouseLeave={() => handleHoverChange(undefined)}
-              onPointerDown={(event) => handleOpeningPointerDown(event, selectWindow(window.geometryId), window.wallId)}
+              onPointerDown={(event) =>
+                handleOpeningPointerDown(
+                  event,
+                  selectWindow(window.geometryId),
+                  window.wallId
+                )
+              }
             >
-              <line className="architectural-opening-hit-target" {...lineAttributes(window.spanStart, window.spanEnd)} />
-              {window.jambs.map((line, index) => <line key={`jamb-${index}`} {...lineAttributes(line[0], line[1])} />)}
-              {window.glazingLines.map((line, index) => <line className="architectural-window-line" key={`glass-${index}`} {...lineAttributes(line[0], line[1])} />)}
-              {window.selected && resolvedSelectionState.selected.length === 1 ? (
+              <line
+                className="architectural-opening-hit-target"
+                {...lineAttributes(window.spanStart, window.spanEnd)}
+              />
+              {window.jambs.map((line, index) => (
+                <line
+                  key={`jamb-${index}`}
+                  {...lineAttributes(line[0], line[1])}
+                />
+              ))}
+              {window.glazingLines.map((line, index) => (
+                <line
+                  className="architectural-window-line"
+                  key={`glass-${index}`}
+                  {...lineAttributes(line[0], line[1])}
+                />
+              ))}
+              {window.selected &&
+              resolvedSelectionState.selected.length === 1 ? (
                 <g
                   className="architectural-opening-drag-handle"
                   data-testid="selected-opening-drag-handle"
                   aria-hidden="true"
                   transform={`translate(${formatSvgNumber((window.spanStart.x + window.spanEnd.x) / 2)} ${formatSvgNumber((window.spanStart.y + window.spanEnd.y) / 2)})`}
                 >
-                  <circle className="architectural-opening-drag-handle__surface" r="8" />
-                  <DragIndicatorRoundedIcon className="architectural-opening-drag-handle__icon" x="-6" y="-6" width="12" height="12" />
+                  <circle
+                    className="architectural-opening-drag-handle__surface"
+                    r="8"
+                  />
+                  <DragIndicatorRoundedIcon
+                    className="architectural-opening-drag-handle__icon"
+                    x="-6"
+                    y="-6"
+                    width="12"
+                    height="12"
+                  />
                 </g>
               ) : null}
             </g>
@@ -1044,23 +1831,55 @@ export function GeometrySvgViewer({
               data-geometry-kind="OPENING"
               data-geometry-id={opening.geometryId}
               className={`${getEntityClassName("architectural-opening architectural-wall-opening", opening)}${interaction.openingEditingEnabled ? " architectural-opening--draggable" : ""}${editorOverlay?.activeOpeningDragId === opening.geometryId ? " architectural-opening--dragging" : ""}`}
-              data-dragging={editorOverlay?.activeOpeningDragId === opening.geometryId ? "true" : undefined}
-              onClick={(event) => handleOpeningClick(event, selectWallOpening(opening.geometryId))}
-              onMouseEnter={() => handleHoverChange(selectWallOpening(opening.geometryId))}
+              data-dragging={
+                editorOverlay?.activeOpeningDragId === opening.geometryId
+                  ? "true"
+                  : undefined
+              }
+              onClick={(event) =>
+                handleOpeningClick(event, selectWallOpening(opening.geometryId))
+              }
+              onMouseEnter={() =>
+                handleHoverChange(selectWallOpening(opening.geometryId))
+              }
               onMouseLeave={() => handleHoverChange(undefined)}
-              onPointerDown={(event) => handleOpeningPointerDown(event, selectWallOpening(opening.geometryId), opening.wallId)}
+              onPointerDown={(event) =>
+                handleOpeningPointerDown(
+                  event,
+                  selectWallOpening(opening.geometryId),
+                  opening.wallId
+                )
+              }
             >
-              <line className="architectural-opening-hit-target" {...lineAttributes(opening.spanStart, opening.spanEnd)} />
-              {opening.jambs.map((line, index) => <line key={`jamb-${index}`} {...lineAttributes(line[0], line[1])} />)}
-              {opening.selected && resolvedSelectionState.selected.length === 1 ? (
+              <line
+                className="architectural-opening-hit-target"
+                {...lineAttributes(opening.spanStart, opening.spanEnd)}
+              />
+              {opening.jambs.map((line, index) => (
+                <line
+                  key={`jamb-${index}`}
+                  {...lineAttributes(line[0], line[1])}
+                />
+              ))}
+              {opening.selected &&
+              resolvedSelectionState.selected.length === 1 ? (
                 <g
                   className="architectural-opening-drag-handle"
                   data-testid="selected-opening-drag-handle"
                   aria-hidden="true"
                   transform={`translate(${formatSvgNumber((opening.spanStart.x + opening.spanEnd.x) / 2)} ${formatSvgNumber((opening.spanStart.y + opening.spanEnd.y) / 2)})`}
                 >
-                  <circle className="architectural-opening-drag-handle__surface" r="8" />
-                  <DragIndicatorRoundedIcon className="architectural-opening-drag-handle__icon" x="-6" y="-6" width="12" height="12" />
+                  <circle
+                    className="architectural-opening-drag-handle__surface"
+                    r="8"
+                  />
+                  <DragIndicatorRoundedIcon
+                    className="architectural-opening-drag-handle__icon"
+                    x="-6"
+                    y="-6"
+                    width="12"
+                    height="12"
+                  />
                 </g>
               ) : null}
             </g>
@@ -1068,10 +1887,75 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
-      {dimensionModel ? (
-        <ArchitecturalDimensionLayer model={dimensionModel} includeTemporary={false} />
+      {furnitureModel ? (
+        <FurnitureSvgLayer
+          model={furnitureModel}
+          transform={transform}
+          selection={resolvedSelectionState}
+          visible={options.furniture !== false}
+          selectionEnabled={interaction.selectionEnabled}
+          onClick={(event, id) => {
+            if (furnitureClickHandledRef.current) {
+              furnitureClickHandledRef.current = false;
+              suppressNextBackgroundClickRef.current = false;
+              event.stopPropagation();
+              return;
+            }
+            handleEntityClick(event, { kind: "FURNITURE", geometryId: id });
+          }}
+          onHover={(id) =>
+            handleHoverChange(
+              id ? { kind: "FURNITURE", geometryId: id } : undefined
+            )
+          }
+          onPointerDown={(event, id, intent) => {
+            if (
+              !furnitureModel.editing ||
+              !interaction.selectionEnabled ||
+              interaction.panAnywhere ||
+              event.button !== 0
+            )
+              return;
+            if (
+              intent === "move" &&
+              handleSelectionTranslationPointerDown(event, {
+                kind: "FURNITURE",
+                geometryId: id
+              })
+            )
+              return;
+            if (event.metaKey || event.ctrlKey) return;
+            const svg = event.currentTarget.ownerSVGElement;
+            if (!svg) return;
+            event.stopPropagation();
+            event.preventDefault();
+            suppressNextBackgroundClickRef.current = false;
+            const pointer = getEventPointer({
+              clientX: event.clientX,
+              clientY: event.clientY,
+              currentTarget: svg
+            });
+            furniturePointerRef.current = {
+              pointerId: event.pointerId,
+              start: pointer.svgPoint,
+              scale: pointer.cssPixelsPerSvgUnit,
+              dragged: false
+            };
+            furnitureClickHandledRef.current = false;
+            svg.setPointerCapture(event.pointerId);
+            onFurniturePointerDown?.(id, intent, pointer, event.pointerId);
+          }}
+        />
       ) : null}
-
+      {dimensionModel ? (
+        <ArchitecturalRoomMetricLayer model={dimensionModel} />
+      ) : null}
+      {dimensionModel ? (
+        <ArchitecturalDimensionLayer
+          model={dimensionModel}
+          includeTemporary={false}
+        />
+      ) : null}
       <GeometryEditorOverlayLayer
         overlay={editorOverlay}
         transform={transform}
@@ -1083,7 +1967,8 @@ export function GeometrySvgViewer({
           onEditorCanvasClick?.({
             worldPoint: editorOverlay.wallVertexPreview,
             svgPoint: transform.worldToScreen(editorOverlay.wallVertexPreview),
-            cssPixelsPerSvgUnit: 1
+            cssPixelsPerSvgUnit: 1,
+            altKey: false
           });
         }}
         onRoomFaceCandidateClick={(faceKey) => {
@@ -1092,6 +1977,15 @@ export function GeometrySvgViewer({
             return;
           }
           onRoomFaceCandidateClick?.(faceKey);
+        }}
+        onStairAdjustmentPointerDown={(event, staircaseId) => {
+          event.preventDefault();
+          event.stopPropagation();
+          stairAdjustmentPointerIdRef.current = event.pointerId;
+          event.currentTarget.ownerSVGElement?.setPointerCapture(
+            event.pointerId
+          );
+          onStairAdjustmentPointerDown?.(staircaseId, event.pointerId);
         }}
       />
       {dimensionModel?.temporary ? (
@@ -1111,39 +2005,89 @@ function ArchitecturalDimensionLayer({
 }) {
   if (includeTemporary) {
     return model.temporary ? (
-      <g data-layer="temporary-measurement" className="architectural-dimension-layer architectural-dimension-layer--temporary">
-        <ArchitecturalLinearDimension dimension={model.temporary} testId="temporary-measurement" />
+      <g
+        data-layer="temporary-measurement"
+        className="architectural-dimension-layer architectural-dimension-layer--temporary"
+      >
+        <ArchitecturalLinearDimension
+          dimension={model.temporary}
+          testId="temporary-measurement"
+        />
       </g>
     ) : null;
   }
   return (
     <>
-      <g data-layer="automatic-dimensions" className="architectural-dimension-layer">
+      <g
+        data-layer="automatic-dimensions"
+        className="architectural-dimension-layer"
+      >
         {model.automatic.map((dimension, index) => (
-          <ArchitecturalLinearDimension key={`automatic-${index}`} dimension={dimension} testId="automatic-dimension" />
+          <ArchitecturalLinearDimension
+            key={`automatic-${index}`}
+            dimension={dimension}
+            testId="automatic-dimension"
+          />
         ))}
       </g>
-      <g data-layer="selected-dimensions" className="architectural-dimension-layer architectural-dimension-layer--selected">
+      <g
+        data-layer="selected-dimensions"
+        className="architectural-dimension-layer architectural-dimension-layer--selected"
+      >
         {model.selected.map((dimension, index) => (
-          <ArchitecturalLinearDimension key={`selected-${index}`} dimension={dimension} testId="selected-dimension" />
-        ))}
-      </g>
-      <g data-layer="room-metrics" className="architectural-room-metric-layer">
-        {model.roomMetrics.map((metric) => (
-          <text
-            key={metric.roomId}
-            data-testid="room-metric"
-            data-source-room-id={metric.roomId}
-            x={formatSvgNumber(metric.anchor.x)}
-            y={formatSvgNumber(metric.anchor.y - 3)}
-            textAnchor="middle"
-          >
-            <tspan className="architectural-room-label__name" x={formatSvgNumber(metric.anchor.x)}>{metric.roomName}</tspan>
-            <tspan className="architectural-room-label__area" x={formatSvgNumber(metric.anchor.x)} dy="14">{metric.formattedArea}</tspan>
-          </text>
+          <ArchitecturalLinearDimension
+            key={`selected-${index}`}
+            dimension={dimension}
+            testId="selected-dimension"
+          />
         ))}
       </g>
     </>
+  );
+}
+
+/** Room labels are repositioned around occupancy, then painted above Furniture as fallback. */
+function ArchitecturalRoomMetricLayer({
+  model
+}: {
+  readonly model: ArchitecturalDimensionPresentationModel2D;
+}) {
+  return (
+    <g data-layer="room-metrics" className="architectural-room-metric-layer">
+      {model.roomMetrics.map((metric) => (
+        <text
+          key={metric.roomId}
+          data-testid="room-metric"
+          data-source-room-id={metric.roomId}
+          x={formatSvgNumber(metric.anchor.x)}
+          y={formatSvgNumber(metric.anchor.y - 3)}
+          textAnchor="middle"
+        >
+          <tspan
+            className="architectural-room-label__name"
+            x={formatSvgNumber(metric.anchor.x)}
+          >
+            {metric.roomName}
+          </tspan>
+          {metric.elevationLabel ? (
+            <tspan
+              className="architectural-room-label__elevation"
+              x={formatSvgNumber(metric.anchor.x)}
+              dy="13"
+            >
+              {metric.elevationLabel}
+            </tspan>
+          ) : null}
+          <tspan
+            className="architectural-room-label__area"
+            x={formatSvgNumber(metric.anchor.x)}
+            dy={metric.elevationLabel ? "12" : "14"}
+          >
+            {metric.formattedArea}
+          </tspan>
+        </text>
+      ))}
+    </g>
   );
 }
 
@@ -1162,11 +2106,25 @@ function ArchitecturalLinearDimension({
       data-orientation={dimension.orientation}
     >
       {dimension.extensionLines.map((line, index) => (
-        <line key={`extension-${index}`} className="architectural-dimension-extension" {...lineAttributes(line.start, line.end)} />
+        <line
+          key={`extension-${index}`}
+          className="architectural-dimension-extension"
+          {...lineAttributes(line.start, line.end)}
+        />
       ))}
-      <line className="architectural-dimension-line" {...lineAttributes(dimension.dimensionLine.start, dimension.dimensionLine.end)} />
+      <line
+        className="architectural-dimension-line"
+        {...lineAttributes(
+          dimension.dimensionLine.start,
+          dimension.dimensionLine.end
+        )}
+      />
       {dimension.markers.map((line, index) => (
-        <line key={`marker-${index}`} className="architectural-dimension-marker" {...lineAttributes(line.start, line.end)} />
+        <line
+          key={`marker-${index}`}
+          className="architectural-dimension-marker"
+          {...lineAttributes(line.start, line.end)}
+        />
       ))}
       <text
         className="architectural-dimension-label"
@@ -1187,7 +2145,8 @@ function GeometryEditorOverlayLayer({
   onEndpointPointerDown,
   onJunctionPointerDown,
   onWallVertexPreviewClick,
-  onRoomFaceCandidateClick
+  onRoomFaceCandidateClick,
+  onStairAdjustmentPointerDown
 }: {
   readonly overlay?: GeometryEditorOverlay;
   readonly transform: ReturnType<typeof createViewportTransform2D>;
@@ -1196,9 +2155,15 @@ function GeometryEditorOverlayLayer({
     event: PointerEvent<SVGCircleElement>,
     endpoint: WallEndpoint
   ) => void;
-  readonly onJunctionPointerDown: (event: PointerEvent<SVGCircleElement>) => void;
+  readonly onJunctionPointerDown: (
+    event: PointerEvent<SVGCircleElement>
+  ) => void;
   readonly onWallVertexPreviewClick: () => void;
   readonly onRoomFaceCandidateClick?: (faceKey: string) => void;
+  readonly onStairAdjustmentPointerDown: (
+    event: PointerEvent<SVGCircleElement>,
+    staircaseId: string
+  ) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const drawStart = overlay?.drawWall
@@ -1224,10 +2189,19 @@ function GeometryEditorOverlayLayer({
     : undefined;
   const openingPreview = overlay?.openingPreview
     ? overlay.openingPreview.opening.type === "DOOR"
-      ? createDoorPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
+      ? createDoorPlanGeometry(
+          overlay.openingPreview.wall,
+          overlay.openingPreview.opening
+        )
       : overlay.openingPreview.opening.type === "WINDOW"
-        ? createWindowPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
-        : createWallOpeningPlanGeometry(overlay.openingPreview.wall, overlay.openingPreview.opening)
+        ? createWindowPlanGeometry(
+            overlay.openingPreview.wall,
+            overlay.openingPreview.opening
+          )
+        : createWallOpeningPlanGeometry(
+            overlay.openingPreview.wall,
+            overlay.openingPreview.opening
+          )
     : undefined;
   const roomShapePreview = overlay?.roomShapePreview
     ? {
@@ -1235,31 +2209,175 @@ function GeometryEditorOverlayLayer({
         vertices: overlay.roomShapePreview.vertices.map((vertex) =>
           transform.worldToScreen(vertex)
         ),
-        labelAnchor: transform.worldToScreen(overlay.roomShapePreview.labelAnchor)
+        labelAnchor: transform.worldToScreen(
+          overlay.roomShapePreview.labelAnchor
+        )
       }
+    : undefined;
+  const stairPreview = overlay?.stairPreview;
+  const stairPreviewPresentation = stairPreview
+    ? createStaircasePresentation2D(stairPreview.staircase, transform)
+    : undefined;
+  const selectionTranslation = overlay?.selectionTranslation;
+  const translationStart = selectionTranslation
+    ? transform.worldToScreen(selectionTranslation.min)
+    : undefined;
+  const translationEnd = selectionTranslation
+    ? transform.worldToScreen({
+        x: selectionTranslation.max.x + selectionTranslation.delta.x,
+        z: selectionTranslation.max.z + selectionTranslation.delta.z
+      })
+    : undefined;
+  const translationOrigin = selectionTranslation
+    ? transform.worldToScreen({
+        x: selectionTranslation.min.x + selectionTranslation.delta.x,
+        z: selectionTranslation.min.z + selectionTranslation.delta.z
+      })
     : undefined;
 
   return (
     <g data-layer="editor-overlay">
+      {selectionTranslation &&
+      translationStart &&
+      translationEnd &&
+      translationOrigin ? (
+        <g data-testid="selection-translation-preview" aria-hidden="true">
+          <rect
+            className="geometry-selection-translation-source"
+            x={formatSvgNumber(
+              Math.min(
+                translationStart.x,
+                transform.worldToScreen(selectionTranslation.max).x
+              )
+            )}
+            y={formatSvgNumber(
+              Math.min(
+                translationStart.y,
+                transform.worldToScreen(selectionTranslation.max).y
+              )
+            )}
+            width={formatSvgNumber(
+              Math.abs(
+                transform.worldToScreen(selectionTranslation.max).x -
+                  translationStart.x
+              )
+            )}
+            height={formatSvgNumber(
+              Math.abs(
+                transform.worldToScreen(selectionTranslation.max).y -
+                  translationStart.y
+              )
+            )}
+          />
+          <rect
+            className="geometry-selection-translation-destination"
+            x={formatSvgNumber(Math.min(translationOrigin.x, translationEnd.x))}
+            y={formatSvgNumber(Math.min(translationOrigin.y, translationEnd.y))}
+            width={formatSvgNumber(
+              Math.abs(translationEnd.x - translationOrigin.x)
+            )}
+            height={formatSvgNumber(
+              Math.abs(translationEnd.y - translationOrigin.y)
+            )}
+          />
+        </g>
+      ) : null}
+      {stairPreview ? (
+        <g
+          data-layer="stair-preview"
+          data-testid="stair-preview"
+          data-valid={stairPreview.valid ? "true" : "false"}
+          data-locked={stairPreview.locked ? "true" : "false"}
+          className={`geometry-stair-preview${stairPreview.valid ? "" : " geometry-stair-preview--invalid"}`}
+          aria-hidden="true"
+        >
+          {stairPreviewPresentation?.flights.map((flight) => (
+            <g
+              key={flight.geometryId}
+              className={
+                flight.beyondCut
+                  ? "geometry-stair-preview__continuation"
+                  : undefined
+              }
+            >
+              <polygon
+                className="geometry-stair-preview__body"
+                points={flight.bodySvgPoints}
+              />
+              {flight.cut ? (
+                <polygon
+                  className="geometry-stair-preview__continuation-body"
+                  points={flight.cut.continuationSvgPoints}
+                />
+              ) : null}
+              {flight.treadLines.map((line, index) => (
+                <line
+                  key={index}
+                  className={`geometry-stair-preview__tread${line.beyondCut ? " geometry-stair-preview__tread--continuation" : ""}`}
+                  {...lineAttributes(line.start, line.end)}
+                />
+              ))}
+              {flight.cut?.breakLines.map((line, index) => (
+                <line
+                  key={`break-${index}`}
+                  className="geometry-stair-preview__break"
+                  {...lineAttributes(line.start, line.end)}
+                />
+              ))}
+              <line
+                className="geometry-stair-preview__direction"
+                {...lineAttributes(
+                  flight.directionLine.start,
+                  flight.directionLine.end
+                )}
+              />
+              <path
+                className="geometry-stair-preview__direction"
+                d={flight.directionArrow}
+              />
+            </g>
+          ))}
+          {stairPreviewPresentation?.landings.map((landing) => (
+            <polygon
+              key={landing.geometryId}
+              className={`geometry-stair-preview__landing${landing.beyondCut ? " geometry-stair-preview__landing--continuation" : ""}`}
+              points={landing.bodySvgPoints}
+            />
+          ))}
+        </g>
+      ) : null}
       {roomShapePreview ? (
         <g
           data-layer="room-shape-preview"
           data-testid="room-shape-preview"
           data-shape-kind={roomShapePreview.kind}
           data-segment-count={roomShapePreview.vertices.length}
+          data-elevated={roomShapePreview.elevated ? "true" : "false"}
+          data-elevation={roomShapePreview.elevation}
+          data-valid={roomShapePreview.valid ? "true" : "false"}
+          className={
+            `${roomShapePreview.elevated ? "geometry-room-shape-preview--elevated" : ""}${roomShapePreview.valid ? "" : " geometry-room-shape-preview--invalid"}`.trim() ||
+            undefined
+          }
           aria-hidden="true"
         >
           <polygon
             className="geometry-room-shape-preview__fill"
-            points={roomShapePreview.vertices.map((point) =>
-              `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`
-            ).join(" ")}
+            points={roomShapePreview.vertices
+              .map(
+                (point) =>
+                  `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`
+              )
+              .join(" ")}
           />
           <polygon
             className="geometry-room-shape-preview__walls"
-            points={roomShapePreview.vertices.map((point) =>
-              `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`
-            ).join(" ")}
+            points={roomShapePreview.vertices
+              .map(
+                (point) =>
+                  `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`
+              )
+              .join(" ")}
           />
           <text
             className="geometry-room-shape-preview__label"
@@ -1272,6 +2390,38 @@ function GeometryEditorOverlayLayer({
           </text>
         </g>
       ) : null}
+      {overlay?.selectedStair
+        ? (() => {
+            const point = transform.worldToScreen(
+              overlay.selectedStair.adjustmentPoint
+            );
+            return (
+              <g
+                data-testid="selected-stair-overlay"
+                data-staircase-id={overlay.selectedStair.staircaseId}
+              >
+                <circle
+                  className="geometry-stair-adjustment-handle__hit-target"
+                  cx={formatSvgNumber(point.x)}
+                  cy={formatSvgNumber(point.y)}
+                  r="13"
+                  onPointerDown={(event) =>
+                    onStairAdjustmentPointerDown(
+                      event,
+                      overlay.selectedStair!.staircaseId
+                    )
+                  }
+                />
+                <circle
+                  className="geometry-stair-adjustment-handle"
+                  cx={formatSvgNumber(point.x)}
+                  cy={formatSvgNumber(point.y)}
+                  r="6"
+                />
+              </g>
+            );
+          })()
+        : null}
       {overlay?.roomFaceCandidates?.length ? (
         <g data-layer="room-face-candidates">
           {overlay.roomFaceCandidates.map((face) => (
@@ -1282,10 +2432,12 @@ function GeometryEditorOverlayLayer({
               className={`geometry-room-face-candidate geometry-room-face-candidate--focusable${
                 face.selected ? " geometry-room-face-candidate--selected" : ""
               }`}
-              points={face.vertices.map((vertex) => {
-                const point = transform.worldToScreen(vertex);
-                return `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`;
-              }).join(" ")}
+              points={face.vertices
+                .map((vertex) => {
+                  const point = transform.worldToScreen(vertex);
+                  return `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`;
+                })
+                .join(" ")}
               role="button"
               aria-label={t("selection.selectRoomRegion")}
               tabIndex={0}
@@ -1338,10 +2490,36 @@ function GeometryEditorOverlayLayer({
           ) : null}
         </g>
       ) : null}
-      {snapPoint && overlay?.snapCandidate && overlay.snapCandidate.kind !== "free" ? (
+      {overlay?.precisionGuides?.length ? (
+        <g
+          className="geometry-precision-guides"
+          data-testid="precision-guides"
+          aria-hidden="true"
+          pointerEvents="none"
+        >
+          {overlay.precisionGuides.map((guide, index) => {
+            const start = transform.worldToScreen(guide.start);
+            const end = transform.worldToScreen(guide.end);
+            return (
+              <line
+                key={`${guide.kind}:${index}`}
+                className={`geometry-precision-guide geometry-precision-guide--${guide.kind}`}
+                {...lineAttributes(start, end)}
+              />
+            );
+          })}
+        </g>
+      ) : null}
+      {snapPoint &&
+      overlay?.snapCandidate &&
+      overlay.snapCandidate.kind !== "free" ? (
         <g
           aria-hidden="true"
-          data-testid={overlay.snapMarkerPurpose === "measurement" ? "measurement-snap-marker" : "draw-wall-snap-marker"}
+          data-testid={
+            overlay.snapMarkerPurpose === "measurement"
+              ? "measurement-snap-marker"
+              : "draw-wall-snap-marker"
+          }
         >
           <circle
             className={`geometry-wall-snap-marker geometry-wall-snap-marker--${overlay.snapCandidate.kind}`}
@@ -1399,21 +2577,44 @@ function GeometryEditorOverlayLayer({
         <g
           data-testid="opening-placement-preview"
           data-valid={overlay.openingPreview.valid ? "true" : "false"}
-          data-offset-from-start={formatSvgNumber(overlay.openingPreview.opening.offsetFromStart)}
+          data-offset-from-start={formatSvgNumber(
+            overlay.openingPreview.opening.offsetFromStart
+          )}
           className={`architectural-opening-preview${overlay.openingPreview.valid ? "" : " architectural-opening-preview--invalid"}`}
           aria-hidden="true"
         >
           {openingPreview.jambs.map((line, index) => (
-            <line key={`jamb-${index}`} {...lineAttributes(transform.worldToScreen(line[0]), transform.worldToScreen(line[1]))} />
+            <line
+              key={`jamb-${index}`}
+              {...lineAttributes(
+                transform.worldToScreen(line[0]),
+                transform.worldToScreen(line[1])
+              )}
+            />
           ))}
           {openingPreview.kind === "DOOR" ? (
             <>
-              <line {...lineAttributes(transform.worldToScreen(openingPreview.hinge), transform.worldToScreen(openingPreview.openLeafEnd))} />
-              <path d={`M ${formatSvgNumber(transform.worldToScreen(openingPreview.arcStart).x)},${formatSvgNumber(transform.worldToScreen(openingPreview.arcStart).y)} A ${formatSvgNumber(transform.scaleLength(openingPreview.arcRadius))} ${formatSvgNumber(transform.scaleLength(openingPreview.arcRadius))} 0 0 ${openingPreview.arcSweep === 1 ? 0 : 1} ${formatSvgNumber(transform.worldToScreen(openingPreview.arcEnd).x)},${formatSvgNumber(transform.worldToScreen(openingPreview.arcEnd).y)}`} />
+              <line
+                {...lineAttributes(
+                  transform.worldToScreen(openingPreview.hinge),
+                  transform.worldToScreen(openingPreview.openLeafEnd)
+                )}
+              />
+              <path
+                d={`M ${formatSvgNumber(transform.worldToScreen(openingPreview.arcStart).x)},${formatSvgNumber(transform.worldToScreen(openingPreview.arcStart).y)} A ${formatSvgNumber(transform.scaleLength(openingPreview.arcRadius))} ${formatSvgNumber(transform.scaleLength(openingPreview.arcRadius))} 0 0 ${openingPreview.arcSweep === 1 ? 0 : 1} ${formatSvgNumber(transform.worldToScreen(openingPreview.arcEnd).x)},${formatSvgNumber(transform.worldToScreen(openingPreview.arcEnd).y)}`}
+              />
             </>
-          ) : openingPreview.kind === "WINDOW" ? openingPreview.glazingLines.map((line, index) => (
-            <line key={`glass-${index}`} {...lineAttributes(transform.worldToScreen(line[0]), transform.worldToScreen(line[1]))} />
-          )) : null}
+          ) : openingPreview.kind === "WINDOW" ? (
+            openingPreview.glazingLines.map((line, index) => (
+              <line
+                key={`glass-${index}`}
+                {...lineAttributes(
+                  transform.worldToScreen(line[0]),
+                  transform.worldToScreen(line[1])
+                )}
+              />
+            ))
+          ) : null}
         </g>
       ) : null}
       {junctionPoint && overlay?.selectedJunction && endpointEditingEnabled ? (
@@ -1533,7 +2734,11 @@ function GeometryGridLayer({
           />
         </pattern>
       </defs>
-      <rect width="100%" height="100%" fill="url(#project-editor-grid-pattern)" />
+      <rect
+        width="100%"
+        height="100%"
+        fill="url(#project-editor-grid-pattern)"
+      />
     </g>
   );
 }

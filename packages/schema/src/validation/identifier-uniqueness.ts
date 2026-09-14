@@ -51,6 +51,7 @@ export function validateProjectIdentifierUniqueness(project: Project): Validatio
   });
 
   const categories: readonly [string, readonly IdentifiedPath[]][] = [
+    ["FurnitureItem", topLevelPaths(project.building.furniture, "building.furniture")],
     ["Level", levels],
     ["Room", rooms],
     ["Wall", walls],

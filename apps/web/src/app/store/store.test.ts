@@ -18,6 +18,7 @@ describe("Redux application state", () => {
         projectId: null,
         draft: null,
         baseRevision: null,
+        baseSnapshot: null,
         dirty: false,
         activeLevelId: null,
         activeTool: null,

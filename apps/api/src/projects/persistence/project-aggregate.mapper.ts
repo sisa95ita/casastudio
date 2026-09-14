@@ -52,6 +52,12 @@ export class ProjectAggregateMapper {
         angle: aggregate.unitAngle
       },
       building: {
+        furniture: mapPositioned(aggregate.furniture, "building.furniture", (item) => ({
+          id: item.domainId, roomId: item.room.domainId, definitionId: item.definitionId,
+          position: { x: item.pointX, z: item.pointZ }, rotation: item.rotation,
+          width: item.width, depth: item.depth, height: item.height,
+          name: item.name ?? undefined, description: item.description ?? undefined
+        })),
         id: building.domainId,
         name: building.name,
         type: building.type,
@@ -68,10 +74,16 @@ export class ProjectAggregateMapper {
             boundary: mapPositioned(
               room.boundaryEdges,
               `building.levels.${level.domainId}.rooms.${room.domainId}.boundary`,
-              (edge) => ({
-                wallId: edge.wall.domainId,
-                direction: edge.direction
-              })
+              (edge) => edge.kind === "WALL"
+                ? {
+                    wallId: edge.wall?.domainId,
+                    direction: edge.direction
+                  }
+                : {
+                    kind: "FREE" as const,
+                    start: { x: edge.startX, z: edge.startZ },
+                    end: { x: edge.endX, z: edge.endZ }
+                  }
             )
           })),
           walls: mapPositioned(level.walls, `building.levels.${level.domainId}.walls`, (wall) => ({

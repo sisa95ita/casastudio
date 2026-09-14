@@ -21,6 +21,14 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
 
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
+  const failedRequests: string[] = [];
+  const apiFailures: { method: string; status: number }[] = [];
+  page.on("requestfailed", (outgoing) => failedRequests.push(`${outgoing.method()} ${outgoing.url()}: ${outgoing.failure()?.errorText}`));
+  page.on("response", (response) => {
+    if (response.url().startsWith(apiBaseUrl) && response.status() >= 400) {
+      apiFailures.push({ method: response.request().method(), status: response.status() });
+    }
+  });
   let authorization = "";
   let projectId = "";
   page.on("console", (message: ConsoleMessage) => {
@@ -44,7 +52,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     expect(projectId).not.toBe("");
 
     const viewport = editorViewport(page);
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Edit plan" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
     await createRoomShape(page, viewport, "L-shape", {
       width: "900",
@@ -79,7 +87,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     expect(await viewport.locator('[data-testid="automatic-dimension"]').count()).toBeGreaterThan(0);
 
     const vertexWall = (await readWalls(viewport)).find((wall) => wall.id === exactWall.id)!;
-    await page.getByRole("tab", { name: "Selection" }).click();
+    await page.getByRole("tab", { name: "Properties" }).click();
     const wallCountBeforeVertex = await viewport.locator('[data-testid="boundary-edge"]').count();
     await page.getByRole("button", { name: "Add vertex" }).click();
     const vertexPoint = midpoint(vertexWall);
@@ -118,7 +126,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await screenshot(page, "01-ground-floor-before-first-save.png");
 
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     const first = await getProject(request, authorization, projectId);
     expect(first.sourceRevision).toBe(2);
     assertProject(first.project, { levels: 1, rooms: [4], openings: { DOOR: 2, WINDOW: 2, OPENING: 1 } });
@@ -140,7 +148,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     const firstReload = await getProject(request, authorization, projectId);
     expect(firstReload).toEqual(first);
 
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Edit plan" }).click();
     await page.getByRole("button", { name: "Measure" }).click();
     const measureWalls = await readWalls(editorViewport(page));
     const measureStart = midpoint(measureWalls[0]!);
@@ -177,7 +185,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await height.press("Enter");
     await screenshot(page, "03-deep-structural-edit.png");
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     const second = await getProject(request, authorization, projectId);
     expect(second.sourceRevision).toBe(3);
     assertProject(second.project, { levels: 1, rooms: [4], openings: { DOOR: 2, WINDOW: 2, OPENING: 1 } });
@@ -191,13 +199,14 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await expect(editorViewport(page).locator('[data-testid="geometry-polygon"]')).toHaveCount(4);
     const secondReload = await getProject(request, authorization, projectId);
     expect(secondReload).toEqual(second);
-    await page.getByRole("button", { name: "Edit" }).click();
-    await page.getByRole("button", { name: "Create level" }).click();
+    await page.getByRole("button", { name: "Edit plan" }).click();
+    await page.getByRole("button", { name: /^Level:/ }).click();
+    await page.getByRole("menuitem", { name: "Add level" }).click();
     const levelDialog = page.getByRole("dialog", { name: "Create level" });
     await levelDialog.getByLabel("Level name").fill("First Floor");
     await levelDialog.getByLabel("Elevation (cm)").fill("300");
     await levelDialog.getByRole("button", { name: "Create Level" }).click();
-    await expect(page.getByRole("combobox", { name: "Level" })).toContainText("First Floor");
+    await expect(page.getByRole("button", { name: "Level: First Floor" })).toBeVisible();
     await expect(editorViewport(page).locator('[data-testid="geometry-polygon"]')).toHaveCount(0);
     await createRoomShape(page, editorViewport(page), "Rectangle", { width: "600", depth: "420" });
     await page.getByRole("button", { name: "Fit to view" }).click();
@@ -218,7 +227,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await switchLevel(page, "First Floor");
 
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "View", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     const finalState = await getProject(request, authorization, projectId);
     expect(finalState.sourceRevision).toBe(4);
     assertProject(finalState.project, { levels: 2, rooms: [4, 2], openings: { DOOR: 3, WINDOW: 3, OPENING: 1 } });
@@ -236,9 +245,198 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await screenshot(page, "06-final-clean-view.png");
     expect(await getProject(request, authorization, projectId)).toEqual(finalState);
 
+    await page.getByRole("button", { name: "Edit plan" }).click();
+    const upperRoom = viewport.getByTestId("geometry-polygon").first();
+    const platformOrigin = await roomPoint(upperRoom, 0.15, 0.15);
+    await page.getByRole("button", { name: "Room", exact: true }).click();
+    await page.getByRole("spinbutton", { name: "Width", exact: true }).fill("200");
+    await page.getByRole("spinbutton", { name: "Depth", exact: true }).fill("180");
+    await page.getByRole("spinbutton", { name: "Elevation above Level" }).fill("180");
+    await page.mouse.move(platformOrigin.x, platformOrigin.y);
+    await expect(viewport.getByTestId("room-shape-preview")).toHaveAttribute("data-elevated", "true");
+    await page.mouse.click(platformOrigin.x, platformOrigin.y);
+    await expect(viewport.getByTestId("geometry-polygon")).toHaveCount(3);
+    const platform = viewport.locator('[data-testid="geometry-polygon"][data-elevated="true"]');
+    await platform.dispatchEvent("click", { bubbles: true });
+    await page.getByRole("textbox", { name: "Name", exact: true }).fill("Raised Study");
+    await page.getByRole("textbox", { name: "Name", exact: true }).press("Enter");
+
+    await page.getByRole("button", { name: "Stair", exact: true }).click();
+    await page.getByRole("combobox", { name: "Target Level", exact: true }).click();
+    await page.getByRole("option", { name: /First Floor · same Level/ }).click();
+    await page.getByRole("combobox", { name: "Target Room (optional)" }).click();
+    await page.getByRole("option", { name: "Raised Study", exact: true }).click();
+    await page.getByRole("radiogroup", { name: "Initial template" }).getByRole("radio", { name: "L-shaped", exact: true }).click();
+    await page.getByRole("spinbutton", { name: "Flight 1 steps", exact: true }).fill("4");
+    await page.getByRole("spinbutton", { name: "Flight 2 steps", exact: true }).fill("6");
+    const stairOrigin = await roomPoint(upperRoom, 0.3, 0.8);
+    await page.mouse.move(stairOrigin.x, stairOrigin.y);
+    await expect(viewport.getByTestId("stair-preview")).toHaveAttribute("data-valid", "true");
+    await page.mouse.click(stairOrigin.x, stairOrigin.y);
+    await expect(viewport.getByTestId("architectural-staircase")).toHaveCount(1);
+    await screenshot(page, "07-elevated-room-and-stair.png");
+    await placeFurniture(page, "Desk", await roomPoint(platform, 0.5, 0.5), "Raised Study · +4.80 m");
+    await placeFurniture(page, "Double bed", await roomPoint(viewport.getByTestId("geometry-polygon").nth(1), 0.5, 0.5));
+
+    await switchLevel(page, "Ground Floor");
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(0);
+    await page.getByRole("button", { name: "Stair", exact: true }).click();
+    await page.getByRole("combobox", { name: "Target Level", exact: true }).click();
+    await page.getByRole("option", { name: "First Floor", exact: true }).click();
+    await page.getByRole("radiogroup", { name: "Initial template" }).getByRole("radio", { name: "Straight", exact: true }).click();
+    await page.getByRole("spinbutton", { name: "Flight 1 steps", exact: true }).fill("16");
+    await page.getByRole("spinbutton", { name: "Tread depth", exact: true }).fill("22");
+    const groundStair = await roomPoint(viewport.getByTestId("geometry-polygon").last(), 0.1, 0.8);
+    await page.mouse.move(groundStair.x, groundStair.y);
+    await expect(viewport.getByTestId("stair-preview")).toHaveAttribute("data-valid", "true");
+    await page.mouse.click(groundStair.x, groundStair.y);
+    await expect(viewport.getByTestId("architectural-staircase")).toHaveCount(1);
+
+    await placeFurniture(page, "Sofa", await roomPoint(viewport.getByTestId("geometry-polygon").first(), 0.5, 0.5));
+    await placeFurniture(page, "Dining table", await roomPoint(viewport.getByTestId("geometry-polygon").nth(1), 0.5, 0.5));
+    const workRoom = viewport.getByTestId("geometry-polygon").nth(2);
+    for (const [x, y] of [[0.2, 0.3], [0.45, 0.5], [0.8, 0.65]]) {
+      await placeFurniture(page, "Chair", await roomPoint(workRoom, x!, y!));
+    }
+    await ensureSelectTool(page);
+    const chairs = viewport.getByTestId("furniture-hit-target");
+    await chairs.nth(2).click({ force: true });
+    await chairs.nth(3).click({ modifiers: ["ControlOrMeta"], force: true });
+    await chairs.nth(4).click({ modifiers: ["ControlOrMeta"], force: true });
+    await expect(page.getByRole("heading", { name: "3 objects selected", exact: true })).toBeVisible();
+    const beforeAlign = await chairs.evaluateAll((items) => items.map((item) => item.getAttribute("points")));
+    await page.getByRole("button", { name: "Top", exact: true }).click();
+    await page.getByRole("button", { name: "Horizontal", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "3 objects selected", exact: true })).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    expect(await chairs.evaluateAll((items) => items.map((item) => item.getAttribute("points")))).toEqual(beforeAlign);
+    for (let index = 0; index < 3; index += 1) await page.getByRole("button", { name: "Redo", exact: true }).click();
+    await screenshot(page, "08-complete-furnished-plan.png");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
+    const furnished = await getProject(request, authorization, projectId);
+    await test.info().attach("complete-house-project", {
+      body: Buffer.from(JSON.stringify(furnished, null, 2)),
+      contentType: "application/json"
+    });
+    assertProject(furnished.project, { levels: 2, rooms: [4, 3], openings: { DOOR: 3, WINDOW: 3, OPENING: 1 } });
+    expect(furnished.project.building.furniture).toHaveLength(7);
+    expect(furnished.project.building.levels.map((level) => level.staircases.length)).toEqual([1, 1]);
+    const raised = furnished.project.building.levels[1]!.rooms.find((room) => room.name === "Raised Study")!;
+    expect(raised.elevation).toBe(180);
+    expect(raised.boundary.every((edge) => "kind" in edge && edge.kind === "FREE")).toBe(true);
+    expect(furnished.project.building.furniture.find((item) => item.definitionId === "generic-desk")?.roomId).toBe(raised.id);
+    expect(furnished.project.building.levels[1]!.staircases[0]).toMatchObject({
+      fromLevelId: furnished.project.building.levels[1]!.id,
+      toLevelId: furnished.project.building.levels[1]!.id,
+      toRoomId: raised.id
+    });
+    await page.reload();
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(5);
+    expect(await getProject(request, authorization, projectId)).toEqual(furnished);
+
+    await switchLevel(page, "First Floor");
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(2);
+    await page.getByRole("button", { name: "3D workspace" }).click();
+    const scene = page.getByTestId("project-3d-workspace");
+    await expect(scene).toHaveAttribute("data-architectural-floor-count", "7");
+    await expect(scene).toHaveAttribute("data-visible-level-elevations", "0,3");
+    await page.getByRole("button", { name: "Fit to building" }).click();
+    await screenshot(page, "09-complete-house-3d.png");
+    await page.getByRole("button", { name: "Edit in 2D" }).click();
+    await expect(page.getByRole("button", { name: "Level: First Floor" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Undo" })).toBeDisabled();
+    await expect(viewport.locator(".geometry-entity-selected")).toHaveCount(0);
+    await expect(viewport.getByTestId("furniture-preview")).toHaveCount(0);
+
+    await viewport.getByTestId("furniture-hit-target").last().click({ force: true });
+    await page.keyboard.press("Delete");
+    await page.getByRole("button", { name: "Back to project" }).click();
+    const leave = page.getByRole("dialog", { name: "Unsaved changes" });
+    await leave.getByRole("button", { name: "Keep editing" }).click();
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(1);
+    await page.getByRole("button", { name: "Discard", exact: true }).click();
+    await page.getByRole("dialog", { name: "Discard unsaved changes?" }).getByRole("button", { name: "Discard changes" }).click();
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(2);
+    expect(await getProject(request, authorization, projectId)).toEqual(furnished);
+
+    await page.getByRole("button", { name: "Edit plan" }).click();
+    await viewport.getByTestId("furniture-hit-target").last().click({ force: true });
+    await page.keyboard.press("Delete");
+    const serverProject: Project = { ...furnished.project, name: `${projectName} updated elsewhere` };
+    const externalSave = await request.put(`${apiBaseUrl}/api/v1/projects/${projectId}`, {
+      headers: { authorization },
+      data: { baseRevision: furnished.sourceRevision, project: serverProject }
+    });
+    expect(externalSave.ok(), await externalSave.text()).toBe(true);
+    const authoritative = await getProject(request, authorization, projectId);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    const conflict = page.getByRole("dialog", { name: "Project changed on the server" });
+    await expect(conflict).toBeVisible();
+    await conflict.getByRole("button", { name: "Keep local draft" }).click();
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(1);
+    expect(await getProject(request, authorization, projectId)).toEqual(authoritative);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await conflict.getByRole("button", { name: "Reload latest" }).click();
+    await page.getByRole("dialog", { name: "Discard local changes and reload?" }).getByRole("button", { name: "Discard and reload" }).click();
+    await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(2);
+    expect(await getProject(request, authorization, projectId)).toEqual(authoritative);
+
+    await switchLevel(page, "Ground Floor");
+    await page.getByRole("button", { name: "Edit plan" }).click();
+    const denseRoom = viewport.getByTestId("geometry-polygon").last();
+    for (const y of [0.3, 0.5, 0.7]) {
+      for (const x of [0.2, 0.4, 0.6, 0.8]) {
+        await placeFurniture(page, "Chair", await roomPoint(denseRoom, x, y));
+      }
+    }
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(17);
+    await expect(viewport.getByTestId("furniture-symbol").locator("text")).toHaveCount(0);
+    await ensureSelectTool(page);
+    await screenshot(page, "10-dense-room-readability.png");
+    for (const tool of ["Wall", "Room", "Stair", "Furniture", "Openings", "Select"]) {
+      const button = page.getByRole("button", { name: tool, exact: true });
+      await button.click();
+      await expect(button).toHaveAttribute("aria-pressed", "true");
+      const pointer = await roomPoint(denseRoom, 0.5, 0.5);
+      await page.mouse.move(pointer.x, pointer.y);
+    }
+    for (const [key, tool] of [["w", "Wall"], ["r", "Room"], ["s", "Stair"], ["u", "Furniture"], ["o", "Openings"], ["v", "Select"]]) {
+      await page.keyboard.press(key!);
+      await expect(page.getByRole("button", { name: tool!, exact: true })).toHaveAttribute("aria-pressed", "true");
+    }
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(17);
+    await expect(viewport.getByTestId("stair-preview")).toHaveCount(0);
+    await expect(viewport.getByTestId("room-shape-preview")).toHaveCount(0);
+    await expect(viewport.getByTestId("opening-placement-preview")).toHaveCount(0);
+    await expect(viewport.getByTestId("furniture-preview")).toHaveCount(0);
+    await page.getByRole("tab", { name: "Layers", exact: true }).click();
+    for (const layer of ["Walls", "Rooms", "Openings", "Furniture", "Dimensions", "Annotations"]) {
+      const control = page.getByRole("switch", { name: layer, exact: true });
+      await control.click();
+      await expect(control).not.toBeChecked();
+      await control.click();
+      await expect(control).toBeChecked();
+    }
+    await page.getByRole("button", { name: "Discard", exact: true }).click();
+    await page.getByRole("dialog", { name: "Discard unsaved changes?" }).getByRole("button", { name: "Discard changes" }).click();
+    await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(5);
+    expect(await getProject(request, authorization, projectId)).toEqual(authoritative);
+
     expect(pageErrors, "Unexpected uncaught browser errors").toEqual([]);
-    expect(consoleErrors, "Unexpected browser console errors").toEqual([]);
+    expect(apiFailures).toEqual([{ method: "PUT", status: 409 }, { method: "PUT", status: 409 }]);
+    expect(failedRequests, "Unexpected failed network requests").toEqual([]);
+    expect(consoleErrors.filter((message) => !message.includes("the server responded with a status of 409")), "Unexpected browser console errors").toEqual([]);
   } finally {
+    await test.info().attach("browser-network-errors", {
+      body: Buffer.from(JSON.stringify({ apiFailures, failedRequests, pageErrors }, null, 2)),
+      contentType: "application/json"
+    });
     await test.info().attach("browser-console-errors", {
       body: Buffer.from(JSON.stringify(consoleErrors, null, 2)),
       contentType: "application/json"
@@ -251,6 +449,35 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     }
   }
 });
+
+async function roomPoint(room: Locator, x: number, y: number) {
+  return room.evaluate((element, fraction) => {
+    const polygon = element as SVGPolygonElement;
+    const box = polygon.getBBox();
+    const point = new DOMPoint(box.x + box.width * fraction.x, box.y + box.height * fraction.y)
+      .matrixTransform(polygon.getScreenCTM()!);
+    return { x: point.x, y: point.y };
+  }, { x, y });
+}
+
+async function placeFurniture(page: Page, name: string, point: { x: number; y: number }, room?: string) {
+  const viewport = editorViewport(page);
+  const count = await viewport.getByTestId("furniture-symbol").count();
+  const button = page.getByRole("button", { name: "Furniture", exact: true });
+  if (await button.getAttribute("aria-pressed") !== "true") await button.click();
+  await page.getByRole("radiogroup", { name: "Catalog" }).getByRole("radio", { name, exact: true }).click();
+  await page.mouse.move(point.x, point.y);
+  if (room) {
+    await page.mouse.click(point.x, point.y);
+    await page.getByRole("combobox", { name: "Room", exact: true }).click();
+    await page.getByRole("option", { name: room, exact: true }).click();
+  }
+  await expect(page.getByTestId("furniture-preview")).toHaveAttribute("data-valid", "true");
+  const bounds = await viewport.boundingBox();
+  if (!bounds) throw new Error("Furniture placement requires a visible plan.");
+  await viewport.click({ position: { x: point.x - bounds.x, y: point.y - bounds.y } });
+  await expect(viewport.getByTestId("furniture-symbol")).toHaveCount(count + 1);
+}
 
 async function login(page: Page, password: string) {
   await page.goto("/app");
@@ -266,7 +493,7 @@ function editorViewport(page: Page) {
 
 async function createRoomShape(page: Page, viewport: Locator, shape: "Rectangle" | "L-shape", dimensions: Record<string, string>) {
   await page.getByRole("button", { name: "Room" }).click();
-  await page.getByRole("menuitem", { name: shape }).click();
+  await page.getByRole("radiogroup", { name: "Shape" }).getByRole("radio", { name: shape, exact: true }).click();
   const labels: Readonly<Record<string, string>> = {
     width: "Width",
     depth: "Depth",
@@ -286,7 +513,7 @@ async function createRoomShape(page: Page, viewport: Locator, shape: "Rectangle"
   await page.mouse.click(point.x, point.y);
 }
 
-async function selectWall(page: Page, viewport: Locator, wallId: string, tab: "Selection" | "Properties" = "Properties") {
+async function selectWall(page: Page, viewport: Locator, wallId: string, tab: "Properties" = "Properties") {
   await ensureSelectTool(page);
   await viewport.locator(`.architectural-wall-hit-target[data-geometry-id="${wallId}"]`).dispatchEvent("click", {
     bubbles: true
@@ -325,7 +552,7 @@ async function partitionOnce(page: Page, viewport: Locator) {
 }
 
 async function drawWall(page: Page, start: { x: number; y: number }, end: { x: number; y: number }) {
-  await page.getByRole("button", { name: "Draw Wall" }).click();
+  await page.getByRole("button", { name: "Wall" }).click();
   await page.mouse.click(start.x, start.y);
   await page.mouse.move(end.x, end.y);
   await expect(page.locator('[data-testid="draw-wall-preview-length"]')).toBeVisible();
@@ -335,10 +562,11 @@ async function drawWall(page: Page, start: { x: number; y: number }, end: { x: n
 
 async function detectRoom(page: Page, viewport: Locator) {
   await page.getByRole("button", { name: "Room" }).click();
-  await page.getByRole("menuitem", { name: "Detect room" }).click();
+  await page.getByRole("combobox", { name: "Method" }).click();
+  await page.getByRole("option", { name: "Detect room" }).click();
   const candidate = viewport.locator('[data-testid="room-face-candidate"]').first();
   await expect(candidate).toBeVisible();
-  await candidate.click({ force: true });
+  await candidate.click();
 }
 
 async function nameRooms(page: Page, viewport: Locator, names: readonly string[]) {
@@ -346,9 +574,9 @@ async function nameRooms(page: Page, viewport: Locator, names: readonly string[]
   await expect(polygons).toHaveCount(names.length);
   for (let index = 0; index < names.length; index += 1) {
     await ensureSelectTool(page);
-    await polygons.nth(index).click({ force: true });
+    await polygons.nth(index).dispatchEvent("click", { bubbles: true });
     await page.getByRole("tab", { name: "Properties" }).click();
-    const name = page.getByLabel("Name");
+    const name = page.getByRole("textbox", { name: "Name", exact: true });
     await name.fill(names[index]!);
     await name.press("Enter");
     if (index === 1) {
@@ -362,7 +590,7 @@ async function exerciseRoomDissolution(page: Page, viewport: Locator) {
   await ensureSelectTool(page);
   await viewport.locator('[data-testid="geometry-polygon"]').first().dispatchEvent("click", { bubbles: true });
   const inspector = page.getByRole("complementary", { name: "Inspector" });
-  await inspector.getByRole("tab", { name: "Selection" }).click();
+  await inspector.getByRole("tab", { name: "Properties" }).click();
   await expect(inspector.getByText("Area", { exact: true })).toBeVisible();
   await expect(inspector.getByText("Perimeter", { exact: true })).toBeVisible();
   await inspector.getByRole("button", { name: "Delete Room" }).click();
@@ -387,7 +615,9 @@ async function placeOpening(
   values: { readonly width: number; readonly height: number; readonly elevation: number; readonly hinge?: "Start" | "End"; readonly swing?: "Left" | "Right" }
 ) {
   await ensureSelectTool(page);
-  await page.getByRole("button", { name: tool }).click();
+  await page.getByRole("button", { name: "Openings" }).click();
+  await page.getByRole("combobox", { name: "Type", exact: true }).click();
+  await page.getByRole("option", { name: tool, exact: true }).click();
   await page.getByRole("tab", { name: "Properties" }).click();
   await commitNumber(page, "Width (cm)", values.width);
   await commitNumber(page, "Height (cm)", values.height);
@@ -438,11 +668,11 @@ async function commitNumber(page: Page, label: string, value: number) {
 }
 
 async function switchLevel(page: Page, name: string) {
-  const selector = page.getByRole("combobox", { name: "Level" });
+  const selector = page.getByRole("button", { name: /^Level:/ });
   if ((await selector.textContent()) === name) return;
   await selector.click();
-  await page.getByRole("option", { name }).click();
-  await expect(selector).toContainText(name);
+  await page.getByRole("menuitem", { name }).click();
+  await expect(page.getByRole("button", { name: `Level: ${name}` })).toBeVisible();
 }
 
 async function readWalls(viewport: Locator): Promise<Line[]> {

@@ -1,4 +1,5 @@
 import type { Project } from "../project/index.js";
+import { isWallRoomBoundaryEdge } from "../physical-building/index.js";
 import { ValidationErrorCode } from "./validation-error-code.js";
 import type { ValidationError, ValidationResult } from "./validation-result.js";
 
@@ -29,6 +30,13 @@ export const validateProjectCrossReferences = (project: Project): ValidationResu
   const designBriefIds = toIdSet(project.designBriefs);
   const renderRequestIds = toIdSet(project.renderRequests);
   const projectRoomIds = new Set(project.building.levels.flatMap((level) => level.rooms.map((room) => room.id)));
+  project.building.furniture.forEach((item, index) => {
+    if (!projectRoomIds.has(item.roomId)) {
+      pushError(errors, ValidationErrorCode.ROOM_NOT_FOUND,
+        `building.furniture[${index}].roomId`,
+        `Furniture "${item.id}" references Room "${item.roomId}" outside this Project.`);
+    }
+  });
   const wallLevelIds = new Map<string, string>();
 
   project.building.levels.forEach((level) => {
@@ -43,6 +51,7 @@ export const validateProjectCrossReferences = (project: Project): ValidationResu
 
     level.rooms.forEach((room, roomIndex) => {
       room.boundary.forEach((boundaryEdge, boundaryEdgeIndex) => {
+        if (!isWallRoomBoundaryEdge(boundaryEdge)) return;
         if (!levelWallIds.has(boundaryEdge.wallId)) {
           const wallLevelId = wallLevelIds.get(boundaryEdge.wallId);
           const isCrossLevelBoundary = wallLevelId !== undefined && wallLevelId !== level.id;

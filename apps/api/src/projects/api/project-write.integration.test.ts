@@ -9,7 +9,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ApiErrorCode } from "../../common/problem-details/api-error-code";
 
-const describeWithDatabase = process.env.DATABASE_URL ? describe : describe.skip;
+const describeWithDatabase = process.env.DATABASE_URL
+  ? describe
+  : describe.skip;
 const ownerSubject = "project-write-integration-owner";
 const otherSubject = "project-write-integration-other";
 const adminSubject = "project-write-integration-admin";
@@ -19,7 +21,8 @@ const environment = {
   KEYCLOAK_BASE_URL: "http://localhost:8080",
   KEYCLOAK_REALM: "casastudio",
   KEYCLOAK_ISSUER: "http://issuer.test/realms/casastudio",
-  KEYCLOAK_JWKS_URI: "http://localhost:8080/realms/casastudio/protocol/openid-connect/certs",
+  KEYCLOAK_JWKS_URI:
+    "http://localhost:8080/realms/casastudio/protocol/openid-connect/certs",
   KEYCLOAK_AUDIENCE: "casastudio-api",
   KEYCLOAK_CLIENT_ID: "casastudio-api",
   LOG_LEVEL: "silent"
@@ -48,10 +51,14 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     vi.resetModules();
 
     const { AppModule } = await import("../../app.module");
-    const { OidcHealthService } = await import("../../health/oidc-health.service");
+    const { OidcHealthService } =
+      await import("../../health/oidc-health.service");
     const { PrismaService } = await import("../../persistence/prisma.service");
-    const { configureApiApplication } = await import("../../bootstrap/create-api-application");
-    const moduleReference = await Test.createTestingModule({ imports: [AppModule] })
+    const { configureApiApplication } =
+      await import("../../bootstrap/create-api-application");
+    const moduleReference = await Test.createTestingModule({
+      imports: [AppModule]
+    })
       .overrideProvider(OidcHealthService)
       .useValue({ verifyReady: vi.fn(async () => undefined) })
       .compile();
@@ -104,7 +111,14 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       name: "Integration apartment",
       revision: 1,
       updatedAt: created.body.project.updatedAt,
-      ownedByCurrentUser: true
+      ownedByCurrentUser: true,
+      levelCount: 1,
+      roomCount: 0,
+      preview: {
+        levelId: created.body.project.building.levels[0].id,
+        elevation: 0,
+        walls: []
+      }
     });
     expect(JSON.stringify(listed.body)).not.toContain("building");
 
@@ -115,9 +129,21 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     const proposed = structuredClone(read.body.project);
     proposed.name = "Saved integration apartment";
     proposed.building.levels[0].walls.push(
-      createBoundaryWall("client-generated-wall", { x: 0, z: 0 }, { x: 100, z: 0 }),
-      createBoundaryWall("saved-east-wall", { x: 100, z: 0 }, { x: 100, z: 100 }),
-      createBoundaryWall("saved-north-wall", { x: 100, z: 100 }, { x: 0, z: 100 }),
+      createBoundaryWall(
+        "client-generated-wall",
+        { x: 0, z: 0 },
+        { x: 100, z: 0 }
+      ),
+      createBoundaryWall(
+        "saved-east-wall",
+        { x: 100, z: 0 },
+        { x: 100, z: 100 }
+      ),
+      createBoundaryWall(
+        "saved-north-wall",
+        { x: 100, z: 100 },
+        { x: 0, z: 100 }
+      ),
       createBoundaryWall("saved-west-wall", { x: 0, z: 100 }, { x: 0, z: 0 })
     );
     proposed.building.levels[0].rooms.push({
@@ -132,12 +158,30 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       ]
     });
 
+    proposed.building.furniture = [
+      {
+        id: "saved-desk",
+        roomId: "saved-room",
+        definitionId: "custom-provider:desk",
+        position: { x: 50, z: 50 },
+        rotation: 27.5,
+        width: 60,
+        depth: 40,
+        height: 75,
+        name: "Desk",
+        description: "Generic desk"
+      }
+    ];
+
     const saved = await request(app.getHttpServer())
       .put(`/api/v1/projects/${projectId}`)
       .set("authorization", authorization)
       .send({ baseRevision: 1, project: proposed })
       .expect(200);
 
+    expect(saved.body.project.building.furniture).toEqual(
+      proposed.building.furniture
+    );
     expect(saved.body.sourceRevision).toBe(2);
     expect(saved.body.project).toMatchObject({
       id: projectId,
@@ -145,7 +189,9 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       revision: 2
     });
     expect(saved.body.project.building.levels[0].walls).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "client-generated-wall" })])
+      expect.arrayContaining([
+        expect.objectContaining({ id: "client-generated-wall" })
+      ])
     );
 
     const authoritative = await request(app.getHttpServer())
@@ -161,7 +207,9 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     expect(geometry.body.sourceProjectId).toBe(projectId);
     expect(geometry.body.sourceRevision).toBe(2);
     expect(geometry.body.geometry.levels[0].boundaryEdges).toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceWallId: "client-generated-wall" })])
+      expect.arrayContaining([
+        expect.objectContaining({ sourceWallId: "client-generated-wall" })
+      ])
     );
     expect(geometry.body.geometry.levels[0].polygons[0]).toMatchObject({
       sourceRoomId: "saved-room",
@@ -173,7 +221,9 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       include: { walls: true, levels: true }
     });
     expect(persisted.revision).toBe(2);
-    expect(persisted.walls.map((wall) => wall.domainId)).toContain("client-generated-wall");
+    expect(persisted.walls.map((wall) => wall.domainId)).toContain(
+      "client-generated-wall"
+    );
     expect(persisted.levels).toHaveLength(1);
   });
 
@@ -190,7 +240,9 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     firstProposal.name = "Writer A";
     secondProposal.name = "Writer B";
     firstProposal.building.levels[0].walls.push(createWall("writer-a-wall", 0));
-    secondProposal.building.levels[0].walls.push(createWall("writer-b-wall", 200));
+    secondProposal.building.levels[0].walls.push(
+      createWall("writer-b-wall", 200)
+    );
 
     const responses = await Promise.all([
       request(app.getHttpServer())
@@ -205,7 +257,9 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     const success = responses.find((response) => response.status === 200);
     const conflict = responses.find((response) => response.status === 409);
 
-    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 409
+    ]);
     expect(conflict?.body.code).toBe(ApiErrorCode.ProjectRevisionConflict);
     const authoritative = await request(app.getHttpServer())
       .get(`/api/v1/projects/${projectId}`)
@@ -213,7 +267,9 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       .expect(200);
     expect(authoritative.body.sourceRevision).toBe(2);
     expect(authoritative.body.project).toEqual(success?.body.project);
-    expect(await prisma.project.findUniqueOrThrow({ where: { domainId: projectId } })).toMatchObject({
+    expect(
+      await prisma.project.findUniqueOrThrow({ where: { domainId: projectId } })
+    ).toMatchObject({
       revision: 2,
       name: success?.body.project.name
     });
@@ -245,7 +301,39 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       .set("authorization", authorization)
       .expect(200);
     expect(authoritative.body).toEqual(created.body);
-    expect(await prisma.wall.count({ where: { project: { domainId: projectId } } })).toBe(0);
+    expect(
+      await prisma.wall.count({ where: { project: { domainId: projectId } } })
+    ).toBe(0);
+  });
+
+  it("deletes an authenticated disposable Project aggregate and keeps listing functional", async () => {
+    const authorization = userAuthorization(ownerSubject);
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/projects")
+      .set("authorization", authorization)
+      .send({ name: "Disposable deletion apartment" })
+      .expect(201);
+    const projectId = created.body.project.id as string;
+
+    const deleted = await request(app.getHttpServer())
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("origin", "http://localhost:5173")
+      .set("authorization", authorization)
+      .expect(204);
+
+    expect(deleted.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173"
+    );
+    expect(
+      await prisma.project.findUnique({ where: { domainId: projectId } })
+    ).toBeNull();
+    const listed = await request(app.getHttpServer())
+      .get("/api/v1/projects")
+      .set("authorization", authorization)
+      .expect(200);
+    expect(listed.body.projects).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: projectId })])
+    );
   });
 
   it("enforces ownership, admin override, authentication, and owner assignment", async () => {
@@ -258,7 +346,10 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     const projectId = created.body.project.id as string;
     const payload = { baseRevision: 1, project: created.body.project };
 
-    await request(app.getHttpServer()).put(`/api/v1/projects/${projectId}`).send(payload).expect(401);
+    await request(app.getHttpServer())
+      .put(`/api/v1/projects/${projectId}`)
+      .send(payload)
+      .expect(401);
     await request(app.getHttpServer())
       .put(`/api/v1/projects/${projectId}`)
       .set("authorization", userAuthorization(otherSubject))
@@ -270,14 +361,18 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
       .send(payload)
       .expect(200);
 
-    const persisted = await prisma.project.findUniqueOrThrow({ where: { domainId: projectId } });
+    const persisted = await prisma.project.findUniqueOrThrow({
+      where: { domainId: projectId }
+    });
     expect(persisted.ownerSubject).toBe(ownerSubject);
     expect(persisted.updatedBySubject).toBe(adminSubject);
   });
 
   async function cleanup(): Promise<void> {
     await prisma.project.deleteMany({
-      where: { ownerSubject: { in: [ownerSubject, otherSubject, adminSubject] } }
+      where: {
+        ownerSubject: { in: [ownerSubject, otherSubject, adminSubject] }
+      }
     });
   }
 
@@ -316,7 +411,9 @@ function createBoundaryWall(
 }
 
 function createSigningKeys() {
-  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048
+  });
   const publicPem = publicKey.export({ format: "pem", type: "spki" }) as string;
   const privatePem = privateKey.export({ format: "pem", type: "pkcs8" });
 

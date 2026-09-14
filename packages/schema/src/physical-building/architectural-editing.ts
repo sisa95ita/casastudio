@@ -12,7 +12,13 @@ import {
   ValidationErrorCode,
   type ValidationError
 } from "../validation/index.js";
-import { RoomSchema, type Room, type RoomBoundaryEdge } from "./room.js";
+import {
+  RoomSchema,
+  isWallRoomBoundaryEdge,
+  type Room,
+  type RoomBoundaryEdge,
+  type WallRoomBoundaryEdge
+} from "./room.js";
 import type { Wall } from "./wall.js";
 import type { ProjectEditingResult } from "./wall-editing.js";
 
@@ -20,7 +26,7 @@ import type { ProjectEditingResult } from "./wall-editing.js";
 export type DerivedBoundedFace = {
   readonly key: string;
   readonly levelId: Identifier;
-  readonly boundary: readonly RoomBoundaryEdge[];
+  readonly boundary: readonly WallRoomBoundaryEdge[];
   readonly vertices: readonly Point2D[];
   readonly area: number;
   readonly centroid: Point2D;
@@ -68,7 +74,7 @@ export type RoomPartitionCandidate = {
   readonly levelId: Identifier;
   readonly roomId: Identifier;
   readonly partitionWallId: Identifier;
-  readonly boundaries: readonly [readonly RoomBoundaryEdge[], readonly RoomBoundaryEdge[]];
+  readonly boundaries: readonly [readonly WallRoomBoundaryEdge[], readonly WallRoomBoundaryEdge[]];
 };
 
 /** Input for adding an explicit Room from a caller-selected wall cycle. */
@@ -111,8 +117,8 @@ export type DissolveRoomInput = {
   readonly roomId: Identifier;
 };
 
-/** Canonical Room metadata supported by semantic property editing. */
-export type UpdateRoomProperties = Pick<Room, "name" | "type">;
+/** Canonical Room properties supported by semantic property editing. */
+export type UpdateRoomProperties = Pick<Room, "name" | "type" | "elevation">;
 
 /** Input for replacing the editable metadata of one exact Room. */
 export type UpdateRoomPropertiesInput = {
@@ -120,6 +126,7 @@ export type UpdateRoomPropertiesInput = {
   readonly roomId: Identifier;
   readonly name?: Room["name"];
   readonly type?: Room["type"];
+  readonly elevation?: Room["elevation"];
 };
 
 /** Input for moving every Wall endpoint incident to one exact canonical point. */
@@ -134,7 +141,7 @@ type DirectedWallUse = {
   readonly wall: Wall;
   readonly from: Point2D;
   readonly to: Point2D;
-  readonly direction: RoomBoundaryEdge["direction"];
+  readonly direction: WallRoomBoundaryEdge["direction"];
 };
 
 /**
@@ -230,7 +237,8 @@ export function deriveBoundedFaces(
  */
 export function classifyLevelRoomTopology(
   project: Project,
-  levelId: Identifier
+  levelId: Identifier,
+  roomElevation = 0
 ): LevelRoomTopologyClassification {
   const level = project.building.levels.find((candidate) => candidate.id === levelId);
   const faces = deriveBoundedFaces(project, levelId);
@@ -239,6 +247,8 @@ export function classifyLevelRoomTopology(
   }
 
   const roomPolygons = level.rooms.flatMap((room) => {
+    if ((room.elevation ?? 0) !== roomElevation) return [];
+    if (!room.boundary.every(isWallRoomBoundaryEdge)) return [];
     const boundary = canonicalizeCycle(room.boundary, level.walls);
     if (!boundary) return [];
     const vertices = getBoundaryVertices(boundary, level.walls);
@@ -360,6 +370,7 @@ export function discoverRoomPartitionCandidates(
     if (subdivision.faces.length !== 2) return [];
     const room = level.rooms.find((candidate) => candidate.id === subdivision.roomId);
     if (!room) return [];
+    if (!room.boundary.every(isWallRoomBoundaryEdge)) return [];
     const roomWallIds = new Set(room.boundary.map((edge) => edge.wallId));
     const firstIds = new Set(subdivision.faces[0]!.boundary.map((edge) => edge.wallId));
     const sharedInternalWalls = subdivision.faces[1]!.boundary
@@ -399,7 +410,8 @@ export function createRoom(project: Project, input: CreateRoomInput): ProjectEdi
     });
   }
   const parsedRoom = RoomSchema.safeParse(input.room);
-  if (!parsedRoom.success || input.room.boundary.length < 3) {
+  if (!parsedRoom.success || input.room.boundary.length < 3 ||
+      !input.room.boundary.every(isWallRoomBoundaryEdge)) {
     return failure(invalidRoomBoundary("room.boundary", input.room.id));
   }
   const boundary = canonicalizeCycle(input.room.boundary, level.walls);
@@ -413,7 +425,12 @@ export function createRoom(project: Project, input: CreateRoomInput): ProjectEdi
     });
   }
   const identity = boundaryIdentity(boundary);
-  if (level.rooms.some((room) => boundaryIdentity(room.boundary) === identity)) {
+  const elevation = parsedRoom.data.elevation ?? 0;
+  if (level.rooms.some((room) =>
+    (room.elevation ?? 0) === elevation &&
+    room.boundary.every(isWallRoomBoundaryEdge) &&
+    boundaryIdentity(room.boundary) === identity
+  )) {
     return failure({
       code: ValidationErrorCode.DUPLICATE_ROOM_BOUNDARY,
       path: "room.boundary",
@@ -427,6 +444,52 @@ export function createRoom(project: Project, input: CreateRoomInput): ProjectEdi
     return { ...current, rooms, walls: rebuildWallRoomIds(current.walls, rooms) };
   });
   return validateCanonicalResult(candidate, "Room creation");
+}
+
+/**
+ * Adds one explicitly bounded Room without requiring a wall-derived face.
+ *
+ * This operation is intended for honest standalone floor footprints, including
+ * mixed and entirely free boundaries. It never creates, removes, or reshapes a
+ * Wall and validates the complete resulting Project atomically.
+ */
+export function createStandaloneRoom(
+  project: Project,
+  input: CreateRoomInput
+): ProjectEditingResult {
+  const levelIndex = findLevelIndex(project, input.levelId);
+  if (levelIndex < 0) return failure(levelNotFound(input.levelId));
+  if (project.building.levels.some((level) =>
+    level.rooms.some((room) => room.id === input.room.id)
+  )) {
+    return failure({
+      code: ValidationErrorCode.DUPLICATE_IDENTIFIER,
+      path: "room.id",
+      message: `Room identifier "${input.room.id}" is already in use.`
+    });
+  }
+  const parsedRoom = RoomSchema.safeParse(input.room);
+  if (!parsedRoom.success || parsedRoom.data.boundary.length < 3) {
+    return failure(invalidRoomBoundary("room.boundary", input.room.id));
+  }
+  const level = project.building.levels[levelIndex]!;
+  const candidate = mapLevel(project, levelIndex, (current) => ({
+    ...current,
+    rooms: [...current.rooms, parsedRoom.data],
+    walls: rebuildWallRoomIds(current.walls, [...current.rooms, parsedRoom.data])
+  }));
+  const duplicate = level.rooms.some((room) =>
+    (room.elevation ?? 0) === (parsedRoom.data.elevation ?? 0) &&
+    boundaryGeometryIdentity(room.boundary, level.walls) ===
+      boundaryGeometryIdentity(parsedRoom.data.boundary, level.walls)
+  );
+  return duplicate
+    ? failure({
+        code: ValidationErrorCode.DUPLICATE_ROOM_BOUNDARY,
+        path: "room.boundary",
+        message: "A Room at this floor elevation already uses this exact boundary."
+      })
+    : validateCanonicalResult(candidate, "Standalone Room creation");
 }
 
 /**
@@ -449,7 +512,11 @@ export function reconcileRoomSubdivision(
   const roomIndex = level.rooms.findIndex((room) => room.id === input.roomId);
   if (roomIndex < 0) return failure(roomNotFound(input.levelId, input.roomId));
   const room = level.rooms[roomIndex]!;
-  const subdivision = classifyLevelRoomTopology(project, input.levelId).subdivisions
+  const subdivision = classifyLevelRoomTopology(
+    project,
+    input.levelId,
+    room.elevation ?? 0
+  ).subdivisions
     .find((candidate) => candidate.roomId === input.roomId);
   if (!subdivision) {
     return failure({
@@ -571,7 +638,10 @@ export function partitionRoom(
   project: Project,
   input: PartitionRoomInput
 ): ProjectEditingResult {
-  const subdivision = classifyLevelRoomTopology(project, input.levelId).subdivisions
+  const roomElevation = project.building.levels
+    .find((level) => level.id === input.levelId)?.rooms
+    .find((room) => room.id === input.roomId)?.elevation ?? 0;
+  const subdivision = classifyLevelRoomTopology(project, input.levelId, roomElevation).subdivisions
     .find((candidate) =>
       candidate.roomId === input.roomId &&
       candidate.faces.length === 2 &&
@@ -611,7 +681,8 @@ export function updateRoomProperties(
   const parsedRoom = RoomSchema.safeParse({
     ...currentRoom,
     name: input.name ?? currentRoom.name,
-    type: input.type ?? currentRoom.type
+    type: input.type ?? currentRoom.type,
+    elevation: input.elevation ?? currentRoom.elevation
   });
   if (!parsedRoom.success) {
     return failure({
@@ -625,7 +696,12 @@ export function updateRoomProperties(
     ...current,
     rooms: current.rooms.map((room, index) =>
       index === roomIndex
-        ? { ...room, name: parsedRoom.data.name, type: parsedRoom.data.type }
+        ? {
+            ...room,
+            name: parsedRoom.data.name,
+            type: parsedRoom.data.type,
+            ...(parsedRoom.data.elevation === undefined ? {} : { elevation: parsedRoom.data.elevation })
+          }
         : room
     )
   }));
@@ -667,6 +743,7 @@ export function deleteRoom(project: Project, input: DeleteRoomInput): ProjectEdi
     rooms,
     walls: rebuildWallRoomIds(current.walls, rooms)
   }));
+  candidate.building.furniture = project.building.furniture.filter((item) => item.roomId !== input.roomId);
   return validateCanonicalResult(candidate, "Room deletion");
 }
 
@@ -675,7 +752,7 @@ export function deleteRoom(project: Project, input: DeleteRoomInput): ProjectEdi
  *
  * The shared boundary must cancel into one exact simple outer cycle whose area
  * equals both source regions. All current Room-scoped Door, Viewpoint, and
- * Staircase references are reassigned to the surviving Room because the full
+ * Staircase and Furniture references are reassigned to the surviving Room because the full
  * dissolved region is incorporated into it. Ambiguous adjacency or invalid
  * union topology is rejected before any Project state is returned.
  */
@@ -685,12 +762,16 @@ export function dissolveRoom(project: Project, input: DissolveRoomInput): Projec
   const level = project.building.levels[levelIndex]!;
   const dissolvedRoom = level.rooms.find((room) => room.id === input.roomId);
   if (!dissolvedRoom) return failure(roomNotFound(input.levelId, input.roomId));
+  if (!dissolvedRoom.boundary.every(isWallRoomBoundaryEdge)) {
+    return failure(invalidRoomDissolution(dissolvedRoom.id));
+  }
 
   const dissolvedWallIds = new Set(dissolvedRoom.boundary.map((edge) => edge.wallId));
   const adjacentRooms = level.rooms.filter(
     (room) =>
       room.id !== dissolvedRoom.id &&
-      room.boundary.some((edge) => dissolvedWallIds.has(edge.wallId))
+      (room.elevation ?? 0) === (dissolvedRoom.elevation ?? 0) &&
+      room.boundary.some((edge) => isWallRoomBoundaryEdge(edge) && dissolvedWallIds.has(edge.wallId))
   );
   if (adjacentRooms.length !== 1) {
     return failure({
@@ -701,9 +782,10 @@ export function dissolveRoom(project: Project, input: DissolveRoomInput): Projec
   }
 
   const survivingRoom = adjacentRooms[0]!;
-  const survivingEdgesByWallId = new Map(
-    survivingRoom.boundary.map((edge) => [edge.wallId, edge])
-  );
+  if (!survivingRoom.boundary.every(isWallRoomBoundaryEdge)) {
+    return failure(invalidRoomDissolution(dissolvedRoom.id));
+  }
+  const survivingEdgesByWallId = new Map(survivingRoom.boundary.map((edge) => [edge.wallId, edge]));
   const sharedWallIds = new Set(
     dissolvedRoom.boundary
       .map((edge) => edge.wallId)
@@ -746,6 +828,8 @@ export function dissolveRoom(project: Project, input: DissolveRoomInput): Projec
     ...project,
     building: {
       ...project.building,
+      furniture: project.building.furniture.map((item) => item.roomId === dissolvedRoom.id
+        ? { ...item, roomId: survivingRoom.id } : item),
       levels: project.building.levels.map((current, index) => {
         const wallsWithReferences = replaceDoorRoomReference(
           current.walls,
@@ -829,9 +913,9 @@ export function moveJunction(project: Project, input: MoveJunctionInput): Projec
 }
 
 function canonicalizeCycle(
-  requested: readonly RoomBoundaryEdge[],
+  requested: readonly WallRoomBoundaryEdge[],
   walls: readonly Wall[]
-): RoomBoundaryEdge[] | undefined {
+): WallRoomBoundaryEdge[] | undefined {
   if (requested.length < 3 || new Set(requested.map((edge) => edge.wallId)).size !== requested.length) {
     return undefined;
   }
@@ -849,7 +933,7 @@ function canonicalizeCycle(
   const traversals = [
     buildCycle(startWall, "FORWARD", selected as Wall[]),
     buildCycle(startWall, "REVERSE", selected as Wall[])
-  ].filter((value): value is RoomBoundaryEdge[] => Boolean(value));
+  ].filter((value): value is WallRoomBoundaryEdge[] => Boolean(value));
   const counterClockwise = traversals.filter(
     (boundary) => signedArea(getBoundaryVertices(boundary, walls)) > 0
   );
@@ -866,9 +950,9 @@ function canonicalizeCycle(
  * every physical Wall and intermediate junction represented by the traversal.
  */
 function canonicalizeDirectedCycle(
-  requested: readonly RoomBoundaryEdge[],
+  requested: readonly WallRoomBoundaryEdge[],
   walls: readonly Wall[]
-): RoomBoundaryEdge[] | undefined {
+): WallRoomBoundaryEdge[] | undefined {
   if (requested.length < 3 || new Set(requested.map((edge) => edge.wallId)).size !== requested.length) {
     return undefined;
   }
@@ -884,7 +968,7 @@ function canonicalizeDirectedCycle(
   });
   if (uses.some((use) => !use)) return undefined;
   const directedUses = uses as Array<{
-    readonly edge: RoomBoundaryEdge;
+    readonly edge: WallRoomBoundaryEdge;
     readonly start: Point2D;
     readonly end: Point2D;
   }>;
@@ -896,7 +980,7 @@ function canonicalizeDirectedCycle(
   const vertices = directedUses.map((use) => use.start);
   const area = signedArea(vertices);
   if (area === 0 || !isSimplePolygon(vertices)) return undefined;
-  const counterClockwise: RoomBoundaryEdge[] = area > 0
+  const counterClockwise: WallRoomBoundaryEdge[] = area > 0
     ? directedUses.map((use) => use.edge)
     : [...directedUses].reverse().map((use) => ({
         wallId: use.edge.wallId,
@@ -907,11 +991,11 @@ function canonicalizeDirectedCycle(
 
 function buildCycle(
   firstWall: Wall,
-  firstDirection: RoomBoundaryEdge["direction"],
+  firstDirection: WallRoomBoundaryEdge["direction"],
   walls: readonly Wall[]
-): RoomBoundaryEdge[] | undefined {
+): WallRoomBoundaryEdge[] | undefined {
   const remaining = new Map(walls.map((wall) => [wall.id, wall]));
-  const result: RoomBoundaryEdge[] = [];
+  const result: WallRoomBoundaryEdge[] = [];
   let wall = firstWall;
   let direction = firstDirection;
   const initialPoint = direction === "FORWARD" ? wall.start : wall.end;
@@ -931,7 +1015,7 @@ function buildCycle(
   return undefined;
 }
 
-function rotateBoundary(boundary: readonly RoomBoundaryEdge[]): RoomBoundaryEdge[] {
+function rotateBoundary(boundary: readonly WallRoomBoundaryEdge[]): WallRoomBoundaryEdge[] {
   const rotations = boundary.map((_, index) => [...boundary.slice(index), ...boundary.slice(0, index)]);
   return rotations.sort((first, second) => boundaryKey(first).localeCompare(boundaryKey(second)))[0]!;
 }
@@ -941,7 +1025,9 @@ function rebuildWallRoomIds(walls: readonly Wall[], rooms: readonly Room[]): Wal
   return walls.map((wall) => ({
     ...wall,
     roomIds: rooms
-      .filter((room) => room.boundary.some((edge) => edge.wallId === wall.id))
+      .filter((room) => room.boundary.some((edge) =>
+        isWallRoomBoundaryEdge(edge) && edge.wallId === wall.id
+      ))
       .map((room) => room.id)
       .sort((first, second) => roomOrder.get(first)! - roomOrder.get(second)!)
   }));
@@ -993,6 +1079,7 @@ function addDirectedUse(map: Map<string, DirectedWallUse[]>, use: DirectedWallUs
 function getBoundaryVertices(boundary: readonly RoomBoundaryEdge[], walls: readonly Wall[]): Point2D[] {
   const wallsById = new Map(walls.map((wall) => [wall.id, wall]));
   return boundary.flatMap((edge) => {
+    if (!isWallRoomBoundaryEdge(edge)) return [edge.start];
     const wall = wallsById.get(edge.wallId);
     return wall ? [edge.direction === "FORWARD" ? wall.start : wall.end] : [];
   });
@@ -1236,12 +1323,24 @@ function arraysEqual(first: readonly Identifier[], second: readonly Identifier[]
   return first.length === second.length && first.every((value, index) => value === second[index]);
 }
 
-function boundaryIdentity(boundary: readonly RoomBoundaryEdge[]): string {
+function boundaryIdentity(boundary: readonly WallRoomBoundaryEdge[]): string {
   return [...boundary.map((edge) => edge.wallId)].sort().join("|");
 }
 
-function boundaryKey(boundary: readonly RoomBoundaryEdge[]): string {
+function boundaryKey(boundary: readonly WallRoomBoundaryEdge[]): string {
   return boundary.map((edge) => `${edge.wallId}:${edge.direction}`).join("|");
+}
+
+function boundaryGeometryIdentity(
+  boundary: readonly RoomBoundaryEdge[],
+  walls: readonly Wall[]
+): string | undefined {
+  const points = getBoundaryVertices(boundary, walls);
+  if (points.length !== boundary.length) return undefined;
+  const rotations = points.map((_, index) => [...points.slice(index), ...points.slice(0, index)]);
+  return rotations
+    .map((rotation) => rotation.map(pointKey).join("|"))
+    .sort()[0];
 }
 
 function directedUseKey(use: DirectedWallUse): string {

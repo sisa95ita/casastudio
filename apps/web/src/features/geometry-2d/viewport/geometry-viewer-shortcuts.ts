@@ -38,7 +38,7 @@ export const geometryViewerShortcuts: readonly GeometryViewerShortcutDefinition[
     }),
     Object.freeze({
       action: "RESET_VIEWPORT",
-      key: "R",
+      key: "Shift + R",
       translationKey: "shortcuts.resetViewport"
     })
   ]);
@@ -66,9 +66,29 @@ export const geometryEditorShortcuts = Object.freeze([
     translationKey: "shortcuts.windowTool"
   }),
   Object.freeze({
+    action: "WALL_OPENING_TOOL",
+    key: "O",
+    translationKey: "shortcuts.wallOpeningTool"
+  }),
+  Object.freeze({
+    action: "ROOM_TOOL",
+    key: "R",
+    translationKey: "shortcuts.roomTool"
+  }),
+  Object.freeze({
     action: "MEASURE_TOOL",
     key: "M",
     translationKey: "shortcuts.measureTool"
+  }),
+  Object.freeze({
+    action: "STAIR_TOOL",
+    key: "S",
+    translationKey: "shortcuts.stairTool"
+  }),
+  Object.freeze({
+    action: "FURNITURE_TOOL",
+    key: "U",
+    translationKey: "shortcuts.furnitureTool"
   }),
   Object.freeze({
     action: "UNDO",
@@ -92,6 +112,7 @@ export const geometryEditorShortcuts = Object.freeze([
  */
 export const getGeometryViewerShortcutAction = (
   event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey"> & {
+    readonly shiftKey?: boolean;
     readonly target?: EventTarget | null;
   }
 ): GeometryViewerShortcutAction | undefined => {
@@ -118,7 +139,7 @@ export const getGeometryViewerShortcutAction = (
     return "FIT_VIEWPORT";
   }
 
-  if (normalizedKey === "r") {
+  if (normalizedKey === "r" && event.shiftKey) {
     return "RESET_VIEWPORT";
   }
 
@@ -135,8 +156,10 @@ export const isEditableShortcutTarget = (
 
   return (
     target.isContentEditable ||
-    Boolean(target.closest(
-      'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], .MuiInputBase-root'
-    ))
+    Boolean(
+      target.closest(
+        'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [data-editor-shortcut-scope="true"], .MuiInputBase-root'
+      )
+    )
   );
 };

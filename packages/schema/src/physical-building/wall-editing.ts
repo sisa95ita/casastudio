@@ -13,7 +13,11 @@ import {
   type ValidationError
 } from "../validation/index.js";
 import type { Opening } from "./opening.js";
-import type { RoomBoundaryEdge } from "./room.js";
+import {
+  isWallRoomBoundaryEdge,
+  type RoomBoundaryEdge,
+  type WallRoomBoundaryEdge
+} from "./room.js";
 import { WallSchema, type Wall } from "./wall.js";
 
 const splitParameterTolerance = 1e-9;
@@ -880,8 +884,12 @@ function mergeRoomBoundaryUses(
   merged: Wall,
   junction: Point2D
 ): RoomBoundaryEdge[] | undefined {
-  const survivorIndex = boundary.findIndex((edge) => edge.wallId === survivor.id);
-  const removedIndex = boundary.findIndex((edge) => edge.wallId === removed.id);
+  const survivorIndex = boundary.findIndex((edge) =>
+    isWallRoomBoundaryEdge(edge) && edge.wallId === survivor.id
+  );
+  const removedIndex = boundary.findIndex((edge) =>
+    isWallRoomBoundaryEdge(edge) && edge.wallId === removed.id
+  );
   if (survivorIndex < 0 && removedIndex < 0) return [...boundary];
   if (survivorIndex < 0 || removedIndex < 0) return undefined;
 
@@ -892,7 +900,8 @@ function mergeRoomBoundaryUses(
   const pairEnd = (pairStart + 1) % boundary.length;
   const firstEdge = boundary[pairStart];
   const secondEdge = boundary[pairEnd];
-  if (!firstEdge || !secondEdge) return undefined;
+  if (!firstEdge || !secondEdge ||
+      !isWallRoomBoundaryEdge(firstEdge) || !isWallRoomBoundaryEdge(secondEdge)) return undefined;
   const firstWall = firstEdge.wallId === survivor.id ? survivor : removed;
   const secondWall = secondEdge.wallId === survivor.id ? survivor : removed;
   const traversalStart = getBoundaryTraversalStart(firstEdge, firstWall);
@@ -930,7 +939,7 @@ function mergeRoomBoundaryUses(
 
 /** Resolves the canonical start of one oriented Room boundary use. */
 function getBoundaryTraversalStart(
-  edge: RoomBoundaryEdge,
+  edge: WallRoomBoundaryEdge,
   wall: Wall
 ): Point2D {
   return edge.direction === "FORWARD" ? wall.start : wall.end;
@@ -938,7 +947,7 @@ function getBoundaryTraversalStart(
 
 /** Resolves the canonical end of one oriented Room boundary use. */
 function getBoundaryTraversalEnd(
-  edge: RoomBoundaryEdge,
+  edge: WallRoomBoundaryEdge,
   wall: Wall
 ): Point2D {
   return edge.direction === "FORWARD" ? wall.end : wall.start;
@@ -998,7 +1007,7 @@ function expandSplitBoundaryEdge(
   originalWallId: Identifier,
   newWallId: Identifier
 ): readonly RoomBoundaryEdge[] {
-  if (edge.wallId !== originalWallId) return [edge];
+  if (!isWallRoomBoundaryEdge(edge) || edge.wallId !== originalWallId) return [edge];
   return edge.direction === "FORWARD"
     ? [edge, { wallId: newWallId, direction: "FORWARD" }]
     : [
@@ -1063,7 +1072,9 @@ export function deleteWall(
   const wall = level.walls[wallIndex];
   const referencingRoomIds = level.rooms
     .filter((room) =>
-      room.boundary.some((edge) => edge.wallId === input.wallId)
+      room.boundary.some((edge) =>
+        isWallRoomBoundaryEdge(edge) && edge.wallId === input.wallId
+      )
     )
     .map((room) => room.id);
 
