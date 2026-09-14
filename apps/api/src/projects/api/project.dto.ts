@@ -288,10 +288,17 @@ export class FurnitureItemDto {
   @ApiProperty({ type: String }) readonly roomId!: string;
   @ApiProperty({ type: String }) readonly definitionId!: string;
   @ApiProperty({ type: () => Point2DDto }) readonly position!: Point2DDto;
-  @ApiProperty({ type: Number, description: "Degrees about positive Y using the right-hand rule." }) readonly rotation!: number;
-  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 }) readonly width!: number;
-  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 }) readonly depth!: number;
-  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 }) readonly height!: number;
+  @ApiProperty({
+    type: Number,
+    description: "Degrees about positive Y using the right-hand rule."
+  })
+  readonly rotation!: number;
+  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 })
+  readonly width!: number;
+  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 })
+  readonly depth!: number;
+  @ApiProperty({ type: Number, exclusiveMinimum: true, minimum: 0 })
+  readonly height!: number;
   @ApiPropertyOptional({ type: String }) readonly name?: string;
   @ApiPropertyOptional({ type: String }) readonly description?: string;
 }
@@ -568,6 +575,33 @@ export class ProjectResponseDto {
   readonly sourceRevision!: number;
 }
 
+/** Lightweight Wall geometry used by a Project library preview. */
+export class ProjectPreviewWallDto {
+  @ApiProperty({ type: String })
+  readonly id!: string;
+
+  @ApiProperty({ type: () => Point2DDto })
+  readonly start!: Point2DDto;
+
+  @ApiProperty({ type: () => Point2DDto })
+  readonly end!: Point2DDto;
+
+  @ApiProperty({ type: Number })
+  readonly thickness!: number;
+}
+
+/** Deterministically selected Level geometry used by a Project library preview. */
+export class ProjectPreviewDto {
+  @ApiProperty({ type: String })
+  readonly levelId!: string;
+
+  @ApiProperty({ type: Number })
+  readonly elevation!: number;
+
+  @ApiProperty({ type: () => [ProjectPreviewWallDto] })
+  readonly walls!: readonly ProjectPreviewWallDto[];
+}
+
 /** Lightweight Project representation used for discovery and navigation. */
 export class ProjectSummaryDto {
   @ApiProperty({ type: String })
@@ -584,6 +618,15 @@ export class ProjectSummaryDto {
 
   @ApiProperty({ type: Boolean })
   readonly ownedByCurrentUser!: boolean;
+
+  @ApiProperty({ type: Number })
+  readonly levelCount!: number;
+
+  @ApiProperty({ type: Number })
+  readonly roomCount!: number;
+
+  @ApiPropertyOptional({ type: () => ProjectPreviewDto })
+  readonly preview?: ProjectPreviewDto;
 }
 
 /** Authenticated Project discovery response. */

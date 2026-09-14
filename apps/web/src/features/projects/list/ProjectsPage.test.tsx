@@ -29,6 +29,96 @@ afterEach(() => {
 });
 
 describe("Projects workspace", () => {
+  it("renders the full-width card library without an Inspector", async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue(
+      Response.json({
+        projects: [summary("Casa"), summary("Loft", "project-loft")]
+      })
+    ) as typeof fetch;
+    const { container } = render(
+      <App
+        initialEntries={["/app"]}
+        authClient={authClient}
+        apiClient={createApi(fetchImplementation)}
+      />
+    );
+
+    await screen.findByRole("heading", { name: "Casa" });
+    expect(
+      screen.queryByRole("complementary", { name: "Inspector" })
+    ).toBeNull();
+    expect(
+      container.querySelector(".app-shell__layout--without-inspector")
+    ).toBeTruthy();
+    expect(container.querySelectorAll(".project-card")).toHaveLength(2);
+    expect(container.querySelectorAll("svg.project-card__plan")).toHaveLength(
+      2
+    );
+    expect(screen.getAllByText("2 Levels · 8 Rooms")).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Open Casa" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Actions for Casa" })
+    ).toBeTruthy();
+  });
+
+  it("filters immediately by trimmed, case-insensitive name without more requests", async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue(
+      Response.json({
+        projects: [summary("Casa"), summary("Lake Loft", "project-loft")]
+      })
+    ) as typeof fetch;
+    render(
+      <App
+        initialEntries={["/app"]}
+        authClient={authClient}
+        apiClient={createApi(fetchImplementation)}
+      />
+    );
+
+    await screen.findByRole("heading", { name: "Casa" });
+    fireEvent.change(screen.getByLabelText("Search projects"), {
+      target: { value: "  lAkE  " }
+    });
+    expect(screen.queryByRole("heading", { name: "Casa" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Lake Loft" })).toBeTruthy();
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText("Search projects"), {
+      target: { value: "missing" }
+    });
+    expect(
+      screen.getByRole("heading", { name: 'No projects match "missing"' })
+    ).toBeTruthy();
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Clear search" })[0]!
+    );
+    expect(screen.getByRole("heading", { name: "Casa" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lake Loft" })).toBeTruthy();
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses an intentional empty-plan placeholder without editor overlays", async () => {
+    const empty = { ...summary("Empty Casa"), preview: undefined };
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValue(Response.json({ projects: [empty] })) as typeof fetch;
+    const { container } = render(
+      <App
+        initialEntries={["/app"]}
+        authClient={authClient}
+        apiClient={createApi(fetchImplementation)}
+      />
+    );
+
+    await screen.findByRole("heading", { name: "Empty Casa" });
+    expect(screen.getByText("Empty plan")).toBeTruthy();
+    expect(container.querySelector(".geometry-label")).toBeNull();
+    expect(container.querySelector(".geometry-dimension")).toBeNull();
+    expect(container.querySelector(".geometry-selection-overlay")).toBeNull();
+  });
+
   it("exposes restrained Project actions without changing the Open link", async () => {
     const fetchImplementation = vi
       .fn()
@@ -45,7 +135,7 @@ describe("Projects workspace", () => {
 
     await screen.findByRole("heading", { name: "Casa" });
     expect(
-      screen.getByRole("link", { name: "Open project" }).getAttribute("href")
+      screen.getByRole("link", { name: "Open Casa" }).getAttribute("href")
     ).toBe("/app/projects/project-casa");
     fireEvent.click(screen.getByRole("button", { name: "Actions for Casa" }));
     const deleteItem = await screen.findByRole("menuitem", {
@@ -454,7 +544,21 @@ function summary(name: string, id = "project-casa") {
     name,
     revision: 1,
     updatedAt: "2026-08-16T00:00:00.000Z",
-    ownedByCurrentUser: true
+    ownedByCurrentUser: true,
+    levelCount: 2,
+    roomCount: 8,
+    preview: {
+      levelId: "ground",
+      elevation: 0,
+      walls: [
+        {
+          id: `${id}-wall`,
+          start: { x: 0, z: 0 },
+          end: { x: 500, z: 0 },
+          thickness: 20
+        }
+      ]
+    }
   };
 }
 

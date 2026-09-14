@@ -157,7 +157,22 @@ describe("ProjectsController", () => {
           name: canonicalProject.name,
           revision: canonicalProject.revision,
           updatedAt: canonicalProject.updatedAt,
-          ownedByCurrentUser: true
+          ownedByCurrentUser: true,
+          levelCount: canonicalProject.building.levels.length,
+          roomCount: canonicalProject.building.levels.reduce(
+            (count, level) => count + level.rooms.length,
+            0
+          ),
+          preview: {
+            levelId: canonicalProject.building.levels[0]!.id,
+            elevation: canonicalProject.building.levels[0]!.elevation,
+            walls: canonicalProject.building.levels[0]!.walls.map((wall) => ({
+              id: wall.id,
+              start: wall.start,
+              end: wall.end,
+              thickness: wall.thickness
+            }))
+          }
         }
       ]
     });
@@ -416,7 +431,9 @@ describe("ProjectsController", () => {
       .set("authorization", authorization)
       .expect(204);
 
-    expect(deleted.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(deleted.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173"
+    );
 
     expect(context.repository.deleteProject).toHaveBeenCalledWith({
       projectId: canonicalProject.id,
@@ -599,15 +616,19 @@ describe("ProjectsController", () => {
       toLevelId: "first-floor",
       fromRoomId: "living-room",
       toRoomId: "studio",
-      flights: [expect.objectContaining({
-        id: "stair-flight:main-stair-flight",
-        startElevation: 0,
-        endElevation: 320
-      })],
-      landings: [expect.objectContaining({
-        id: "stair-landing:main-stair-upper-landing",
-        elevation: 320
-      })]
+      flights: [
+        expect.objectContaining({
+          id: "stair-flight:main-stair-flight",
+          startElevation: 0,
+          endElevation: 320
+        })
+      ],
+      landings: [
+        expect.objectContaining({
+          id: "stair-landing:main-stair-upper-landing",
+          elevation: 320
+        })
+      ]
     });
     expect(JSON.stringify(response.body)).not.toContain("ownerSubject");
     expect(JSON.stringify(response.body)).not.toContain("createdBySubject");
@@ -998,8 +1019,12 @@ describe("Projects OpenAPI contract", () => {
       "#/components/schemas/GeometryPolygonMetricsDto"
     );
     expect(documentJson).toContain("#/components/schemas/StairGeometryDto");
-    expect(documentJson).toContain("#/components/schemas/StairFlightGeometryDto");
-    expect(documentJson).toContain("#/components/schemas/StairLandingGeometryDto");
+    expect(documentJson).toContain(
+      "#/components/schemas/StairFlightGeometryDto"
+    );
+    expect(documentJson).toContain(
+      "#/components/schemas/StairLandingGeometryDto"
+    );
     expect(documentJson).toContain("#/components/schemas/ProjectDto");
     expect(documentJson).toContain("#/components/schemas/BuildingDto");
     expect(documentJson).toContain("#/components/schemas/RoomBoundaryEdgeDto");
@@ -1172,7 +1197,30 @@ function createRepository(input: {
                 name: currentLoadedProject.project.name,
                 revision: currentLoadedProject.project.revision,
                 updatedAt: currentLoadedProject.project.updatedAt,
-                ownerSubject: currentLoadedProject.metadata.ownerSubject
+                ownerSubject: currentLoadedProject.metadata.ownerSubject,
+                levelCount: currentLoadedProject.project.building.levels.length,
+                roomCount: currentLoadedProject.project.building.levels.reduce(
+                  (count, level) => count + level.rooms.length,
+                  0
+                ),
+                preview: currentLoadedProject.project.building.levels[0]
+                  ? {
+                      levelId:
+                        currentLoadedProject.project.building.levels[0].id,
+                      elevation:
+                        currentLoadedProject.project.building.levels[0]
+                          .elevation,
+                      walls:
+                        currentLoadedProject.project.building.levels[0].walls.map(
+                          (wall) => ({
+                            id: wall.id,
+                            start: wall.start,
+                            end: wall.end,
+                            thickness: wall.thickness
+                          })
+                        )
+                    }
+                  : undefined
               }
             ]
           : []

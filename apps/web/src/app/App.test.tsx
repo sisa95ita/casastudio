@@ -263,7 +263,17 @@ describe("App authentication and routing", () => {
               name: demoProjectFixture.name,
               revision: demoProjectFixture.revision,
               updatedAt: demoProjectFixture.updatedAt,
-              ownedByCurrentUser: true
+              ownedByCurrentUser: true,
+              levelCount: demoProjectFixture.building.levels.length,
+              roomCount: demoProjectFixture.building.levels.reduce(
+                (count, level) => count + level.rooms.length,
+                0
+              ),
+              preview: {
+                levelId: demoProjectFixture.building.levels[0]!.id,
+                elevation: demoProjectFixture.building.levels[0]!.elevation,
+                walls: []
+              }
             }
           ]
         });
@@ -288,7 +298,11 @@ describe("App authentication and routing", () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole("link", { name: "Open project" }));
+    fireEvent.click(
+      await screen.findByRole("link", {
+        name: `Open ${demoProjectFixture.name}`
+      })
+    );
 
     expect(
       await screen.findByRole("img", {

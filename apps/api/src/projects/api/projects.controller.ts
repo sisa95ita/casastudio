@@ -60,6 +60,8 @@ import {
   ViewpointDto,
   WallDto,
   ProjectListResponseDto,
+  ProjectPreviewDto,
+  ProjectPreviewWallDto,
   ProjectSummaryDto,
   ReplaceProjectRequestDto
 } from "./project.dto";
@@ -77,6 +79,8 @@ import { ProjectIdPipe } from "./project-id.pipe";
 @ApiExtraModels(
   ProjectResponseDto,
   ProjectListResponseDto,
+  ProjectPreviewDto,
+  ProjectPreviewWallDto,
   ProjectSummaryDto,
   CreateProjectRequestDto,
   ReplaceProjectRequestDto,
@@ -107,15 +111,22 @@ import { ProjectIdPipe } from "./project-id.pipe";
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {
   constructor(
-    @Inject(GetProjectService) private readonly getProjectService: GetProjectService,
-    @Inject(ListProjectsService) private readonly listProjectsService: ListProjectsService,
-    @Inject(CreateProjectService) private readonly createProjectService: CreateProjectService,
-    @Inject(DeleteProjectService) private readonly deleteProjectService: DeleteProjectService,
-    @Inject(ReplaceProjectService) private readonly replaceProjectService: ReplaceProjectService
+    @Inject(GetProjectService)
+    private readonly getProjectService: GetProjectService,
+    @Inject(ListProjectsService)
+    private readonly listProjectsService: ListProjectsService,
+    @Inject(CreateProjectService)
+    private readonly createProjectService: CreateProjectService,
+    @Inject(DeleteProjectService)
+    private readonly deleteProjectService: DeleteProjectService,
+    @Inject(ReplaceProjectService)
+    private readonly replaceProjectService: ReplaceProjectService
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "List Projects visible to the authenticated principal." })
+  @ApiOperation({
+    summary: "List Projects visible to the authenticated principal."
+  })
   @ApiOkResponse({ type: ProjectListResponseDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
@@ -127,7 +138,9 @@ export class ProjectsController {
   }
 
   @Post()
-  @ApiOperation({ summary: "Create a canonical editable Project owned by the caller." })
+  @ApiOperation({
+    summary: "Create a canonical editable Project owned by the caller."
+  })
   @ApiCreatedResponse({ type: ProjectResponseDto })
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiBadRequestResponse({ type: ProblemDetailsDto })
@@ -196,7 +209,9 @@ export class ProjectsController {
   }
 
   @Put(":id")
-  @ApiOperation({ summary: "Replace the complete authoritative Project state." })
+  @ApiOperation({
+    summary: "Replace the complete authoritative Project state."
+  })
   @ApiParam({
     name: "id",
     required: true,

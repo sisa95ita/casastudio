@@ -90,7 +90,7 @@ test("authenticates and exercises the Demo Project editor in Chromium", async ({
     .getByRole("article")
     .filter({ hasText: "Demo Project" });
   await expect(demoProject).toBeVisible();
-  await demoProject.getByRole("link", { name: "Open project" }).click();
+  await demoProject.getByRole("link", { name: "Open Demo Project" }).click();
 
   await expect(page).toHaveURL(/\/app\/projects\/demo-project$/);
   await expect(
@@ -234,7 +234,7 @@ test("keeps the workspace hierarchy coherent on tablet and phone", async ({
     .getByRole("article")
     .filter({ hasText: "Demo Project" });
   await expect(demoProject).toBeVisible();
-  await demoProject.getByRole("link", { name: "Open project" }).click();
+  await demoProject.getByRole("link", { name: "Open Demo Project" }).click();
   await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
   await expect(
     page.getByRole("group", { name: "Project representation" })
@@ -429,7 +429,7 @@ test("presents the architectural plan cleanly across View and Edit", async ({
     .getByRole("article")
     .filter({ hasText: "Demo Project" });
   await expect(demoProject).toBeVisible();
-  await demoProject.getByRole("link", { name: "Open project" }).click();
+  await demoProject.getByRole("link", { name: "Open Demo Project" }).click();
 
   const editorViewport = page.locator(
     'svg[aria-labelledby="geometry-svg-title geometry-svg-description"]'
@@ -886,7 +886,7 @@ test("accepts precision Walls, vertices, pending Opening properties, and compact
     .getByRole("article")
     .filter({ hasText: "Demo Project" });
   await expect(demoProject).toBeVisible();
-  await demoProject.getByRole("link", { name: "Open project" }).click();
+  await demoProject.getByRole("link", { name: "Open Demo Project" }).click();
   await page.getByRole("button", { name: "Edit plan" }).click();
   const inspector = page.getByRole("complementary", { name: "Inspector" });
 

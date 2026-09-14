@@ -416,6 +416,10 @@ img {
   min-width: 0;
 }
 
+.app-shell__layout--without-inspector {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
 .app-shell__navigation-slot {
   display: contents;
 }
@@ -580,14 +584,31 @@ img {
 
 .project-home {
   margin: 0 auto;
-  max-width: 1180px;
+  max-width: 1440px;
   padding: clamp(18px, 4vw, 52px);
+}
+
+.project-home__header {
+  align-items: end;
+  display: flex;
+  gap: 32px;
+  justify-content: space-between;
 }
 
 .project-home__intro {
   display: grid;
   gap: 12px;
   max-width: 680px;
+}
+
+.project-home__controls {
+  flex: 0 1 520px;
+  justify-content: flex-end;
+}
+
+.project-home__search {
+  flex: 1 1 280px;
+  max-width: 360px;
 }
 
 .project-home__intro > p:last-child {
@@ -599,6 +620,124 @@ img {
   display: flex;
   justify-content: space-between;
   margin: 44px 0 15px;
+}
+
+.project-grid {
+  display: grid;
+  gap: clamp(16px, 2vw, 24px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 36px;
+  position: relative;
+}
+
+.project-card {
+  background: var(--casa-paper) !important;
+  border-radius: 10px !important;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.project-card:hover,
+.project-card:focus-within {
+  border-color: rgba(158, 63, 37, 0.48);
+  box-shadow: 0 9px 24px rgba(57, 47, 37, 0.07);
+  transform: translateY(-1px);
+}
+
+.project-card__open {
+  color: inherit;
+  display: block;
+  height: 100%;
+  text-decoration: none;
+}
+
+.project-card__open:focus-visible {
+  outline: 3px solid rgba(199, 85, 50, 0.42);
+  outline-offset: -3px;
+}
+
+.project-card__preview {
+  align-items: center;
+  background: #f1ede5;
+  border-bottom: 1px solid var(--casa-border);
+  display: flex;
+  justify-content: center;
+  min-height: 190px;
+  overflow: hidden;
+}
+
+.project-card__plan {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.project-card__wall-shapes {
+  fill: var(--casa-plan-structure);
+  stroke: var(--casa-plan-structure-edge);
+  stroke-linejoin: round;
+  stroke-width: 0.65;
+}
+
+.project-card__empty-preview {
+  align-items: center;
+  color: var(--casa-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-card__empty-preview svg {
+  color: rgba(72, 102, 90, 0.62);
+  font-size: 32px;
+}
+
+.project-card__content {
+  display: grid;
+  gap: 5px;
+  min-height: 156px;
+  padding: 19px 56px 18px 20px;
+}
+
+.project-card__content .MuiTypography-h3 {
+  overflow-wrap: anywhere;
+}
+
+.project-card__open-hint {
+  align-items: center;
+  align-self: end;
+  color: var(--casa-terracotta-dark);
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.project-card__actions {
+  bottom: 14px;
+  position: absolute !important;
+  right: 14px;
+  z-index: 1;
+}
+
+.project-card--loading:hover {
+  border-color: var(--casa-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.project-home__no-results {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 36px;
+  padding: 48px 24px;
+  text-align: center;
 }
 
 .project-entry-card {
@@ -1875,6 +2014,14 @@ img {
     grid-template-columns: 72px minmax(0, 1fr);
   }
 
+  .app-shell__layout--without-inspector {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .app-shell__layout > .inspector-panel {
     display: none;
   }
@@ -2164,6 +2311,10 @@ img {
     grid-template-rows: minmax(0, 1fr) 62px;
   }
 
+  .app-shell__layout--without-inspector {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .main-workspace {
     grid-column: 1;
     grid-row: 1;
@@ -2202,6 +2353,16 @@ img {
 
   .project-home {
     padding: 22px 4px 36px;
+  }
+
+  .project-home__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-home__controls {
+    flex-basis: auto;
+    justify-content: flex-start;
   }
 
   .project-home__section-heading {
@@ -2280,6 +2441,21 @@ img {
   .mobile-project-overview__facts > div:first-child {
     border-left: 0;
     padding-left: 0;
+  }
+}
+
+@media (max-width: 599px) {
+  .project-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-home__search {
+    max-width: none;
+    width: 100%;
+  }
+
+  .project-home__controls .MuiButton-root {
+    min-height: 42px;
   }
 }
 
