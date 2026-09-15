@@ -831,16 +831,15 @@ function ArchitecturalStaircase3D({
   return <group name={`architectural-staircase:${model.id}`} {...handlers}>
     <ArchitecturalVolumeMesh3D solid={model.stepsSolid} color="#c3b49e" state={state} />
     <ArchitecturalVolumeMesh3D solid={model.slabSolid} color="#8e9394" state={state} />
-    <ArchitecturalVolumeMesh3D solid={model.landingsSolid} color="#afa38f" state={state} landing />
+    <ArchitecturalVolumeMesh3D solid={model.landingsSolid} color="#afa38f" state={state} />
   </group>;
 }
 
 /** Uploads static outward triangles once, retaining material identity under interaction tint. */
-function ArchitecturalVolumeMesh3D({ solid, color, state, landing = false }: {
+function ArchitecturalVolumeMesh3D({ solid, color, state }: {
   readonly solid: ArchitecturalSolid3D;
   readonly color: string;
   readonly state: "idle" | "hovered" | "selected";
-  readonly landing?: boolean;
 }) {
   const geometry = useMemo(() => {
     const result = new BufferGeometry();
@@ -854,9 +853,6 @@ function ArchitecturalVolumeMesh3D({ solid, color, state, landing = false }: {
     <meshStandardMaterial color={color} roughness={0.95} metalness={0}
       emissive={getArchitecturalEntityColor3D("#000000", state)}
       emissiveIntensity={state === "selected" ? 0.35 : 0.18}
-      // Canonical centered Landings can overlap the final tread at identical Y.
-      // Depth bias resolves that coplanar seam without moving either walking surface.
-      polygonOffset={landing} polygonOffsetFactor={landing ? -1 : 0} polygonOffsetUnits={landing ? -1 : 0}
     />
   </mesh>;
 }

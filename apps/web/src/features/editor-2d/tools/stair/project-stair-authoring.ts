@@ -193,14 +193,16 @@ export function createStairProposal(options: {
     ));
   } else if (options.template === "L_SHAPED") {
     const secondLength = controlLength * (secondSteps / firstSteps);
-    const secondEnd = add(firstEnd, scale(side, secondLength));
+    const landingCenter = add(firstEnd, scale(direction, width / 2));
+    const secondStart = add(landingCenter, scale(side, width / 2));
+    const secondEnd = add(secondStart, scale(side, secondLength));
     flights.push(
       createFlight(options.identifiers.flightIds[0]!, options.start, firstEnd, width, firstSteps, elevations.startElevation, transitionElevation),
-      createFlight(options.identifiers.flightIds[1]!, firstEnd, secondEnd, width, secondSteps, transitionElevation, elevations.endElevation)
+      createFlight(options.identifiers.flightIds[1]!, secondStart, secondEnd, width, secondSteps, transitionElevation, elevations.endElevation)
     );
     landings.push(createLanding(
       options.identifiers.landingIds[0]!,
-      firstEnd,
+      landingCenter,
       width,
       width,
       transitionElevation
@@ -209,13 +211,14 @@ export function createStairProposal(options: {
     const offset = width;
     const secondStart = add(firstEnd, scale(side, offset));
     const secondEnd = add(secondStart, scale(direction, -controlLength * (secondSteps / firstSteps)));
+    const landingCenter = add(midpoint(firstEnd, secondStart), scale(direction, width / 2));
     flights.push(
       createFlight(options.identifiers.flightIds[0]!, options.start, firstEnd, width, firstSteps, elevations.startElevation, transitionElevation),
       createFlight(options.identifiers.flightIds[1]!, secondStart, secondEnd, width, secondSteps, transitionElevation, elevations.endElevation)
     );
     landings.push(createLanding(
       options.identifiers.landingIds[0]!,
-      midpoint(firstEnd, secondStart),
+      landingCenter,
       width * 2,
       width,
       transitionElevation
@@ -447,7 +450,7 @@ export function updateStaircaseParameters(
     if (!originalSecond) return undefined;
     const secondDirection = unitDirection(originalSecond);
     const secondStart = template === "L_SHAPED"
-      ? firstEnd
+      ? add(add(firstEnd, scale(firstDirection, width / 2)), scale(secondDirection, width / 2))
       : add(firstEnd, scale(unitDirectionBetween(first.end, originalSecond.start), width));
     flights.push({
       ...originalSecond,
@@ -465,8 +468,8 @@ export function updateStaircaseParameters(
     return {
       ...landing,
       position: template === "U_SHAPED"
-        ? midpoint(firstFlight.end, secondFlight.start)
-        : firstFlight.end,
+        ? add(midpoint(firstFlight.end, secondFlight.start), scale(firstDirection, width / 2))
+        : add(firstFlight.end, scale(firstDirection, width / 2)),
       width: template === "U_SHAPED" ? width * 2 : width,
       depth: width,
       elevation: firstFlight.endElevation

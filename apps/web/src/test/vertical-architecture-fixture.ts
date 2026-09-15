@@ -14,7 +14,7 @@ export function createVerticalArchitectureFixture(
     ? [flight("flight-1", { x: 0, z: 0 }, { x: 360, z: 0 }, 0, destinationElevation)]
     : [flight("flight-1", { x: 0, z: 0 }, { x: 180, z: 0 }, 0, destinationElevation / 2),
       layout === "L"
-        ? flight("flight-2", { x: 180, z: 0 }, { x: 180, z: 180 }, destinationElevation / 2, destinationElevation)
+        ? flight("flight-2", { x: 230, z: 50 }, { x: 230, z: 230 }, destinationElevation / 2, destinationElevation)
         : flight("flight-2", { x: 180, z: 100 }, { x: 0, z: 100 }, destinationElevation / 2, destinationElevation)];
   const elevated = layout === "straight"
     ? rectangleRoom("elevated", 360, -50, 520, 150, crossLevel ? 0 : destinationElevation)
@@ -26,7 +26,7 @@ export function createVerticalArchitectureFixture(
     id: "ground", name: "Ground", elevation: 0, walls: [], rooms: crossLevel ? [lower] : [lower, elevated],
     staircases: [{ id: "stair", name: `${layout} Stair`, fromLevelId: "ground", toLevelId: destinationLevelId,
       fromRoomId: "lower", toRoomId: "elevated", width: 100, flights,
-      landings: layout === "straight" ? [] : [{ id: "landing", position: { x: 180, z: layout === "L" ? 0 : 50 },
+      landings: layout === "straight" ? [] : [{ id: "landing", position: { x: 230, z: layout === "L" ? 0 : 50 },
         width: layout === "L" ? 100 : 200, depth: 100, elevation: destinationElevation / 2 }]
     }]
   }, ...(crossLevel ? [{ id: "upper", name: "Upper", elevation: destinationElevation, walls: [], rooms: [elevated], staircases: [] }] : [])];

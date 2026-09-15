@@ -92,14 +92,21 @@ describe("renderer-neutral vertical architecture", () => {
 
   it("places an angled non-square Landing using the corresponding Flight frame", () => {
     const flight = createStairFlight3D({ ...baseFlight, end: { x: -146, z: -328 } }, "cm");
-    const landing = createStairLanding3D({ id: "landing", position: { x: -146, z: -328 }, width: 200, depth: 100, elevation: 343 }, 0, [flight], "cm");
+    const landingSource = { id: "landing", position: { x: -146, z: -328 }, width: 200, depth: 100, elevation: 343 };
+    const frame = { landing: landingSource, center: landingSource.position,
+      entry: { x: -116, z: -288 }, exit: { x: -176, z: -368 },
+      forward: { x: flight.forward.x, z: -flight.forward.z },
+      lateral: { x: flight.lateral.x, z: -flight.lateral.z }, topology: "TURN" as const,
+      width: landingSource.width, depth: landingSource.depth };
+    const landing = createStairLanding3D(frame, "cm");
     expect(landing.center).toEqual(flight.end);
     expect(landing.forward).toEqual(flight.forward);
     expect(landing.width).toBe(2);
     expect(landing.depth).toBe(1);
     expect(landing.thickness).toBe(architectural3DProfile.stairSlabThickness);
     expectClosedOutwardSolid(landing.solid, 2 * landing.thickness);
-    expect(() => createStairLanding3D({ id: "bad", position: { x: 0, z: 0 }, width: 0, depth: 10, elevation: 0 }, 0, [], "cm")).toThrow(/invalid/);
+    expect(() => createStairLanding3D({ ...frame,
+      landing: { ...landingSource, id: "bad", width: 0 }, width: 0 }, "cm")).toThrow(/invalid/);
   });
 
   it.each(["straight", "L", "U"] as const)("derives continuous canonical %s aggregates with independent overlapping Room floors", (layout) => {
@@ -124,6 +131,14 @@ describe("renderer-neutral vertical architecture", () => {
         const landing = stair.landings[0];
         expect(landing.center.y).toBe(stair.flights[0]!.end.y);
         expect(landing.center.y).toBe(stair.flights[1]!.start.y);
+        expectPoint3D(landing.entry, stair.flights[0]!.end);
+        expectPoint3D(landing.exit, stair.flights[1]!.start);
+        expect(stair.flights[0]!.steps.at(-1)!.elevation).toBe(landing.center.y);
+        expect(stair.flights[1]!.steps[0]!.riserBottom).toBe(landing.center.y);
+        expect(getStairUndersideElevation3D(stair.flights[0]!, landing.entry))
+          .toBeCloseTo(stair.flights[0]!.end.y - stair.flights[0]!.slabVerticalDepth);
+        expect(getStairUndersideElevation3D(stair.flights[1]!, landing.exit))
+          .toBeCloseTo(stair.flights[1]!.start.y - stair.flights[1]!.slabVerticalDepth);
         for (const point of [stair.flights[0]!.end, stair.flights[1]!.start]) {
           const dx = point.x - landing.center.x, dz = point.z - landing.center.z;
           expect(Math.abs(dx * landing.forward.x + dz * landing.forward.z)).toBeLessThanOrEqual(landing.depth / 2);
@@ -224,6 +239,12 @@ function vertices(solid: ArchitecturalSolid3D): ScenePoint3D[] {
   const points: ScenePoint3D[] = [];
   for (let i = 0; i < solid.positions.length; i += 3) points.push({ x: solid.positions[i]!, y: solid.positions[i + 1]!, z: solid.positions[i + 2]! });
   return points;
+}
+
+function expectPoint3D(actual: ScenePoint3D, expected: ScenePoint3D) {
+  expect(actual.x).toBeCloseTo(expected.x, 12);
+  expect(actual.y).toBeCloseTo(expected.y, 12);
+  expect(actual.z).toBeCloseTo(expected.z, 12);
 }
 
 // Signed volume detects inverted faces; matching directed edges detects open or inconsistent shells.

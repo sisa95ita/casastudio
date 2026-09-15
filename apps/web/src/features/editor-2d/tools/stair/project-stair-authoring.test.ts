@@ -186,6 +186,16 @@ describe("stair template authoring", () => {
     expect(proposal?.staircase.flights).toHaveLength(flightCount);
     expect(proposal?.staircase.landings).toHaveLength(landingCount);
     expect(inferStairTemplate(proposal!.staircase)).toBe(template);
+    const first = proposal!.staircase.flights[0]!;
+    const second = proposal!.staircase.flights[1]!;
+    const landing = proposal!.staircase.landings[0]!;
+    expect(first.end).toEqual({ x: 300, z: 0 });
+    expect(landing.position).toEqual(
+      template === "L_SHAPED" ? { x: 345, z: 0 } : { x: 345, z: 45 }
+    );
+    expect(second.start).toEqual(
+      template === "L_SHAPED" ? { x: 345, z: 45 } : { x: 300, z: 90 }
+    );
   });
 
   it("updates width, steps, and tread depth while preserving aggregate part IDs", () => {

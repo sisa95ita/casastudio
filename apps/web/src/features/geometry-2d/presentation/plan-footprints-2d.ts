@@ -3,10 +3,11 @@ import type {
   FurnitureItem,
   Level,
   Point2D,
-  StairFlight,
-  StairLanding,
-  Staircase
+  StairFlight
 } from "@casastudio/schema";
+import {
+  deriveStairPlanGeometry, type StairLandingPlanGeometry
+} from "../../stair/model/stair-plan-geometry";
 
 const SPATIAL_EPSILON = 1e-7;
 
@@ -106,12 +107,13 @@ export function createStairFootprints2D(
   level: Pick<Level, "staircases">
 ): readonly (readonly Point2D[])[] {
   return Object.freeze(
-    level.staircases.flatMap((staircase) => [
-      ...staircase.flights.map(createFlightFootprint),
-      ...staircase.landings.map((landing, index) =>
-        createLandingFootprint(staircase, landing, index)
-      )
-    ])
+    level.staircases.flatMap((staircase) => {
+      const plan = deriveStairPlanGeometry(staircase);
+      return [
+        ...plan.flights.map(createFlightFootprint),
+        ...plan.landings.map(createLandingFootprint)
+      ];
+    })
   );
 }
 
@@ -197,22 +199,11 @@ function createFlightFootprint(flight: StairFlight): readonly Point2D[] {
 }
 
 function createLandingFootprint(
-  staircase: Staircase,
-  landing: StairLanding,
-  index: number
+  landing: StairLandingPlanGeometry
 ): readonly Point2D[] {
-  const flight =
-    staircase.flights[Math.min(index, staircase.flights.length - 1)];
-  const rotation = flight
-    ? (-Math.atan2(
-        flight.end.z - flight.start.z,
-        flight.end.x - flight.start.x
-      ) *
-        180) /
-      Math.PI
-    : 0;
+  const rotation = (-Math.atan2(landing.forward.z, landing.forward.x) * 180) / Math.PI;
   return createOrientedRectangleFootprint(
-    landing.position,
+    landing.center,
     landing.depth,
     landing.width,
     rotation

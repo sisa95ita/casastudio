@@ -8,7 +8,6 @@ import type {
   Level,
   Point2D,
   StairFlight,
-  StairLanding,
   Staircase
 } from "@casastudio/schema";
 
@@ -21,6 +20,9 @@ import type {
   ScreenPoint,
   ViewportTransform2D
 } from "../viewport/viewport-transform-2d";
+import {
+  deriveStairPlanGeometry, type StairLandingPlanGeometry
+} from "../../stair/model/stair-plan-geometry";
 
 /** Conventional plan-cut height above the active Level datum, in Project units. */
 export const architecturalPlanCutHeight = 120;
@@ -319,7 +321,8 @@ export function createStaircasePresentation2D(
   referenceElevation = (staircase.flights[0]?.startElevation ?? 0) +
     architecturalPlanCutHeight
 ): StaircasePresentation2D {
-  const hasContinuation = staircase.flights.some(
+  const plan = deriveStairPlanGeometry(staircase);
+  const hasContinuation = plan.flights.some(
     (flight) => flight.endElevation > referenceElevation
   );
   return {
@@ -337,7 +340,7 @@ export function createStaircasePresentation2D(
       "STAIRCASE",
       staircase.id
     ),
-    flights: staircase.flights.map((flight): StairFlightPresentation2D => {
+    flights: plan.flights.map((flight): StairFlightPresentation2D => {
       const start = transform.worldToScreen(flight.start);
       const end = transform.worldToScreen(flight.end);
       const direction = createDirectionGraphic(start, end);
@@ -371,27 +374,22 @@ export function createStaircasePresentation2D(
         )
       };
     }),
-    landings: staircase.landings.map(
-      (landing, index): StairLandingPresentation2D => ({
+    landings: plan.landings.map(
+      (landing): StairLandingPresentation2D => ({
         kind: "STAIR_LANDING",
-        geometryId: landing.id,
+        geometryId: landing.landing.id,
         staircaseId: staircase.id,
-        bodySvgPoints: createLandingBodyPoints(
-          staircase,
-          landing,
-          index,
-          transform
-        ),
-        beyondCut: landing.elevation > referenceElevation,
+        bodySvgPoints: createLandingBodyPoints(landing, transform),
+        beyondCut: landing.landing.elevation > referenceElevation,
         selected: isGeometrySelectionMatch(
           selection.selected,
           "STAIR_LANDING",
-          landing.id
+          landing.landing.id
         ),
         hovered: isGeometrySelectionMatch(
           selection.hovered,
           "STAIR_LANDING",
-          landing.id
+          landing.landing.id
         )
       })
     )
@@ -522,17 +520,11 @@ function createStairPlanCut(
 }
 
 function createLandingBodyPoints(
-  staircase: Staircase,
-  landing: StairLanding,
-  landingIndex: number,
+  landing: StairLandingPlanGeometry,
   transform: ViewportTransform2D
 ): string {
-  const adjacentFlight =
-    staircase.flights[Math.min(landingIndex, staircase.flights.length - 1)];
-  const direction = adjacentFlight
-    ? worldDirection(adjacentFlight.start, adjacentFlight.end)
-    : { x: 1, z: 0 };
-  const normal = { x: -direction.z, z: direction.x };
+  const direction = landing.forward;
+  const normal = landing.lateral;
   const longitudinal = {
     x: (direction.x * landing.depth) / 2,
     z: (direction.z * landing.depth) / 2
@@ -542,15 +534,15 @@ function createLandingBodyPoints(
     z: (normal.z * landing.width) / 2
   };
   return [
-    addWorld(landing.position, longitudinal, lateral),
-    addWorld(landing.position, longitudinal, { x: -lateral.x, z: -lateral.z }),
+    addWorld(landing.center, longitudinal, lateral),
+    addWorld(landing.center, longitudinal, { x: -lateral.x, z: -lateral.z }),
     addWorld(
-      landing.position,
+      landing.center,
       { x: -longitudinal.x, z: -longitudinal.z },
       { x: -lateral.x, z: -lateral.z }
     ),
     addWorld(
-      landing.position,
+      landing.center,
       { x: -longitudinal.x, z: -longitudinal.z },
       lateral
     )
@@ -591,11 +583,6 @@ function createDirectionGraphic(
     line: { start: lineStart, end: lineEnd },
     arrow: `M ${svgPoint(left)} L ${svgPoint(lineEnd)} L ${svgPoint(right)}`
   };
-}
-
-function worldDirection(start: Point2D, end: Point2D): Point2D {
-  const length = Math.hypot(end.x - start.x, end.z - start.z) || 1;
-  return { x: (end.x - start.x) / length, z: (end.z - start.z) / length };
 }
 
 function addWorld(origin: Point2D, first: Point2D, second: Point2D): Point2D {

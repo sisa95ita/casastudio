@@ -1,4 +1,4 @@
-import type { MetricLengthUnit, Staircase, StairFlight, StairLanding } from "@casastudio/schema";
+import type { MetricLengthUnit, Staircase, StairFlight } from "@casastudio/schema";
 import { architectural3DProfile, type Architectural3DProfile } from "./architectural-3d-profile";
 import {
   createBoundsFromPoints, projectPointToThree, toThreeLength,
@@ -7,6 +7,9 @@ import {
 import {
   extrudeFlightSection3D, mergeArchitecturalSolids3D, type ArchitecturalSolid3D
 } from "./architectural-solid-3d";
+import {
+  deriveStairPlanGeometry, type StairLandingPlanGeometry
+} from "../../stair/model/stair-plan-geometry";
 
 /** A single exact tread interval and the wedge above the inclined structural plane. */
 export type StairStep3D = Readonly<{
@@ -36,14 +39,18 @@ export type StairFlight3D = Readonly<{
   slab: ArchitecturalSolid3D;
 }>;
 
-/** Centered horizontal volume; depth follows the corresponding incoming Flight. */
+/** Horizontal Landing volume with topology-derived frame and Flight interfaces. */
 export type StairLanding3D = Readonly<{
   id: string;
   center: ScenePoint3D;
+  entry: ScenePoint3D;
+  exit: ScenePoint3D;
   width: number;
   depth: number;
   thickness: number;
   forward: ScenePlanVector3D;
+  lateral: ScenePlanVector3D;
+  topology: "TURN" | "RETURN";
   solid: ArchitecturalSolid3D;
 }>;
 
@@ -141,39 +148,43 @@ export function createStairFlight3D(
 }
 
 /**
- * Derives the existing centered 2D footprint convention: landing i follows Flight i,
- * falling back to the last Flight or world X. Landing thickness uses the Stair slab
- * profile because the volume belongs to the Stair structural assembly.
+ * Converts a renderer-neutral Landing frame into a closed horizontal volume.
+ * Entry and exit are exact plan interfaces shared with the adjacent effective Flights.
  */
 export function createStairLanding3D(
-  source: StairLanding, index: number, flights: readonly StairFlight3D[],
+  source: StairLandingPlanGeometry,
   unit: MetricLengthUnit, profile: Architectural3DProfile = architectural3DProfile
 ): StairLanding3D {
-  const center = projectPointToThree(source.position, source.elevation, unit);
+  const center = projectPointToThree(source.center, source.landing.elevation, unit);
+  const entry = projectPointToThree(source.entry, source.landing.elevation, unit);
+  const exit = projectPointToThree(source.exit, source.landing.elevation, unit);
   const width = toThreeLength(source.width, unit);
   const depth = toThreeLength(source.depth, unit);
   const thickness = profile.stairSlabThickness;
   if (![center.x, center.y, center.z].every(Number.isFinite) ||
     ![width, depth, thickness].every((v) => Number.isFinite(v) && v > 0)) {
-    throw new Error(`Stair Landing "${source.id}" has invalid position or dimensions.`);
+    throw new Error(`Stair Landing "${source.landing.id}" has invalid position or dimensions.`);
   }
-  const forward = flights[Math.min(index, flights.length - 1)]?.forward ?? Object.freeze({ x: 1, z: 0 });
+  const forward = Object.freeze({ x: source.forward.x, z: -source.forward.z });
+  const lateral = Object.freeze({ x: source.lateral.x, z: -source.lateral.z });
   const solid = extrudeFlightSection3D([
     { along: -depth / 2, y: center.y }, { along: depth / 2, y: center.y },
     { along: depth / 2, y: center.y - thickness }, { along: -depth / 2, y: center.y - thickness }
   ], width, (along, lateral, y) => ({
-    x: center.x + forward.x * along - forward.z * lateral,
-    y, z: center.z + forward.z * along + forward.x * lateral
+    x: center.x + forward.x * along + source.lateral.x * lateral,
+    y, z: center.z + forward.z * along - source.lateral.z * lateral
   }));
-  return Object.freeze({ id: source.id, center, width, depth, thickness, forward, solid });
+  return Object.freeze({ id: source.landing.id, center, entry, exit, width, depth, thickness,
+    forward, lateral, topology: source.topology, solid });
 }
 
 /** Derives the complete canonical aggregate once, suitable for memoized rendering and bounds. */
 export function createStaircase3D(
   source: Staircase, unit: MetricLengthUnit, profile: Architectural3DProfile = architectural3DProfile
 ): Staircase3D {
-  const flights = Object.freeze(source.flights.map((flight) => createStairFlight3D(flight, unit, profile)));
-  const landings = Object.freeze(source.landings.map((landing, index) => createStairLanding3D(landing, index, flights, unit, profile)));
+  const plan = deriveStairPlanGeometry(source);
+  const flights = Object.freeze(plan.flights.map((flight) => createStairFlight3D(flight, unit, profile)));
+  const landings = Object.freeze(plan.landings.map((landing) => createStairLanding3D(landing, unit, profile)));
   const stepsSolid = mergeArchitecturalSolids3D(flights.flatMap((flight) => flight.steps.map((step) => step.solid)));
   const slabSolid = mergeArchitecturalSolids3D(flights.map((flight) => flight.slab));
   const landingsSolid = mergeArchitecturalSolids3D(landings.map((landing) => landing.solid));

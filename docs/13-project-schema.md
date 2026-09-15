@@ -793,8 +793,13 @@ elevation
 The landing is modelled explicitly.
 
 `elevation` uses the same building-space vertical reference frame as StairFlight
-elevations. Its exact XZ anchor and attachment semantics remain unspecified;
-consumers must not infer orientation or Flight attachment from `position` alone.
+elevations. `position` is the center of the horizontal Landing footprint. The
+Landing local frame and its entry/exit interfaces are derived from the ordered
+adjacent Flights: depth follows the incoming Flight and width follows its lateral
+axis. A Flight endpoint at an intermediate Landing is the boundary of its complete
+run, not the Landing center. Geometry consumers retain compatibility with older
+turn-point and lane-midpoint anchors by recognizing those layouts from adjacent
+Flight topology; persisted Projects do not require migration.
 
 ## 14. Viewpoint
 

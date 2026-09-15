@@ -46,8 +46,9 @@ For N steps, interval i spans run fractions i/N to (i+1)/N. Its tread is at
 first vertical riser starts at source Y. Each step is a triangular prism between
 the inclined structural top and the horizontal tread, providing a real riser,
 tread and lateral faces. Subdivision never accumulates rounded riser heights or
-requires a second authoritative tread-depth field. Canonical endpoints remain
-unchanged.
+requires a second authoritative tread-depth field. At an intermediate Landing,
+the effective start/end anchors are the exact derived Landing exit/entry
+interfaces. Step count and canonical elevations remain unchanged.
 
 The Flight's structural top joins its start and end elevations. Its underside is
 a parallel plane. Thickness is measured **normal to the incline**, so its vertical
@@ -67,19 +68,33 @@ own volume queries.
 ## Landings and joins
 
 Landings are centered horizontal rectangular volumes at canonical elevation.
-Their thickness uses the Stair slab profile because they belong to the same
-structural assembly. Placement follows the established 2D footprint convention:
-Landing i uses Flight i's plan direction, falling back to the final Flight, or
-world X for a Landing-only aggregate. Depth runs along the Flight; width runs
-across it. No template identity or persisted rotation participates in rendering.
+Their renderer-neutral local frame is derived from ordered adjacent Flight
+vectors: the normalized incoming direction is `forward`, its perpendicular is
+`lateral`, depth follows `forward`, and width follows `lateral`. A quarter-turn
+Landing connects the incoming boundary to the boundary reached along the
+outgoing vector. A return Landing keeps the two lane centers distinct on its
+shared return edge. This vector contract works at arbitrary global rotation and
+does not depend on persisted template or rotation metadata.
+
+`StairLanding.position` is the footprint center for current authoring. The
+derivation also recognizes the earlier L turn-point and U lane-midpoint anchors
+from adjacent Flight topology, producing the same entry/exit contract without a
+Project migration. Both 2D presentation and 3D solids consume the normalized
+plan geometry.
+
+Incoming final tread elevation, Landing top elevation, and outgoing Flight start
+elevation share the canonical transition elevation. Flight slabs terminate at
+the same plan interfaces as their steps; the Landing remains a real horizontal
+volume using the Stair slab thickness. The inclined slab bottom stays parallel
+to its rendered Flight, so renderer-neutral soffit queries use the exact same
+effective span and cannot report clearance outside the visible structure.
 
 This convention is deterministic even though the domain does not express an
 independent Landing orientation or explicit Flight-to-Landing adjacency. The
-canonical centered footprint may overlap adjacent Flight portions. No anchor is
-moved to hide that fact. A material depth bias resolves coplanar final-tread and
-Landing surfaces without changing physical walking elevations. Arbitrary
-canonical layouts are rendered as supplied; the renderer does not repair absent
-or disconnected architecture.
+ordered topology supplies that adjacency, and its interfaces partition the
+walking and structural geometry without duplicate tread area or presentation
+offsets. Landing-only aggregates retain their centered footprint with world X as
+the fallback frame.
 
 ## Visibility, interaction, bounds and rendering
 
