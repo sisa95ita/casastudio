@@ -7,6 +7,10 @@ import {
   type StairLanding,
   type Staircase
 } from "@casastudio/schema";
+import {
+  furnitureRoomCandidates,
+  type FurnitureRoomCandidate
+} from "../furniture/project-furniture-authoring";
 
 /** Initial authoring layouts that all materialize as canonical Staircase parts. */
 export type StairTemplate = "STRAIGHT" | "L_SHAPED" | "U_SHAPED";
@@ -41,6 +45,7 @@ export type StairParameterChanges = {
   readonly flightStepCount?: number;
   readonly firstFlightStepCount?: number;
   readonly secondFlightStepCount?: number;
+  readonly rotation?: number;
 };
 
 /** Connection-first destination chosen before spatial placement starts. */
@@ -49,12 +54,19 @@ export type StairDestination = {
   readonly toRoomId?: string;
 };
 
+/** Anchor-containing source Room expressed through the existing canonical fromRoomId. */
+export type StairSourceRoomCandidate = FurnitureRoomCandidate;
+
 /** Complete transient canonical proposal plus product-level validity feedback. */
 export type StairProposal = {
   readonly staircase: Staircase;
   readonly template: StairTemplate;
   readonly valid: boolean;
-  readonly invalidReason?: "NO_RISE" | "TOO_SHORT" | "INVALID_PARAMETERS";
+  readonly invalidReason?:
+    | "NO_RISE"
+    | "TOO_SHORT"
+    | "INVALID_PARAMETERS"
+    | "AMBIGUOUS_SOURCE";
   readonly totalRise: number;
   readonly totalRun: number;
   readonly riserHeight: number;
@@ -121,6 +133,8 @@ export function createStairProposal(options: {
   readonly project: Project;
   readonly owningLevelId: string;
   readonly destination: StairDestination;
+  readonly fromRoomId?: string;
+  readonly sourceRoomAmbiguous?: boolean;
   readonly template: StairTemplate;
   readonly parameters: StairAuthoringParameters;
   readonly start: Point2D;
@@ -132,7 +146,8 @@ export function createStairProposal(options: {
   const elevations = getStairConnectionElevations(
     options.project,
     options.owningLevelId,
-    options.destination
+    options.destination,
+    options.fromRoomId
   );
   if (!elevations) return undefined;
 
@@ -211,7 +226,9 @@ export function createStairProposal(options: {
   const flightRunsValid = flights.every((flight) =>
     distance(flight.start, flight.end) + 1e-7 >= flight.stepCount * treadDepth
   );
-  const invalidReason = !parametersValid
+  const invalidReason = options.sourceRoomAmbiguous
+    ? "AMBIGUOUS_SOURCE" as const
+    : !parametersValid
     ? "INVALID_PARAMETERS" as const
     : elevations.totalRise <= 0
       ? "NO_RISE" as const
@@ -223,6 +240,7 @@ export function createStairProposal(options: {
     name: options.name ?? "Staircase",
     fromLevelId: options.owningLevelId,
     toLevelId: options.destination.toLevelId,
+    ...(options.fromRoomId ? { fromRoomId: options.fromRoomId } : {}),
     ...(options.destination.toRoomId ? { toRoomId: options.destination.toRoomId } : {}),
     width,
     flights,
@@ -291,11 +309,110 @@ export function getStairAuthoringParameters(staircase: Staircase): StairAuthorin
   };
 }
 
+/**
+ * Converts a Project-plan angle to a unit direction. Zero degrees is Project +X;
+ * positive angles turn from +X toward +Z, matching the existing X/Z shape convention.
+ */
+export function angleToProjectPlanVector(rotation: number): Point2D | undefined {
+  if (!Number.isFinite(rotation)) return undefined;
+  const radians = rotation * Math.PI / 180;
+  const x = Math.cos(radians);
+  const z = Math.sin(radians);
+  return {
+    x: Math.abs(x) < 1e-15 ? 0 : x,
+    z: Math.abs(z) < 1e-15 ? 0 : z
+  };
+}
+
+/** Derives editor Rotation from the first non-degenerate canonical Flight. */
+export function getStaircaseRotation(staircase: Staircase): number | undefined {
+  const flight = staircase.flights.find((candidate) =>
+    distance(candidate.start, candidate.end) > 1e-12
+  );
+  if (!flight) return undefined;
+  return Math.atan2(
+    flight.end.z - flight.start.z,
+    flight.end.x - flight.start.x
+  ) * 180 / Math.PI;
+}
+
+/** Derives the existing relative turn so handle editing never silently mirrors a layout. */
+export function inferStairTurnDirection(staircase: Staircase): "LEFT" | "RIGHT" {
+  const first = staircase.flights[0];
+  const second = staircase.flights[1];
+  if (!first || !second) return "LEFT";
+  const firstDirection = unitDirection(first);
+  const secondReference = inferStairTemplate(staircase) === "U_SHAPED"
+    ? unitDirectionBetween(first.end, second.start)
+    : unitDirection(second);
+  const cross = firstDirection.x * secondReference.z - firstDirection.z * secondReference.x;
+  return cross < 0 ? "RIGHT" : "LEFT";
+}
+
+/**
+ * Rigidly rotates every canonical plan point so the first non-degenerate Flight
+ * reaches targetAngle. Elevations, identity, dimensions, and references are unchanged.
+ */
+export function rotateStaircaseInPlan(
+  staircase: Staircase,
+  anchor: Point2D,
+  targetAngle: number
+): Staircase | undefined {
+  const currentAngle = getStaircaseRotation(staircase);
+  if (!Number.isFinite(targetAngle) || currentAngle === undefined ||
+      !Number.isFinite(anchor.x) || !Number.isFinite(anchor.z)) return undefined;
+  const delta = (targetAngle - currentAngle) * Math.PI / 180;
+  const cosine = Math.cos(delta);
+  const sine = Math.sin(delta);
+  const rotate = (point: Point2D): Point2D => {
+    const x = point.x - anchor.x;
+    const z = point.z - anchor.z;
+    return {
+      x: anchor.x + x * cosine - z * sine,
+      z: anchor.z + x * sine + z * cosine
+    };
+  };
+  return {
+    ...staircase,
+    flights: staircase.flights.map((flight) => ({
+      ...flight,
+      start: rotate(flight.start),
+      end: rotate(flight.end)
+    })),
+    landings: staircase.landings.map((landing) => ({
+      ...landing,
+      position: rotate(landing.position)
+    }))
+  };
+}
+
+/** Reuses the editor's edge-inclusive Room containment and stacked-floor policy. */
+export function getStairSourceRoomCandidates(
+  project: Project,
+  owningLevelId: string,
+  start: Point2D
+): readonly StairSourceRoomCandidate[] {
+  return furnitureRoomCandidates(project, owningLevelId, start);
+}
+
 /** Applies assisted numeric controls while preserving canonical part identity and elevations. */
 export function updateStaircaseParameters(
   staircase: Staircase,
   changes: StairParameterChanges
 ): Staircase | undefined {
+  const parameterChangeRequested = [
+    changes.width,
+    changes.treadDepth,
+    changes.flightStepCount,
+    changes.firstFlightStepCount,
+    changes.secondFlightStepCount
+  ].some((value) => value !== undefined);
+  if (changes.rotation !== undefined && !parameterChangeRequested) {
+    const anchor = staircase.flights[0]?.start;
+    return anchor
+      ? rotateStaircaseInPlan(staircase, anchor, changes.rotation)
+      : undefined;
+  }
   const metrics = measureStaircase(staircase);
   const width = changes.width ?? staircase.width;
   const treadDepth = changes.treadDepth ?? metrics.treadDepth;
@@ -307,7 +424,8 @@ export function updateStaircaseParameters(
         changes.secondFlightStepCount ?? metrics.flightStepCounts[1] ?? 0
       ];
   const totalStepCount = nextSteps.reduce((sum, count) => sum + count, 0);
-  if (!Number.isFinite(width) || width <= 0 || totalStepCount < 2 ||
+  if ((changes.rotation !== undefined && !Number.isFinite(changes.rotation)) ||
+      !Number.isFinite(width) || width <= 0 || totalStepCount < 2 ||
       nextSteps.some((count) => !Number.isInteger(count) || count <= 0) ||
       !Number.isFinite(treadDepth) || treadDepth <= 0 || staircase.flights.length === 0) return undefined;
 
@@ -354,23 +472,33 @@ export function updateStaircaseParameters(
       elevation: firstFlight.endElevation
     };
   });
-  return { ...staircase, width, flights, landings };
+  const updated = { ...staircase, width, flights, landings };
+  if (changes.rotation === undefined) return updated;
+  return rotateStaircaseInPlan(
+    updated,
+    staircase.flights[0]?.start ?? updated.flights[0]!.start,
+    changes.rotation
+  );
 }
 
 /** Resolves the exact absolute floor elevations for cross- or same-Level connections. */
 export function getStairConnectionElevations(
   project: Project,
   owningLevelId: string,
-  destination: StairDestination
+  destination: StairDestination,
+  fromRoomId?: string
 ): { readonly startElevation: number; readonly endElevation: number; readonly totalRise: number } | undefined {
   const fromLevel = project.building.levels.find((level) => level.id === owningLevelId);
   const toLevel = project.building.levels.find((level) => level.id === destination.toLevelId);
   if (!fromLevel || !toLevel) return undefined;
+  const fromRoom = fromRoomId
+    ? fromLevel.rooms.find((room) => room.id === fromRoomId)
+    : undefined;
   const toRoom = destination.toRoomId
     ? toLevel.rooms.find((room) => room.id === destination.toRoomId)
     : undefined;
-  if (destination.toRoomId && !toRoom) return undefined;
-  const startElevation = fromLevel.elevation;
+  if ((fromRoomId && !fromRoom) || (destination.toRoomId && !toRoom)) return undefined;
+  const startElevation = fromLevel.elevation + (fromRoom?.elevation ?? 0);
   const endElevation = toLevel.elevation + (toRoom?.elevation ?? 0);
   return { startElevation, endElevation, totalRise: endElevation - startElevation };
 }

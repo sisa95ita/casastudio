@@ -27,6 +27,10 @@ import {
 } from "react";
 import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
 
+import { createFloorSolid3D } from "./model/floor-solid-3d";
+import type { ArchitecturalSolid3D } from "./model/architectural-solid-3d";
+import type { Staircase3D } from "./model/staircase-3d-model";
+
 import { useCasaTranslation } from "../../core/i18n";
 import { isEditableShortcutTarget } from "../geometry-2d/viewport/geometry-viewer-shortcuts";
 import {
@@ -243,6 +247,9 @@ export function Project3DViewer({
       data-visible-architectural-bounds={visibleBounds
         ? JSON.stringify({ min: visibleBounds.min, max: visibleBounds.max })
         : ""}
+      data-architectural-staircase-count={visibleLevels.reduce((sum, level) => sum + level.staircases.length, 0)}
+      data-architectural-step-count={visibleLevels.reduce((sum, level) => sum + level.staircases.reduce((count, stair) => count + stair.flights.reduce((n, flight) => n + flight.stepCount, 0), 0), 0)}
+      data-architectural-floor-volumes={JSON.stringify(visibleLevels.flatMap((level) => level.floors.map((floor) => ({ roomId: floor.roomId, top: floor.y, bottom: floor.bottomY }))))}
       data-selected-entity-kind={selection?.kind ?? ""}
       data-selected-entity-id={selection?.id ?? ""}
       data-selected-level-id={selection?.levelId ?? ""}
@@ -503,7 +510,7 @@ function ArchitecturalFoundationScene({
           pose,
           size.width / size.height
         );
-        return [getArchitecturalEntityKey3D(target.identity), projected
+        return [getArchitecturalEntityKey3D(target.identity) + (target.part ? `:${target.part}` : ""), projected
           ? { x: projected.x, y: projected.y, depth: projected.depth }
           : null];
       })
@@ -595,6 +602,9 @@ const ArchitecturalLevel3D = memo(function ArchitecturalLevel3D({
           levelId={model.id}
           {...interaction}
         />
+      ))}
+      {model.staircases.map((staircase) => (
+        <ArchitecturalStaircase3D key={staircase.id} model={staircase} levelId={model.id} {...interaction} />
       ))}
       {model.walls.map((wall) => (
         <ArchitecturalWall3D
@@ -795,47 +805,60 @@ function ArchitecturalWallOpening3D({
   );
 }
 
-/** Renders one triangulated exact Room contour as a neutral horizontal Floor. */
+/** Renders a closed Room volume; every face retains the same Room identity. */
 function ArchitecturalFloor3D({
-  model,
-  levelId,
-  ...interaction
+  model, levelId, ...interaction
 }: { readonly model: Floor3D; readonly levelId: string } & ArchitecturalInteractionContext3D) {
   const identity = useMemo<ArchitecturalEntityIdentity3D>(
-    () => Object.freeze({ kind: "room", id: model.roomId, levelId }),
-    [levelId, model.roomId]
+    () => Object.freeze({ kind: "room", id: model.roomId, levelId }), [levelId, model.roomId]
   );
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
-  const geometry = useMemo(() => {
-    const floorGeometry = new BufferGeometry();
-    const positions = model.triangles.flatMap((triangle) =>
-      triangle.flatMap((index) => {
-        const point = model.contour[index]!;
-        return [point.x, 0, point.z];
-      })
-    );
-    floorGeometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-    floorGeometry.computeVertexNormals();
-    return floorGeometry;
-  }, [model]);
+  const solids = useMemo(() => createFloorSolid3D(model), [model]);
+  return <group name={`architectural-floor:${model.roomId}`} {...handlers}>
+    <ArchitecturalVolumeMesh3D solid={solids.top} color="#b8aa94" state={state} />
+    <ArchitecturalVolumeMesh3D solid={solids.edgesAndBottom} color="#968c7e" state={state} />
+  </group>;
+}
 
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  return (
-    <mesh
-      name={`architectural-floor:${model.roomId}`}
-      geometry={geometry}
-      position={[0, model.y + 0.004, 0]}
-      {...handlers}
-    >
-      <meshStandardMaterial
-        color={getArchitecturalEntityColor3D("#b8aa94", state)}
-        roughness={1}
-        metalness={0}
-        side={DoubleSide}
-      />
-    </mesh>
+/** Batches all Flight steps, structural slabs, and Landings into three semantic meshes. */
+function ArchitecturalStaircase3D({
+  model, levelId, ...interaction
+}: { readonly model: Staircase3D; readonly levelId: string } & ArchitecturalInteractionContext3D) {
+  const identity = useMemo<ArchitecturalEntityIdentity3D>(
+    () => Object.freeze({ kind: "staircase", id: model.id, levelId }), [levelId, model.id]
   );
+  const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
+  return <group name={`architectural-staircase:${model.id}`} {...handlers}>
+    <ArchitecturalVolumeMesh3D solid={model.stepsSolid} color="#c3b49e" state={state} />
+    <ArchitecturalVolumeMesh3D solid={model.slabSolid} color="#8e9394" state={state} />
+    <ArchitecturalVolumeMesh3D solid={model.landingsSolid} color="#afa38f" state={state} landing />
+  </group>;
+}
+
+/** Uploads static outward triangles once, retaining material identity under interaction tint. */
+function ArchitecturalVolumeMesh3D({ solid, color, state, landing = false }: {
+  readonly solid: ArchitecturalSolid3D;
+  readonly color: string;
+  readonly state: "idle" | "hovered" | "selected";
+  readonly landing?: boolean;
+}) {
+  const geometry = useMemo(() => {
+    const result = new BufferGeometry();
+    result.setAttribute("position", new Float32BufferAttribute(solid.positions, 3));
+    result.computeVertexNormals();
+    return result;
+  }, [solid]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  if (solid.positions.length === 0) return null;
+  return <mesh geometry={geometry}>
+    <meshStandardMaterial color={color} roughness={0.95} metalness={0}
+      emissive={getArchitecturalEntityColor3D("#000000", state)}
+      emissiveIntensity={state === "selected" ? 0.35 : 0.18}
+      // Canonical centered Landings can overlap the final tread at identical Y.
+      // Depth bias resolves that coplanar seam without moving either walking surface.
+      polygonOffset={landing} polygonOffsetFactor={landing ? -1 : 0} polygonOffsetUnits={landing ? -1 : 0}
+    />
+  </mesh>;
 }
 
 /** Shared local interaction state passed only through the renderer scene graph. */

@@ -2172,6 +2172,15 @@ describe("ProjectViewerPage", () => {
     });
     fireEvent.change(firstSteps, { target: { value: "4" } });
     fireEvent.change(secondSteps, { target: { value: "13" } });
+    const authoringRotation = within(inspector).getByRole("spinbutton", {
+      name: "Rotation"
+    });
+    fireEvent.change(authoringRotation, { target: { value: "37" } });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-stair",
+      rotation: 37
+    });
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
     const confirm = within(inspector).getByRole("button", {
       name: "Create Stair"
     });
@@ -2190,6 +2199,14 @@ describe("ProjectViewerPage", () => {
     });
     expect(level.staircases[0]?.flights).toHaveLength(2);
     expect(level.staircases[0]?.landings).toHaveLength(1);
+    expect(level.staircases[0]).not.toHaveProperty("rotation");
+    const authoredDirection = level.staircases[0]!.flights[0]!;
+    expect(
+      Math.atan2(
+        authoredDirection.end.z - authoredDirection.start.z,
+        authoredDirection.end.x - authoredDirection.start.x
+      ) * 180 / Math.PI
+    ).toBeCloseTo(37);
     expect(
       level.staircases[0]?.flights.map((flight) => flight.stepCount)
     ).toEqual([4, 13]);
@@ -2236,6 +2253,25 @@ describe("ProjectViewerPage", () => {
     ).toBe(100);
     expect(store.getState().projectEditor.history.past).toHaveLength(3);
 
+    const beforeRotation = structuredClone(
+      store.getState().projectEditor.draft!.building.levels[0]!.staircases[0]!
+    );
+    const selectedRotation = within(inspector).getByRole("spinbutton", {
+      name: "Rotation"
+    });
+    fireEvent.change(selectedRotation, { target: { value: "90" } });
+    fireEvent.blur(selectedRotation);
+    const rotated =
+      store.getState().projectEditor.draft!.building.levels[0]!.staircases[0]!;
+    expect(rotated.flights[0]!.start).toEqual(beforeRotation.flights[0]!.start);
+    expect(rotated.flights.map((flight) => flight.id)).toEqual(
+      beforeRotation.flights.map((flight) => flight.id)
+    );
+    expect(rotated.flights.map((flight) => [flight.startElevation, flight.endElevation])).toEqual(
+      beforeRotation.flights.map((flight) => [flight.startElevation, flight.endElevation])
+    );
+    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+
     const stairBody = document.querySelector(
       ".architectural-stair-flight__body"
     )!;
@@ -2260,7 +2296,7 @@ describe("ProjectViewerPage", () => {
     expect(translated.flights.at(-1)!.endElevation).toBe(
       beforeTranslation.flights.at(-1)!.endElevation
     );
-    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+    expect(store.getState().projectEditor.history.past).toHaveLength(5);
 
     const adjustmentHandle = screen
       .getByTestId("selected-stair-overlay")
@@ -2273,13 +2309,13 @@ describe("ProjectViewerPage", () => {
     fireEvent.pointerMove(svg, { clientX: 700, clientY: 220, pointerId: 712 });
     expect(screen.getByTestId("stair-preview")).toBeTruthy();
     fireEvent.pointerUp(svg, { clientX: 700, clientY: 220, pointerId: 712 });
-    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+    expect(store.getState().projectEditor.history.past).toHaveLength(5);
 
     fireEvent.keyDown(window, { key: "Delete" });
     expect(
       store.getState().projectEditor.draft!.building.levels[0]!.staircases
     ).toEqual([]);
-    expect(store.getState().projectEditor.history.past).toHaveLength(5);
+    expect(store.getState().projectEditor.history.past).toHaveLength(6);
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(
       store.getState().projectEditor.draft!.building.levels[0]!.staircases
@@ -2292,7 +2328,7 @@ describe("ProjectViewerPage", () => {
     await activateEditorTool("Stair");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(store.getState().projectEditor.activeTool).toBe("select");
-    expect(store.getState().projectEditor.history.past).toHaveLength(5);
+    expect(store.getState().projectEditor.history.past).toHaveLength(6);
   });
 
   it("toggles Room authoring off and clears transient state on the second toolbar click", async () => {

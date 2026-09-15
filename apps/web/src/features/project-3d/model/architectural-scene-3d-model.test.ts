@@ -54,10 +54,10 @@ describe("architectural 3D presentation model", () => {
     expect(model.worldLengthUnit).toBe("m");
     expect(model.hasArchitecturalGeometry).toBe(true);
     expect(model.bounds).toEqual({
-      min: { x: -0.1, y: 0, z: -3.1 },
+      min: { x: -0.1, y: -0.18, z: -3.1 },
       max: { x: 8.1, y: 3, z: 0.1 },
-      center: { x: 4, y: 1.5, z: -1.5 },
-      size: { x: 8.2, y: 3, z: 3.2 }
+      center: { x: 4, y: 1.41, z: -1.5 },
+      size: { x: 8.2, y: 3.18, z: 3.2 }
     });
     expect(Object.isFrozen(model)).toBe(true);
     expect(Object.isFrozen(model.levels[0]?.segments)).toBe(true);
@@ -84,9 +84,9 @@ describe("architectural 3D presentation model", () => {
     const model = createArchitecturalScene3DModel(project);
 
     expect(model.levels.map((level) => level.y)).toEqual([-0.5, 0, 3.2]);
-    expect(model.bounds?.min.y).toBe(-0.5);
+    expect(model.bounds?.min.y).toBeCloseTo(-0.68);
     expect(model.bounds?.max.y).toBe(6.2);
-    expect(model.bounds?.size.y).toBe(6.7);
+    expect(model.bounds?.size.y).toBeCloseTo(6.88);
   });
 
   it("filters Active Level references and refits only visible physical content", () => {
@@ -96,9 +96,9 @@ describe("architectural 3D presentation model", () => {
     expect(getVisibleLevelReferences3D(model, "active", "level-upper").map((level) => level.id))
       .toEqual(["level-upper"]);
     expect(collectVisibleSceneBounds3D(model, "active", "level-upper")).toMatchObject({
-      min: { y: 3.2 },
+      min: { y: 3.02 },
       max: { y: 6.2 },
-      size: { y: 3 }
+      size: { y: 3.18 }
     });
     expect(getVisibleLevelReferences3D(model, "active", "missing")).toEqual([]);
     expect(collectVisibleSceneBounds3D(model, "active", "missing")).toBeUndefined();
@@ -331,7 +331,7 @@ describe("architectural 3D presentation model", () => {
     expect(model.levels[0]).not.toHaveProperty("slabs");
   });
 
-  it("includes elevated Floor Y in scene bounds without introducing Stair render entities", () => {
+  it("includes elevated Floor Y in scene bounds alongside empty canonical Stair aggregates", () => {
     const project = structuredClone(demoProjectFixture);
     project.building.levels[0]!.rooms[0]!.elevation = 450;
     project.building.levels[0]!.staircases = [{
@@ -347,7 +347,7 @@ describe("architectural 3D presentation model", () => {
 
     expect(model.bounds?.max.y).toBe(4.5);
     expect(model).not.toHaveProperty("staircases");
-    expect(model.levels[0]).not.toHaveProperty("staircases");
+    expect(model.levels[0]?.staircases[0]?.flights).toEqual([]);
   });
 
   it("triangulates irregular and concave contours to their exact polygon area", () => {

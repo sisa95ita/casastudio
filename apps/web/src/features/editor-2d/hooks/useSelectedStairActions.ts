@@ -31,6 +31,7 @@ import {
   createStairProposal,
   findProjectStaircase,
   getStairAuthoringParameters,
+  inferStairTurnDirection,
   inferStairTemplate,
   translateStaircase,
   updateStaircaseParameters,
@@ -94,10 +95,12 @@ export function useSelectedStairActions({
         toLevelId: staircase.toLevelId,
         ...(staircase.toRoomId ? { toRoomId: staircase.toRoomId } : {})
       },
+      ...(staircase.fromRoomId ? { fromRoomId: staircase.fromRoomId } : {}),
       template: inferStairTemplate(staircase),
       parameters: getStairAuthoringParameters(staircase),
       start: staircase.flights[0]?.start ?? adjustment.control,
       control: adjustment.control,
+      turnDirection: inferStairTurnDirection(staircase),
       identifiers: {
         staircaseId: staircase.id,
         flightIds: staircase.flights.map((flight) => flight.id),
@@ -105,12 +108,7 @@ export function useSelectedStairActions({
       },
       name: staircase.name
     });
-    return proposal && staircase.fromRoomId
-      ? {
-          ...proposal,
-          staircase: { ...proposal.staircase, fromRoomId: staircase.fromRoomId }
-        }
-      : proposal;
+    return proposal;
   }, [activeProject, editor.transient.interaction, selectedStair]);
   const translatedStaircase = useMemo(() => {
     const move =
@@ -260,10 +258,12 @@ export function useSelectedStairActions({
           toLevelId: staircase.toLevelId,
           ...(staircase.toRoomId ? { toRoomId: staircase.toRoomId } : {})
         },
+        ...(staircase.fromRoomId ? { fromRoomId: staircase.fromRoomId } : {}),
         template: inferStairTemplate(staircase),
         parameters: getStairAuthoringParameters(staircase),
         start: staircase.flights[0]?.start ?? control,
         control,
+        turnDirection: inferStairTurnDirection(staircase),
         identifiers: {
           staircaseId: staircase.id,
           flightIds: staircase.flights.map((flight) => flight.id),
@@ -276,13 +276,10 @@ export function useSelectedStairActions({
         setEditingError("errors.stair.invalid");
         return;
       }
-      const editedStaircase = staircase.fromRoomId
-        ? { ...proposal.staircase, fromRoomId: staircase.fromRoomId }
-        : proposal.staircase;
       const result = updateStaircase(editor.draft, {
         owningLevelId: interaction.owningLevelId,
         staircaseId: staircase.id,
-        staircase: editedStaircase
+        staircase: proposal.staircase
       });
       if (!result.ok) {
         setEditingError("errors.stair.invalid");

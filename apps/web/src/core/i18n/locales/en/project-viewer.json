@@ -40,7 +40,7 @@
   },
   "threeD": {
     "title": "Architectural 3D viewer",
-    "description": "Read-only Walls, Openings, and Room Floors derived from the authoritative Project.",
+    "description": "Read-only Walls, Openings, Room Floors, and Stairs derived from the authoritative Project.",
     "loading": "Loading the 3D workspace…",
     "fit": "Fit to building",
     "reset": "Reset camera",
@@ -53,7 +53,7 @@
     },
     "empty": {
       "title": "No architectural geometry",
-      "detail": "This Project has no Walls or explicit Room Floors yet. The physical ground and camera workspace remain available."
+      "detail": "This Project has no Walls, Room Floors, or Stairs yet. The physical ground and camera workspace remain available."
     },
     "inspector": {
       "title": "3D viewer",
@@ -63,7 +63,7 @@
       "empty": "Empty architectural geometry",
       "selection": "Selection",
       "nothingSelected": "Nothing selected",
-      "selectionHint": "Select a Wall, Door, Window, Wall Opening, or Room Floor in the viewer.",
+      "selectionHint": "Select a Wall, Door, Window, Wall Opening, Room Floor, or Staircase in the viewer.",
       "visibleLevels": "Visible Levels",
       "noVisibleLevels": "No architectural Level is visible.",
       "fields": {
@@ -77,16 +77,24 @@
         "swingSide": "Swing side",
         "wall": "Wall",
         "level": "Level",
-        "name": "Room name",
+        "name": "Name",
         "roomType": "Room type",
-        "area": "Area"
+        "area": "Area",
+        "flights": "Flights",
+        "steps": "Steps",
+        "landings": "Landings",
+        "sourceElevation": "Source elevation",
+        "destinationElevation": "Destination elevation",
+        "source": "Source",
+        "destination": "Destination"
       },
       "types": {
         "wall": "Wall",
         "door": "Door",
         "window": "Window",
         "wallOpening": "Wall Opening",
-        "room": "Room"
+        "room": "Room",
+        "staircase": "Staircase"
       }
     },
     "errors": {
@@ -209,6 +217,11 @@
   },
   "stairAuthoring": {
     "title": "Stair authoring",
+    "from": "From",
+    "to": "To",
+    "sourceRoom": "Source Room",
+    "levelFloor": "Level floor",
+    "chooseSourceRoom": "Choose the source floor",
     "targetLevel": "Target Level",
     "targetRoom": "Target Room (optional)",
     "noTargetRoom": "Level floor",
@@ -218,6 +231,7 @@
     "left": "Left",
     "right": "Right",
     "connectionSummary": "From {{from}} to {{to}}",
+    "rotationHelp": "0° follows Project +X; positive angles turn toward Project +Z.",
     "templates": {
       "straight": "Straight",
       "lShaped": "L-shaped",
@@ -231,7 +245,8 @@
     "invalid": {
       "NO_RISE": "The destination must be above the stair start. Choose a higher Level or an elevated Room.",
       "TOO_SHORT": "The run is too short for the selected step count and tread depth. Extend the preview.",
-      "INVALID_PARAMETERS": "Width, Flight step counts, and tread depth must be positive valid values."
+      "INVALID_PARAMETERS": "Width, Flight step counts, and tread depth must be positive valid values.",
+      "AMBIGUOUS_SOURCE": "Rooms overlap at the start anchor. Choose the intended source Room or Level floor."
     }
   },
   "openingAuthoring": {
@@ -580,6 +595,9 @@
     "labels": {
       "type": "Type",
       "template": "Template",
+      "from": "From",
+      "to": "To",
+      "rotation": "Rotation",
       "width": "Width",
       "stepCount": "Step count",
       "flight1Steps": "Flight 1 steps",

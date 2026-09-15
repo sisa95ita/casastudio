@@ -55,3 +55,7 @@ In the MVP, `RenderModule` is part of the NestJS backend. It receives screenshot
 ## Module boundaries
 
 `packages/geometry` must not depend on React, NestJS, Prisma, or Three.js. `packages/schema` must not depend on application code. Domain logic should not live directly in UI components or controllers.
+
+The browser architectural viewer derives closed Room floors and canonical Stair
+volumes through a pure presentation boundary. See [Architectural 3D model](geometry/architectural-3d.md)
+for coordinate, thickness, soffit, selection and visibility contracts.

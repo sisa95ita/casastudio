@@ -131,7 +131,7 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     const architecturalBounds = JSON.parse(
       (await workspace.getAttribute("data-visible-architectural-bounds")) ?? "{}"
     ) as { readonly min: { readonly y: number }; readonly max: { readonly y: number } };
-    expect(architecturalBounds.min.y).toBe(0);
+    expect(architecturalBounds.min.y).toBe(-0.18);
     expect(architecturalBounds.max.y).toBeGreaterThanOrEqual(6.2);
     const inspector = page.getByRole("complementary", { name: "Inspector" }).first();
     await expect(inspector.getByText("Ground Floor", { exact: true })).toBeVisible();

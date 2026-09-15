@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import type { Project } from "@casastudio/schema";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { createVerticalArchitectureFixture } from "../../test/vertical-architecture-fixture";
 import { demoProjectFixture } from "../../test/demo-project-fixture";
 import { createArchitecturalScene3DModel } from "./model/architectural-scene-3d-model";
 import { resolveArchitecturalSelection3D } from "./interaction/architectural-selection-3d";
@@ -38,6 +39,18 @@ describe("Project3DInspector", () => {
     expect(within(details).getAllByText(type).length).toBeGreaterThan(0);
     for (const value of values) expect(within(details).getByText(value)).toBeTruthy();
     expect(within(details).queryByRole("textbox")).toBeNull();
+    expect(within(details).queryByRole("spinbutton")).toBeNull();
+    expect(within(details).queryByRole("button")).toBeNull();
+  });
+
+  it("shows Stair aggregate properties without authoring controls", () => {
+    const stairModel = createArchitecturalScene3DModel(createVerticalArchitectureFixture(demoProjectFixture));
+    render(<Project3DInspector projectName="Vertical" model={stairModel} visibility="all"
+      selection={resolveArchitecturalSelection3D(stairModel, { kind: "staircase", id: "stair", levelId: "ground" })} />);
+    const details = screen.getByTestId("project-3d-selection-details");
+    expect(within(details).getByText("straight Stair")).toBeTruthy();
+    expect(within(details).getByText("12")).toBeTruthy();
+    expect(within(details).getByText("2.20 m")).toBeTruthy();
     expect(within(details).queryByRole("spinbutton")).toBeNull();
     expect(within(details).queryByRole("button")).toBeNull();
   });

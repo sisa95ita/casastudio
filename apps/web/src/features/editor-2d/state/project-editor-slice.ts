@@ -128,6 +128,11 @@ export type PlaceStairInteraction = {
   readonly owningLevelId: string;
   readonly toLevelId?: string;
   readonly toRoomId?: string;
+  readonly fromRoomId?: string;
+  /** Distinguishes an explicit Level-floor choice from automatic Room resolution. */
+  readonly sourceRoomSelectionExplicit?: boolean;
+  /** Authoring-only Project-plan angle; canonical orientation remains Flight geometry. */
+  readonly rotation: number;
   readonly template?: StairTemplate;
   readonly parameters: StairAuthoringParameters;
   readonly identifiers?: {
@@ -542,7 +547,8 @@ const projectEditorSlice = createSlice({
                   kind: "place-stair",
                   owningLevelId: state.activeLevelId,
                   parameters: { ...defaultStairAuthoringParameters },
-                  turnDirection: "LEFT"
+                  turnDirection: "LEFT",
+                  rotation: 0
                 }
               : null
         };
@@ -574,7 +580,8 @@ const projectEditorSlice = createSlice({
                   kind: "place-stair",
                   owningLevelId: state.activeLevelId,
                   parameters: { ...defaultStairAuthoringParameters },
-                  turnDirection: "LEFT"
+                  turnDirection: "LEFT",
+                  rotation: 0
                 }
               : null
       };
@@ -786,7 +793,8 @@ const projectEditorSlice = createSlice({
           kind: "place-stair",
           owningLevelId: state.activeLevelId,
           parameters: { ...defaultStairAuthoringParameters },
-          turnDirection: "LEFT"
+          turnDirection: "LEFT",
+          rotation: 0
         };
       }
       const interaction = state.transient.interaction;

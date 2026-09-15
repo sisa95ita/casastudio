@@ -793,6 +793,9 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
     .getByRole("radiogroup", { name: "Initial template" })
     .getByRole("radio", { name: "L-shaped" })
     .click();
+  await inspector.getByRole("combobox", { name: "Turn" }).click();
+  await page.getByRole("option", { name: "Right", exact: true }).click();
+  await expect(page.locator('[role="listbox"]')).toHaveCount(0);
   await expect(
     inspector.getByTestId("stair-authoring-inspector")
   ).toBeVisible();
@@ -805,8 +808,15 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await inspector
     .getByRole("spinbutton", { name: "Flight 2 steps" })
     .fill("13");
+  await inspector.getByRole("spinbutton", { name: "Rotation" }).fill("135");
 
   await page.mouse.move(roomPoint.x, roomPoint.y);
+  await expect(
+    viewport.locator('[data-testid="stair-preview"]')
+  ).toHaveAttribute("data-valid", "false");
+  await inspector.getByRole("combobox", { name: "Source Room" }).click();
+  await page.getByRole("option", { name: /^Room 1 ·/ }).click();
+  await expect(page.locator('[role="listbox"]')).toHaveCount(0);
   await expect(
     viewport.locator('[data-testid="stair-preview"]')
   ).toHaveAttribute("data-valid", "true");
@@ -820,6 +830,9 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await expect(
     inspector.getByRole("spinbutton", { name: "Flight 2 steps" })
   ).toHaveValue("13");
+  await expect(
+    inspector.getByRole("spinbutton", { name: "Rotation" })
+  ).toHaveValue("135");
 
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
@@ -839,6 +852,12 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await expect(
     viewport.locator('[data-testid="room-metric"]').first()
   ).toContainText("12.00 m²");
+  await page.getByRole("button", { name: "3D workspace" }).click();
+  const threeD = page.getByTestId("project-3d-workspace");
+  await expect(threeD).toHaveAttribute("data-renderer-status", "ready");
+  await expect(threeD).toHaveAttribute("data-architectural-staircase-count", "1");
+  await threeD.screenshot({ path: test.info().outputPath("l-shaped-right-135.png") });
+  await page.getByRole("button", { name: "2D workspace" }).click();
   await page.getByRole("button", { name: "Edit plan" }).click();
   await page.getByRole("button", { name: "Select" }).click();
   await viewport

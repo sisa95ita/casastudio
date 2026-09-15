@@ -97,7 +97,23 @@ export function Project3DInspector({
 /** Renders canonical read-only metadata for the selected architectural entity. */
 function SelectionDetails3D({ selection }: { readonly selection: ArchitecturalSelection3D }) {
   const { t } = useCasaTranslation("project-viewer");
-  const rows: readonly (readonly [string, string])[] = selection.kind === "wall"
+  const rows: readonly (readonly [string, string])[] = selection.kind === "staircase"
+    ? [
+        [t("threeD.inspector.fields.type"), t("threeD.inspector.types.staircase")],
+        ...(selection.staircase!.name ? [[t("threeD.inspector.fields.name"), selection.staircase!.name] as const] : []),
+        [t("threeD.inspector.fields.width"), formatMeters(selection.staircase!.width)],
+        [t("threeD.inspector.fields.flights"), String(selection.staircase!.flights.length)],
+        [t("threeD.inspector.fields.steps"), String(selection.staircase!.flights.reduce((sum, flight) => sum + flight.stepCount, 0))],
+        [t("threeD.inspector.fields.landings"), String(selection.staircase!.landings.length)],
+        ...((selection.staircase!.flights.length > 0) ? [
+          [t("threeD.inspector.fields.sourceElevation"), formatMeters(selection.staircase!.flights[0]!.start.y)] as const,
+          [t("threeD.inspector.fields.destinationElevation"), formatMeters(selection.staircase!.flights.at(-1)!.end.y)] as const
+        ] : []),
+        [t("threeD.inspector.fields.source"), selection.staircase!.fromRoomId ?? selection.staircase!.fromLevelId],
+        [t("threeD.inspector.fields.destination"), selection.staircase!.toRoomId ?? selection.staircase!.toLevelId],
+        [t("threeD.inspector.fields.level"), selection.levelName]
+      ]
+    : selection.kind === "wall"
     ? [
         [t("threeD.inspector.fields.type"), t("threeD.inspector.types.wall")],
         [t("threeD.inspector.fields.length"), formatMeters(selection.wall!.length)],
@@ -145,6 +161,8 @@ function SelectionDetails3D({ selection }: { readonly selection: ArchitecturalSe
                   ] as const]
                 : []),
               [t("threeD.inspector.fields.area"), `${selection.floor!.area.toFixed(2)} m²`],
+              [t("threeD.inspector.fields.elevation"), formatMeters(selection.floor!.y)],
+              [t("threeD.inspector.fields.thickness"), formatMeters(selection.floor!.thickness)],
               [t("threeD.inspector.fields.level"), selection.levelName]
             ];
 

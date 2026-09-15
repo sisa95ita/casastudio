@@ -12,6 +12,9 @@ import {
   type Wall
 } from "@casastudio/schema";
 
+import { architectural3DProfile, type Architectural3DProfile } from "./architectural-3d-profile";
+import { createStaircase3D, type Staircase3D } from "./staircase-3d-model";
+
 import type { GeometrySnapshot } from "../../../core/api/api-types";
 
 /** Plain immutable point in the renderer's meter-scaled XYZ coordinate space. */
@@ -154,6 +157,8 @@ export type Floor3D = Readonly<{
   roomType?: RoomType;
   area: number;
   y: number;
+  bottomY: number;
+  thickness: number;
   contour: readonly ScenePlanVector3D[];
   triangles: readonly FloorTriangle3D[];
 }>;
@@ -168,6 +173,7 @@ export type Level3D = Readonly<{
   segments: readonly LevelReferenceSegment3D[];
   walls: readonly Wall3D[];
   floors: readonly Floor3D[];
+  staircases: readonly Staircase3D[];
 }>;
 
 /** Backwards-compatible name for the architectural Level presentation contract. */
@@ -395,8 +401,11 @@ function freezeScenePoint(x: number, y: number, z: number): ScenePoint3D {
  */
 export function createArchitecturalScene3DModel(
   project: Project,
-  geometrySnapshot?: GeometrySnapshot
+  geometrySnapshot?: GeometrySnapshot,
+  profile: Architectural3DProfile = architectural3DProfile
 ): ArchitecturalScene3DModel {
+  assertPositiveFinite(profile.floorThickness, "Floor thickness");
+  assertPositiveFinite(profile.stairSlabThickness, "Stair slab thickness");
   const sourceUnit = project.units.length;
   const floorSources = collectFloorContourSources(project, geometrySnapshot);
   const levels = project.building.levels.map<Level3D>((level) => {
@@ -419,11 +428,14 @@ export function createArchitecturalScene3DModel(
         roomType: floorSource.roomType,
         area: Math.abs(signedContourArea(contour)),
         y: toThreeLength(floorSource.floorElevation, floorSource.unit),
+        bottomY: toThreeLength(floorSource.floorElevation, floorSource.unit) - profile.floorThickness,
+        thickness: profile.floorThickness,
         contour: Object.freeze(contour),
         triangles: triangulateFloorContour3D(contour)
       });
     });
-    const bounds3D = collectArchitecturalBounds3D(walls, floors);
+    const staircases = level.staircases.map((staircase) => createStaircase3D(staircase, sourceUnit, profile));
+    const bounds3D = collectArchitecturalBounds3D(walls, floors, staircases);
     return Object.freeze({
       id: level.id,
       name: level.name,
@@ -437,7 +449,8 @@ export function createArchitecturalScene3DModel(
       }) : undefined,
       segments: Object.freeze(segments),
       walls: Object.freeze(walls),
-      floors: Object.freeze(floors)
+      floors: Object.freeze(floors),
+      staircases: Object.freeze(staircases)
     });
   });
   const bounds = collectSceneBounds3D(levels);
@@ -732,25 +745,28 @@ export function getLevelReferenceOrientation3D(level: Level3D): LevelReferenceOr
 function collectSceneBounds3D(levels: readonly Level3D[]): SceneBounds3D | undefined {
   return createBoundsFromPoints(levels.flatMap((level) => [
     ...collectWallBoundsPoints(level.walls),
-    ...collectFloorBoundsPoints(level.floors)
+    ...collectFloorBoundsPoints(level.floors),
+    ...level.staircases.flatMap((stair) => stair.bounds ? [stair.bounds.min, stair.bounds.max] : [])
   ]));
 }
 
 /** Collects bounds for one Level's actual architectural renderables. */
 function collectArchitecturalBounds3D(
   walls: readonly Wall3D[],
-  floors: readonly Floor3D[]
+  floors: readonly Floor3D[],
+  staircases: readonly Staircase3D[]
 ): SceneBounds3D | undefined {
   return createBoundsFromPoints([
     ...collectWallBoundsPoints(walls),
-    ...collectFloorBoundsPoints(floors)
+    ...collectFloorBoundsPoints(floors),
+    ...staircases.flatMap((stair) => stair.bounds ? [stair.bounds.min, stair.bounds.max] : [])
   ]);
 }
 
 /** Expands Floor contours into world points for physical bounds. */
 function collectFloorBoundsPoints(floors: readonly Floor3D[]): ScenePoint3D[] {
   return floors.flatMap((floor) =>
-    floor.contour.map((point) => ({ x: point.x, y: floor.y, z: point.z }))
+    floor.contour.flatMap((point) => [floor.y, floor.bottomY].map((y) => ({ x: point.x, y, z: point.z })))
   );
 }
 
@@ -798,7 +814,7 @@ function collectPanelBoundsPoints(panel: ArchitecturalPanel3D): ScenePoint3D[] {
 }
 
 /** Creates immutable axis-aligned bounds for a finite non-empty point set. */
-function createBoundsFromPoints(points: readonly ScenePoint3D[]): SceneBounds3D | undefined {
+export function createBoundsFromPoints(points: readonly ScenePoint3D[]): SceneBounds3D | undefined {
   if (points.length === 0) return undefined;
   if (points.some((point) =>
     !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)

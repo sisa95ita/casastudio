@@ -729,9 +729,14 @@ export function ProjectWorkspacePage() {
   const {
     stairPlacement,
     stairProposal,
+    sourceRoomCandidates,
+    resolvedFromRoomId,
+    sourceRoomAmbiguous,
     handleStairDestinationChange,
     handleStairTemplateChange,
     handleStairParametersChange,
+    handleStairRotationChange,
+    handleStairSourceRoomChange,
     handleCancelStairAuthoring,
     handleConfirmStairAuthoring
   } = useStairAuthoring({
@@ -2131,7 +2136,12 @@ export function ProjectWorkspacePage() {
         }
         selectedRoom={selectedRoom}
         selectedRoomLevelElevation={activeProjectLevel?.elevation}
-        selectedStair={selectedStair}
+        selectedStair={
+          stairAdjustmentProposal && selectedStair
+            ? { ...selectedStair, staircase: stairAdjustmentProposal.staircase }
+            : selectedStair
+        }
+        levels={activeProject?.building.levels ?? []}
         stairAuthoring={
           stairPlacement?.toLevelId && stairPlacement.template
             ? {
@@ -2141,6 +2151,12 @@ export function ProjectWorkspacePage() {
                 ...(stairPlacement.toRoomId
                   ? { targetRoomId: stairPlacement.toRoomId }
                   : {}),
+                sourceRoomCandidates,
+                ...(resolvedFromRoomId
+                  ? { sourceRoomId: resolvedFromRoomId }
+                  : {}),
+                sourceRoomAmbiguous,
+                rotation: stairPlacement.rotation,
                 template: stairPlacement.template,
                 parameters: stairPlacement.parameters,
                 proposal: stairProposal,
@@ -2177,6 +2193,8 @@ export function ProjectWorkspacePage() {
         onUpdateStair={handleUpdateSelectedStair}
         onStairAuthoringTemplateChange={handleStairTemplateChange}
         onStairAuthoringDestinationChange={handleStairDestinationChange}
+        onStairAuthoringSourceRoomChange={handleStairSourceRoomChange}
+        onStairAuthoringRotationChange={handleStairRotationChange}
         onStairAuthoringTurnChange={(turnDirection) =>
           dispatch(editorStairAuthoringChanged({ turnDirection }))
         }
@@ -2217,6 +2235,9 @@ export function ProjectWorkspacePage() {
     activeProjectLevel?.elevation,
     stairPlacement,
     stairProposal,
+    sourceRoomCandidates,
+    resolvedFromRoomId,
+    sourceRoomAmbiguous,
     selectedStair,
     selectedRoomMeasurement,
     activeLevelMeasurement,
@@ -2251,6 +2272,8 @@ export function ProjectWorkspacePage() {
     handleUpdateSelectedStair,
     handleStairTemplateChange,
     handleStairDestinationChange,
+    handleStairSourceRoomChange,
+    handleStairRotationChange,
     handleStairParametersChange,
     handleConfirmStairAuthoring,
     handleCancelStairAuthoring,
