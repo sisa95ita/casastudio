@@ -40,7 +40,7 @@
   },
   "threeD": {
     "title": "Architectural 3D viewer",
-    "description": "Read-only Walls, Openings, Room Floors, and Stairs derived from the authoritative Project.",
+    "description": "Read-only Walls, Openings, Room Floors, Stairs, and Furniture derived from the authoritative Project.",
     "loading": "Loading the 3D workspace…",
     "fit": "Fit to building",
     "reset": "Reset camera",
@@ -63,7 +63,7 @@
       "empty": "Empty architectural geometry",
       "selection": "Selection",
       "nothingSelected": "Nothing selected",
-      "selectionHint": "Select a Wall, Door, Window, Wall Opening, Room Floor, or Staircase in the viewer.",
+      "selectionHint": "Select a Wall, Door, Window, Wall Opening, Room Floor, Staircase, or Furniture in the viewer.",
       "visibleLevels": "Visible Levels",
       "noVisibleLevels": "No architectural Level is visible.",
       "fields": {
@@ -86,7 +86,13 @@
         "sourceElevation": "Source elevation",
         "destinationElevation": "Destination elevation",
         "source": "Source",
-        "destination": "Destination"
+        "destination": "Destination",
+        "definition": "Definition",
+        "category": "Category",
+        "room": "Room",
+        "floorElevation": "Floor elevation",
+        "depth": "Depth",
+        "rotation": "Rotation"
       },
       "types": {
         "wall": "Wall",
@@ -94,7 +100,8 @@
         "window": "Window",
         "wallOpening": "Wall Opening",
         "room": "Room",
-        "staircase": "Staircase"
+        "staircase": "Staircase",
+        "furniture": "Furniture"
       }
     },
     "errors": {

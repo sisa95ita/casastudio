@@ -1,3 +1,5 @@
+import { FurnitureAsset3D } from "./FurnitureAsset3D";
+import type { FurnitureModel3D } from "./model/furniture-3d-model";
 import CenterFocusStrongRoundedIcon from "@mui/icons-material/CenterFocusStrongRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import {
@@ -11,7 +13,7 @@ import {
   Typography
 } from "@mui/material";
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import {
   Component,
   memo,
@@ -60,6 +62,7 @@ import {
   type ArchitecturalEntityIdentity3D
 } from "./interaction/architectural-selection-3d";
 import {
+  createEntityPointerHandlers3D,
   getArchitecturalEntityColor3D,
   getArchitecturalEntityPresentationState3D,
   getProject3DShortcutAction,
@@ -247,6 +250,8 @@ export function Project3DViewer({
       data-visible-architectural-bounds={visibleBounds
         ? JSON.stringify({ min: visibleBounds.min, max: visibleBounds.max })
         : ""}
+      data-furniture-count={visibleLevels.reduce((sum, level) => sum + level.furniture.length, 0)}
+      data-furniture-poses={JSON.stringify(visibleLevels.flatMap((level) => level.furniture.map((item) => ({ id: item.id, baseY: item.position.y, yaw: item.yaw, width: item.width, depth: item.depth, height: item.height }))))}
       data-architectural-staircase-count={visibleLevels.reduce((sum, level) => sum + level.staircases.length, 0)}
       data-architectural-step-count={visibleLevels.reduce((sum, level) => sum + level.staircases.reduce((count, stair) => count + stair.flights.reduce((n, flight) => n + flight.stepCount, 0), 0), 0)}
       data-architectural-floor-volumes={JSON.stringify(visibleLevels.flatMap((level) => level.floors.map((floor) => ({ roomId: floor.roomId, top: floor.y, bottom: floor.bottomY }))))}
@@ -595,6 +600,7 @@ const ArchitecturalLevel3D = memo(function ArchitecturalLevel3D({
 }: { readonly model: LevelReference3D } & ArchitecturalInteractionContext3D) {
   return (
     <group name={`architectural-level:${model.id}`}>
+      {model.furniture.map((item) => <ArchitecturalFurniture3D key={item.id} model={item} {...interaction} />)}
       {model.floors.map((floor) => (
         <ArchitecturalFloor3D
           key={floor.id}
@@ -617,6 +623,15 @@ const ArchitecturalLevel3D = memo(function ArchitecturalLevel3D({
     </group>
   );
 });
+
+/** Bubbled child-mesh hits retain the owning Furniture identity and existing orbit-click rules. */
+function ArchitecturalFurniture3D({ model, ...interaction }: { model: FurnitureModel3D } & ArchitecturalInteractionContext3D) {
+  const identity = useMemo<ArchitecturalEntityIdentity3D>(() => ({ kind: "furniture", id: model.id, levelId: model.levelId }), [model.id, model.levelId]);
+  const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
+  return <group name={`furniture:${model.id}`} userData={{ identity }} {...handlers}>
+    <FurnitureAsset3D model={model} state={state} />
+  </group>;
+}
 
 /** Extrudes the immutable rectangular sections belonging to one architectural Wall. */
 function ArchitecturalWall3D({
@@ -879,35 +894,6 @@ function useArchitecturalEntityInteraction3D(
     ),
     handlers: createEntityPointerHandlers3D(identity, interaction, setHovered)
   } as const;
-}
-
-/** Creates consistent semantic pointer events for any architectural hit assembly. */
-function createEntityPointerHandlers3D(
-  identity: ArchitecturalEntityIdentity3D,
-  interaction: ArchitecturalInteractionContext3D,
-  setHovered: (hovered: boolean) => void
-) {
-  return {
-    onPointerOver: (event: ThreeEvent<PointerEvent>) => {
-      event.stopPropagation();
-      setHovered(true);
-      interaction.onHoverChange(identity);
-    },
-    onPointerOut: (event: ThreeEvent<PointerEvent>) => {
-      event.stopPropagation();
-      setHovered(false);
-      interaction.onHoverChange(undefined);
-    },
-    onPointerDown: (event: ThreeEvent<PointerEvent>) => {
-      event.stopPropagation();
-    },
-    onPointerUp: (event: ThreeEvent<PointerEvent>) => {
-      event.stopPropagation();
-      if (!interaction.pointerGestureRef.current?.dragged) {
-        interaction.onSelectionChange(identity);
-      }
-    }
-  };
 }
 
 /** Formats camera telemetry without coupling architectural state to Three objects. */

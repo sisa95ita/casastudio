@@ -1,3 +1,4 @@
+import type { FurnitureModel3D } from "../model/furniture-3d-model";
 import { stairFlightPoint3D, type Staircase3D } from "../model/staircase-3d-model";
 import type {
   ArchitecturalScene3DModel,
@@ -18,7 +19,8 @@ export type ArchitecturalSelectionKind3D =
   | "window"
   | "wall-opening"
   | "room"
-  | "staircase";
+  | "staircase"
+  | "furniture";
 
 /** Stable identity shared by selection, hover, renderer hit targets, and Inspector state. */
 export type ArchitecturalEntityIdentity3D = Readonly<{
@@ -41,6 +43,7 @@ export type ArchitecturalSelection3D = Readonly<{
   wallOpening?: WallOpening3D;
   floor?: Floor3D;
   staircase?: Staircase3D;
+  furniture?: FurnitureModel3D;
 }>;
 
 /** Semantic world point used by deterministic browser interaction acceptance. */
@@ -80,6 +83,7 @@ export function collectArchitecturalSelectionTargets3D(
   levels: readonly Level3D[]
 ): readonly ArchitecturalSelectionTarget3D[] {
   return Object.freeze(levels.flatMap((level) => [
+    ...level.furniture.map((item) => ({ identity: Object.freeze({ kind: "furniture" as const, id: item.id, levelId: level.id }), point: Object.freeze({ ...item.position, y: item.position.y + item.height * 0.5 }) })),
     ...level.walls.flatMap((wall) => {
       const section = wall.sections[0];
       const wallTargets: ArchitecturalSelectionTarget3D[] = section ? [{
@@ -151,6 +155,10 @@ function resolveSelectionInLevel3D(
   level: Level3D,
   identity: ArchitecturalEntityIdentity3D
 ): ArchitecturalSelection3D | undefined {
+  if (identity.kind === "furniture") {
+    const furniture = level.furniture.find((item) => item.id === identity.id);
+    return furniture ? Object.freeze({ ...identity, levelName: level.name, roomId: furniture.roomId, furniture }) : undefined;
+  }
   if (identity.kind === "staircase") {
     const staircase = level.staircases.find((candidate) => candidate.id === identity.id);
     return staircase ? Object.freeze({ ...identity, levelName: level.name, staircase }) : undefined;

@@ -1,3 +1,4 @@
+import { createFurnitureModels3D, type FurnitureModel3D } from "./furniture-3d-model";
 import { GeometryEngine } from "@casastudio/geometry";
 import {
   convertPhysicalLength,
@@ -174,6 +175,7 @@ export type Level3D = Readonly<{
   walls: readonly Wall3D[];
   floors: readonly Floor3D[];
   staircases: readonly Staircase3D[];
+  furniture: readonly FurnitureModel3D[];
 }>;
 
 /** Backwards-compatible name for the architectural Level presentation contract. */
@@ -407,6 +409,7 @@ export function createArchitecturalScene3DModel(
   assertPositiveFinite(profile.floorThickness, "Floor thickness");
   assertPositiveFinite(profile.stairSlabThickness, "Stair slab thickness");
   const sourceUnit = project.units.length;
+  const furnitureModels = createFurnitureModels3D(project);
   const floorSources = collectFloorContourSources(project, geometrySnapshot);
   const levels = project.building.levels.map<Level3D>((level) => {
     const walls = level.walls.map((wall) => createWall3D(wall, level.elevation, sourceUnit));
@@ -435,7 +438,8 @@ export function createArchitecturalScene3DModel(
       });
     });
     const staircases = level.staircases.map((staircase) => createStaircase3D(staircase, sourceUnit, profile));
-    const bounds3D = collectArchitecturalBounds3D(walls, floors, staircases);
+    const furniture = Object.freeze(furnitureModels.filter((item) => item.levelId === level.id));
+    const bounds3D = collectArchitecturalBounds3D(walls, floors, staircases, furniture);
     return Object.freeze({
       id: level.id,
       name: level.name,
@@ -450,7 +454,8 @@ export function createArchitecturalScene3DModel(
       segments: Object.freeze(segments),
       walls: Object.freeze(walls),
       floors: Object.freeze(floors),
-      staircases: Object.freeze(staircases)
+      staircases: Object.freeze(staircases),
+      furniture
     });
   });
   const bounds = collectSceneBounds3D(levels);
@@ -746,6 +751,7 @@ function collectSceneBounds3D(levels: readonly Level3D[]): SceneBounds3D | undef
   return createBoundsFromPoints(levels.flatMap((level) => [
     ...collectWallBoundsPoints(level.walls),
     ...collectFloorBoundsPoints(level.floors),
+    ...level.furniture.flatMap((item) => [item.bounds.min, item.bounds.max]),
     ...level.staircases.flatMap((stair) => stair.bounds ? [stair.bounds.min, stair.bounds.max] : [])
   ]));
 }
@@ -754,11 +760,13 @@ function collectSceneBounds3D(levels: readonly Level3D[]): SceneBounds3D | undef
 function collectArchitecturalBounds3D(
   walls: readonly Wall3D[],
   floors: readonly Floor3D[],
-  staircases: readonly Staircase3D[]
+  staircases: readonly Staircase3D[],
+  furniture: readonly FurnitureModel3D[]
 ): SceneBounds3D | undefined {
   return createBoundsFromPoints([
     ...collectWallBoundsPoints(walls),
     ...collectFloorBoundsPoints(floors),
+    ...furniture.flatMap((item) => [item.bounds.min, item.bounds.max]),
     ...staircases.flatMap((stair) => stair.bounds ? [stair.bounds.min, stair.bounds.max] : [])
   ]);
 }

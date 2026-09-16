@@ -97,7 +97,21 @@ export function Project3DInspector({
 /** Renders canonical read-only metadata for the selected architectural entity. */
 function SelectionDetails3D({ selection }: { readonly selection: ArchitecturalSelection3D }) {
   const { t } = useCasaTranslation("project-viewer");
-  const rows: readonly (readonly [string, string])[] = selection.kind === "staircase"
+  const rows: readonly (readonly [string, string])[] = selection.kind === "furniture"
+    ? [
+        [t("threeD.inspector.fields.type"), t("threeD.inspector.types.furniture")],
+        [t("threeD.inspector.fields.name"), selection.furniture!.name],
+        [t("threeD.inspector.fields.definition"), selection.furniture!.definitionId],
+        [t("threeD.inspector.fields.category"), formatRoomType(selection.furniture!.category)],
+        [t("threeD.inspector.fields.room"), selection.furniture!.roomName],
+        [t("threeD.inspector.fields.level"), selection.levelName],
+        [t("threeD.inspector.fields.floorElevation"), formatMeters(selection.furniture!.position.y)],
+        [t("threeD.inspector.fields.width"), formatMeters(selection.furniture!.width)],
+        [t("threeD.inspector.fields.depth"), formatMeters(selection.furniture!.depth)],
+        [t("threeD.inspector.fields.height"), formatMeters(selection.furniture!.height)],
+        [t("threeD.inspector.fields.rotation"), `${selection.furniture!.rotation}°`]
+      ]
+    : selection.kind === "staircase"
     ? [
         [t("threeD.inspector.fields.type"), t("threeD.inspector.types.staircase")],
         ...(selection.staircase!.name ? [[t("threeD.inspector.fields.name"), selection.staircase!.name] as const] : []),

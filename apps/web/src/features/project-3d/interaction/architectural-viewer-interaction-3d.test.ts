@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { getArchitecturalEntityKey3D } from "./architectural-selection-3d";
 import {
+  createEntityPointerHandlers3D,
   getArchitecturalEntityColor3D,
   getArchitecturalEntityPresentationState3D,
   getProject3DShortcutAction,
@@ -52,5 +53,26 @@ describe("architectural 3D viewer interaction", () => {
       ctrlKey: true,
       metaKey: false
     })).toBeUndefined();
+  });
+});
+
+
+describe("Furniture child-mesh interaction", () => {
+  it("uses the semantic group identity for hover and selection and suppresses orbit drags", () => {
+    const identity = { kind: "furniture" as const, id: "sofa-one", levelId: "ground" };
+    const onSelectionChange = vi.fn(), onHoverChange = vi.fn(), setHovered = vi.fn();
+    const pointerGestureRef = { current: { dragged: false } };
+    const handlers = createEntityPointerHandlers3D(identity, { pointerGestureRef, onSelectionChange, onHoverChange }, setHovered);
+    const event = { object: { uuid: "gltf-cushion-uuid", name: "cushion" }, stopPropagation: vi.fn() };
+    handlers.onPointerOver(event); handlers.onPointerDown(event); handlers.onPointerUp(event);
+    expect(onSelectionChange).toHaveBeenCalledExactlyOnceWith(identity);
+    expect(onHoverChange).toHaveBeenCalledWith(identity);
+    expect(setHovered).toHaveBeenCalledWith(true);
+    handlers.onPointerOut(event);
+    expect(setHovered).toHaveBeenLastCalledWith(false);
+    pointerGestureRef.current.dragged = true;
+    handlers.onPointerUp(event);
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(5);
   });
 });

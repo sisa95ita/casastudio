@@ -22,6 +22,7 @@ describe("Project3DInspector", () => {
   });
 
   it.each([
+    ["furniture", "inspector-furniture", "Furniture", ["Work desk", "Desk", "generic-desk", "1.37 m", "0.61 m", "0.78 m", "37°", "Left Room"]],
     ["wall", "left-room-north-wall", "Wall", ["4.00 m", "0.20 m", "3.00 m"]],
     ["door", "inspector-door", "Door", ["0.90 m", "2.10 m", "END", "RIGHT"]],
     ["window", "inspector-window", "Window", ["1.00 m", "1.20 m", "0.90 m"]],
@@ -72,6 +73,7 @@ describe("Project3DInspector", () => {
 
 function createSelectableProject(): Project {
   const project = structuredClone(demoProjectFixture);
+  project.building.furniture = [{ id: "inspector-furniture", name: "Work desk", roomId: "left-room", definitionId: "generic-desk", position: { x: 100, z: 100 }, rotation: 37, width: 137, depth: 61, height: 78 }];
   const walls = project.building.levels[0]!.walls;
   walls[0]!.openings = [{
     id: "inspector-door",

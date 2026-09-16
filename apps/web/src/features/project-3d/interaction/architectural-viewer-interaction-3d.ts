@@ -49,3 +49,36 @@ export function getArchitecturalEntityColor3D(
   if (state === "hovered") return "#e7b980";
   return idleColor;
 }
+
+/** Creates consistent semantic pointer events for any architectural hit assembly. */
+export function createEntityPointerHandlers3D(
+  identity: ArchitecturalEntityIdentity3D,
+  interaction: Readonly<{
+    pointerGestureRef: Readonly<{ current: Readonly<{ dragged: boolean }> | undefined }>;
+    onHoverChange: (identity?: ArchitecturalEntityIdentity3D) => void;
+    onSelectionChange: (identity?: ArchitecturalEntityIdentity3D) => void;
+  }>,
+  setHovered: (hovered: boolean) => void
+) {
+  return {
+    onPointerOver: (event: Readonly<{ stopPropagation: () => void }>) => {
+      event.stopPropagation();
+      setHovered(true);
+      interaction.onHoverChange(identity);
+    },
+    onPointerOut: (event: Readonly<{ stopPropagation: () => void }>) => {
+      event.stopPropagation();
+      setHovered(false);
+      interaction.onHoverChange(undefined);
+    },
+    onPointerDown: (event: Readonly<{ stopPropagation: () => void }>) => {
+      event.stopPropagation();
+    },
+    onPointerUp: (event: Readonly<{ stopPropagation: () => void }>) => {
+      event.stopPropagation();
+      if (!interaction.pointerGestureRef.current?.dragged) {
+        interaction.onSelectionChange(identity);
+      }
+    }
+  };
+}
