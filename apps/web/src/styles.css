@@ -1009,7 +1009,6 @@ img {
 }
 
 .project-3d-viewer__canvas {
-  background: #f7f3ec;
   flex: 1 1 auto;
   min-height: 260px;
   overscroll-behavior: contain;

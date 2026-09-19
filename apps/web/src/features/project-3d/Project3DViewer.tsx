@@ -12,13 +12,15 @@ import {
   ToggleButtonGroup,
   Typography
 } from "@mui/material";
-import { OrbitControls } from "@react-three/drei";
+import { Edges, OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import {
   Component,
+  createContext,
   memo,
   useCallback,
   useEffect,
+  useContext,
   useMemo,
   useRef,
   useState,
@@ -27,7 +29,17 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from "react";
-import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
+import {
+  ACESFilmicToneMapping,
+  BufferGeometry,
+  DoubleSide,
+  Float32BufferAttribute,
+  MeshBasicMaterial,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+  SRGBColorSpace,
+  type DirectionalLight
+} from "three";
 
 import { createFloorSolid3D } from "./model/floor-solid-3d";
 import type { ArchitecturalSolid3D } from "./model/architectural-solid-3d";
@@ -37,6 +49,7 @@ import { useCasaTranslation } from "../../core/i18n";
 import { isEditableShortcutTarget } from "../geometry-2d/viewport/geometry-viewer-shortcuts";
 import {
   createArchitecturalCameraPose3D,
+  createArchitecturalOrbitLimits3D,
   createArchitecturalScreenParityLandmarks3D,
   projectScenePointToArchitecturalScreen3D,
   type ArchitecturalCameraPose3D
@@ -63,11 +76,15 @@ import {
 } from "./interaction/architectural-selection-3d";
 import {
   createEntityPointerHandlers3D,
-  getArchitecturalEntityColor3D,
   getArchitecturalEntityPresentationState3D,
   getProject3DShortcutAction,
   hasPointerGestureExceededSelectionThreshold3D
 } from "./interaction/architectural-viewer-interaction-3d";
+import {
+  architecturalPresentationProfile3D,
+  createArchitecturalKeyLight3D,
+  type ArchitecturalMaterialRole3D
+} from "./presentation/architectural-presentation-3d";
 
 /** Inputs for the read-only architectural 3D viewport. */
 export type Project3DViewerProps = {
@@ -338,7 +355,15 @@ export function Project3DViewer({
               }}
               dpr={[1, 2]}
               frameloop="demand"
-              gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
+              shadows="soft"
+              gl={{
+                antialias: true,
+                alpha: false,
+                powerPreference: "high-performance",
+                outputColorSpace: SRGBColorSpace,
+                toneMapping: ACESFilmicToneMapping,
+                toneMappingExposure: architecturalPresentationProfile3D.lighting.exposure
+              }}
               onCreated={() => setRendererStatus("ready")}
               onPointerMissed={() => {
                 if (!pointerGestureRef.current?.dragged) onSelectionChange(undefined);
@@ -473,6 +498,7 @@ function ArchitecturalFoundationScene({
   const controlsRef = useRef<React.ElementRef<typeof OrbitControls>>(null);
   const { camera, size } = useThree();
   const ground = useMemo(() => createGroundReference(bounds), [bounds]);
+  const orbitLimits = useMemo(() => createArchitecturalOrbitLimits3D(bounds), [bounds]);
   const reportCameraChange = useCallback(() => {
     const target = controlsRef.current?.target ?? bounds?.center ?? { x: 0, y: 0, z: 0 };
     const position = {
@@ -537,10 +563,14 @@ function ArchitecturalFoundationScene({
   }, [bounds, camera, levels, onCameraChange, size.height, size.width]);
 
   return (
-    <>
-      <color attach="background" args={["#f7f3ec"]} />
-      <hemisphereLight args={["#fffdf8", "#b9b1a4", 1.45]} />
-      <directionalLight position={[8, 12, 6]} intensity={1.15} color="#fff8ed" />
+    <ArchitecturalMaterialsProvider3D>
+      <color attach="background" args={[architecturalPresentationProfile3D.world.background]} />
+      <hemisphereLight args={[
+        architecturalPresentationProfile3D.lighting.hemisphereSky,
+        architecturalPresentationProfile3D.lighting.hemisphereGround,
+        architecturalPresentationProfile3D.lighting.hemisphereIntensity
+      ]} />
+      <ArchitecturalKeyLight bounds={bounds} />
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[ground.centerX, ground.y, ground.centerZ]}
@@ -551,12 +581,22 @@ function ArchitecturalFoundationScene({
             onSelectionChange(undefined);
           }
         }}
+        receiveShadow
       >
         <planeGeometry args={[ground.size, ground.size]} />
-        <meshStandardMaterial color="#f2ede4" roughness={1} metalness={0} />
+        <meshStandardMaterial
+          color={architecturalPresentationProfile3D.world.ground}
+          roughness={1}
+          metalness={0}
+        />
       </mesh>
       <gridHelper
-        args={[ground.size, ground.divisions, "#c9c0b3", "#ded7cc"]}
+        args={[
+          ground.size,
+          ground.divisions,
+          architecturalPresentationProfile3D.world.gridMajor,
+          architecturalPresentationProfile3D.world.gridMinor
+        ]}
         position={[ground.centerX, ground.y + 0.002, ground.centerZ]}
         raycast={() => null}
       />
@@ -582,15 +622,124 @@ function ArchitecturalFoundationScene({
         makeDefault
         enableDamping
         dampingFactor={0.08}
-        minDistance={0.35}
-        maxDistance={500}
-        minPolarAngle={0.12}
-        maxPolarAngle={Math.PI / 2 - 0.025}
+        rotateSpeed={0.65}
+        zoomSpeed={0.9}
+        panSpeed={0.8}
+        minDistance={orbitLimits.minDistance}
+        maxDistance={orbitLimits.maxDistance}
+        minPolarAngle={0.1}
+        maxPolarAngle={Math.PI / 2 - 0.035}
         screenSpacePanning={false}
         onChange={reportCameraChange}
       />
-    </>
+    </ArchitecturalMaterialsProvider3D>
   );
+}
+
+/** Positions the only shadow-casting light and its camera from physical bounds. */
+function ArchitecturalKeyLight({ bounds }: { readonly bounds?: SceneBounds3D }) {
+  const lightRef = useRef<DirectionalLight>(null);
+  const { scene } = useThree();
+  const light = useMemo(() => createArchitecturalKeyLight3D(bounds), [bounds]);
+  useEffect(() => {
+    const target = lightRef.current?.target;
+    if (!target) return;
+    target.position.set(light.target.x, light.target.y, light.target.z);
+    scene.add(target);
+    target.updateMatrixWorld();
+    return () => {
+      scene.remove(target);
+    };
+  }, [light.target.x, light.target.y, light.target.z, scene]);
+  return <directionalLight
+    ref={lightRef}
+    position={[light.position.x, light.position.y, light.position.z]}
+    intensity={architecturalPresentationProfile3D.lighting.keyIntensity}
+    color={architecturalPresentationProfile3D.lighting.keyColor}
+    castShadow
+    shadow-mapSize-width={architecturalPresentationProfile3D.shadows.mapSize}
+    shadow-mapSize-height={architecturalPresentationProfile3D.shadows.mapSize}
+    shadow-camera-left={-light.shadowExtent}
+    shadow-camera-right={light.shadowExtent}
+    shadow-camera-top={light.shadowExtent}
+    shadow-camera-bottom={-light.shadowExtent}
+    shadow-camera-near={light.shadowNear}
+    shadow-camera-far={light.shadowFar}
+    shadow-bias={architecturalPresentationProfile3D.shadows.bias}
+    shadow-normalBias={architecturalPresentationProfile3D.shadows.normalBias}
+  />;
+}
+
+type CanvasArchitecturalMaterialRole3D = Exclude<
+  ArchitecturalMaterialRole3D,
+  "furnitureFallback" | "furnitureFallbackPlinth"
+>;
+
+const canvasArchitecturalMaterialRoles3D: readonly CanvasArchitecturalMaterialRole3D[] =
+  ["wall", "floorTop", "floorEdge", "door", "openingFrame", "glazing", "stairWalking", "stairStructure"];
+
+type ArchitecturalMaterialSet3D = Readonly<
+  Record<CanvasArchitecturalMaterialRole3D, MeshStandardMaterial | MeshPhysicalMaterial>
+  & { hitTarget: MeshBasicMaterial }
+>;
+
+const ArchitecturalMaterialsContext3D = createContext<ArchitecturalMaterialSet3D | null>(null);
+
+/** Owns one immutable material instance per architectural role for this Canvas. */
+function ArchitecturalMaterialsProvider3D({ children }: { readonly children: ReactNode }) {
+  const materials = useMemo<ArchitecturalMaterialSet3D>(() => {
+    const result = Object.fromEntries(
+      canvasArchitecturalMaterialRoles3D.map((role) => {
+        const value = architecturalPresentationProfile3D.materials[role];
+        const surface = role === "glazing"
+          ? new MeshPhysicalMaterial({
+              ...value,
+              transparent: true,
+              depthWrite: false,
+              side: DoubleSide,
+              thickness: 0.012
+            })
+          : new MeshStandardMaterial(value);
+        surface.name = `casa-architectural-${role}`;
+        return [role, surface];
+      })
+    ) as Record<CanvasArchitecturalMaterialRole3D, MeshStandardMaterial | MeshPhysicalMaterial>;
+    const hitTarget = new MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      colorWrite: false
+    });
+    hitTarget.name = "casa-architectural-hit-target";
+    return Object.freeze({ ...result, hitTarget });
+  }, []);
+  useEffect(() => () => {
+    Object.values(materials).forEach((material) => material.dispose());
+  }, [materials]);
+  return <ArchitecturalMaterialsContext3D.Provider value={materials}>
+    {children}
+  </ArchitecturalMaterialsContext3D.Provider>;
+}
+
+/** Returns the Canvas-owned shared architectural material set. */
+function useArchitecturalMaterials3D(): ArchitecturalMaterialSet3D {
+  const materials = useContext(ArchitecturalMaterialsContext3D);
+  if (!materials) throw new Error("Architectural materials require their scene provider.");
+  return materials;
+}
+
+/** Draws a non-selectable, non-shadowing semantic hover or selection outline. */
+function ArchitecturalInteractionEdges3D({
+  state
+}: { readonly state: "idle" | "hovered" | "selected" }) {
+  if (state === "idle") return null;
+  return <Edges
+    threshold={20}
+    color={state === "selected"
+      ? architecturalPresentationProfile3D.interaction.selected
+      : architecturalPresentationProfile3D.interaction.hover}
+    raycast={() => undefined}
+  />;
 }
 
 /** Renders the already-derived architectural entities for one Level. */
@@ -645,6 +794,7 @@ function ArchitecturalWall3D({
     [levelId, model.id]
   );
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
+  const materials = useArchitecturalMaterials3D();
   return (
     <group name={`architectural-wall:${model.id}`}>
       <group
@@ -663,15 +813,13 @@ function ArchitecturalWall3D({
                 section.bottom + height / 2,
                 0
               ]}
+              material={materials.wall}
               {...handlers}
+              castShadow
+              receiveShadow
             >
               <boxGeometry args={[width, height, model.thickness]} />
-              <meshStandardMaterial
-                color={getArchitecturalEntityColor3D("#d9c8b2", state)}
-                roughness={0.92}
-                metalness={0}
-                side={DoubleSide}
-              />
+              <ArchitecturalInteractionEdges3D state={state} />
             </mesh>
           );
         })}
@@ -706,20 +854,19 @@ function ArchitecturalDoor3D({
     [levelId, model.id]
   );
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
+  const materials = useArchitecturalMaterials3D();
   return (
     <mesh
       name={`architectural-door:${model.id}`}
       position={[model.leaf.center.x, model.leaf.center.y, model.leaf.center.z]}
       rotation={[0, rotationY, 0]}
+      material={materials.door}
       {...handlers}
+      castShadow
+      receiveShadow
     >
       <boxGeometry args={[model.leaf.width, model.leaf.height, model.leaf.thickness]} />
-      <meshStandardMaterial
-        color={getArchitecturalEntityColor3D("#7e7162", state)}
-        roughness={0.88}
-        metalness={0}
-        side={DoubleSide}
-      />
+      <ArchitecturalInteractionEdges3D state={state} />
     </mesh>
   );
 }
@@ -736,6 +883,7 @@ function ArchitecturalWindow3D({
     [levelId, model.id]
   );
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
+  const materials = useArchitecturalMaterials3D();
   return (
     <group
       name={`architectural-window:${model.id}`}
@@ -747,14 +895,12 @@ function ArchitecturalWindow3D({
           name={`architectural-window-frame:${model.id}:${index}`}
           position={[bar.center.x, bar.center.y, bar.center.z]}
           rotation={[0, rotationY, 0]}
+          material={materials.openingFrame}
+          castShadow
+          receiveShadow
         >
           <boxGeometry args={[bar.width, bar.height, bar.depth]} />
-          <meshStandardMaterial
-            color={getArchitecturalEntityColor3D("#5f6668", state)}
-            roughness={0.8}
-            metalness={0.05}
-            side={DoubleSide}
-          />
+          <ArchitecturalInteractionEdges3D state={state} />
         </mesh>
       ))}
       <mesh
@@ -765,19 +911,12 @@ function ArchitecturalWindow3D({
           model.glazing.center.z
         ]}
         rotation={[0, rotationY, 0]}
+        material={materials.glazing}
       >
         <boxGeometry
           args={[model.glazing.width, model.glazing.height, model.glazing.thickness]}
         />
-        <meshStandardMaterial
-          color={getArchitecturalEntityColor3D("#84b9c8", state)}
-          transparent
-          opacity={0.34}
-          roughness={0.45}
-          metalness={0}
-          depthWrite={false}
-          side={DoubleSide}
-        />
+        <ArchitecturalInteractionEdges3D state={state} />
       </mesh>
     </group>
   );
@@ -798,11 +937,13 @@ function ArchitecturalWallOpening3D({
     [levelId, model.id]
   );
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
+  const materials = useArchitecturalMaterials3D();
   return (
     <mesh
       name={`architectural-wall-opening:${model.id}`}
       position={[model.frame.center.x, model.frame.center.y, model.frame.center.z]}
       rotation={[0, rotationY, 0]}
+      material={materials.hitTarget}
       {...handlers}
     >
       <boxGeometry args={[
@@ -810,12 +951,7 @@ function ArchitecturalWallOpening3D({
         model.frame.height,
         Math.max(model.frame.wallThickness * 0.7, 0.04)
       ]} />
-      <meshBasicMaterial
-        color={getArchitecturalEntityColor3D("#b8aa94", state)}
-        transparent
-        opacity={state === "idle" ? 0.001 : state === "hovered" ? 0.16 : 0.3}
-        depthWrite={false}
-      />
+      <ArchitecturalInteractionEdges3D state={state} />
     </mesh>
   );
 }
@@ -830,8 +966,8 @@ function ArchitecturalFloor3D({
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
   const solids = useMemo(() => createFloorSolid3D(model), [model]);
   return <group name={`architectural-floor:${model.roomId}`} {...handlers}>
-    <ArchitecturalVolumeMesh3D solid={solids.top} color="#b8aa94" state={state} />
-    <ArchitecturalVolumeMesh3D solid={solids.edgesAndBottom} color="#968c7e" state={state} />
+    <ArchitecturalVolumeMesh3D solid={solids.top} role="floorTop" state={state} />
+    <ArchitecturalVolumeMesh3D solid={solids.edgesAndBottom} role="floorEdge" state={state} />
   </group>;
 }
 
@@ -844,18 +980,19 @@ function ArchitecturalStaircase3D({
   );
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
   return <group name={`architectural-staircase:${model.id}`} {...handlers}>
-    <ArchitecturalVolumeMesh3D solid={model.stepsSolid} color="#c3b49e" state={state} />
-    <ArchitecturalVolumeMesh3D solid={model.slabSolid} color="#8e9394" state={state} />
-    <ArchitecturalVolumeMesh3D solid={model.landingsSolid} color="#afa38f" state={state} />
+    <ArchitecturalVolumeMesh3D solid={model.stepsSolid} role="stairWalking" state={state} />
+    <ArchitecturalVolumeMesh3D solid={model.slabSolid} role="stairStructure" state={state} />
+    <ArchitecturalVolumeMesh3D solid={model.landingsSolid} role="stairWalking" state={state} />
   </group>;
 }
 
 /** Uploads static outward triangles once, retaining material identity under interaction tint. */
-function ArchitecturalVolumeMesh3D({ solid, color, state }: {
+function ArchitecturalVolumeMesh3D({ solid, role, state }: {
   readonly solid: ArchitecturalSolid3D;
-  readonly color: string;
+  readonly role: CanvasArchitecturalMaterialRole3D;
   readonly state: "idle" | "hovered" | "selected";
 }) {
+  const materials = useArchitecturalMaterials3D();
   const geometry = useMemo(() => {
     const result = new BufferGeometry();
     result.setAttribute("position", new Float32BufferAttribute(solid.positions, 3));
@@ -864,11 +1001,8 @@ function ArchitecturalVolumeMesh3D({ solid, color, state }: {
   }, [solid]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   if (solid.positions.length === 0) return null;
-  return <mesh geometry={geometry}>
-    <meshStandardMaterial color={color} roughness={0.95} metalness={0}
-      emissive={getArchitecturalEntityColor3D("#000000", state)}
-      emissiveIntensity={state === "selected" ? 0.35 : 0.18}
-    />
+  return <mesh geometry={geometry} material={materials[role]} castShadow receiveShadow>
+    <ArchitecturalInteractionEdges3D state={state} />
   </mesh>;
 }
 

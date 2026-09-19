@@ -3,7 +3,10 @@ import { useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 
 import type { SceneBounds3D } from "../model/architectural-scene-3d-model";
-import { createArchitecturalCameraPose3D } from "./architectural-camera-3d";
+import {
+  createArchitecturalCameraClippingPlanes3D,
+  createArchitecturalCameraPose3D
+} from "./architectural-camera-3d";
 
 type CameraControllerProps = {
   readonly bounds?: SceneBounds3D;
@@ -29,6 +32,21 @@ export function CameraController({
     const previous = framingStateRef.current;
     const fitChanged = fitRequest !== previous.fitRequest;
     const resetChanged = resetRequest !== previous.resetRequest;
+    const shouldFrame = !previous.hasFramed || fitChanged || resetChanged;
+    if (!shouldFrame) {
+      const target = controls?.target ?? bounds?.center ?? { x: 0, y: 0, z: 0 };
+      const clipping = createArchitecturalCameraClippingPlanes3D(
+        bounds,
+        camera.position.distanceTo(target)
+      );
+      camera.near = clipping.near;
+      camera.far = clipping.far;
+      camera.updateProjectionMatrix();
+      framingStateRef.current = { fitRequest, resetRequest, hasFramed: true };
+      onCameraChange();
+      invalidate();
+      return;
+    }
     const preserveCurrentDirection = previous.hasFramed && fitChanged && !resetChanged;
     const dampingEnabled = controls?.enableDamping;
     if (controls) {

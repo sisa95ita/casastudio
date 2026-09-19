@@ -40,16 +40,6 @@ export function getArchitecturalEntityPresentationState3D(
   return key === hoveredKey ? "hovered" : "idle";
 }
 
-/** Applies the shared CasaStudio blue selection language and a quieter hover tint. */
-export function getArchitecturalEntityColor3D(
-  idleColor: string,
-  state: ArchitecturalEntityPresentationState3D
-): string {
-  if (state === "selected") return "#246caf";
-  if (state === "hovered") return "#e7b980";
-  return idleColor;
-}
-
 /** Creates consistent semantic pointer events for any architectural hit assembly. */
 export function createEntityPointerHandlers3D(
   identity: ArchitecturalEntityIdentity3D,

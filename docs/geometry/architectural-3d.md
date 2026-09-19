@@ -105,8 +105,9 @@ geometry derivation.
 
 Clicking treads, risers, structural slab or Landing resolves to the canonical
 Staircase. Floor top, edge and bottom resolve to the Room. The Inspector displays
-read-only dimensions, elevations and semantic references. Hover/selection tint
-retains the different step, structural and Landing base materials.
+read-only dimensions, elevations and semantic references. Hover and selection
+use temporary semantic edge overlays, so the surface hierarchy and shared GLB
+materials are never recolored or mutated.
 
 Every generated vertex contributes to Stair bounds; Level and scene bounds
 include Stair bounds and both floor elevations. Fit/reset and visibility use
@@ -117,6 +118,55 @@ wedges, Flight slabs, and Landings. A Room uses two. Pure derived models are
 immutable and memoizable. Uploads are memoized, disposed on replacement/unmount,
 and never regenerated per frame. Non-indexed outward triangles preserve hard
 normals; these volumes use front-sided materials. The viewer remains lazy-loaded.
+
+## Scene presentation
+
+`architecturalPresentationProfile3D` is the renderer-neutral visual contract for
+the scene. It centralizes the warm Wall, Floor top, slab edge, Door, Window frame,
+glazing, Stair walking, Stair structure, and neutral Furniture fallback roles.
+Walls are the primary light architectural surface. Floor tops are warmer and
+darker, while exposed slab edges and undersides are quieter and deeper. Stair
+steps and Landings share a walking-surface material; inclined slabs and soffits
+share the structural material. A Wall Opening remains an invisible hit volume
+with an edge overlay only while hovered or selected, so it never reads as glass.
+
+The Canvas explicitly uses sRGB output, ACES filmic tone mapping, and one fixed
+exposure suitable for local GLB PBR assets. Window glazing uses one restrained
+transparent `MeshPhysicalMaterial` with low transmission and no refraction or
+environment-map infrastructure. No HDRI, environment preset, texture library,
+or remote runtime asset participates in the architectural finish.
+
+One hemisphere light supplies soft global readability. One warm directional key
+light casts soft shadows; its position, orthographic frustum, and clipping range
+scale from the complete visible renderer-neutral bounds. The shadow map remains
+1024 square. Walls, slabs, Stairs, Furniture, and Door/Window frames cast and
+receive shadows; glazing, interaction overlays, the grid, and semantic hit
+volumes do not. The neutral context plane receives shadows and is deliberately
+non-canonical and non-selectable as Project geometry.
+
+Architectural materials are created once per Canvas and reused by role. Static
+geometry remains memoized independently of lighting and interaction state.
+Furniture instances retain cached GLB geometry, source PBR materials, and
+textures; only their cloned Object3D nodes receive per-instance shadow flags.
+Fallback Furniture uses the same presentation profile. Demand rendering remains
+enabled, with OrbitControls invalidating frames while damping or interaction is
+active.
+
+## Camera framing and controls
+
+Initial and Reset framing use the same elevated three-quarter direction and the
+center of complete visible scene bounds. Fit uses those renderer-neutral bounds
+but preserves the user's current viewing direction. Both apply deterministic
+padding. Visibility changes and responsive resizes update clipping without
+silently resetting an established view; explicit Fit always reframes the newly
+visible content.
+
+Near/far planes and Orbit distance limits scale with physical scene radius. The
+near plane stays small enough for close architectural inspection, while the far
+plane includes wide footprints, tall Levels, Stairs, elevated slabs, and
+Furniture beyond the central footprint without using an unbounded ratio.
+Rotation, zoom, pan, damping, and polar limits prevent inversion while retaining
+normal architectural exploration.
 
 ## Canonical limits
 
@@ -129,8 +179,7 @@ Room slab when its canonical footprint overlaps that Room. No heuristic Stair
 hole is cut, and no elevated footprint is subtracted from a lower Room. Explicit
 floor/slab openings require a future domain contract.
 
-Furniture assets, furniture clearance validation and final material/lighting
-refinement are outside this architecture implementation.
+Furniture clearance validation remains outside this renderer contract.
 
 ## Verification
 

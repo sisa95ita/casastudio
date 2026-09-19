@@ -1,8 +1,17 @@
 import { Edges, RoundedBox, useGLTF } from "@react-three/drei";
-import { Component, Suspense, useMemo, type ReactNode } from "react";
+import { Component, Suspense, useLayoutEffect, useMemo, type ReactNode } from "react";
+import { MeshStandardMaterial, type Mesh, type Object3D } from "three";
 import { furnitureAssetTransform, type FurnitureModel3D } from "./model/furniture-3d-model";
 import type { FurnitureAssetDefinition } from "./assets/furniture-asset-registry";
 import type { ArchitecturalEntityPresentationState3D } from "./interaction/architectural-viewer-interaction-3d";
+import { architecturalPresentationProfile3D } from "./presentation/architectural-presentation-3d";
+
+const furnitureFallbackMaterial3D = new MeshStandardMaterial(
+  architecturalPresentationProfile3D.materials.furnitureFallback
+);
+const furnitureFallbackPlinthMaterial3D = new MeshStandardMaterial(
+  architecturalPresentationProfile3D.materials.furnitureFallbackPlinth
+);
 
 /** Isolates a failed resource to its own furnishing, leaving its semantic parent selectable. */
 export class FurnitureAssetBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
@@ -21,7 +30,9 @@ export function FurnitureAsset3D({ model, state }: { model: FurnitureModel3D; st
     {state !== "idle" && <mesh position={[0, model.height / 2, 0]} raycast={() => undefined}>
       <boxGeometry args={[model.width, model.height, model.depth]} />
       <meshBasicMaterial visible={false} />
-      <Edges color={state === "selected" ? "#246caf" : "#e7b980"} raycast={() => undefined} />
+      <Edges color={state === "selected"
+        ? architecturalPresentationProfile3D.interaction.selected
+        : architecturalPresentationProfile3D.interaction.hover} raycast={() => undefined} />
     </mesh>}
   </group>;
 }
@@ -32,6 +43,7 @@ function LoadedFurnitureAsset({ model, asset }: { model: FurnitureModel3D; asset
   const { scene } = useGLTF(asset.resource, false, false);
   const instance = useMemo(() => scene.clone(true), [scene]);
   const transform = useMemo(() => furnitureAssetTransform(asset, model), [asset, model]);
+  useLayoutEffect(() => prepareFurnitureInstance3D(instance), [instance]);
   // Cache owns geometry, materials and embedded textures. Unmount must not dispose shared resources.
   return <group scale={[...transform.scale]} dispose={null}>
     <group position={[...transform.offset]}><group rotation={[0, transform.yaw, 0]}>
@@ -40,18 +52,43 @@ function LoadedFurnitureAsset({ model, asset }: { model: FurnitureModel3D; asset
   </group>;
 }
 
+/** Enables normal architectural shadow participation without touching shared GLB resources. */
+export function prepareFurnitureInstance3D(instance: Object3D): () => void {
+  const meshes: Array<Readonly<{
+    mesh: Mesh;
+    castShadow: boolean;
+    receiveShadow: boolean;
+  }>> = [];
+  instance.traverse((object) => {
+    const mesh = object as Mesh;
+    if (!mesh.isMesh) return;
+    meshes.push({
+      mesh,
+      castShadow: mesh.castShadow,
+      receiveShadow: mesh.receiveShadow
+    });
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  });
+  return () => {
+    for (const original of meshes) {
+      original.mesh.castShadow = original.castShadow;
+      original.mesh.receiveShadow = original.receiveShadow;
+    }
+  };
+}
+
 /** Neutral chamfered volume and recessed plinth occupying the exact canonical physical envelope. */
 function FurnitureFallback3D({ model }: { model: FurnitureModel3D }) {
   const plinth = Math.min(model.height * 0.06, 0.04);
   const radius = Math.min(model.width, model.depth, model.height) * 0.025;
   return <group name="furniture-fallback">
     <RoundedBox args={[model.width, model.height - plinth, model.depth]} radius={radius} smoothness={2}
-      position={[0, (model.height + plinth) / 2, 0]}>
-      <meshStandardMaterial color="#a9aaa3" roughness={0.85} metalness={0} />
-    </RoundedBox>
-    <mesh position={[0, plinth / 2, 0]}>
+      position={[0, (model.height + plinth) / 2, 0]} material={furnitureFallbackMaterial3D}
+      castShadow receiveShadow dispose={null} />
+    <mesh position={[0, plinth / 2, 0]} material={furnitureFallbackPlinthMaterial3D}
+      castShadow receiveShadow dispose={null}>
       <boxGeometry args={[model.width * 0.9, plinth, model.depth * 0.9]} />
-      <meshStandardMaterial color="#666b68" roughness={0.9} />
     </mesh>
   </group>;
 }

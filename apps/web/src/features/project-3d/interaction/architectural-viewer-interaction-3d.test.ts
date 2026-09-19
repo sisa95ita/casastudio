@@ -3,21 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import { getArchitecturalEntityKey3D } from "./architectural-selection-3d";
 import {
   createEntityPointerHandlers3D,
-  getArchitecturalEntityColor3D,
   getArchitecturalEntityPresentationState3D,
   getProject3DShortcutAction,
   hasPointerGestureExceededSelectionThreshold3D
 } from "./architectural-viewer-interaction-3d";
 
 describe("architectural 3D viewer interaction", () => {
-  it("keeps hover and CasaStudio-blue selection visually distinct", () => {
+  it("gives selection precedence over transient hover", () => {
     const wall = { kind: "wall" as const, id: "wall-a", levelId: "ground" };
     const key = getArchitecturalEntityKey3D(wall);
 
     expect(getArchitecturalEntityPresentationState3D(wall, "", key)).toBe("hovered");
     expect(getArchitecturalEntityPresentationState3D(wall, key, key)).toBe("selected");
-    expect(getArchitecturalEntityColor3D("#d9c8b2", "hovered")).toBe("#e7b980");
-    expect(getArchitecturalEntityColor3D("#d9c8b2", "selected")).toBe("#246caf");
   });
 
   it("does not treat an Orbit drag as a selection click", () => {
