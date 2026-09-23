@@ -1,5 +1,9 @@
 import { createFurnitureModels3D, type FurnitureModel3D } from "./furniture-3d-model";
-import { GeometryEngine } from "@casastudio/geometry";
+import {
+  createArchitecturalWallEndpointInterfaces,
+  GeometryEngine,
+  type ArchitecturalWallEndpointInterfaces
+} from "@casastudio/geometry";
 import {
   convertPhysicalLength,
   getDoorHingeSide,
@@ -15,6 +19,10 @@ import {
 
 import { architectural3DProfile, type Architectural3DProfile } from "./architectural-3d-profile";
 import { createStaircase3D, type Staircase3D } from "./staircase-3d-model";
+import {
+  extrudeConvexPlanPolygon3D,
+  type ArchitecturalSolid3D
+} from "./architectural-solid-3d";
 
 import type { GeometrySnapshot } from "../../../core/api/api-types";
 
@@ -131,6 +139,17 @@ export type WallSection3D = Readonly<{
   top: number;
 }>;
 
+/** One Opening-aware Wall section with its final resolved physical footprint. */
+export type WallBodySection3D = WallSection3D & Readonly<{
+  contour: readonly [
+    ScenePlanVector3D,
+    ScenePlanVector3D,
+    ScenePlanVector3D,
+    ScenePlanVector3D
+  ];
+  solid: ArchitecturalSolid3D;
+}>;
+
 /** Stable meter-scaled local frame and solids derived from one canonical Wall. */
 export type Wall3D = Readonly<{
   id: string;
@@ -142,6 +161,7 @@ export type Wall3D = Readonly<{
   height: number;
   openings: readonly Opening3D[];
   sections: readonly WallSection3D[];
+  bodySections: readonly WallBodySection3D[];
   doors: readonly Door3D[];
   windows: readonly Window3D[];
   wallOpenings: readonly WallOpening3D[];
@@ -412,7 +432,18 @@ export function createArchitecturalScene3DModel(
   const furnitureModels = createFurnitureModels3D(project);
   const floorSources = collectFloorContourSources(project, geometrySnapshot);
   const levels = project.building.levels.map<Level3D>((level) => {
-    const walls = level.walls.map((wall) => createWall3D(wall, level.elevation, sourceUnit));
+    const endpointInterfaces = new Map(
+      createArchitecturalWallEndpointInterfaces(level).map((interfaces) => [
+        interfaces.wallId,
+        interfaces
+      ])
+    );
+    const walls = level.walls.map((wall) => createWall3D(
+      wall,
+      level.elevation,
+      sourceUnit,
+      endpointInterfaces.get(wall.id)
+    ));
     const segments = walls.map<LevelReferenceSegment3D>((wall) => Object.freeze({
       start: Object.freeze({ x: wall.origin.x, z: wall.origin.z }),
       end: Object.freeze({
@@ -555,7 +586,8 @@ function collectFloorContourSources(
 export function createWall3D(
   wall: Wall,
   levelElevation: number,
-  sourceUnit: MetricLengthUnit
+  sourceUnit: MetricLengthUnit,
+  endpointInterfaces?: ArchitecturalWallEndpointInterfaces
 ): Wall3D {
   const origin = projectPointToThree(wall.start, levelElevation, sourceUnit);
   const end = projectPointToThree(wall.end, levelElevation, sourceUnit);
@@ -596,6 +628,26 @@ export function createWall3D(
       wallOpenings.push(createWallOpening3D(wallFrame, opening3D));
     }
   });
+  const sections = decomposeWallSections3D(length, height, openings, wall.id);
+  const sceneInterfaces = endpointInterfaces
+    ? Object.freeze({
+        start: Object.freeze({
+          left: projectPlanPointToThree(endpointInterfaces.start.left, sourceUnit),
+          right: projectPlanPointToThree(endpointInterfaces.start.right, sourceUnit)
+        }),
+        end: Object.freeze({
+          left: projectPlanPointToThree(endpointInterfaces.end.left, sourceUnit),
+          right: projectPlanPointToThree(endpointInterfaces.end.right, sourceUnit)
+        })
+      })
+    : undefined;
+  const bodySections = sections.map((section) =>
+    createWallBodySection3D(
+      section,
+      { origin, u, n, length, thickness },
+      sceneInterfaces
+    )
+  );
   return Object.freeze({
     id: wall.id,
     origin,
@@ -605,10 +657,44 @@ export function createWall3D(
     thickness,
     height,
     openings: Object.freeze(openings),
-    sections: decomposeWallSections3D(length, height, openings, wall.id),
+    sections,
+    bodySections: Object.freeze(bodySections),
     doors: Object.freeze(doors),
     windows: Object.freeze(windows),
     wallOpenings: Object.freeze(wallOpenings)
+  });
+}
+
+type SceneWallEndpointInterfaces3D = Readonly<{
+  start: Readonly<{ left: ScenePlanVector3D; right: ScenePlanVector3D }>;
+  end: Readonly<{ left: ScenePlanVector3D; right: ScenePlanVector3D }>;
+}>;
+
+/** Extrudes one Wall-owned section after applying only its outer endpoint interfaces. */
+function createWallBodySection3D(
+  section: WallSection3D,
+  wall: Pick<Wall3D, "origin" | "u" | "n" | "length" | "thickness">,
+  interfaces?: SceneWallEndpointInterfaces3D
+): WallBodySection3D {
+  const pointAt = (along: number, canonicalLeft: boolean): ScenePlanVector3D => {
+    const normal = (canonicalLeft ? -1 : 1) * wall.thickness / 2;
+    return Object.freeze({
+      x: wall.origin.x + wall.u.x * along + wall.n.x * normal,
+      z: wall.origin.z + wall.u.z * along + wall.n.z * normal
+    });
+  };
+  const contour: WallBodySection3D["contour"] = Object.freeze([
+    section.start === 0 && interfaces ? interfaces.start.left : pointAt(section.start, true),
+    section.start === 0 && interfaces ? interfaces.start.right : pointAt(section.start, false),
+    section.end === wall.length && interfaces ? interfaces.end.right : pointAt(section.end, false),
+    section.end === wall.length && interfaces ? interfaces.end.left : pointAt(section.end, true)
+  ]);
+  const bottomY = wall.origin.y + section.bottom;
+  const topY = wall.origin.y + section.top;
+  return Object.freeze({
+    ...section,
+    contour,
+    solid: extrudeConvexPlanPolygon3D(contour, bottomY, topY)
   });
 }
 
@@ -781,18 +867,13 @@ function collectFloorBoundsPoints(floors: readonly Floor3D[]): ScenePoint3D[] {
 /** Expands Wall solids and entity corners into world points for exact rendered bounds. */
 function collectWallBoundsPoints(walls: readonly Wall3D[]): ScenePoint3D[] {
   return walls.flatMap((wall) => [
-    ...wall.sections.flatMap((section) => {
-      const halfThickness = wall.thickness / 2;
-      return [section.start, section.end].flatMap((along) =>
-        [section.bottom, section.top].flatMap((vertical) =>
-          [-halfThickness, halfThickness].map((normal) => ({
-            x: wall.origin.x + wall.u.x * along + wall.n.x * normal,
-            y: wall.origin.y + vertical,
-            z: wall.origin.z + wall.u.z * along + wall.n.z * normal
-          }))
-        )
-      );
-    }),
+    ...wall.bodySections.flatMap((section) =>
+      section.contour.flatMap((point) => [section.bottom, section.top].map((vertical) => ({
+        x: point.x,
+        y: wall.origin.y + vertical,
+        z: point.z
+      })))
+    ),
     ...wall.doors.flatMap((door) => collectPanelBoundsPoints(door.leaf)),
     ...wall.windows.flatMap((window) => [
       ...window.frameBars.flatMap((bar) => collectPanelBoundsPoints({

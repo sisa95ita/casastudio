@@ -19,6 +19,39 @@ space; the owning Level elevation must never be added to them.
 slab thickness (0.16 m). Callers can supply the small renderer-neutral profile to
 pure derivation. Neither dimension is stored in ProjectSchema.
 
+## Physical Wall bodies and junctions
+
+Canonical Wall start/end segments, thickness, height, and Opening offsets remain
+authoritative. `createArchitecturalWallEndpointInterfaces` groups exact canonical
+endpoints and sorts incident rays around each node. It intersects each Wall face
+line with the adjacent incident face line, producing final left/right physical
+interfaces without moving the reference endpoint. This endpoint contract is pure
+geometry used by the 3D model; the established 2D plan convention remains
+independent.
+
+Incident endpoint directions always point away from their shared node, making the
+result independent of canonical Wall direction. A two-Wall corner resolves both
+the inner and outer face intersections, so the two Wall bodies share one mitered
+end interface. At a T node, the branch interface lands on the through-Wall face;
+the two collinear through segments retain their common square caps. Three-or-more
+Wall nodes retain overlapping square caps where those caps already cover the
+node; only branch-to-through boundaries and an uncovered exterior angular sector
+are resolved against adjacent faces. This deterministic overlap policy avoids a
+central polygonal void without creating separate junction geometry.
+
+Near-parallel intersections are replaced by a shared bevel point bounded by four
+times the largest incident half-thickness and 45 percent of either incident Wall
+length. Different thicknesses retain their individual face offsets. Opening
+subdivision remains in canonical Wall-local distance: only sections touching a
+Wall start or end use its resolved interface, while sill, header, and interior
+sections retain their exact spans.
+
+Each resulting four-point section footprint is extruded directly into a closed,
+outward-wound Wall solid. Every surface remains owned by its canonical Wall and
+uses the shared Wall material, shadow flags, hover, and selection behavior. Final
+Wall footprint vertices contribute to Level and scene bounds; presentation
+context does not.
+
 ## Room floor volumes
 
 `Floor3D.y` is the canonical global walking elevation. `bottomY` is `y` minus the
@@ -111,7 +144,7 @@ materials are never recolored or mutated.
 
 Every generated vertex contributes to Stair bounds; Level and scene bounds
 include Stair bounds and both floor elevations. Fit/reset and visibility use
-these same bounds. Walls and Opening sections retain their existing generation.
+these same bounds. Wall bounds use the final endpoint-resolved section footprints.
 
 Each Staircase uploads at most three static BufferGeometries: batched step
 wedges, Flight slabs, and Landings. A Room uses two. Pure derived models are
@@ -143,6 +176,14 @@ scale from the complete visible renderer-neutral bounds. The shadow map remains
 receive shadows; glazing, interaction overlays, the grid, and semantic hit
 volumes do not. The neutral context plane receives shadows and is deliberately
 non-canonical and non-selectable as Project geometry.
+
+The context plane datum is the lowest visible Room floor top, or the lowest
+visible Level datum when there are no Room floors, with zero as the empty-scene
+fallback. The plane sits 0.001 m below that walking datum and the grid sits 0.001 m
+above it. Floor slabs keep their full volume below their canonical top: the ground
+plane visually meets the lowest floor while elevated Room and upper-Level slab
+edges remain exposed. Context and grid remain presentation-only, do not contribute
+to architectural bounds, and do not change Floor, Wall, or Level elevations.
 
 Architectural materials are created once per Canvas and reused by role. Static
 geometry remains memoized independently of lighting and interaction state.

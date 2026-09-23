@@ -3,6 +3,7 @@ import type { Door, Wall, WallOpening, Window } from "@casastudio/schema";
 
 import {
   createArchitecturalWallBodyShapes,
+  createArchitecturalWallEndpointInterfaces,
   createArchitecturalWallShape,
   createDoorPlanGeometry,
   createOpeningPlanSpan,
@@ -71,6 +72,118 @@ describe("architectural plan geometry", () => {
     expect(geometry).not.toHaveProperty("openLeafEnd");
     expect(geometry).not.toHaveProperty("arcRadius");
   });
+
+  it("resolves both physical faces of a 90-degree corner into shared miters", () => {
+    const [east, north] = createArchitecturalWallEndpointInterfaces({
+      walls: [ray("east", 100, 0), ray("north", 0, 100)]
+    });
+
+    expect(east?.start).toEqual({
+      left: { x: 10, z: 10 },
+      right: { x: -10, z: -10 },
+      kind: "miter"
+    });
+    expect(north?.start).toEqual({
+      left: { x: -10, z: -10 },
+      right: { x: 10, z: 10 },
+      kind: "miter"
+    });
+  });
+
+  it("is invariant to canonical Wall direction at an equivalent corner", () => {
+    const forward = createArchitecturalWallEndpointInterfaces({
+      walls: [ray("east", 100, 0), ray("north", 0, 100)]
+    });
+    const reversed = createArchitecturalWallEndpointInterfaces({
+      walls: [reverseRay("east", 100, 0), reverseRay("north", 0, 100)]
+    });
+    expect(sortedPoints([reversed[0]!.end.left, reversed[0]!.end.right])).toEqual(
+      sortedPoints([forward[0]!.start.left, forward[0]!.start.right])
+    );
+    expect(sortedPoints([reversed[1]!.end.left, reversed[1]!.end.right])).toEqual(
+      sortedPoints([forward[1]!.start.left, forward[1]!.start.right])
+    );
+  });
+
+  it("keeps collinear continuations capped and trims a T branch to the through-Wall face", () => {
+    const west = ray("west", -100, 0);
+    const east = ray("east", 100, 0);
+    const north = ray("north", 0, 100);
+    const continuation = createArchitecturalWallEndpointInterfaces({ walls: [west, east] });
+    expect(continuation.map((interfaces) => interfaces.start.kind)).toEqual(["cap", "cap"]);
+
+    const tee = interfaceMap([west, east, north]);
+    expect(tee.get("north")?.start).toMatchObject({
+      left: { x: -10, z: 10 },
+      right: { x: 10, z: 10 },
+      kind: "miter"
+    });
+    expect(tee.get("east")?.start).toMatchObject({
+      left: { x: 0, z: 10 },
+      right: { x: 0, z: -10 },
+      kind: "cap"
+    });
+    expect(tee.get("west")?.start).toMatchObject({
+      left: { x: 0, z: -10 },
+      right: { x: 0, z: 10 },
+      kind: "cap"
+    });
+  });
+
+  it("resolves arbitrary angles with finite shared face intersections", () => {
+    const radians = 37 * Math.PI / 180;
+    const interfaces = interfaceMap([
+      ray("east", 100, 0),
+      ray("angled", Math.cos(radians) * 100, Math.sin(radians) * 100)
+    ]);
+    const east = interfaces.get("east")!.start;
+    const angled = interfaces.get("angled")!.start;
+    expect(east.left).toEqual(angled.right);
+    expect(east.right).toEqual(angled.left);
+    expect([east.left, east.right].flatMap((point) => [point.x, point.z])
+      .every(Number.isFinite)).toBe(true);
+    expect(east.kind).toBe("miter");
+  });
+
+  it("preserves different face offsets and bounds near-parallel interfaces", () => {
+    const differentThickness = interfaceMap([
+      ray("east", 100, 0, 20),
+      ray("north", 0, 100, 40)
+    ]);
+    expect(differentThickness.get("east")?.start).toMatchObject({
+      left: { x: 20, z: 10 },
+      right: { x: -20, z: -10 }
+    });
+    expect(differentThickness.get("north")?.start).toMatchObject({
+      left: { x: -20, z: -10 },
+      right: { x: 20, z: 10 }
+    });
+
+    const radians = Math.PI / 180;
+    const nearParallel = interfaceMap([
+      ray("east", 100, 0),
+      ray("near", Math.cos(radians) * 100, Math.sin(radians) * 100)
+    ]);
+    const points = [...nearParallel.values()].flatMap((interfaces) => [
+      interfaces.start.left,
+      interfaces.start.right
+    ]);
+    expect([...nearParallel.values()].map((interfaces) => interfaces.start.kind))
+      .toEqual(["bounded", "bounded"]);
+    expect(Math.max(...points.map((point) => Math.hypot(point.x, point.z))))
+      .toBeLessThanOrEqual(40 + 1e-9);
+  });
+
+  it("keeps Opening subdivision unchanged near a resolved endpoint", () => {
+    const east = ray("east", 200, 0);
+    east.openings.push(window("near-corner", 20, 50));
+    const interfaces = interfaceMap([east, ray("north", 0, 200)]);
+    expect(interfaces.get("east")?.start.kind).toBe("miter");
+    expect(createArchitecturalWallBodyShapes(east)
+      .map((shape) => [shape.startDistance, shape.endDistance]))
+      .toEqual([[0, 20], [70, 200]]);
+    expect(east.openings[0]).toMatchObject({ offsetFromStart: 20, width: 50 });
+  });
 });
 
 function window(id: string, offsetFromStart: number, width: number): Window {
@@ -79,4 +192,33 @@ function window(id: string, offsetFromStart: number, width: number): Window {
 
 function distance(first: { x: number; z: number }, second: { x: number; z: number }): number {
   return Math.hypot(second.x - first.x, second.z - first.z);
+}
+
+function ray(id: string, x: number, z: number, thickness = 20): Wall {
+  return {
+    id,
+    start: { x: 0, z: 0 },
+    end: { x, z },
+    height: 280,
+    thickness,
+    roomIds: [],
+    openings: []
+  };
+}
+
+function reverseRay(id: string, x: number, z: number): Wall {
+  return { ...ray(id, x, z), start: { x, z }, end: { x: 0, z: 0 } };
+}
+
+function sortedPoints(points: readonly { x: number; z: number }[]) {
+  return [...points].sort((left, right) => left.x - right.x || left.z - right.z);
+}
+
+function interfaceMap(walls: readonly Wall[]) {
+  return new Map(
+    createArchitecturalWallEndpointInterfaces({ walls }).map((interfaces) => [
+      interfaces.wallId,
+      interfaces
+    ])
+  );
 }

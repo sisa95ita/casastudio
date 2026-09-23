@@ -52,6 +52,9 @@ describe("architectural presentation model", () => {
     expect(model.windows[0]?.glazingLines).toHaveLength(2);
     expect(model.joins).toHaveLength(1);
     expect(model.joins[0]?.radius).toBe(10);
+    expect(model.joins[0]).not.toHaveProperty("bodySvgPoints");
+    expect(model.walls.find((wall) => wall.geometryId === "return")?.bodySvgPoints)
+      .toEqual(["490,500 510,500 510,200 490,200"]);
   });
 
   it("keeps Wall geometry stable while exposing distinct hover and selected states", () => {

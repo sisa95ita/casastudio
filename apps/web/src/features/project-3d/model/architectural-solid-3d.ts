@@ -1,4 +1,7 @@
-import type { ScenePoint3D } from "./architectural-scene-3d-model";
+import type {
+  ScenePlanVector3D,
+  ScenePoint3D
+} from "./architectural-scene-3d-model";
 
 /** Non-indexed outward-wound triangles in meter-scaled scene space. */
 export type ArchitecturalSolid3D = Readonly<{ positions: readonly number[] }>;
@@ -11,6 +14,36 @@ export function createArchitecturalSolid3D(positions: readonly number[]): Archit
 /** Combines derived solids without changing geometry or semantic ownership. */
 export function mergeArchitecturalSolids3D(solids: readonly ArchitecturalSolid3D[]): ArchitecturalSolid3D {
   return createArchitecturalSolid3D(solids.flatMap((solid) => solid.positions));
+}
+
+/** Extrudes one convex plan contour into a closed outward-wound vertical solid. */
+export function extrudeConvexPlanPolygon3D(
+  contour: readonly ScenePlanVector3D[],
+  bottomY: number,
+  topY: number
+): ArchitecturalSolid3D {
+  if (contour.length < 3 || !Number.isFinite(bottomY) || !Number.isFinite(topY) || topY <= bottomY) {
+    throw new Error("A convex architectural extrusion requires a valid contour and vertical extent.");
+  }
+  const bottom = contour.map((point) => ({ x: point.x, y: bottomY, z: point.z }));
+  const top = contour.map((point) => ({ x: point.x, y: topY, z: point.z }));
+  const interior = {
+    x: contour.reduce((sum, point) => sum + point.x, 0) / contour.length,
+    y: (bottomY + topY) / 2,
+    z: contour.reduce((sum, point) => sum + point.z, 0) / contour.length
+  };
+  const positions: number[] = [];
+  appendSolidFace3D(positions, top, interior);
+  appendSolidFace3D(positions, bottom, interior);
+  contour.forEach((_point, index) => {
+    const next = (index + 1) % contour.length;
+    appendSolidFace3D(
+      positions,
+      [bottom[index]!, bottom[next]!, top[next]!, top[index]!],
+      interior
+    );
+  });
+  return createArchitecturalSolid3D(positions);
 }
 
 /** Emits a convex planar face, oriented away from a known interior point. */

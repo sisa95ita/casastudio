@@ -42,6 +42,7 @@ import {
 } from "three";
 
 import { createFloorSolid3D } from "./model/floor-solid-3d";
+import { createGroundReference3D } from "./model/ground-reference-3d";
 import type { ArchitecturalSolid3D } from "./model/architectural-solid-3d";
 import type { Staircase3D } from "./model/staircase-3d-model";
 
@@ -497,7 +498,7 @@ function ArchitecturalFoundationScene({
 }: ArchitecturalFoundationSceneProps) {
   const controlsRef = useRef<React.ElementRef<typeof OrbitControls>>(null);
   const { camera, size } = useThree();
-  const ground = useMemo(() => createGroundReference(bounds), [bounds]);
+  const ground = useMemo(() => createGroundReference3D(levels, bounds), [bounds, levels]);
   const orbitLimits = useMemo(() => createArchitecturalOrbitLimits3D(bounds), [bounds]);
   const reportCameraChange = useCallback(() => {
     const target = controlsRef.current?.target ?? bounds?.center ?? { x: 0, y: 0, z: 0 };
@@ -597,7 +598,7 @@ function ArchitecturalFoundationScene({
           architecturalPresentationProfile3D.world.gridMajor,
           architecturalPresentationProfile3D.world.gridMinor
         ]}
-        position={[ground.centerX, ground.y + 0.002, ground.centerZ]}
+        position={[ground.centerX, ground.gridY, ground.centerZ]}
         raycast={() => null}
       />
       {levels.map((level) => (
@@ -782,48 +783,28 @@ function ArchitecturalFurniture3D({ model, ...interaction }: { model: FurnitureM
   </group>;
 }
 
-/** Extrudes the immutable rectangular sections belonging to one architectural Wall. */
+/** Renders final endpoint-resolved solids belonging to one architectural Wall. */
 function ArchitecturalWall3D({
   model,
   levelId,
   ...interaction
 }: { readonly model: Wall3D; readonly levelId: string } & ArchitecturalInteractionContext3D) {
-  const rotationY = Math.atan2(-model.u.z, model.u.x);
   const identity = useMemo<ArchitecturalEntityIdentity3D>(
     () => Object.freeze({ kind: "wall", id: model.id, levelId }),
     [levelId, model.id]
   );
   const { state, handlers } = useArchitecturalEntityInteraction3D(identity, interaction);
-  const materials = useArchitecturalMaterials3D();
   return (
     <group name={`architectural-wall:${model.id}`}>
-      <group
-        position={[model.origin.x, model.origin.y, model.origin.z]}
-        rotation={[0, rotationY, 0]}
-      >
-        {model.sections.map((section, index) => {
-          const width = section.end - section.start;
-          const height = section.top - section.bottom;
-          return (
-            <mesh
-              key={`${section.start}:${section.end}:${section.bottom}:${section.top}:${index}`}
-              name={`architectural-wall-section:${model.id}:${index}`}
-              position={[
-                section.start + width / 2,
-                section.bottom + height / 2,
-                0
-              ]}
-              material={materials.wall}
-              {...handlers}
-              castShadow
-              receiveShadow
-            >
-              <boxGeometry args={[width, height, model.thickness]} />
-              <ArchitecturalInteractionEdges3D state={state} />
-            </mesh>
-          );
-        })}
-      </group>
+      {model.bodySections.map((section, index) => (
+        <group
+          key={`${section.start}:${section.end}:${section.bottom}:${section.top}:${index}`}
+          name={`architectural-wall-section:${model.id}:${index}`}
+          {...handlers}
+        >
+          <ArchitecturalVolumeMesh3D solid={section.solid} role="wall" state={state} />
+        </group>
+      ))}
       {model.doors.map((door) => (
         <ArchitecturalDoor3D key={door.id} model={door} levelId={levelId} {...interaction} />
       ))}
@@ -1033,28 +1014,6 @@ function useArchitecturalEntityInteraction3D(
 /** Formats camera telemetry without coupling architectural state to Three objects. */
 function formatCameraTelemetryNumber(value: number): string {
   return value.toFixed(6);
-}
-
-/** Physical ground reference derived from scene bounds with a safe empty fallback. */
-type GroundReference3D = Readonly<{
-  centerX: number;
-  centerZ: number;
-  y: number;
-  size: number;
-  divisions: number;
-}>;
-
-/** Derives a restrained ground plane that contains the current physical bounds. */
-function createGroundReference(bounds?: SceneBounds3D): GroundReference3D {
-  const span = bounds ? Math.max(bounds.size.x, bounds.size.z) : 5;
-  const size = Math.max(10, Math.ceil(span * 1.5));
-  return Object.freeze({
-    centerX: bounds?.center.x ?? 0,
-    centerZ: bounds?.center.z ?? 0,
-    y: Math.min(0, bounds?.min.y ?? 0) - 0.01,
-    size,
-    divisions: Math.min(100, Math.max(10, Math.round(size)))
-  });
 }
 
 /** Detects whether this browser can create a WebGL rendering context. */
