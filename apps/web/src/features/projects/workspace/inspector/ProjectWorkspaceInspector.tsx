@@ -17,7 +17,7 @@ import type {
   Wall
 } from "@casastudio/schema";
 import { Box, Tab, Tabs, Typography } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 import { useCasaTranslation } from "../../../../core/i18n";
 import { ProjectLayerControls } from "../../../editor-2d/components/ProjectLayerControls";
@@ -101,6 +101,9 @@ type ProjectWorkspaceInspectorProps = {
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly selectedVertexRemovable: boolean;
   readonly units?: Project["units"];
+  readonly levelBelow?: ComponentProps<
+    typeof ProjectLayerControls
+  >["levelBelow"];
   readonly onDeleteWall: () => void;
   readonly onAddWallVertex: () => void;
   readonly onRemoveVertex: () => void;
@@ -181,6 +184,7 @@ export function ProjectWorkspaceInspector({
   endpointAvailability,
   selectedVertexRemovable,
   units,
+  levelBelow,
   onDeleteWall,
   onAddWallVertex,
   onRemoveVertex,
@@ -265,6 +269,7 @@ export function ProjectWorkspaceInspector({
             onOptionsChange={onOptionsChange}
             measurement={levelMeasurement}
             units={units}
+            levelBelow={levelBelow}
           />
         ) : units &&
           furniture &&

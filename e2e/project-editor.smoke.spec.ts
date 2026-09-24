@@ -298,7 +298,6 @@ test("creates, places, persists, and reloads a rectangular Room shape", async ({
   await expect(
     page.getByRole("heading", { name: projectName, level: 1 })
   ).toBeVisible();
-  await page.getByRole("button", { name: "Edit plan" }).click();
   await page.getByRole("button", { name: "Room", exact: true }).click();
   const inspector = page.getByRole("complementary", { name: "Inspector" });
   await expect(inspector.getByTestId("room-authoring-inspector")).toBeVisible();
@@ -713,7 +712,6 @@ test("persists an elevated Room overlay and asymmetric L-shaped Staircase", asyn
   await page.getByRole("button", { name: "New Project" }).click();
   await page.getByLabel("Project name").fill(projectName);
   await page.getByRole("button", { name: "Create" }).click();
-  await page.getByRole("button", { name: "Edit plan" }).click();
   const inspector = page.getByRole("complementary", { name: "Inspector" });
 
   await page.getByRole("button", { name: "Room", exact: true }).click();

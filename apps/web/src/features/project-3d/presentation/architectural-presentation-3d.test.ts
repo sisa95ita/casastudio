@@ -25,6 +25,7 @@ describe("architectural 3D presentation", () => {
     }
     expect(profile.materials.wall.color).not.toBe(profile.materials.floorTop.color);
     expect(profile.materials.floorTop.color).not.toBe(profile.materials.floorEdge.color);
+    expect(profile.materials.floorBottom).toEqual(profile.materials.floorEdge);
     expect(profile.materials.stairWalking.color).not.toBe(profile.materials.stairStructure.color);
     expect(profile.interaction.hover).not.toBe(profile.interaction.selected);
   });

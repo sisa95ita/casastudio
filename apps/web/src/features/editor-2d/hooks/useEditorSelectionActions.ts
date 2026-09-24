@@ -51,6 +51,7 @@ export type EditingErrorKey =
   | RoomEditingErrorKey
   | "errors.opening.invalid"
   | "errors.stair.invalid"
+  | "errors.levelCopy.invalid"
   | "errors.selection.invalid";
 
 type UseEditorSelectionActionsOptions = {

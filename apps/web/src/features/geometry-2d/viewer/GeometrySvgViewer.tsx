@@ -168,6 +168,8 @@ export type GeometrySvgViewerProps = {
   readonly onFurniturePointerCancel?: () => void;
   readonly presentationModel: GeometryPresentationModel2D;
   readonly architecturalModel?: ArchitecturalPresentationModel2D;
+  /** Non-interactive lower-Level architecture sharing the active viewport transform. */
+  readonly referenceArchitecturalModel?: ArchitecturalPresentationModel2D;
   readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
@@ -391,6 +393,7 @@ export function GeometrySvgViewer({
   onFurniturePointerCancel,
   presentationModel,
   architecturalModel,
+  referenceArchitecturalModel,
   dimensionModel,
   options,
   viewport,
@@ -466,6 +469,10 @@ export function GeometrySvgViewer({
   const rendersSvgViewport = Boolean(
     bounds ||
     architecturalModel?.staircases.length ||
+    referenceArchitecturalModel?.walls.length ||
+    referenceArchitecturalModel?.doors.length ||
+    referenceArchitecturalModel?.windows.length ||
+    referenceArchitecturalModel?.openings.length ||
     interaction.drawWallEnabled ||
     interaction.measurementEnabled ||
     interaction.roomShapePlacementEnabled ||
@@ -1356,6 +1363,51 @@ export function GeometrySvgViewer({
               className={getEntityClassName("geometry-room-contour", polygon)}
               points={polygon.svgPoints}
             />
+          ))}
+        </g>
+      ) : null}
+
+      {referenceArchitecturalModel ? (
+        <g
+          data-layer="reference-level-below"
+          data-testid="reference-level-below"
+          className="architectural-level-reference"
+          aria-hidden="true"
+        >
+          {referenceArchitecturalModel.joins.map((join, index) => (
+            <circle
+              key={`${join.point.x}:${join.point.y}:${index}`}
+              className="architectural-level-reference__wall"
+              cx={formatSvgNumber(join.point.x)}
+              cy={formatSvgNumber(join.point.y)}
+              r={formatSvgNumber(join.radius)}
+            />
+          ))}
+          {referenceArchitecturalModel.walls.flatMap((wall) =>
+            wall.bodySvgPoints.map((points, index) => (
+              <polygon
+                key={`${wall.geometryId}:${index}`}
+                data-reference-wall-id={wall.geometryId}
+                className="architectural-level-reference__wall"
+                points={points}
+              />
+            ))
+          )}
+          {[
+            ...referenceArchitecturalModel.doors,
+            ...referenceArchitecturalModel.windows,
+            ...referenceArchitecturalModel.openings
+          ].map((opening) => (
+            <g key={opening.geometryId}>
+              <line
+                className="architectural-level-reference__opening-gap"
+                {...lineAttributes(opening.spanStart, opening.spanEnd)}
+              />
+              <line
+                className="architectural-level-reference__opening-mark"
+                {...lineAttributes(opening.spanStart, opening.spanEnd)}
+              />
+            </g>
           ))}
         </g>
       ) : null}

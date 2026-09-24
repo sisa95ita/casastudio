@@ -45,7 +45,10 @@ import {
   type DirectionalLight
 } from "three";
 
-import { createFloorSolid3D } from "./model/floor-solid-3d";
+import {
+  createFloorSolid3D,
+  floorSurfaceMaterialRoles3D
+} from "./model/floor-solid-3d";
 import { createGroundReference3D } from "./model/ground-reference-3d";
 import type { ArchitecturalSolid3D } from "./model/architectural-solid-3d";
 import type { Staircase3D } from "./model/staircase-3d-model";
@@ -907,6 +910,7 @@ const canvasArchitecturalMaterialRoles3D: readonly CanvasArchitecturalMaterialRo
     "wall",
     "floorTop",
     "floorEdge",
+    "floorBottom",
     "door",
     "openingFrame",
     "glazing",
@@ -1449,12 +1453,22 @@ function ArchitecturalFloor3D({
     <group name={`architectural-floor:${model.roomId}`} {...handlers}>
       <ArchitecturalVolumeMesh3D
         solid={solids.top}
-        role="floorTop"
+        role={floorSurfaceMaterialRoles3D.top}
         state={state}
       />
       <ArchitecturalVolumeMesh3D
-        solid={solids.edgesAndBottom}
-        role="floorEdge"
+        solid={solids.wallEdges}
+        role={floorSurfaceMaterialRoles3D.wallEdge}
+        state={state}
+      />
+      <ArchitecturalVolumeMesh3D
+        solid={solids.freeEdges}
+        role={floorSurfaceMaterialRoles3D.freeEdge}
+        state={state}
+      />
+      <ArchitecturalVolumeMesh3D
+        solid={solids.bottom}
+        role={floorSurfaceMaterialRoles3D.bottom}
         state={state}
       />
     </group>

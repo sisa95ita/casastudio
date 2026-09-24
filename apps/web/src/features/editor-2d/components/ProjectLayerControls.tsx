@@ -5,7 +5,7 @@ import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import StraightenRoundedIcon from "@mui/icons-material/StraightenRounded";
 import ViewStreamRoundedIcon from "@mui/icons-material/ViewStreamRounded";
-import { Box, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
+import { Box, Button, Divider, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
 import type { LevelMeasurement } from "@casastudio/geometry";
 import {
   formatArchitecturalArea,
@@ -23,6 +23,13 @@ export type ProjectLayerControlsProps = {
   readonly onOptionsChange: (options: GeometryDisplayOptions) => void;
   readonly measurement?: LevelMeasurement;
   readonly units?: Project["units"];
+  readonly levelBelow?: {
+    readonly name: string;
+    readonly visible: boolean;
+    readonly createDisabled: boolean;
+    readonly onVisibleChange: (visible: boolean) => void;
+    readonly onCreate: () => void;
+  };
 };
 
 /** One semantic layer and its mapping to renderer presentation flags. */
@@ -88,7 +95,8 @@ export function ProjectLayerControls({
   options,
   onOptionsChange,
   measurement,
-  units
+  units,
+  levelBelow
 }: ProjectLayerControlsProps) {
   const { t } = useCasaTranslation("project-viewer");
 
@@ -138,6 +146,42 @@ export function ProjectLayerControls({
           );
         })}
       </Box>
+
+      {levelBelow ? (
+        <Stack spacing={1.25} className="project-level-reference-control">
+          <Divider />
+          <FormControlLabel
+            className="project-layer-control"
+            control={
+              <Switch
+                checked={levelBelow.visible}
+                onChange={(_event, visible) => levelBelow.onVisibleChange(visible)}
+                size="small"
+                slotProps={{ input: { "aria-label": t("layers.levelBelow") } }}
+              />
+            }
+            label={
+              <Typography variant="body2">
+                {t("layers.levelBelowNamed", { level: levelBelow.name })}
+              </Typography>
+            }
+            labelPlacement="start"
+          />
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={levelBelow.createDisabled}
+            onClick={levelBelow.onCreate}
+          >
+            {t("layers.createFromBelow")}
+          </Button>
+          {levelBelow.createDisabled ? (
+            <Typography variant="caption" color="text.secondary">
+              {t("layers.createFromBelowDisabled")}
+            </Typography>
+          ) : null}
+        </Stack>
+      ) : null}
 
       {measurement && units ? (
         <Box className="project-plan-summary" aria-label={t("planSummary.title")}>

@@ -241,6 +241,19 @@ function createProjectWithDoor(): Project {
   return project;
 }
 
+function createProjectWithEmptyUpperLevel(): Project {
+  const project = structuredClone(demoProjectFixture);
+  project.building.levels.push({
+    id: "first-floor",
+    name: "First Floor",
+    elevation: 300,
+    rooms: [],
+    walls: [],
+    staircases: []
+  });
+  return project;
+}
+
 async function renderEditingProject(project = demoProjectFixture) {
   const result = renderConnectedRoute(createApiClient(projectFetch(project)));
   fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
@@ -1683,6 +1696,87 @@ describe("ProjectViewerPage", () => {
     expect(within(inspector).getByText("24.00 m²")).toBeTruthy();
     expect(within(inspector).getByText("8.00 m")).toBeTruthy();
     expect(within(inspector).getByText("3.00 m")).toBeTruthy();
+  });
+
+  it("keeps the Level-below reference presentation-only and copies Walls atomically", async () => {
+    const project = createProjectWithEmptyUpperLevel();
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    const inspector = screen.getByRole("complementary", {
+      name: "Test inspector"
+    });
+    expect(
+      within(inspector).queryByRole("switch", {
+        name: "Reference level below"
+      })
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
+
+    const referenceToggle = await within(inspector).findByRole("switch", {
+      name: "Reference level below"
+    });
+    expect(referenceToggle).toHaveProperty("checked", true);
+    expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    const draftBeforeToggle = JSON.stringify(
+      store.getState().projectEditor.draft
+    );
+
+    fireEvent.click(referenceToggle);
+    expect(screen.queryByTestId("reference-level-below")).toBeNull();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history.past).toHaveLength(0);
+    expect(JSON.stringify(store.getState().projectEditor.draft)).toBe(
+      draftBeforeToggle
+    );
+
+    fireEvent.click(referenceToggle);
+    expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    fireEvent.click(
+      within(inspector).getByRole("button", {
+        name: "Create from level below"
+      })
+    );
+
+    const state = store.getState().projectEditor;
+    const lower = state.draft!.building.levels[0]!;
+    const upper = state.draft!.building.levels.find(
+      (level) => level.id === "first-floor"
+    )!;
+    expect(upper.walls).toHaveLength(lower.walls.length);
+    expect(upper.walls.map((wall) => wall.id)).not.toEqual(
+      lower.walls.map((wall) => wall.id)
+    );
+    expect(
+      upper.walls.map((wall) => [wall.start, wall.end, wall.thickness])
+    ).toEqual(
+      lower.walls.map((wall) => [wall.start, wall.end, wall.thickness])
+    );
+    expect(upper.walls.every((wall) => wall.openings.length === 0)).toBe(true);
+    expect(upper.rooms).toEqual([]);
+    expect(upper.staircases).toEqual([]);
+    expect(state.history.past).toHaveLength(1);
+    expect(state.dirty).toBe(true);
+    expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    expect(
+      within(inspector).getByRole("button", {
+        name: "Create from level below"
+      })
+    ).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      store.getState().projectEditor.draft!.building.levels.at(-1)!.walls
+    ).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(
+      store.getState().projectEditor.draft!.building.levels.at(-1)!.walls
+    ).toHaveLength(lower.walls.length);
   });
 
   it("commits Room metadata and dissolution once each with semantic undo", async () => {

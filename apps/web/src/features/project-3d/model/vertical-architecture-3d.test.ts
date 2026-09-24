@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { demoProjectFixture } from "../../../test/demo-project-fixture";
 import { createVerticalArchitectureFixture } from "../../../test/vertical-architecture-fixture";
 import { architectural3DProfile } from "./architectural-3d-profile";
-import { createFloorSolid3D } from "./floor-solid-3d";
+import { createFloorSolid3D, floorSurfaceMaterialRoles3D } from "./floor-solid-3d";
 import { createArchitecturalScene3DModel, collectVisibleSceneBounds3D, getVisibleLevelReferences3D, triangulateFloorContour3D, type ScenePoint3D } from "./architectural-scene-3d-model";
 import { createStairFlight3D, createStairLanding3D, getStairUndersideElevation3D, stairFlightPoint3D } from "./staircase-3d-model";
 import type { ArchitecturalSolid3D } from "./architectural-solid-3d";
@@ -192,9 +192,66 @@ describe("renderer-neutral vertical architecture", () => {
     expect(model.levels[0]!.floors).toHaveLength(existing.levels[0]!.floors.length + 1);
     const floor = model.levels[0]!.floors.find((candidate) => candidate.roomId === "mixed")!;
     const solid = createFloorSolid3D(floor);
-    expectClosedOutwardSolid({ positions: [...solid.top.positions, ...solid.edgesAndBottom.positions] }, 8 * 0.18);
+    expect(floor.boundaryKinds).toEqual(["WALL", "FREE", "FREE", "FREE"]);
+    expect(solid.wallEdges.positions).toHaveLength(18);
+    expect(solid.freeEdges.positions).toHaveLength(54);
+    expect(floorSurfaceMaterialRoles3D).toEqual({
+      top: "floorTop",
+      wallEdge: "wall",
+      freeEdge: "floorEdge",
+      bottom: "floorBottom"
+    });
+    expectClosedOutwardSolid({ positions: [
+      ...solid.top.positions,
+      ...solid.wallEdges.positions,
+      ...solid.freeEdges.positions,
+      ...solid.bottom.positions
+    ] }, 8 * 0.18);
     expect(floor.y).toBe(2.2);
     expect(floor.contour).toHaveLength(4);
+  });
+
+  it("keeps aligned upper-Level wall-backed Floor sides in the wall material batch", () => {
+    const project = structuredClone(demoProjectFixture);
+    const source = project.building.levels[0]!;
+    const roomIds = new Map(source.rooms.map((room) => [room.id, `upper-${room.id}`]));
+    const wallIds = new Map(source.walls.map((wall) => [wall.id, `upper-${wall.id}`]));
+    project.building.levels.push({
+      ...source,
+      id: "upper-level",
+      name: "Upper Level",
+      elevation: 300,
+      walls: source.walls.map((wall) => ({
+        ...wall,
+        id: wallIds.get(wall.id)!,
+        roomIds: wall.roomIds.map((roomId) => roomIds.get(roomId)!),
+        openings: []
+      })),
+      rooms: source.rooms.map((room) => ({
+        ...room,
+        id: roomIds.get(room.id)!,
+        boundary: room.boundary.map((edge) => "kind" in edge
+          ? edge
+          : { ...edge, wallId: wallIds.get(edge.wallId)! })
+      })),
+      staircases: []
+    });
+
+    const upper = createArchitecturalScene3DModel(project).levels.find((level) => level.id === "upper-level")!;
+    expect(upper.floors).toHaveLength(source.rooms.length);
+    for (const floor of upper.floors) {
+      expect(floor.y).toBe(3);
+      expect(floor.boundaryKinds.every((kind) => kind === "WALL")).toBe(true);
+      const solid = createFloorSolid3D(floor);
+      expect(solid.wallEdges.positions.length).toBe(floor.contour.length * 18);
+      expect(solid.freeEdges.positions).toHaveLength(0);
+      expectClosedOutwardSolid({ positions: [
+        ...solid.top.positions,
+        ...solid.wallEdges.positions,
+        ...solid.freeEdges.positions,
+        ...solid.bottom.positions
+      ] }, floor.area * floor.thickness);
+    }
   });
 
   it("never adds owning Level elevation to already-global Flight elevations", () => {
@@ -224,10 +281,17 @@ it.each(Object.entries(contours))("closes %s Floor tops, bottoms and sides with 
       return sum + p.x * next.z - next.x * p.z;
     }, 0) / 2);
     const floor = { id: "floor", roomId: "room", area, y: 2.2, bottomY: 2.02, thickness: 0.18,
-      contour, triangles: triangulateFloorContour3D(contour) };
+      contour, boundaryKinds: contour.map(() => "FREE" as const), triangles: triangulateFloorContour3D(contour) };
     const solid = createFloorSolid3D(floor);
     expect(vertices(solid.top).every((point) => point.y === 2.2)).toBe(true);
-    expectClosedOutwardSolid({ positions: [...solid.top.positions, ...solid.edgesAndBottom.positions] }, area * 0.18);
+    expect(solid.wallEdges.positions).toHaveLength(0);
+    expect(solid.freeEdges.positions).toHaveLength(contour.length * 18);
+    expectClosedOutwardSolid({ positions: [
+      ...solid.top.positions,
+      ...solid.wallEdges.positions,
+      ...solid.freeEdges.positions,
+      ...solid.bottom.positions
+    ] }, area * 0.18);
     for (let i = 0; i < solid.top.positions.length; i += 9) {
       const [a, b, c] = vertices({ positions: solid.top.positions.slice(i, i + 9) });
       expect((b!.z - a!.z) * (c!.x - a!.x) - (b!.x - a!.x) * (c!.z - a!.z)).toBeGreaterThan(0);

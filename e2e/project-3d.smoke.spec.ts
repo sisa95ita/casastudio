@@ -51,7 +51,6 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
       "aria-pressed",
       "true"
     );
-    await page.getByRole("button", { name: "Edit plan" }).click();
     await createRoomShape(page, plan, "L-shape", {
       width: "600",
       depth: "420",

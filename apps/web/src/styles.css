@@ -1334,6 +1334,32 @@ img {
   stroke-width: 1.8;
 }
 
+.architectural-level-reference {
+  opacity: 0.46;
+  pointer-events: none;
+}
+
+.architectural-level-reference__wall {
+  fill: #c7cdd0;
+  stroke: #7f8b91;
+  stroke-dasharray: 5 4;
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-level-reference__opening-gap {
+  stroke: rgba(253, 252, 249, 0.9);
+  stroke-width: 7;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-level-reference__opening-mark {
+  stroke: #65747b;
+  stroke-dasharray: 3 3;
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+}
+
 .architectural-wall-hit-target,
 .architectural-opening-hit-target {
   fill: none;

@@ -8,6 +8,7 @@ export type ArchitecturalMaterialRole3D =
   | "wall"
   | "floorTop"
   | "floorEdge"
+  | "floorBottom"
   | "door"
   | "openingFrame"
   | "glazing"
@@ -66,6 +67,7 @@ export const architecturalPresentationProfile3D: ArchitecturalPresentationProfil
       wall: material({ color: "#d8cbbb", roughness: 0.82, metalness: 0 }),
       floorTop: material({ color: "#b9a98f", roughness: 0.88, metalness: 0 }),
       floorEdge: material({ color: "#8f877b", roughness: 0.94, metalness: 0 }),
+      floorBottom: material({ color: "#8f877b", roughness: 0.94, metalness: 0 }),
       door: material({ color: "#766a5d", roughness: 0.8, metalness: 0 }),
       openingFrame: material({ color: "#555d5e", roughness: 0.72, metalness: 0.04 }),
       glazing: material({

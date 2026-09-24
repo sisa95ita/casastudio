@@ -52,7 +52,6 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     expect(projectId).not.toBe("");
 
     const viewport = editorViewport(page);
-    await page.getByRole("button", { name: "Edit plan" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
     await createRoomShape(page, viewport, "L-shape", {
       width: "900",

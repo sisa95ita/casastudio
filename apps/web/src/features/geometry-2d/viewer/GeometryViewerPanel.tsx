@@ -61,6 +61,7 @@ export type GeometryViewerPanelProps = Pick<
   readonly headingId: string;
   readonly presentationModel: GeometryPresentationModel2D;
   readonly architecturalModel?: ArchitecturalPresentationModel2D;
+  readonly referenceArchitecturalModel?: ArchitecturalPresentationModel2D;
   readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
@@ -138,6 +139,7 @@ export function GeometryViewerPanel({
   headingId,
   presentationModel,
   architecturalModel,
+  referenceArchitecturalModel,
   dimensionModel,
   options,
   viewport,
@@ -248,6 +250,7 @@ export function GeometryViewerPanel({
           onFurniturePointerCancel={onFurniturePointerCancel}
           presentationModel={presentationModel}
           architecturalModel={architecturalModel}
+          referenceArchitecturalModel={referenceArchitecturalModel}
           dimensionModel={dimensionModel}
           options={options}
           viewport={viewport}

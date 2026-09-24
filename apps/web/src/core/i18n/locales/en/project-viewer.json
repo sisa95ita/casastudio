@@ -360,7 +360,11 @@
       "dimensions": "Dimensions",
       "annotations": "Annotations",
       "furniture": "Furniture"
-    }
+    },
+    "levelBelow": "Reference level below",
+    "levelBelowNamed": "Reference level below: {{level}}",
+    "createFromBelow": "Create from level below",
+    "createFromBelowDisabled": "Available when this level has no walls or rooms."
   },
   "planSummary": {
     "title": "Plan information",
@@ -445,6 +449,9 @@
     },
     "stair": {
       "invalid": "The staircase could not be created or changed because its connection or geometry is invalid."
+    },
+    "levelCopy": {
+      "invalid": "The level below could not be copied because the resulting project would be invalid."
     }
   },
   "wall": {

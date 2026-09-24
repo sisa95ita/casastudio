@@ -170,6 +170,9 @@ export type Wall3D = Readonly<{
 /** One triangle indexing the canonical contour of an architectural Floor. */
 export type FloorTriangle3D = readonly [number, number, number];
 
+/** Canonical semantic backing for one ordered Floor contour edge. */
+export type FloorBoundaryKind3D = "WALL" | "FREE";
+
 /** Horizontal architectural Floor derived from one explicit Room polygon. */
 export type Floor3D = Readonly<{
   id: string;
@@ -181,6 +184,7 @@ export type Floor3D = Readonly<{
   bottomY: number;
   thickness: number;
   contour: readonly ScenePlanVector3D[];
+  boundaryKinds: readonly FloorBoundaryKind3D[];
   triangles: readonly FloorTriangle3D[];
 }>;
 
@@ -465,6 +469,7 @@ export function createArchitecturalScene3DModel(
         bottomY: toThreeLength(floorSource.floorElevation, floorSource.unit) - profile.floorThickness,
         thickness: profile.floorThickness,
         contour: Object.freeze(contour),
+        boundaryKinds: floorSource.boundaryKinds,
         triangles: triangulateFloorContour3D(contour)
       });
     });
@@ -507,6 +512,7 @@ type FloorContourSource3D = Readonly<{
   unit: MetricLengthUnit;
   floorElevation: number;
   points: readonly Readonly<{ x: number; z: number }>[];
+  boundaryKinds: readonly FloorBoundaryKind3D[];
 }>;
 
 /** Reuses trusted Geometry Engine Room topology instead of interpreting Room boundaries again. */
@@ -524,18 +530,21 @@ function collectFloorContourSources(
       const edgeUsesById = new Map(
         level.boundaryEdgeUses.map((edgeUse) => [edgeUse.id, edgeUse])
       );
+      const boundaryEdgesById = new Map(
+        level.boundaryEdges.map((edge) => [edge.id, edge])
+      );
       const contours = level.polygons.map<FloorContourSource3D>((polygon) => {
         const room = roomsById.get(polygon.sourceRoomId);
         const loop = loopsById.get(polygon.outerLoopId);
         if (!loop || loop.kind !== "OUTER") {
           throw new Error(`Room "${polygon.sourceRoomId}" has no valid outer Geometry loop.`);
         }
-        const points = loop.boundaryEdgeUseIds.map((edgeUseId) => {
+        const edgeUses = loop.boundaryEdgeUseIds.map((edgeUseId) => {
           const edgeUse = edgeUsesById.get(edgeUseId);
           if (!edgeUse || edgeUse.loopId !== loop.id) {
             throw new Error(`Room "${polygon.sourceRoomId}" has an invalid Geometry edge use.`);
           }
-          return Object.freeze({ ...edgeUse.start });
+          return edgeUse;
         });
         return Object.freeze({
           roomId: polygon.sourceRoomId,
@@ -543,7 +552,14 @@ function collectFloorContourSources(
           roomType: room?.type,
           unit: geometrySnapshot.units.length,
           floorElevation: polygon.floorElevation,
-          points: Object.freeze(points)
+          points: Object.freeze(edgeUses.map((edgeUse) => Object.freeze({ ...edgeUse.start }))),
+          boundaryKinds: Object.freeze(edgeUses.map((edgeUse) => {
+            const edge = boundaryEdgesById.get(edgeUse.boundaryEdgeId);
+            if (!edge) {
+              throw new Error(`Room "${polygon.sourceRoomId}" has a missing Geometry boundary edge.`);
+            }
+            return edge.sourceKind;
+          }))
         });
       });
       return [level.sourceLevelId, Object.freeze(contours)] as const;
@@ -575,7 +591,10 @@ function collectFloorContourSources(
           points: Object.freeze(polygon.outerLoop.vertices.map((vertex) => Object.freeze({
             x: vertex.x,
             z: vertex.z
-          })))
+          }))),
+          boundaryKinds: Object.freeze(
+            polygon.outerLoop.edgeUses.map((edgeUse) => edgeUse.boundaryEdge.sourceKind)
+          )
         });
       }))
     ] as const;
