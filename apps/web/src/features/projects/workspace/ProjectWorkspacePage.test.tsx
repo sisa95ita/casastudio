@@ -619,6 +619,19 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
 
     const workspace = await screen.findByTestId("project-3d-workspace");
+    expect(screen.getByRole("heading", { name: "3D workspace" })).toBeTruthy();
+    expect(screen.getByText("Explore the Project in 3D.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "3D Properties" })).toBeTruthy();
+    expect(
+      screen.getByText("Select an object to inspect its properties.")
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("contentinfo", { name: "Test status bar" })
+      ).getByText(
+        "3D · 1 visible Level · View mode"
+      )
+    ).toBeTruthy();
     expect(workspace.getAttribute("data-architectural-wall-count")).toBe("7");
     expect(
       workspace.getAttribute("data-architectural-wall-section-count")
@@ -678,53 +691,379 @@ describe("ProjectViewerPage", () => {
       await screen.findByRole("toolbar", { name: "Editing tools" })
     ).toBeTruthy();
     expect(screen.queryByTestId("project-3d-workspace")).toBeNull();
-    expect(screen.queryByRole("button", { name: "3D workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "3D workspace" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Back to project" })
     ).toBeTruthy();
   });
 
-  it("keeps 3D unavailable during Edit so the local draft is never discarded", async () => {
+  it("keeps the same local draft available when Edit switches to 3D", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
-    expect(screen.queryByRole("button", { name: "3D workspace" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    expect(await screen.findByTestId("project-3d-workspace")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Move and rotate Furniture in 3D. Architectural geometry remains read-only."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Select Furniture to edit it, or another object to inspect its properties."
+      )
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("contentinfo", { name: "Test status bar" })
+      ).getByText(
+        "3D · 1 visible Level · Edit mode"
+      )
+    ).toBeTruthy();
     expect(store.getState().projectEditor.mode).toBe("edit");
     expect(store.getState().projectEditor.dirty).toBe(true);
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
-  it("returns from an edited Level through View and 3D to the same clean Level", async () => {
-    const { store } = renderConnectedRoute(createApiClient(multiLevel3DFetch()));
+  it("moves selected Furniture through the shared 3D draft and history boundary", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push({
+      id: "3d-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+
     fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
-    fireEvent.click(screen.getByRole("button", { name: "Level: Ground Floor" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    const workspace = await screen.findByTestId("project-3d-workspace");
+    expect(workspace.getAttribute("data-furniture-editable")).toBe("false");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select Wall left-room-north-wall"
+      })
+    );
+    expect(screen.getByText("Read-only in 3D")).toBeTruthy();
+    expect(screen.queryByTestId("furniture-properties")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    await waitFor(() =>
+      expect(workspace.getAttribute("data-furniture-editable")).toBe("true")
+    );
+    expect(screen.getByTestId("furniture-properties")).toBeTruthy();
+    expect(screen.queryByText("Read-only in 3D")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start moving Chair" }));
+    await waitFor(() =>
+      expect(store.getState().projectEditor.transient.interaction?.kind).toBe(
+        "furniture"
+      )
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview moving Chair" })
+    );
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.transient.interaction
+      ).toMatchObject({ item: { position: { x: 120, z: 110 } } })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Finish moving Chair" })
+    );
+
+    await waitFor(() =>
+      expect(
+        store
+          .getState()
+          .projectEditor.draft?.building.furniture.find(
+            (item) => item.id === "3d-chair"
+          )?.position
+      ).toEqual({ x: 120, z: 110 })
+    );
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      store.getState().projectEditor.draft?.building.furniture[0]?.position
+    ).toEqual({ x: 100, z: 100 });
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(
+      store.getState().projectEditor.draft?.building.furniture[0]?.position
+    ).toEqual({ x: 120, z: 110 });
+  });
+
+  it("keeps Furniture manipulation callbacks absent in read-only 3D View", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push({
+      id: "view-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "3D workspace" })
+    );
+    const workspace = await screen.findByTestId("project-3d-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    expect(workspace.getAttribute("data-furniture-editable")).toBe("false");
+    expect(
+      screen.queryByRole("button", { name: "Start moving Chair" })
+    ).toBeNull();
+    expect(store.getState().projectEditor.mode).toBe("view");
+    expect(store.getState().projectEditor.draft).toBeNull();
+  });
+
+  it("reuses Project-space Furniture nudges and shared history shortcuts in 3D Edit", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push({
+      id: "3d-nudge-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    const position = () =>
+      store
+        .getState()
+        .projectEditor.draft?.building.furniture.find(
+          (item) => item.id === "3d-nudge-chair"
+        )?.position;
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    await screen.findByTestId("project-3d-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+
+    fireEvent.keyDown(window, { key: "ArrowRight", shiftKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    const xInput = within(screen.getByTestId("furniture-properties")).getByRole(
+      "spinbutton",
+      { name: "X (cm)" }
+    );
+    fireEvent.keyDown(xInput, { key: "ArrowLeft" });
+    fireEvent.keyDown(xInput, { key: "z", ctrlKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    fireEvent.keyDown(window, { key: "z", metaKey: true, shiftKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    fireEvent.keyDown(window, { key: "y", ctrlKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+  });
+
+  it("gates 3D nudging by mode, semantic selection, validation, and selection count", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push(
+      {
+        id: "3d-gated-chair",
+        roomId: "left-room",
+        definitionId: "generic-chair",
+        position: { x: 30, z: 30 },
+        rotation: 0,
+        width: 40,
+        depth: 40,
+        height: 80
+      },
+      {
+        id: "3d-gated-table",
+        roomId: "left-room",
+        definitionId: "generic-table",
+        position: { x: 200, z: 100 },
+        rotation: 0,
+        width: 80,
+        depth: 80,
+        height: 75
+      }
+    );
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    const chairPosition = () =>
+      store
+        .getState()
+        .projectEditor.draft?.building.furniture.find(
+          (item) => item.id === "3d-gated-chair"
+        )?.position;
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "3D workspace" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(store.getState().projectEditor.draft).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit in 2D" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    await screen.findByTestId("project-3d-workspace");
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select Wall left-room-north-wall"
+      })
+    );
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    fireEvent.keyDown(window, { key: "ArrowLeft", shiftKey: true });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(0);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+
+    act(() => {
+      store.dispatch(
+        editorSelectionChanged({
+          selected: [
+            { kind: "FURNITURE", geometryId: "3d-gated-chair" },
+            { kind: "FURNITURE", geometryId: "3d-gated-table" }
+          ],
+          hovered: undefined
+        })
+      );
+    });
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(0);
+  });
+
+  it("nudges elevated Furniture without persisting a vertical coordinate", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.levels[0]!.rooms[0]!.elevation = 270;
+    project.building.furniture.push({
+      id: "3d-raised-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    await screen.findByTestId("project-3d-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    expect(screen.getByTestId("furniture-floor").textContent).toBe("2.70 m");
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    const item = store
+      .getState()
+      .projectEditor.draft?.building.furniture.find(
+        (candidate) => candidate.id === "3d-raised-chair"
+      );
+    expect(item?.position).toEqual({ x: 100, z: 101 });
+    expect(item?.roomId).toBe("left-room");
+    expect(item && "y" in item.position).toBe(false);
+    expect(screen.getByTestId("furniture-floor").textContent).toBe("2.70 m");
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+  });
+
+  it("returns from an edited Level through View and 3D to the same clean Level", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(multiLevel3DFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
     const levelId = store.getState().projectEditor.activeLevelId;
     fireEvent.click(screen.getByRole("button", { name: "Back to project" }));
-    expect(await screen.findByRole("button", { name: "Level: Upper Level" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Level: Upper Level" })
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
     fireEvent.click(await screen.findByRole("button", { name: "Edit in 2D" }));
     expect(store.getState().projectEditor.activeLevelId).toBe(levelId);
     expect(store.getState().projectEditor.dirty).toBe(false);
   });
 
-  it.each(["Openings", "Stair"])("keeps %s authoring usable after Level changes and Undo", async (tool) => {
-    const { store } = renderConnectedRoute(createApiClient(multiLevel3DFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
-    fireEvent.click(screen.getByRole("button", { name: tool }));
-    fireEvent.click(screen.getByRole("button", { name: "Level: Ground Floor" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
-    const kind = tool === "Stair" ? "place-stair" : "place-opening";
-    await waitFor(() => expect(store.getState().projectEditor.transient.interaction?.kind).toBe(kind));
-    expect(store.getState().projectEditor.dirty).toBe(false);
-    act(() => store.dispatch(editingDraftReplaced({ ...store.getState().projectEditor.draft!, name: "Temporary change" })));
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(store.getState().projectEditor.transient.interaction?.kind).toBe(kind));
-    expect(screen.getByRole("combobox", { name: tool === "Stair" ? "Target Level" : "Type" })).toBeTruthy();
-    expect(store.getState().projectEditor.dirty).toBe(false);
-  });
+  it.each(["Openings", "Stair"])(
+    "keeps %s authoring usable after Level changes and Undo",
+    async (tool) => {
+      const { store } = renderConnectedRoute(
+        createApiClient(multiLevel3DFetch())
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+      fireEvent.click(screen.getByRole("button", { name: tool }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Level: Ground Floor" })
+      );
+      fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
+      const kind = tool === "Stair" ? "place-stair" : "place-opening";
+      await waitFor(() =>
+        expect(store.getState().projectEditor.transient.interaction?.kind).toBe(
+          kind
+        )
+      );
+      expect(store.getState().projectEditor.dirty).toBe(false);
+      act(() =>
+        store.dispatch(
+          editingDraftReplaced({
+            ...store.getState().projectEditor.draft!,
+            name: "Temporary change"
+          })
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      await waitFor(() =>
+        expect(store.getState().projectEditor.transient.interaction?.kind).toBe(
+          kind
+        )
+      );
+      expect(
+        screen.getByRole("combobox", {
+          name: tool === "Stair" ? "Target Level" : "Type"
+        })
+      ).toBeTruthy();
+      expect(store.getState().projectEditor.dirty).toBe(false);
+    }
+  );
 
   it("clears hidden architectural selections without dirtying or deleting their canonical content", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
@@ -732,7 +1071,7 @@ describe("ProjectViewerPage", () => {
     const original = store.getState().projectEditor.draft;
     for (const [layer, selector] of [
       ["Rooms", '[data-testid="geometry-polygon"]'],
-      ["Walls", '.architectural-wall-hit-target']
+      ["Walls", ".architectural-wall-hit-target"]
     ]) {
       fireEvent.click(document.querySelector(selector!)!);
       expect(store.getState().projectEditor.selection).toHaveLength(1);
@@ -963,7 +1302,7 @@ describe("ProjectViewerPage", () => {
     ).toBeNull();
     expect(buildSpy).toHaveBeenCalledWith(store.getState().projectEditor.draft);
     expect(store.getState().projectEditor.draft).not.toBe(demoProjectFixture);
-    expect(screen.queryByRole("button", { name: "2D workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "2D workspace" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Back to project" })
     ).toBeTruthy();
@@ -2134,9 +2473,7 @@ describe("ProjectViewerPage", () => {
       await screen.findByRole("option", { name: "Left Room" })
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("option", { name: "Left Room" }));
-    fireEvent.click(
-      within(inspector).getByRole("radio", { name: "L-shaped" })
-    );
+    fireEvent.click(within(inspector).getByRole("radio", { name: "L-shaped" }));
     fireEvent.pointerMove(svg, { clientX: 620, clientY: 180, pointerId: 711 });
     const stairInteraction =
       store.getState().projectEditor.transient.interaction;
@@ -2144,9 +2481,7 @@ describe("ProjectViewerPage", () => {
       stairInteraction?.kind === "place-stair"
         ? stairInteraction.start
         : undefined;
-    fireEvent.click(
-      within(inspector).getByRole("radio", { name: "Straight" })
-    );
+    fireEvent.click(within(inspector).getByRole("radio", { name: "Straight" }));
     expect(
       screen
         .getByTestId("stair-preview")
@@ -2156,9 +2491,7 @@ describe("ProjectViewerPage", () => {
       kind: "place-stair",
       start: anchoredStart
     });
-    fireEvent.click(
-      within(inspector).getByRole("radio", { name: "L-shaped" })
-    );
+    fireEvent.click(within(inspector).getByRole("radio", { name: "L-shaped" }));
     expect(
       screen
         .getByTestId("stair-preview")
@@ -2202,10 +2535,12 @@ describe("ProjectViewerPage", () => {
     expect(level.staircases[0]).not.toHaveProperty("rotation");
     const authoredDirection = level.staircases[0]!.flights[0]!;
     expect(
-      Math.atan2(
+      (Math.atan2(
         authoredDirection.end.z - authoredDirection.start.z,
         authoredDirection.end.x - authoredDirection.start.x
-      ) * 180 / Math.PI
+      ) *
+        180) /
+        Math.PI
     ).toBeCloseTo(37);
     expect(
       level.staircases[0]?.flights.map((flight) => flight.stepCount)
@@ -2267,8 +2602,16 @@ describe("ProjectViewerPage", () => {
     expect(rotated.flights.map((flight) => flight.id)).toEqual(
       beforeRotation.flights.map((flight) => flight.id)
     );
-    expect(rotated.flights.map((flight) => [flight.startElevation, flight.endElevation])).toEqual(
-      beforeRotation.flights.map((flight) => [flight.startElevation, flight.endElevation])
+    expect(
+      rotated.flights.map((flight) => [
+        flight.startElevation,
+        flight.endElevation
+      ])
+    ).toEqual(
+      beforeRotation.flights.map((flight) => [
+        flight.startElevation,
+        flight.endElevation
+      ])
     );
     expect(store.getState().projectEditor.history.past).toHaveLength(4);
 
@@ -2533,7 +2876,8 @@ describe("ProjectViewerPage", () => {
     expect(uPreview.querySelector("polygon")!.getAttribute("points")).not.toBe(
       uPoints
     );
-    const roomInteraction = store.getState().projectEditor.transient.interaction;
+    const roomInteraction =
+      store.getState().projectEditor.transient.interaction;
     const anchoredOrigin =
       roomInteraction?.kind === "place-room-shape"
         ? roomInteraction.origin
@@ -5156,7 +5500,10 @@ describe("ProjectViewerPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Elevation above Level" }), { target: { value: "180" } });
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Elevation above Level" }),
+      { target: { value: "180" } }
+    );
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getByRole("tab", { name: "Layers" }));
     fireEvent.click(screen.getByRole("switch", { name: "Walls" }));
@@ -5169,10 +5516,19 @@ describe("ProjectViewerPage", () => {
       (await screen.findByTestId("geometry-polygon")).getAttribute("class")
     ).not.toContain("geometry-entity-selected");
     fireEvent.click(screen.getByRole("tab", { name: "Layers" }));
-    expect((screen.getByRole("switch", { name: "Walls" }) as HTMLInputElement).checked).toBe(true);
+    expect(
+      (screen.getByRole("switch", { name: "Walls" }) as HTMLInputElement)
+        .checked
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
-    expect((screen.getByRole("spinbutton", { name: "Elevation above Level" }) as HTMLInputElement).value).toBe("0");
+    expect(
+      (
+        screen.getByRole("spinbutton", {
+          name: "Elevation above Level"
+        }) as HTMLInputElement
+      ).value
+    ).toBe("0");
   });
 
   it("keeps late data from an old project ID out of the new route", async () => {

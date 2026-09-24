@@ -74,6 +74,7 @@ import {
   createArchitecturalScene3DModel,
   type LevelVisibility3D
 } from "../../project-3d/model/architectural-scene-3d-model";
+import { createFurnitureModel3D } from "../../project-3d/model/furniture-3d-model";
 import { useProjectGeometryQuery } from "../data/geometry-queries";
 import { useReplaceProjectMutation } from "../data/project-mutations";
 import { useProjectQuery } from "../data/project-queries";
@@ -278,47 +279,10 @@ export function ProjectWorkspacePage() {
       shortcutsOpen,
       saveInteractionBlocked
     );
-  const scene3DResult = useMemo(() => {
-    if (!projectResponse || !geometryResponse || consistencyFailure)
-      return undefined;
-    try {
-      return {
-        ok: true as const,
-        model: createArchitecturalScene3DModel(
-          projectResponse.project,
-          geometryResponse.geometry
-        )
-      };
-    } catch (error) {
-      return { ok: false as const, error };
-    }
-  }, [consistencyFailure, geometryResponse, projectResponse]);
-
   const viewLevels = geometryResponse?.geometry.levels ?? [];
   const selectedViewLevel =
     viewLevels.find((level) => level.sourceLevelId === selectedViewLevelId) ??
     viewLevels[0];
-  const activeLevelId3D = selectedViewLevel?.sourceLevelId;
-  const resolvedSelection3D = useMemo(
-    () =>
-      scene3DResult?.ok && selection3D
-        ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
-        : undefined,
-    [scene3DResult, selection3D]
-  );
-
-  useEffect(() => {
-    if (
-      selection3D &&
-      !isArchitecturalSelectionVisible3D(
-        resolvedSelection3D,
-        levelVisibility3D,
-        activeLevelId3D
-      )
-    )
-      setSelection3D(undefined);
-  }, [activeLevelId3D, levelVisibility3D, resolvedSelection3D, selection3D]);
-
   useEffect(() => {
     setSelection3D(undefined);
   }, [projectId]);
@@ -361,21 +325,190 @@ export function ProjectWorkspacePage() {
   const activeProjectLevel = activeProject?.building.levels.find(
     (level) => level.id === selectedLevel?.sourceLevelId
   );
+  const selectionOperationLevel = useMemo(() => {
+    if (
+      workspaceRepresentation !== "3d" ||
+      selection3D?.kind !== "furniture" ||
+      !activeProject
+    )
+      return activeProjectLevel;
+    const item = activeProject.building.furniture.find(
+      (candidate) => candidate.id === selection3D.id
+    );
+    return item
+      ? activeProject.building.levels.find((level) =>
+          level.rooms.some((room) => room.id === item.roomId)
+        )
+      : activeProjectLevel;
+  }, [activeProject, activeProjectLevel, selection3D, workspaceRepresentation]);
   const furniture = useFurnitureEditor({
     project: activeProject,
-    levelId: activeProjectLevel?.id,
+    levelId:
+      workspaceRepresentation === "3d" && selection3D?.kind === "furniture"
+        ? selection3D.levelId
+        : activeProjectLevel?.id,
     editor,
     dispatch,
     selection: selectionState,
-    editable:
-      workspaceMode === "edit" &&
-      !saveInteractionBlocked &&
-      workspaceRepresentation === "2d",
+    editable: workspaceMode === "edit" && !saveInteractionBlocked,
     visible: displayOptions.furniture !== false,
     zoom: activeViewport.zoom,
     snapToGrid: editor.precision.snapToGrid,
     gridSpacing: editor.precision.gridSpacing
   });
+  const activeLevelId3D =
+    workspaceMode === "edit"
+      ? (activeProjectLevel?.id ?? undefined)
+      : selectedViewLevel?.sourceLevelId;
+  const scene3DResult = useMemo(() => {
+    if (
+      workspaceRepresentation !== "3d" ||
+      !activeProject ||
+      consistencyFailure
+    )
+      return undefined;
+    try {
+      return {
+        ok: true as const,
+        model: createArchitecturalScene3DModel(
+          activeProject,
+          workspaceMode === "view" ? geometryResponse?.geometry : undefined
+        )
+      };
+    } catch (error) {
+      return { ok: false as const, error };
+    }
+  }, [
+    activeProject,
+    consistencyFailure,
+    geometryResponse,
+    workspaceMode,
+    workspaceRepresentation
+  ]);
+  const resolvedSelection3D = useMemo(
+    () =>
+      scene3DResult?.ok && selection3D
+        ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
+        : undefined,
+    [scene3DResult, selection3D]
+  );
+  const furnitureKeyboardEditable3D = Boolean(
+    workspaceMode === "edit" &&
+    workspaceRepresentation === "3d" &&
+    editor.activeTool === "select" &&
+    !saveInteractionBlocked &&
+    selection3D?.kind === "furniture" &&
+    resolvedSelection3D?.kind === "furniture" &&
+    isArchitecturalSelectionVisible3D(
+      resolvedSelection3D,
+      levelVisibility3D,
+      activeLevelId3D
+    ) &&
+    selectionState.selected.length === 1 &&
+    selectionState.selected[0]?.kind === "FURNITURE" &&
+    selectionState.selected[0].geometryId === selection3D.id
+  );
+  const furniturePreview3D = useMemo(() => {
+    const transient = furniture.transient;
+    if (!activeProject || !transient?.item) return undefined;
+    const source = transient.sourceId
+      ? activeProject.building.furniture.find(
+          (item) => item.id === transient.sourceId
+        )
+      : undefined;
+    return createFurnitureModel3D(
+      activeProject,
+      transient.item.roomId || !source
+        ? transient.item
+        : { ...transient.item, roomId: source.roomId }
+    );
+  }, [activeProject, furniture.transient]);
+  const furnitureManipulation3D = useMemo(
+    () =>
+      furnitureKeyboardEditable3D &&
+      selection3D?.kind === "furniture" &&
+      activeProject
+        ? {
+            sourceUnit: activeProject.units.length,
+            preview: furniturePreview3D,
+            previewValid: furniture.previewValid,
+            onBegin: (
+              id: string,
+              intent: "move" | "rotate",
+              point: Readonly<{ x: number; z: number }>,
+              pointerId: number
+            ) =>
+              furniture.beginGesture(
+                id,
+                intent,
+                { worldPoint: point },
+                pointerId
+              ),
+            onMove: furniture.pointerMoveProject,
+            onEnd: (dragged: boolean) => furniture.endGesture(dragged, false),
+            onCancel: furniture.cancel
+          }
+        : undefined,
+    [
+      activeProject,
+      editor.activeTool,
+      furniture,
+      furnitureKeyboardEditable3D,
+      furniturePreview3D,
+      selection3D?.kind,
+      selection3D?.id
+    ]
+  );
+
+  useEffect(() => {
+    if (
+      selection3D &&
+      !isArchitecturalSelectionVisible3D(
+        resolvedSelection3D,
+        levelVisibility3D,
+        activeLevelId3D
+      )
+    )
+      setSelection3D(undefined);
+  }, [activeLevelId3D, levelVisibility3D, resolvedSelection3D, selection3D]);
+  useEffect(() => {
+    if (workspaceMode !== "edit" || workspaceRepresentation !== "3d") return;
+    const selected = selectionState.selected;
+    if (selected.length !== 1 || selected[0]?.kind !== "FURNITURE") return;
+    const id = selected[0].geometryId;
+    const level = scene3DResult?.ok
+      ? scene3DResult.model.levels.find((entry) =>
+          entry.furniture.some((item) => item.id === id)
+        )
+      : undefined;
+    if (level) setSelection3D({ kind: "furniture", id, levelId: level.id });
+  }, [
+    scene3DResult,
+    selectionState.selected,
+    workspaceMode,
+    workspaceRepresentation
+  ]);
+
+  const handleSelection3DChange = useCallback(
+    (identity?: ArchitecturalEntityIdentity3D) => {
+      setSelection3D(identity);
+      if (workspaceMode !== "edit") return;
+      if (!identity) {
+        dispatch(editorSelectionCleared());
+      } else if (identity.kind === "furniture") {
+        dispatch(
+          editorSelectionChanged(
+            createGeometrySelectionState([
+              { kind: "FURNITURE", geometryId: identity.id }
+            ])
+          )
+        );
+      } else {
+        dispatch(editorSelectionCleared());
+      }
+    },
+    [dispatch, workspaceMode]
+  );
   useEffect(() => {
     const selected = selectionState.selected.filter((entry) =>
       isSelectionLayerVisible(entry, displayOptions)
@@ -478,30 +611,33 @@ export function ProjectWorkspacePage() {
   ]);
   const selectionRoots = useMemo(
     () =>
-      activeProject && activeProjectLevel && presentationResult?.ok
+      activeProject && selectionOperationLevel && presentationResult?.ok
         ? resolveProjectSelectionRoots(
             activeProject,
-            activeProjectLevel,
+            selectionOperationLevel,
             presentationResult.model,
             selectionState.selected
           )
         : [],
     [
       activeProject,
-      activeProjectLevel,
+      selectionOperationLevel,
       presentationResult,
       selectionState.selected
     ]
   );
   const selectionCapabilities = useMemo(
     () =>
-      activeProjectLevel
-        ? getProjectSelectionCapabilities(activeProjectLevel, selectionRoots)
+      selectionOperationLevel
+        ? getProjectSelectionCapabilities(
+            selectionOperationLevel,
+            selectionRoots
+          )
         : getProjectSelectionCapabilities(
             { walls: [], rooms: [], staircases: [] } as never,
             []
           ),
-    [activeProjectLevel, selectionRoots]
+    [selectionOperationLevel, selectionRoots]
   );
 
   const selectedEditWall = useMemo(() => {
@@ -1867,7 +2003,7 @@ export function ProjectWorkspacePage() {
   } = useEditorSelectionTransformActions({
     dispatch,
     editor,
-    activeProjectLevel,
+    activeProjectLevel: selectionOperationLevel,
     selectionRoots,
     selectionCapabilities,
     saveInteractionBlocked,
@@ -1950,6 +2086,7 @@ export function ProjectWorkspacePage() {
     handleCancelStairAuthoring,
     handleOpeningAuthoringTypeChange,
     selectionCount: selectionState.selected.length,
+    furnitureNudgeEnabled3D: furnitureKeyboardEditable3D,
     handleDeleteSelection,
     handleNudgeSelection
   });
@@ -2007,14 +2144,15 @@ export function ProjectWorkspacePage() {
       if (
         !representation ||
         representation === workspaceRepresentation ||
-        saveInteractionBlocked ||
-        (representation === "3d" && workspaceMode === "edit")
+        saveInteractionBlocked
       )
         return;
+      dispatch(editorTransientInteractionCleared());
+      if (workspaceMode === "edit" && representation === "3d")
+        dispatch(editorActiveToolChanged("select"));
       setWorkspaceRepresentation(representation);
-      if (representation === "2d") setSelection3D(undefined);
     },
-    [saveInteractionBlocked, workspaceMode, workspaceRepresentation]
+    [dispatch, saveInteractionBlocked, workspaceMode, workspaceRepresentation]
   );
 
   const {
@@ -2060,16 +2198,20 @@ export function ProjectWorkspacePage() {
   const inspector = useMemo(() => {
     if (
       workspaceRepresentation === "3d" &&
-      projectResponse &&
+      activeProject &&
       scene3DResult?.ok
     ) {
       return (
         <Project3DInspector
-          projectName={projectResponse.project.name}
+          mode={workspaceMode}
+          projectName={activeProject.name}
           model={scene3DResult.model}
           visibility={levelVisibility3D}
           activeLevelId={activeLevelId3D}
           selection={resolvedSelection3D}
+          furniture={furniture}
+          units={activeProject.units}
+          editable={workspaceMode === "edit" && !saveInteractionBlocked}
         />
       );
     }
@@ -2286,7 +2428,8 @@ export function ProjectWorkspacePage() {
     scene3DResult,
     levelVisibility3D,
     activeLevelId3D,
-    resolvedSelection3D
+    resolvedSelection3D,
+    saveInteractionBlocked
   ]);
 
   const handleViewLevelChange = useCallback(
@@ -2402,6 +2545,7 @@ export function ProjectWorkspacePage() {
       />
       <ProjectWorkspaceCanvas
         representation={workspaceRepresentation}
+        mode={workspaceMode}
         editorToolbarProps={
           workspaceRepresentation === "2d" && workspaceMode === "edit"
             ? {
@@ -2419,7 +2563,8 @@ export function ProjectWorkspacePage() {
         levelVisibility3D={levelVisibility3D}
         onLevelVisibility3DChange={setLevelVisibility3D}
         selection3D={selection3D}
-        onSelection3DChange={setSelection3D}
+        onSelection3DChange={handleSelection3DChange}
+        furnitureManipulation3D={furnitureManipulation3D}
         editBuildFailed={Boolean(editBuildFailed)}
         presentationFailed={Boolean(presentationFailed)}
         presentationError={

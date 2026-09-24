@@ -1,6 +1,7 @@
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import ViewInArRoundedIcon from "@mui/icons-material/ViewInArRounded";
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
+import type { Project } from "@casastudio/schema";
 
 import { useCasaTranslation } from "../../core/i18n";
 import {
@@ -9,49 +10,78 @@ import {
   type LevelVisibility3D
 } from "./model/architectural-scene-3d-model";
 import type { ArchitecturalSelection3D } from "./interaction/architectural-selection-3d";
+import { ProjectFurnitureProperties } from "../editor-2d/tools/furniture/ProjectFurnitureProperties";
+import type { FurnitureEditorController } from "../editor-2d/tools/furniture/useFurnitureEditor";
 
 /** Inputs for the read-only 3D Project inspector summary. */
 export type Project3DInspectorProps = {
+  readonly mode?: "view" | "edit";
   readonly projectName: string;
   readonly model: ArchitecturalScene3DModel;
   readonly visibility: LevelVisibility3D;
   readonly activeLevelId?: string;
   readonly selection?: ArchitecturalSelection3D;
+  readonly furniture?: FurnitureEditorController;
+  readonly units?: Project["units"];
+  readonly editable?: boolean;
 };
 
 /** Renders coherent Project and Level status without exposing 2D edit controls. */
 export function Project3DInspector({
+  mode = "view",
   projectName,
   model,
   visibility,
   activeLevelId,
-  selection
+  selection,
+  furniture,
+  units,
+  editable = false
 }: Project3DInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
-  const visibleLevels = getVisibleLevelReferences3D(model, visibility, activeLevelId);
+  const visibleLevels = getVisibleLevelReferences3D(
+    model,
+    visibility,
+    activeLevelId
+  );
 
   return (
     <Stack className="project-3d-inspector" spacing={2.25} sx={{ p: 2.5 }}>
       <Box>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: "center", mb: 0.5 }}
+        >
           <ViewInArRoundedIcon color="primary" fontSize="small" />
-          <Typography component="h2" variant="h3">{t("threeD.inspector.title")}</Typography>
+          <Typography component="h2" variant="h3">
+            {t("threeD.inspector.title")}
+          </Typography>
         </Stack>
-        <Typography variant="body2" color="text.secondary">
-          {t("threeD.inspector.readOnly")}
-        </Typography>
       </Box>
       <Divider />
-      {selection ? (
-        <SelectionDetails3D selection={selection} />
+      {editable && selection?.kind === "furniture" && furniture && units ? (
+        <ProjectFurnitureProperties
+          controller={furniture}
+          units={units}
+          editable
+        />
+      ) : selection ? (
+        <SelectionDetails3D
+          selection={selection}
+          showReadOnly={mode === "edit" && selection.kind !== "furniture"}
+        />
       ) : (
         <Stack spacing={1} data-testid="project-3d-empty-selection">
           <Typography variant="overline" color="text.secondary">
             {t("threeD.inspector.selection")}
           </Typography>
-          <Typography variant="body2">{t("threeD.inspector.nothingSelected")}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {t("threeD.inspector.selectionHint")}
+          <Typography variant="body2" color="text.secondary">
+            {t(
+              mode === "edit"
+                ? "threeD.inspector.emptySelectionEdit"
+                : "threeD.inspector.emptySelectionView"
+            )}
           </Typography>
         </Stack>
       )}
@@ -64,9 +94,11 @@ export function Project3DInspector({
         <Chip
           size="small"
           variant="outlined"
-          label={model.hasArchitecturalGeometry
-            ? t("threeD.inspector.referenceReady")
-            : t("threeD.inspector.empty")}
+          label={
+            model.hasArchitecturalGeometry
+              ? t("threeD.inspector.referenceReady")
+              : t("threeD.inspector.empty")
+          }
         />
       </Stack>
       <Divider />
@@ -77,14 +109,20 @@ export function Project3DInspector({
             {t("threeD.inspector.visibleLevels")}
           </Typography>
         </Stack>
-        {visibleLevels.length > 0 ? visibleLevels.map((level) => (
-          <Stack key={level.id} direction="row" sx={{ justifyContent: "space-between" }}>
-            <Typography variant="body2">{level.name}</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {level.y.toFixed(2)} m
-            </Typography>
-          </Stack>
-        )) : (
+        {visibleLevels.length > 0 ? (
+          visibleLevels.map((level) => (
+            <Stack
+              key={level.id}
+              direction="row"
+              sx={{ justifyContent: "space-between" }}
+            >
+              <Typography variant="body2">{level.name}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {level.y.toFixed(2)} m
+              </Typography>
+            </Stack>
+          ))
+        ) : (
           <Typography variant="body2" color="text.secondary">
             {t("threeD.inspector.noVisibleLevels")}
           </Typography>
@@ -95,97 +133,249 @@ export function Project3DInspector({
 }
 
 /** Renders canonical read-only metadata for the selected architectural entity. */
-function SelectionDetails3D({ selection }: { readonly selection: ArchitecturalSelection3D }) {
+function SelectionDetails3D({
+  selection,
+  showReadOnly = false
+}: {
+  readonly selection: ArchitecturalSelection3D;
+  readonly showReadOnly?: boolean;
+}) {
   const { t } = useCasaTranslation("project-viewer");
-  const rows: readonly (readonly [string, string])[] = selection.kind === "furniture"
-    ? [
-        [t("threeD.inspector.fields.type"), t("threeD.inspector.types.furniture")],
-        [t("threeD.inspector.fields.name"), selection.furniture!.name],
-        [t("threeD.inspector.fields.definition"), selection.furniture!.definitionId],
-        [t("threeD.inspector.fields.category"), formatRoomType(selection.furniture!.category)],
-        [t("threeD.inspector.fields.room"), selection.furniture!.roomName],
-        [t("threeD.inspector.fields.level"), selection.levelName],
-        [t("threeD.inspector.fields.floorElevation"), formatMeters(selection.furniture!.position.y)],
-        [t("threeD.inspector.fields.width"), formatMeters(selection.furniture!.width)],
-        [t("threeD.inspector.fields.depth"), formatMeters(selection.furniture!.depth)],
-        [t("threeD.inspector.fields.height"), formatMeters(selection.furniture!.height)],
-        [t("threeD.inspector.fields.rotation"), `${selection.furniture!.rotation}°`]
-      ]
-    : selection.kind === "staircase"
-    ? [
-        [t("threeD.inspector.fields.type"), t("threeD.inspector.types.staircase")],
-        ...(selection.staircase!.name ? [[t("threeD.inspector.fields.name"), selection.staircase!.name] as const] : []),
-        [t("threeD.inspector.fields.width"), formatMeters(selection.staircase!.width)],
-        [t("threeD.inspector.fields.flights"), String(selection.staircase!.flights.length)],
-        [t("threeD.inspector.fields.steps"), String(selection.staircase!.flights.reduce((sum, flight) => sum + flight.stepCount, 0))],
-        [t("threeD.inspector.fields.landings"), String(selection.staircase!.landings.length)],
-        ...((selection.staircase!.flights.length > 0) ? [
-          [t("threeD.inspector.fields.sourceElevation"), formatMeters(selection.staircase!.flights[0]!.start.y)] as const,
-          [t("threeD.inspector.fields.destinationElevation"), formatMeters(selection.staircase!.flights.at(-1)!.end.y)] as const
-        ] : []),
-        [t("threeD.inspector.fields.source"), selection.staircase!.fromRoomId ?? selection.staircase!.fromLevelId],
-        [t("threeD.inspector.fields.destination"), selection.staircase!.toRoomId ?? selection.staircase!.toLevelId],
-        [t("threeD.inspector.fields.level"), selection.levelName]
-      ]
-    : selection.kind === "wall"
-    ? [
-        [t("threeD.inspector.fields.type"), t("threeD.inspector.types.wall")],
-        [t("threeD.inspector.fields.length"), formatMeters(selection.wall!.length)],
-        [t("threeD.inspector.fields.thickness"), formatMeters(selection.wall!.thickness)],
-        [t("threeD.inspector.fields.height"), formatMeters(selection.wall!.height)],
-        [t("threeD.inspector.fields.level"), selection.levelName]
-      ]
-    : selection.kind === "door"
+  const rows: readonly (readonly [string, string])[] =
+    selection.kind === "furniture"
       ? [
-          [t("threeD.inspector.fields.type"), t("threeD.inspector.types.door")],
-          [t("threeD.inspector.fields.width"), formatMeters(selection.door!.frame.width)],
-          [t("threeD.inspector.fields.height"), formatMeters(selection.door!.frame.height)],
-          [t("threeD.inspector.fields.hingeSide"), selection.door!.hingeSide],
-          [t("threeD.inspector.fields.swingSide"), selection.door!.swingSide],
-          [t("threeD.inspector.fields.wall"), selection.wallId!],
-          [t("threeD.inspector.fields.level"), selection.levelName]
+          [
+            t("threeD.inspector.fields.type"),
+            t("threeD.inspector.types.furniture")
+          ],
+          [t("threeD.inspector.fields.name"), selection.furniture!.name],
+          [
+            t("threeD.inspector.fields.definition"),
+            selection.furniture!.definitionId
+          ],
+          [
+            t("threeD.inspector.fields.category"),
+            formatRoomType(selection.furniture!.category)
+          ],
+          [t("threeD.inspector.fields.room"), selection.furniture!.roomName],
+          [t("threeD.inspector.fields.level"), selection.levelName],
+          [
+            t("threeD.inspector.fields.floorElevation"),
+            formatMeters(selection.furniture!.position.y)
+          ],
+          [
+            t("threeD.inspector.fields.width"),
+            formatMeters(selection.furniture!.width)
+          ],
+          [
+            t("threeD.inspector.fields.depth"),
+            formatMeters(selection.furniture!.depth)
+          ],
+          [
+            t("threeD.inspector.fields.height"),
+            formatMeters(selection.furniture!.height)
+          ],
+          [
+            t("threeD.inspector.fields.rotation"),
+            `${selection.furniture!.rotation}°`
+          ]
         ]
-      : selection.kind === "window"
+      : selection.kind === "staircase"
         ? [
-            [t("threeD.inspector.fields.type"), t("threeD.inspector.types.window")],
-            [t("threeD.inspector.fields.width"), formatMeters(selection.window!.frame.width)],
-            [t("threeD.inspector.fields.height"), formatMeters(selection.window!.frame.height)],
-            [t("threeD.inspector.fields.elevation"), formatMeters(selection.window!.frame.elevation)],
-            [t("threeD.inspector.fields.wall"), selection.wallId!],
+            [
+              t("threeD.inspector.fields.type"),
+              t("threeD.inspector.types.staircase")
+            ],
+            ...(selection.staircase!.name
+              ? [
+                  [
+                    t("threeD.inspector.fields.name"),
+                    selection.staircase!.name
+                  ] as const
+                ]
+              : []),
+            [
+              t("threeD.inspector.fields.width"),
+              formatMeters(selection.staircase!.width)
+            ],
+            [
+              t("threeD.inspector.fields.flights"),
+              String(selection.staircase!.flights.length)
+            ],
+            [
+              t("threeD.inspector.fields.steps"),
+              String(
+                selection.staircase!.flights.reduce(
+                  (sum, flight) => sum + flight.stepCount,
+                  0
+                )
+              )
+            ],
+            [
+              t("threeD.inspector.fields.landings"),
+              String(selection.staircase!.landings.length)
+            ],
+            ...(selection.staircase!.flights.length > 0
+              ? [
+                  [
+                    t("threeD.inspector.fields.sourceElevation"),
+                    formatMeters(selection.staircase!.flights[0]!.start.y)
+                  ] as const,
+                  [
+                    t("threeD.inspector.fields.destinationElevation"),
+                    formatMeters(selection.staircase!.flights.at(-1)!.end.y)
+                  ] as const
+                ]
+              : []),
+            [
+              t("threeD.inspector.fields.source"),
+              selection.staircase!.fromRoomId ??
+                selection.staircase!.fromLevelId
+            ],
+            [
+              t("threeD.inspector.fields.destination"),
+              selection.staircase!.toRoomId ?? selection.staircase!.toLevelId
+            ],
             [t("threeD.inspector.fields.level"), selection.levelName]
           ]
-        : selection.kind === "wall-opening"
+        : selection.kind === "wall"
           ? [
-              [t("threeD.inspector.fields.type"), t("threeD.inspector.types.wallOpening")],
-              [t("threeD.inspector.fields.width"), formatMeters(selection.wallOpening!.frame.width)],
-              [t("threeD.inspector.fields.height"), formatMeters(selection.wallOpening!.frame.height)],
-              [t("threeD.inspector.fields.elevation"), formatMeters(selection.wallOpening!.frame.elevation)],
-              [t("threeD.inspector.fields.wall"), selection.wallId!],
+              [
+                t("threeD.inspector.fields.type"),
+                t("threeD.inspector.types.wall")
+              ],
+              [
+                t("threeD.inspector.fields.length"),
+                formatMeters(selection.wall!.length)
+              ],
+              [
+                t("threeD.inspector.fields.thickness"),
+                formatMeters(selection.wall!.thickness)
+              ],
+              [
+                t("threeD.inspector.fields.height"),
+                formatMeters(selection.wall!.height)
+              ],
               [t("threeD.inspector.fields.level"), selection.levelName]
             ]
-          : [
-              [t("threeD.inspector.fields.type"), t("threeD.inspector.types.room")],
-              ...(selection.floor!.roomName
-                ? [[t("threeD.inspector.fields.name"), selection.floor!.roomName] as const]
-                : []),
-              ...(selection.floor!.roomType
-                ? [[
-                    t("threeD.inspector.fields.roomType"),
-                    formatRoomType(selection.floor!.roomType)
-                  ] as const]
-                : []),
-              [t("threeD.inspector.fields.area"), `${selection.floor!.area.toFixed(2)} m²`],
-              [t("threeD.inspector.fields.elevation"), formatMeters(selection.floor!.y)],
-              [t("threeD.inspector.fields.thickness"), formatMeters(selection.floor!.thickness)],
-              [t("threeD.inspector.fields.level"), selection.levelName]
-            ];
+          : selection.kind === "door"
+            ? [
+                [
+                  t("threeD.inspector.fields.type"),
+                  t("threeD.inspector.types.door")
+                ],
+                [
+                  t("threeD.inspector.fields.width"),
+                  formatMeters(selection.door!.frame.width)
+                ],
+                [
+                  t("threeD.inspector.fields.height"),
+                  formatMeters(selection.door!.frame.height)
+                ],
+                [
+                  t("threeD.inspector.fields.hingeSide"),
+                  selection.door!.hingeSide
+                ],
+                [
+                  t("threeD.inspector.fields.swingSide"),
+                  selection.door!.swingSide
+                ],
+                [t("threeD.inspector.fields.wall"), selection.wallId!],
+                [t("threeD.inspector.fields.level"), selection.levelName]
+              ]
+            : selection.kind === "window"
+              ? [
+                  [
+                    t("threeD.inspector.fields.type"),
+                    t("threeD.inspector.types.window")
+                  ],
+                  [
+                    t("threeD.inspector.fields.width"),
+                    formatMeters(selection.window!.frame.width)
+                  ],
+                  [
+                    t("threeD.inspector.fields.height"),
+                    formatMeters(selection.window!.frame.height)
+                  ],
+                  [
+                    t("threeD.inspector.fields.elevation"),
+                    formatMeters(selection.window!.frame.elevation)
+                  ],
+                  [t("threeD.inspector.fields.wall"), selection.wallId!],
+                  [t("threeD.inspector.fields.level"), selection.levelName]
+                ]
+              : selection.kind === "wall-opening"
+                ? [
+                    [
+                      t("threeD.inspector.fields.type"),
+                      t("threeD.inspector.types.wallOpening")
+                    ],
+                    [
+                      t("threeD.inspector.fields.width"),
+                      formatMeters(selection.wallOpening!.frame.width)
+                    ],
+                    [
+                      t("threeD.inspector.fields.height"),
+                      formatMeters(selection.wallOpening!.frame.height)
+                    ],
+                    [
+                      t("threeD.inspector.fields.elevation"),
+                      formatMeters(selection.wallOpening!.frame.elevation)
+                    ],
+                    [t("threeD.inspector.fields.wall"), selection.wallId!],
+                    [t("threeD.inspector.fields.level"), selection.levelName]
+                  ]
+                : [
+                    [
+                      t("threeD.inspector.fields.type"),
+                      t("threeD.inspector.types.room")
+                    ],
+                    ...(selection.floor!.roomName
+                      ? [
+                          [
+                            t("threeD.inspector.fields.name"),
+                            selection.floor!.roomName
+                          ] as const
+                        ]
+                      : []),
+                    ...(selection.floor!.roomType
+                      ? [
+                          [
+                            t("threeD.inspector.fields.roomType"),
+                            formatRoomType(selection.floor!.roomType)
+                          ] as const
+                        ]
+                      : []),
+                    [
+                      t("threeD.inspector.fields.area"),
+                      `${selection.floor!.area.toFixed(2)} m²`
+                    ],
+                    [
+                      t("threeD.inspector.fields.elevation"),
+                      formatMeters(selection.floor!.y)
+                    ],
+                    [
+                      t("threeD.inspector.fields.thickness"),
+                      formatMeters(selection.floor!.thickness)
+                    ],
+                    [t("threeD.inspector.fields.level"), selection.levelName]
+                  ];
 
   return (
-    <Stack spacing={1} data-testid="project-3d-selection-details" aria-live="polite">
+    <Stack
+      spacing={1}
+      data-testid="project-3d-selection-details"
+      aria-live="polite"
+    >
       <Typography variant="overline" color="text.secondary">
         {t("threeD.inspector.selection")}
       </Typography>
       <Typography variant="subtitle2">{rows[0]![1]}</Typography>
+      {showReadOnly ? (
+        <Typography variant="caption" color="text.secondary">
+          {t("threeD.inspector.readOnlyEntity")}
+        </Typography>
+      ) : null}
       <Box component="dl" sx={{ m: 0 }}>
         {rows.map(([label, value]) => (
           <Stack
@@ -197,7 +387,11 @@ function SelectionDetails3D({ selection }: { readonly selection: ArchitecturalSe
             <Typography component="dt" variant="caption" color="text.secondary">
               {label}
             </Typography>
-            <Typography component="dd" variant="body2" sx={{ m: 0, textAlign: "right" }}>
+            <Typography
+              component="dd"
+              variant="body2"
+              sx={{ m: 0, textAlign: "right" }}
+            >
               {value}
             </Typography>
           </Stack>
@@ -214,7 +408,9 @@ function formatMeters(value: number): string {
 
 /** Formats canonical Room enum values without reinterpreting their semantics. */
 function formatRoomType(value: string): string {
-  return value.toLowerCase().split("_").map(
-    (word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`
-  ).join(" ");
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
 }

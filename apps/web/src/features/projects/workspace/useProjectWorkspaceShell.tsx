@@ -144,7 +144,7 @@ export function useProjectWorkspaceShell({
           />
         ) : undefined,
       headerCenter:
-        !isPhone && project && !consistencyFailure && mode === "view" ? (
+        !isPhone && project && !consistencyFailure ? (
           <WorkspaceRepresentationControl
             representation={representation}
             disabled={saveInteractionBlocked}
@@ -177,7 +177,7 @@ export function useProjectWorkspaceShell({
       inspector: isTablet || isPhone ? undefined : inspector,
       status:
         representation === "3d" && scene3D ? (
-          t("threeD.status", {
+          t(mode === "edit" ? "threeD.editStatus" : "threeD.status", {
             count: getVisibleLevelReferences3D(
               scene3D,
               levelVisibility3D,

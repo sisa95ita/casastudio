@@ -1,6 +1,6 @@
 # Architectural 3D model
 
-The viewer consumes the immutable `ArchitecturalScene3DModel` in
+The workspace consumes the immutable `ArchitecturalScene3DModel` in
 `apps/web/src/features/project-3d/model`. ProjectSchema remains authoritative.
 Room contours and global floor elevations come from a matching Geometry Snapshot
 or the Geometry Engine. Walls, Openings and Stair aggregates derive from the
@@ -193,6 +193,49 @@ Fallback Furniture uses the same presentation profile. Demand rendering remains
 enabled, with OrbitControls invalidating frames while damping or interaction is
 active.
 
+## Furniture interaction boundary
+
+The 3D representation remains read-only in View. While the existing Project edit
+session is active, a single selected Furniture item can be moved or rotated. No
+second Project draft or 3D history exists: 3D renders the editor draft, submits a
+completed gesture through the shared Furniture authoring policy, and replaces the
+draft once through the normal history action. Undo, Redo, dirty comparison, Save,
+and Discard therefore have identical meaning in 2D and 3D. Walls, Rooms, Stairs,
+and Openings remain inspectable but not directly manipulable.
+
+Keyboard movement uses the same Project-space axes and centimeter steps as 2D:
+Arrow keys nudge by 1 cm and Shift+Arrow nudges by 10 cm. Camera orientation does
+not reinterpret those directions. Each accepted nudge passes through the shared
+selection translation and Furniture validation operation and creates one history
+action; rejected nudges change neither draft nor history. The shared editor
+Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl/Cmd+Y shortcuts work in 3D Edit outside
+editable controls. Product copy consistently describes this surface as the 3D
+workspace, with View mode and Edit mode defining mutation availability.
+
+A Furniture gesture owns only a transient proposal. Pointer motion changes the
+semantic Furniture group's transform without updating canonical history or
+reloading its cached GLB. The stable drag plane is the current owning Room's
+global floor elevation; ray hits on Furniture, Walls, Stairs, or other objects do
+not replace it. Three X/Z intersections convert back to Project X/−Z in the
+Project length unit, and translation retains the initial pointer-to-anchor
+offset. Rotation is around the Furniture center on that same plane and remains
+canonical, unnormalized degrees.
+
+Every preview uses the shared 2D Furniture Room resolution and oriented-footprint
+validator. Wall and same-floor Furniture intersections block commit, leaving all
+canonical state and history unchanged. Stair overlap remains warning-only.
+Existing Room ownership is preferred while its polygon contains the anchor; one
+unambiguous candidate may be reassigned, while no Room or ambiguous stacked Rooms
+cannot commit. Room ownership remains the only source of vertical placement and
+no Furniture Y coordinate is persisted.
+
+During a gesture OrbitControls are disabled and pointer capture keeps the
+mathematical plane authoritative. Pointer cancellation, Escape, selection or
+visibility changes, and representation changes discard the transient proposal
+and restore camera controls. The rotation ring and valid/invalid edge feedback
+are renderer-only overlays: they cast no shadows, contribute no bounds, and do
+not mutate architectural or Furniture materials.
+
 ## Camera framing and controls
 
 Initial and Reset framing use the same elevated three-quarter direction and the
@@ -220,7 +263,8 @@ Room slab when its canonical footprint overlaps that Room. No heuristic Stair
 hole is cut, and no elevated footprint is subtracted from a lower Room. Explicit
 floor/slab openings require a future domain contract.
 
-Furniture clearance validation remains outside this renderer contract.
+General 3D collision or clearance geometry remains outside this renderer
+contract; Furniture manipulation reuses the established 2D plan-placement policy.
 
 ## Verification
 
@@ -231,4 +275,6 @@ Landing joins, aggregate bounds, selection and camera containment. The Chromium
 vertical-architecture workflow saves generic canonical layouts, renders them,
 clicks architectural surfaces, checks Level ownership, and returns to 2D with
 unchanged persisted Project state. Existing 3D/editor scenarios cover Wall and
-Opening regression, camera interaction and workspace transitions.
+Opening regression, camera interaction and workspace transitions. Furniture
+interaction tests cover floor-plane elevation, coordinate reflection, grab
+offset, rotation math, shared draft/history commits, and read-only View gating.

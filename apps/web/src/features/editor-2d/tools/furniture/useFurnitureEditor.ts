@@ -36,6 +36,10 @@ import {
 } from "../../../geometry-2d/presentation/furniture-presentation-model-2d";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveFurniturePrecisionTranslation } from "../../precision/project-precision-assistance";
+import {
+  furniturePositionFromGrabOffset,
+  furnitureRotationFromPointer
+} from "../../../project-3d/interaction/furniture-manipulation-3d";
 
 type Options = {
   readonly project?: Project | null;
@@ -66,7 +70,8 @@ export function useFurnitureEditor({
   const lastCanvasPointerRef = useRef<SvgViewportPointer | undefined>(
     undefined
   );
-  const furnitureAuthoringActive = editable && editor.activeTool === "furniture";
+  const furnitureAuthoringActive =
+    editable && editor.activeTool === "furniture";
   const [error, setError] = useState<
     FurniturePlacementIssue | "EDIT_FAILED" | undefined
   >();
@@ -207,6 +212,48 @@ export function useFurnitureEditor({
       });
       return { ...positioned, precision };
     };
+    const updateGestureAtProjectPoint = (
+      point: Readonly<{ x: number; z: number }>,
+      pointerId: number,
+      withPrecision?: SvgViewportPointer
+    ) => {
+      if (
+        !editable ||
+        !project ||
+        !levelId ||
+        !transient ||
+        transient.awaitingRoom
+      )
+        return;
+      const gesture = transient.gesture;
+      if (!gesture || gesture.pointerId !== pointerId) return;
+      const item = gesture.original;
+      if (transient.intent === "rotate") {
+        setTransient({
+          ...transient,
+          item: {
+            ...transient.item,
+            rotation: furnitureRotationFromPointer(
+              item.rotation,
+              item.position,
+              gesture.start,
+              point
+            )
+          }
+        });
+        return;
+      }
+      const position = furniturePositionFromGrabOffset(
+        item.position,
+        gesture.start,
+        point
+      );
+      setTransient(
+        withPrecision
+          ? positionWithPrecision(transient, position, withPrecision)
+          : positionFurniture(project, levelId, transient, position)
+      );
+    };
     const pointerMove = (pointer: SvgViewportPointer, pointerId: number) => {
       if (authoring && transient) lastCanvasPointerRef.current = pointer;
       if (
@@ -219,40 +266,7 @@ export function useFurnitureEditor({
         return;
       const gesture = transient.gesture;
       if (gesture) {
-        if (gesture.pointerId !== pointerId) return;
-        const item = gesture.original;
-        if (transient.intent === "rotate") {
-          const initial = Math.atan2(
-            gesture.start.z - item.position.z,
-            gesture.start.x - item.position.x
-          );
-          const current = Math.atan2(
-            pointer.worldPoint.z - item.position.z,
-            pointer.worldPoint.x - item.position.x
-          );
-          const delta = Math.atan2(
-            Math.sin(initial - current),
-            Math.cos(initial - current)
-          );
-          setTransient({
-            ...transient,
-            item: {
-              ...transient.item,
-              rotation: item.rotation + (delta * 180) / Math.PI
-            }
-          });
-        } else {
-          setTransient(
-            positionWithPrecision(
-              transient,
-              {
-                x: item.position.x + pointer.worldPoint.x - gesture.start.x,
-                z: item.position.z + pointer.worldPoint.z - gesture.start.z
-              },
-              pointer
-            )
-          );
-        }
+        updateGestureAtProjectPoint(pointer.worldPoint, pointerId, pointer);
       } else if (authoring)
         setTransient(
           positionWithPrecision(transient, pointer.worldPoint, pointer)
@@ -282,7 +296,7 @@ export function useFurnitureEditor({
     const beginGesture = (
       id: string,
       intent: "move" | "rotate",
-      pointer: SvgViewportPointer,
+      pointer: Pick<SvgViewportPointer, "worldPoint">,
       pointerId: number
     ) => {
       if (!editable || editor.activeTool !== "select") return;
@@ -303,13 +317,14 @@ export function useFurnitureEditor({
         gesture: { pointerId, start: pointer.worldPoint, original: item }
       });
     };
-    const endGesture = (dragged: boolean) => {
+    const endGesture = (dragged: boolean, allowAmbiguousRoomChoice = true) => {
       if (!editable || !transient?.gesture) return;
       if (!dragged) {
         cancel();
         return;
       }
       if (
+        allowAmbiguousRoomChoice &&
         !transient.item.roomId &&
         project &&
         levelId &&
@@ -514,7 +529,11 @@ export function useFurnitureEditor({
       pointerMove,
       canvasClick,
       beginGesture,
-      endGesture
+      endGesture,
+      pointerMoveProject: (
+        point: Readonly<{ x: number; z: number }>,
+        pointerId: number
+      ) => updateGestureAtProjectPoint(point, pointerId)
     };
   }, [
     project,

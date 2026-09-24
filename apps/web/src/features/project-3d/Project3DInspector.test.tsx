@@ -16,13 +16,57 @@ describe("Project3DInspector", () => {
   it("shows Project and visible-Level context when nothing is selected", () => {
     renderInspector();
 
+    expect(screen.getByRole("heading", { name: "3D Properties" })).toBeTruthy();
     expect(screen.getByText("Inspector Project")).toBeTruthy();
-    expect(screen.getByText("Nothing selected")).toBeTruthy();
+    expect(
+      screen.getByText("Select an object to inspect its properties.")
+    ).toBeTruthy();
     expect(screen.getByText("Ground Floor")).toBeTruthy();
   });
 
+  it("uses edit guidance and marks only architectural selections read-only", () => {
+    const wall = resolveArchitecturalSelection3D(model, {
+      kind: "wall",
+      id: "left-room-north-wall",
+      levelId: "ground-floor"
+    });
+    const { rerender } = renderInspector(undefined, "edit");
+    expect(
+      screen.getByText(
+        "Select Furniture to edit it, or another object to inspect its properties."
+      )
+    ).toBeTruthy();
+
+    rerender(
+      <Project3DInspector
+        mode="edit"
+        projectName="Inspector Project"
+        model={model}
+        visibility="all"
+        activeLevelId="ground-floor"
+        selection={wall}
+      />
+    );
+    expect(screen.getByText("Read-only in 3D")).toBeTruthy();
+    expect(screen.queryByTestId("furniture-properties")).toBeNull();
+  });
+
   it.each([
-    ["furniture", "inspector-furniture", "Furniture", ["Work desk", "Desk", "generic-desk", "1.37 m", "0.61 m", "0.78 m", "37°", "Left Room"]],
+    [
+      "furniture",
+      "inspector-furniture",
+      "Furniture",
+      [
+        "Work desk",
+        "Desk",
+        "generic-desk",
+        "1.37 m",
+        "0.61 m",
+        "0.78 m",
+        "37°",
+        "Left Room"
+      ]
+    ],
     ["wall", "left-room-north-wall", "Wall", ["4.00 m", "0.20 m", "3.00 m"]],
     ["door", "inspector-door", "Door", ["0.90 m", "2.10 m", "END", "RIGHT"]],
     ["window", "inspector-window", "Window", ["1.00 m", "1.20 m", "0.90 m"]],
@@ -38,16 +82,29 @@ describe("Project3DInspector", () => {
 
     const details = screen.getByTestId("project-3d-selection-details");
     expect(within(details).getAllByText(type).length).toBeGreaterThan(0);
-    for (const value of values) expect(within(details).getByText(value)).toBeTruthy();
+    for (const value of values)
+      expect(within(details).getByText(value)).toBeTruthy();
     expect(within(details).queryByRole("textbox")).toBeNull();
     expect(within(details).queryByRole("spinbutton")).toBeNull();
     expect(within(details).queryByRole("button")).toBeNull();
   });
 
   it("shows Stair aggregate properties without authoring controls", () => {
-    const stairModel = createArchitecturalScene3DModel(createVerticalArchitectureFixture(demoProjectFixture));
-    render(<Project3DInspector projectName="Vertical" model={stairModel} visibility="all"
-      selection={resolveArchitecturalSelection3D(stairModel, { kind: "staircase", id: "stair", levelId: "ground" })} />);
+    const stairModel = createArchitecturalScene3DModel(
+      createVerticalArchitectureFixture(demoProjectFixture)
+    );
+    render(
+      <Project3DInspector
+        projectName="Vertical"
+        model={stairModel}
+        visibility="all"
+        selection={resolveArchitecturalSelection3D(stairModel, {
+          kind: "staircase",
+          id: "stair",
+          levelId: "ground"
+        })}
+      />
+    );
     const details = screen.getByTestId("project-3d-selection-details");
     expect(within(details).getByText("straight Stair")).toBeTruthy();
     expect(within(details).getByText("12")).toBeTruthy();
@@ -57,10 +114,12 @@ describe("Project3DInspector", () => {
   });
 
   function renderInspector(
-    selection = undefined as ReturnType<typeof resolveArchitecturalSelection3D>
+    selection = undefined as ReturnType<typeof resolveArchitecturalSelection3D>,
+    mode: "view" | "edit" = "view"
   ) {
     return render(
       <Project3DInspector
+        mode={mode}
         projectName="Inspector Project"
         model={model}
         visibility="all"
@@ -73,33 +132,51 @@ describe("Project3DInspector", () => {
 
 function createSelectableProject(): Project {
   const project = structuredClone(demoProjectFixture);
-  project.building.furniture = [{ id: "inspector-furniture", name: "Work desk", roomId: "left-room", definitionId: "generic-desk", position: { x: 100, z: 100 }, rotation: 37, width: 137, depth: 61, height: 78 }];
+  project.building.furniture = [
+    {
+      id: "inspector-furniture",
+      name: "Work desk",
+      roomId: "left-room",
+      definitionId: "generic-desk",
+      position: { x: 100, z: 100 },
+      rotation: 37,
+      width: 137,
+      depth: 61,
+      height: 78
+    }
+  ];
   const walls = project.building.levels[0]!.walls;
-  walls[0]!.openings = [{
-    id: "inspector-door",
-    type: "DOOR",
-    offsetFromStart: 50,
-    width: 90,
-    height: 210,
-    elevation: 0,
-    hingeSide: "END",
-    swingSide: "RIGHT"
-  }];
-  walls[1]!.openings = [{
-    id: "inspector-window",
-    type: "WINDOW",
-    offsetFromStart: 50,
-    width: 100,
-    height: 120,
-    elevation: 90
-  }];
-  walls[2]!.openings = [{
-    id: "inspector-opening",
-    type: "OPENING",
-    offsetFromStart: 50,
-    width: 100,
-    height: 220,
-    elevation: 0
-  }];
+  walls[0]!.openings = [
+    {
+      id: "inspector-door",
+      type: "DOOR",
+      offsetFromStart: 50,
+      width: 90,
+      height: 210,
+      elevation: 0,
+      hingeSide: "END",
+      swingSide: "RIGHT"
+    }
+  ];
+  walls[1]!.openings = [
+    {
+      id: "inspector-window",
+      type: "WINDOW",
+      offsetFromStart: 50,
+      width: 100,
+      height: 120,
+      elevation: 90
+    }
+  ];
+  walls[2]!.openings = [
+    {
+      id: "inspector-opening",
+      type: "OPENING",
+      offsetFromStart: 50,
+      width: 100,
+      height: 220,
+      elevation: 0
+    }
+  ];
   return project;
 }

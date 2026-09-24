@@ -39,13 +39,16 @@
     "threeD": "3D workspace"
   },
   "threeD": {
-    "title": "Architectural 3D viewer",
-    "description": "Read-only Walls, Openings, Room Floors, Stairs, and Furniture derived from the authoritative Project.",
+    "title": "3D workspace",
+    "viewDescription": "Explore the Project in 3D.",
+    "editDescription": "Move and rotate Furniture in 3D. Architectural geometry remains read-only.",
     "loading": "Loading the 3D workspace…",
     "fit": "Fit to building",
     "reset": "Reset camera",
-    "status_one": "3D viewer · {{count}} visible Level · Read-only",
-    "status_other": "3D viewer · {{count}} visible Levels · Read-only",
+    "status_one": "3D · {{count}} visible Level · View mode",
+    "status_other": "3D · {{count}} visible Levels · View mode",
+    "editStatus_one": "3D · {{count}} visible Level · Edit mode",
+    "editStatus_other": "3D · {{count}} visible Levels · Edit mode",
     "visibility": {
       "label": "3D Level visibility",
       "all": "All Levels",
@@ -56,14 +59,14 @@
       "detail": "This Project has no Walls, Room Floors, or Stairs yet. The physical ground and camera workspace remain available."
     },
     "inspector": {
-      "title": "3D viewer",
-      "readOnly": "This representation is read-only and does not change Project geometry.",
+      "title": "3D Properties",
       "project": "Project",
       "referenceReady": "Architectural geometry ready",
       "empty": "Empty architectural geometry",
       "selection": "Selection",
-      "nothingSelected": "Nothing selected",
-      "selectionHint": "Select a Wall, Door, Window, Wall Opening, Room Floor, Staircase, or Furniture in the viewer.",
+      "emptySelectionView": "Select an object to inspect its properties.",
+      "emptySelectionEdit": "Select Furniture to edit it, or another object to inspect its properties.",
+      "readOnlyEntity": "Read-only in 3D",
       "visibleLevels": "Visible Levels",
       "noVisibleLevels": "No architectural Level is visible.",
       "fields": {
@@ -107,7 +110,7 @@
     "errors": {
       "unsupportedTitle": "3D rendering is unavailable",
       "unsupportedDetail": "This browser or device could not initialize WebGL. You can continue using the 2D workspace.",
-      "runtimeTitle": "The 3D viewer stopped rendering",
+      "runtimeTitle": "The 3D workspace stopped rendering",
       "runtimeDetail": "The Project remains available. Return to 2D or retry the 3D workspace in a WebGL-capable browser.",
       "derivationTitle": "The 3D scene could not be prepared",
       "derivationDetail": "The authoritative Project is still available in 2D. No Project data was changed."
