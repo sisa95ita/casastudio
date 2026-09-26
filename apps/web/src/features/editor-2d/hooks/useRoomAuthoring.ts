@@ -72,14 +72,46 @@ export function useRoomAuthoring({
       !validatedRoomShape
     )
       return undefined;
+    const occupiedRoomIds = new Set(
+      editor.draft.building.levels.flatMap((level) =>
+        level.rooms.map((room) => room.id)
+      )
+    );
+    const occupiedWallIds = new Set(
+      editor.draft.building.levels.flatMap((level) =>
+        level.walls.map((wall) => wall.id)
+      )
+    );
+    const [previewRoomId] = allocateTransientIdentifiers(
+      occupiedRoomIds,
+      "room-authoring-preview-room",
+      1
+    );
     const room = {
-      id: "room-authoring-preview",
+      id: previewRoomId!,
       name: "Room preview",
       type: roomShapePlacement.roomType,
       ...(roomShapePlacement.boundaryKind === "FREE"
         ? { elevation: roomShapePlacement.elevation }
         : {})
     };
+    const edgeCount =
+      deriveRoomShapeVertices(roomShapePlacement.origin, validatedRoomShape)
+        ?.length ?? 0;
+    const activeLevel = editor.draft.building.levels.find(
+      (level) => level.id === editor.activeLevelId
+    );
+    const identifierBudget = edgeCount * ((activeLevel?.walls.length ?? 0) + 1);
+    const previewWallIds = allocateTransientIdentifiers(
+      occupiedWallIds,
+      "room-authoring-preview-wall",
+      identifierBudget
+    );
+    const previewSplitWallIds = allocateTransientIdentifiers(
+      occupiedWallIds,
+      "room-authoring-preview-split",
+      identifierBudget * 2
+    );
     return roomShapePlacement.boundaryKind === "FREE"
       ? createFreeBoundaryRoomFromShape(editor.draft, {
           levelId: editor.activeLevelId,
@@ -92,16 +124,8 @@ export function useRoomAuthoring({
           origin: roomShapePlacement.origin,
           shape: validatedRoomShape,
           room,
-          wallIds: Array.from(
-            {
-              length:
-                deriveRoomShapeVertices(
-                  roomShapePlacement.origin,
-                  validatedRoomShape
-                )?.length ?? 0
-            },
-            (_, index) => `room-authoring-preview-wall-${index + 1}`
-          ),
+          wallIds: previewWallIds,
+          splitWallIds: previewSplitWallIds,
           wallHeight: newWallDefaults.height,
           wallThickness: newWallDefaults.thickness
         });
@@ -274,4 +298,20 @@ export function useRoomAuthoring({
     handleRoomShapeDimensionChange,
     handleCancelRoomAuthoring
   };
+}
+
+function allocateTransientIdentifiers(
+  occupied: Set<string>,
+  prefix: string,
+  count: number
+): readonly string[] {
+  const identifiers: string[] = [];
+  let suffix = 1;
+  while (identifiers.length < count) {
+    const candidate = `${prefix}-${suffix++}`;
+    if (occupied.has(candidate)) continue;
+    occupied.add(candidate);
+    identifiers.push(candidate);
+  }
+  return identifiers;
 }

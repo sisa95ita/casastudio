@@ -1360,6 +1360,14 @@ img {
   vector-effect: non-scaling-stroke;
 }
 
+.architectural-level-reference__vertex {
+  fill: rgba(101, 116, 123, 0.56);
+  pointer-events: none;
+  stroke: rgba(253, 252, 249, 0.9);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
 .architectural-wall-hit-target,
 .architectural-opening-hit-target {
   fill: none;
@@ -1863,9 +1871,23 @@ img {
   fill: rgba(199, 85, 50, 0.2);
 }
 
+.geometry-wall-snap-marker--reference-vertex {
+  fill: rgba(101, 116, 123, 0.2);
+  stroke: #65747b;
+}
+
 .geometry-wall-snap-marker__inner {
   fill: var(--casa-terracotta);
   pointer-events: none;
+}
+
+.geometry-room-shape-snap-marker--secondary {
+  opacity: 0.78;
+}
+
+.geometry-room-shape-snap-marker.geometry-wall-snap-marker--reference-vertex
+  + .geometry-wall-snap-marker__inner {
+  fill: #65747b;
 }
 
 .geometry-precision-guides {

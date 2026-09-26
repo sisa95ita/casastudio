@@ -20,6 +20,7 @@ export function furnitureProjectFixture(): Project {
     shape: { kind: "RECTANGLE", dimensions: { width: 600, depth: 600 } },
     room: { id: "living", name: "Living Room", type: "LIVING_ROOM" },
     wallIds: ["wall-a", "wall-b", "wall-c", "wall-d"],
+    splitWallIds: ["split-a", "split-b", "split-c", "split-d"],
     wallHeight: 300,
     wallThickness: 20
   });

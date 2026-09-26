@@ -1,7 +1,10 @@
 import { ProjectSchema, type Project } from "../project/index.js";
 import { IdentifierSchema, type Identifier } from "../primitives/index.js";
 import {
+  validateProjectCrossReferences,
+  validateProjectGeometry,
   validateProjectIdentifierUniqueness,
+  validateProjectReferenceConsistency,
   ValidationErrorCode,
   type ValidationError
 } from "../validation/index.js";
@@ -17,6 +20,25 @@ export type UpdateLevelPropertiesInput = {
   readonly name?: Level["name"];
   readonly elevation?: Level["elevation"];
 };
+
+/** Input for atomically removing one eligible highest Level. */
+export type DeleteLevelInput = {
+  readonly levelId: Identifier;
+};
+
+/**
+ * Returns the canonical highest Level using elevation followed by durable Level
+ * order as the deterministic tie-breaker.
+ */
+export function findHighestLevel(
+  project: Pick<Project, "building">
+): Level | undefined {
+  return project.building.levels.reduce<Level | undefined>(
+    (highest, level) =>
+      !highest || level.elevation >= highest.elevation ? level : highest,
+    undefined
+  );
+}
 
 /**
  * Appends an empty Level while preserving the Project's durable Level order.
@@ -83,7 +105,10 @@ export function updateLevelProperties(
     ...(input.elevation === undefined ? {} : { elevation: input.elevation })
   });
   if (!levelResult.success) return failure(invalidLevelProperties());
-  if (levelResult.data.name === current.name && levelResult.data.elevation === current.elevation) {
+  if (
+    levelResult.data.name === current.name &&
+    levelResult.data.elevation === current.elevation
+  ) {
     return { ok: true, project };
   }
 
@@ -98,20 +123,120 @@ export function updateLevelProperties(
   });
 }
 
+/**
+ * Removes only the highest Level while preserving at least one Level.
+ *
+ * Level-owned Walls, Openings, Rooms, and Staircases are removed with their
+ * container. Building Furniture, cross-Level Staircases, and observation and
+ * rendering artifacts that depend on the deleted Level are cascaded in the
+ * same validated Project candidate.
+ */
+export function deleteLevel(
+  project: Project,
+  input: DeleteLevelInput
+): ProjectEditingResult {
+  const level = project.building.levels.find(
+    (candidate) => candidate.id === input.levelId
+  );
+  if (!level) {
+    return failure({
+      code: ValidationErrorCode.LEVEL_NOT_FOUND,
+      path: "levelId",
+      message: `Level "${input.levelId}" could not be found.`
+    });
+  }
+  const highest = findHighestLevel(project);
+  if (project.building.levels.length <= 1 || highest?.id !== level.id) {
+    return failure({
+      code: ValidationErrorCode.PROJECT_SCHEMA_VALIDATION_FAILED,
+      path: "levelId",
+      message:
+        project.building.levels.length <= 1
+          ? "The final remaining Level cannot be deleted."
+          : `Only the highest Level "${highest?.id}" can be deleted.`
+    });
+  }
+
+  const deletedRoomIds = new Set(level.rooms.map((room) => room.id));
+  const deletedViewpointIds = new Set(
+    project.viewpoints
+      .filter((viewpoint) => viewpoint.levelId === level.id)
+      .map((viewpoint) => viewpoint.id)
+  );
+  const deletedBaseImageIds = new Set(
+    project.baseImages
+      .filter((image) => deletedViewpointIds.has(image.viewpointId))
+      .map((image) => image.id)
+  );
+  const deletedRenderRequestIds = new Set(
+    project.renderRequests
+      .filter(
+        (request) =>
+          deletedViewpointIds.has(request.viewpointId) ||
+          deletedBaseImageIds.has(request.baseImageId)
+      )
+      .map((request) => request.id)
+  );
+
+  const candidate: Project = {
+    ...project,
+    building: {
+      ...project.building,
+      levels: project.building.levels
+        .filter((candidateLevel) => candidateLevel.id !== level.id)
+        .map((candidateLevel) => ({
+          ...candidateLevel,
+          staircases: candidateLevel.staircases.filter(
+            (staircase) =>
+              staircase.fromLevelId !== level.id &&
+              staircase.toLevelId !== level.id &&
+              (!staircase.fromRoomId ||
+                !deletedRoomIds.has(staircase.fromRoomId)) &&
+              (!staircase.toRoomId || !deletedRoomIds.has(staircase.toRoomId))
+          )
+        })),
+      furniture: project.building.furniture.filter(
+        (item) => !deletedRoomIds.has(item.roomId)
+      )
+    },
+    viewpoints: project.viewpoints.filter(
+      (viewpoint) => !deletedViewpointIds.has(viewpoint.id)
+    ),
+    baseImages: project.baseImages.filter(
+      (image) => !deletedBaseImageIds.has(image.id)
+    ),
+    renderRequests: project.renderRequests.filter(
+      (request) => !deletedRenderRequestIds.has(request.id)
+    ),
+    renderResults: project.renderResults.filter(
+      (result) => !deletedRenderRequestIds.has(result.renderRequestId)
+    )
+  };
+
+  return validateCandidate(candidate);
+}
+
 function validateCandidate(candidate: Project): ProjectEditingResult {
   const parsed = ProjectSchema.safeParse(candidate);
   if (!parsed.success) return failure(invalidLevelProperties());
-  const identifiers = validateProjectIdentifierUniqueness(parsed.data);
-  return identifiers.valid
-    ? { ok: true, project: parsed.data }
-    : { ok: false, errors: identifiers.errors };
+  for (const validate of [
+    validateProjectIdentifierUniqueness,
+    validateProjectCrossReferences,
+    validateProjectReferenceConsistency,
+    validateProjectGeometry
+  ]) {
+    const result = validate(parsed.data);
+    if (!result.valid) return { ok: false, errors: result.errors };
+  }
+  return { ok: true, project: parsed.data };
 }
 
 function invalidLevelProperties(): ValidationError {
   return {
     code: ValidationErrorCode.PROJECT_SCHEMA_VALIDATION_FAILED,
     path: "level",
-    message: "Level name and elevation must satisfy the canonical Level contract."
+    message:
+      "Level name and elevation must satisfy the canonical Level contract."
   };
 }
 

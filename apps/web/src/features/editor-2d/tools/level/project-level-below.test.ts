@@ -9,6 +9,7 @@ import {
   projectEditorReducer
 } from "../../state/project-editor-slice";
 import {
+  canCreateFromLevelBelow,
   createFromLevelBelow,
   findNearestLowerLevel
 } from "./project-level-below";
@@ -27,6 +28,27 @@ function projectWithEmptyUpperLevel() {
 }
 
 describe("Level-below authoring", () => {
+  it("is actionable only for an empty upper Level above a Wall footprint", () => {
+    const project = projectWithEmptyUpperLevel();
+    expect(canCreateFromLevelBelow(project, "upper")).toBe(true);
+    expect(
+      canCreateFromLevelBelow(project, project.building.levels[0]!.id)
+    ).toBe(false);
+
+    project.building.levels.at(-1)!.rooms.push({
+      id: "upper-room",
+      name: "Upper Room",
+      type: "OTHER",
+      boundary: []
+    });
+    expect(canCreateFromLevelBelow(project, "upper")).toBe(false);
+    project.building.levels.at(-1)!.rooms = [];
+    project.building.levels
+      .at(-1)!
+      .walls.push(structuredClone(project.building.levels[0]!.walls[0]!));
+    expect(canCreateFromLevelBelow(project, "upper")).toBe(false);
+  });
+
   it("uses nearest lower global elevation instead of array position", () => {
     const project = projectWithEmptyUpperLevel();
     project.building.levels.splice(1, 0, {

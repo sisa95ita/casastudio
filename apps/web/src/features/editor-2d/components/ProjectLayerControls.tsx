@@ -5,7 +5,13 @@ import MeetingRoomRoundedIcon from "@mui/icons-material/MeetingRoomRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import StraightenRoundedIcon from "@mui/icons-material/StraightenRounded";
 import ViewStreamRoundedIcon from "@mui/icons-material/ViewStreamRounded";
-import { Box, Button, Divider, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
+import {
+  Box,
+  FormControlLabel,
+  Stack,
+  Switch,
+  Typography
+} from "@mui/material";
 import type { LevelMeasurement } from "@casastudio/geometry";
 import {
   formatArchitecturalArea,
@@ -26,18 +32,20 @@ export type ProjectLayerControlsProps = {
   readonly levelBelow?: {
     readonly name: string;
     readonly visible: boolean;
-    readonly createDisabled: boolean;
     readonly onVisibleChange: (visible: boolean) => void;
-    readonly onCreate: () => void;
   };
 };
 
 /** One semantic layer and its mapping to renderer presentation flags. */
 type ProductLayer = {
-  readonly id: "furniture" | "walls" | "rooms" | "openings" | "dimensions" | "annotations";
+  readonly id:
+    "furniture" | "walls" | "rooms" | "openings" | "dimensions" | "annotations";
   readonly icon: ReactNode;
   readonly visible: (options: GeometryDisplayOptions) => boolean;
-  readonly apply: (options: GeometryDisplayOptions, visible: boolean) => GeometryDisplayOptions;
+  readonly apply: (
+    options: GeometryDisplayOptions,
+    visible: boolean
+  ) => GeometryDisplayOptions;
 };
 
 /** Stable architectural layer order used by the Project inspector. */
@@ -68,14 +76,16 @@ const productLayers: readonly ProductLayer[] = Object.freeze([
     apply: (options, visible) => ({ ...options, openings: visible })
   },
   {
-    id: "furniture", icon: <ChairRoundedIcon fontSize="small" />,
+    id: "furniture",
+    icon: <ChairRoundedIcon fontSize="small" />,
     visible: (options) => options.furniture !== false,
     apply: (options, visible) => ({ ...options, furniture: visible })
   },
   {
     id: "dimensions",
     icon: <StraightenRoundedIcon fontSize="small" />,
-    visible: (options) => options.overallDimensions || options.selectedDimensions,
+    visible: (options) =>
+      options.overallDimensions || options.selectedDimensions,
     apply: (options, visible) => ({
       ...options,
       overallDimensions: visible,
@@ -134,8 +144,15 @@ export function ProjectLayerControls({
                 />
               }
               label={
-                <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
-                  <Box className="project-layer-control__icon" aria-hidden="true">
+                <Stack
+                  direction="row"
+                  spacing={1.25}
+                  sx={{ alignItems: "center" }}
+                >
+                  <Box
+                    className="project-layer-control__icon"
+                    aria-hidden="true"
+                  >
                     {layer.icon}
                   </Box>
                   <Typography variant="body2">{label}</Typography>
@@ -145,64 +162,70 @@ export function ProjectLayerControls({
             />
           );
         })}
-      </Box>
-
-      {levelBelow ? (
-        <Stack spacing={1.25} className="project-level-reference-control">
-          <Divider />
+        {levelBelow ? (
           <FormControlLabel
-            className="project-layer-control"
+            className="project-layer-control project-level-reference-control"
             control={
               <Switch
                 checked={levelBelow.visible}
-                onChange={(_event, visible) => levelBelow.onVisibleChange(visible)}
+                onChange={(_event, visible) =>
+                  levelBelow.onVisibleChange(visible)
+                }
                 size="small"
                 slotProps={{ input: { "aria-label": t("layers.levelBelow") } }}
               />
             }
             label={
-              <Typography variant="body2">
-                {t("layers.levelBelowNamed", { level: levelBelow.name })}
-              </Typography>
+              <Stack
+                direction="row"
+                spacing={1.25}
+                sx={{ alignItems: "center" }}
+              >
+                <Box className="project-layer-control__icon" aria-hidden="true">
+                  <LayersRoundedIcon fontSize="small" />
+                </Box>
+                <Typography variant="body2">
+                  {t("layers.levelBelowNamed", { level: levelBelow.name })}
+                </Typography>
+              </Stack>
             }
             labelPlacement="start"
           />
-          <Button
-            variant="outlined"
-            size="small"
-            disabled={levelBelow.createDisabled}
-            onClick={levelBelow.onCreate}
-          >
-            {t("layers.createFromBelow")}
-          </Button>
-          {levelBelow.createDisabled ? (
-            <Typography variant="caption" color="text.secondary">
-              {t("layers.createFromBelowDisabled")}
-            </Typography>
-          ) : null}
-        </Stack>
-      ) : null}
+        ) : null}
+      </Box>
 
       {measurement && units ? (
-        <Box className="project-plan-summary" aria-label={t("planSummary.title")}>
+        <Box
+          className="project-plan-summary"
+          aria-label={t("planSummary.title")}
+        >
           <Typography variant="overline" color="text.secondary">
             {t("planSummary.title")}
           </Typography>
           {measurement.rooms.length > 0 ? (
             <SummaryRow
               label={t("planSummary.totalArea")}
-              value={formatArchitecturalArea(measurement.totalRoomArea, units.length)}
+              value={formatArchitecturalArea(
+                measurement.totalRoomArea,
+                units.length
+              )}
             />
           ) : null}
           {measurement.plan ? (
             <>
               <SummaryRow
                 label={t("planSummary.width")}
-                value={formatArchitecturalLength(measurement.plan.width, units.length)}
+                value={formatArchitecturalLength(
+                  measurement.plan.width,
+                  units.length
+                )}
               />
               <SummaryRow
                 label={t("planSummary.depth")}
-                value={formatArchitecturalLength(measurement.plan.depth, units.length)}
+                value={formatArchitecturalLength(
+                  measurement.plan.depth,
+                  units.length
+                )}
               />
             </>
           ) : null}
@@ -213,11 +236,21 @@ export function ProjectLayerControls({
 }
 
 /** Renders one read-only plan measurement. */
-function SummaryRow({ label, value }: { readonly label: string; readonly value: string }) {
+function SummaryRow({
+  label,
+  value
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
   return (
     <Stack direction="row" className="project-plan-summary__row">
-      <Typography variant="caption" color="text.secondary">{label}</Typography>
-      <Typography variant="caption" sx={{ fontWeight: 700 }}>{value}</Typography>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="caption" sx={{ fontWeight: 700 }}>
+        {value}
+      </Typography>
     </Stack>
   );
 }

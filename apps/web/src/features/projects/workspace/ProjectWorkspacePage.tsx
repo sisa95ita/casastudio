@@ -132,6 +132,7 @@ import {
   resolveFurniturePrecisionTranslation
 } from "../../editor-2d/precision/project-precision-assistance";
 import {
+  canCreateFromLevelBelow,
   createFromLevelBelow,
   findNearestLowerLevel
 } from "../../editor-2d/tools/level/project-level-below";
@@ -147,10 +148,12 @@ import {
   newWallDefaults
 } from "../../editor-2d/tools/wall/project-wall-editing";
 import {
+  createReferenceLevelSnapTargets,
   resolveDrawWallSnapCandidate,
   resolveGridSnapCandidate,
   resolveProjectPointSnapCandidate
 } from "../../editor-2d/tools/wall/project-wall-snapping";
+import { resolveRoomShapeVertexSnap } from "../../editor-2d/tools/room/room-shape-snapping";
 import {
   commitOpeningPlacementCandidate,
   createOpeningIdentifier,
@@ -621,6 +624,25 @@ export function ProjectWorkspacePage() {
     levelBelow,
     levelBelowReferenceVisible
   ]);
+  const referenceSnapTargets = useMemo(
+    () =>
+      workspaceMode === "edit" &&
+      levelBelowReferenceVisible &&
+      levelBelow &&
+      (editor.activeTool === "room" || editor.activeTool === "draw-wall")
+        ? createReferenceLevelSnapTargets(
+            levelBelow,
+            createViewportTransform2D(activeViewport)
+          )
+        : [],
+    [
+      activeViewport,
+      editor.activeTool,
+      levelBelow,
+      levelBelowReferenceVisible,
+      workspaceMode
+    ]
+  );
 
   const selectionFootprints = useMemo(() => {
     if (!presentationResult?.ok || !activeProjectLevel || !activeProject)
@@ -1193,6 +1215,7 @@ export function ProjectWorkspacePage() {
         const level = editor.draft.building.levels.find(
           (candidate) => candidate.id === editor.activeLevelId
         );
+        const identifierBudget = wallCount * ((level?.walls.length ?? 0) + 1);
         const room = {
           id: roomId,
           name: `Room ${(level?.rooms.length ?? 0) + 1}`,
@@ -1214,7 +1237,10 @@ export function ProjectWorkspacePage() {
                 origin,
                 shape: validatedRoomShape,
                 room,
-                wallIds: Array.from({ length: wallCount }, () =>
+                wallIds: Array.from({ length: identifierBudget }, () =>
+                  createWallIdentifier()
+                ),
+                splitWallIds: Array.from({ length: identifierBudget * 2 }, () =>
                   createWallIdentifier()
                 ),
                 wallHeight: newWallDefaults.height,
@@ -1326,6 +1352,7 @@ export function ProjectWorkspacePage() {
                       ).worldToScreen(editor.transient.interaction.startPoint)
                     }
                   : undefined,
+              referenceTargets: referenceSnapTargets,
               grid: {
                 enabled: editor.precision.snapToGrid,
                 spacing: editor.precision.gridSpacing,
@@ -1393,6 +1420,7 @@ export function ProjectWorkspacePage() {
       validRoomElevation,
       activeViewport,
       presentationResult,
+      referenceSnapTargets,
       roomPlacementValidation,
       saveInteractionBlocked,
       workspaceMode
@@ -1614,33 +1642,52 @@ export function ProjectWorkspacePage() {
         editor.transient.interaction?.kind === "place-room-shape" &&
         validatedRoomShape
       ) {
-        const snapCandidate = presentationResult?.ok
-          ? resolveProjectPointSnapCandidate(
-              pointer.svgPoint,
-              presentationResult.model,
-              {
-                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
-                bypass: pointer.altKey,
-                worldPoint: pointer.worldPoint,
-                grid: {
+        const shapeSnap =
+          !pointer.altKey && presentationResult?.ok && activeProjectLevel
+            ? resolveRoomShapeVertexSnap(
+                pointer.worldPoint,
+                validatedRoomShape,
+                presentationResult.model,
+                createViewportTransform2D(activeViewport),
+                {
+                  currentLevel: activeProjectLevel,
+                  cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                  referenceTargets: referenceSnapTargets
+                }
+              )
+            : undefined;
+        const snapCandidate = shapeSnap
+          ? shapeSnap.primaryMatch.snapCandidate
+          : presentationResult?.ok
+            ? resolveProjectPointSnapCandidate(
+                pointer.svgPoint,
+                presentationResult.model,
+                {
+                  cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                  bypass: pointer.altKey,
+                  worldPoint: pointer.worldPoint,
+                  grid: {
+                    enabled: editor.precision.snapToGrid,
+                    spacing: editor.precision.gridSpacing,
+                    worldToSvgScale: activeViewport.zoom
+                  }
+                }
+              )
+            : pointer.altKey
+              ? undefined
+              : resolveGridSnapCandidate(pointer.worldPoint, {
                   enabled: editor.precision.snapToGrid,
                   spacing: editor.precision.gridSpacing,
-                  worldToSvgScale: activeViewport.zoom
-                }
-              }
-            )
-          : pointer.altKey
-            ? undefined
-            : resolveGridSnapCandidate(pointer.worldPoint, {
-                enabled: editor.precision.snapToGrid,
-                spacing: editor.precision.gridSpacing,
-                worldToSvgScale: activeViewport.zoom,
-                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
-              });
+                  worldToSvgScale: activeViewport.zoom,
+                  cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
+                });
         dispatch(
-          editorRoomShapePlacementPointerMoved(
-            snapCandidate?.point ?? pointer.worldPoint
-          )
+          editorRoomShapePlacementPointerMoved({
+            point:
+              shapeSnap?.origin ?? snapCandidate?.point ?? pointer.worldPoint,
+            snapCandidate,
+            snapMatches: shapeSnap?.matches
+          })
         );
       } else if (
         workspaceMode === "edit" &&
@@ -1764,6 +1811,7 @@ export function ProjectWorkspacePage() {
                     ).worldToScreen(editor.transient.interaction.startPoint)
                   }
                 : undefined,
+            referenceTargets: referenceSnapTargets,
             grid: {
               enabled: editor.precision.snapToGrid,
               spacing: editor.precision.gridSpacing,
@@ -1822,6 +1870,7 @@ export function ProjectWorkspacePage() {
       activeProject,
       activeProjectLevel,
       presentationResult,
+      referenceSnapTargets,
       selectionFootprints,
       selectionRoots,
       selectionState.selected,
@@ -2110,6 +2159,7 @@ export function ProjectWorkspacePage() {
     handleUpdateSelectedRoomProperties,
     handleCreateLevel,
     handleUpdateActiveLevel,
+    handleDeleteActiveLevel,
     handleCreateRoom
   } = useEditorSelectionActions({
     dispatch,
@@ -2427,14 +2477,7 @@ export function ProjectWorkspacePage() {
             ? {
                 name: levelBelow.name,
                 visible: levelBelowReferenceVisible,
-                createDisabled: Boolean(
-                  saveInteractionBlocked ||
-                  !activeProjectLevel ||
-                  activeProjectLevel.walls.length > 0 ||
-                  activeProjectLevel.rooms.length > 0
-                ),
-                onVisibleChange: setLevelBelowReferenceVisible,
-                onCreate: handleCreateFromLevelBelow
+                onVisibleChange: setLevelBelowReferenceVisible
               }
             : undefined
         }
@@ -2595,6 +2638,14 @@ export function ProjectWorkspacePage() {
     onViewLevelChange: handleViewLevelChange,
     onCreateLevel: handleCreateLevel,
     onUpdateActiveLevel: handleUpdateActiveLevel,
+    canCreateFromBelow: Boolean(
+      workspaceMode === "edit" &&
+      !saveInteractionBlocked &&
+      editor.draft &&
+      canCreateFromLevelBelow(editor.draft, editor.activeLevelId)
+    ),
+    onCreateFromBelow: handleCreateFromLevelBelow,
+    onDeleteActiveLevel: handleDeleteActiveLevel,
     onModeChange: handleModeChange,
     onRepresentationChange: handleRepresentationChange,
     onSave: handleSave,
@@ -2713,6 +2764,7 @@ export function ProjectWorkspacePage() {
                 architecturalModel: presentationResult.architecturalModel,
                 referenceArchitecturalModel:
                   presentationResult.referenceArchitecturalModel,
+                referenceSnapTargets,
                 dimensionModel,
                 options: resolvedDisplayOptions,
                 viewport: activeViewport,

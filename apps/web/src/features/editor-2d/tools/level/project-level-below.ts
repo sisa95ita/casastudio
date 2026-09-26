@@ -31,6 +31,24 @@ export function findNearestLowerLevel(
   );
 }
 
+/** Returns whether copying a non-empty lower-Level Wall footprint is actionable. */
+export function canCreateFromLevelBelow(
+  project: Pick<Project, "building">,
+  activeLevelId: string | null | undefined
+): boolean {
+  const activeLevel = project.building.levels.find(
+    (level) => level.id === activeLevelId
+  );
+  const sourceLevel = findNearestLowerLevel(project, activeLevelId);
+  return Boolean(
+    activeLevel &&
+    sourceLevel &&
+    sourceLevel.walls.length > 0 &&
+    activeLevel.walls.length === 0 &&
+    activeLevel.rooms.length === 0
+  );
+}
+
 export type CreateFromLevelBelowResult =
   | Readonly<{ ok: true; project: Project; sourceLevelId: string }>
   | Readonly<{

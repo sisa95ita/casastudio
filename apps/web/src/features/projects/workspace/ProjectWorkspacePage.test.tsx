@@ -641,9 +641,7 @@ describe("ProjectViewerPage", () => {
     expect(
       within(
         screen.getByRole("contentinfo", { name: "Test status bar" })
-      ).getByText(
-        "3D · 1 visible Level · View mode"
-      )
+      ).getByText("3D · 1 visible Level · View mode")
     ).toBeTruthy();
     expect(workspace.getAttribute("data-architectural-wall-count")).toBe("7");
     expect(
@@ -731,9 +729,7 @@ describe("ProjectViewerPage", () => {
     expect(
       within(
         screen.getByRole("contentinfo", { name: "Test status bar" })
-      ).getByText(
-        "3D · 1 visible Level · Edit mode"
-      )
+      ).getByText("3D · 1 visible Level · Edit mode")
     ).toBeTruthy();
     expect(store.getState().projectEditor.mode).toBe("edit");
     expect(store.getState().projectEditor.dirty).toBe(true);
@@ -1716,6 +1712,9 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Level: Ground Floor" })
     );
+    expect(
+      screen.queryByRole("menuitem", { name: "Create from level below" })
+    ).toBeNull();
     fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
 
     const referenceToggle = await within(inspector).findByRole("switch", {
@@ -1737,8 +1736,9 @@ describe("ProjectViewerPage", () => {
 
     fireEvent.click(referenceToggle);
     expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
     fireEvent.click(
-      within(inspector).getByRole("button", {
+      screen.getByRole("menuitem", {
         name: "Create from level below"
       })
     );
@@ -1763,11 +1763,13 @@ describe("ProjectViewerPage", () => {
     expect(state.history.past).toHaveLength(1);
     expect(state.dirty).toBe(true);
     expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
     expect(
-      within(inspector).getByRole("button", {
+      screen.queryByRole("menuitem", {
         name: "Create from level below"
       })
-    ).toHaveProperty("disabled", true);
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(
@@ -1777,6 +1779,73 @@ describe("ProjectViewerPage", () => {
     expect(
       store.getState().projectEditor.draft!.building.levels.at(-1)!.walls
     ).toHaveLength(lower.walls.length);
+  });
+
+  it("omits Create from below for an upper Level that already has a Room", async () => {
+    const project = createProjectWithEmptyUpperLevel();
+    project.building.levels.at(-1)!.rooms.push({
+      id: "upper-room",
+      name: "Upper Room",
+      type: "OTHER",
+      boundary: []
+    });
+    renderConnectedRoute(createApiClient(projectFetch(project)));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+
+    expect(
+      screen.queryByRole("menuitem", { name: "Create from level below" })
+    ).toBeNull();
+  });
+
+  it("deletes only the active highest Level as one undoable action", async () => {
+    const project = createProjectWithEmptyUpperLevel();
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Manage levels…" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete level" }));
+    expect(
+      screen.getByText(
+        "Walls, Rooms, Furniture, Openings and Staircases connected to this Level will also be removed."
+      )
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete Level" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    expect(
+      store
+        .getState()
+        .projectEditor.draft!.building.levels.map((level) => level.id)
+    ).toEqual(["ground-floor"]);
+    expect(store.getState().projectEditor.activeLevelId).toBe("ground-floor");
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels).toHaveLength(
+      2
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels).toHaveLength(
+      1
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Manage levels…" }));
+    expect(screen.queryByRole("button", { name: "Delete level" })).toBeNull();
   });
 
   it("commits Room metadata and dissolution once each with semantic undo", async () => {
@@ -2476,7 +2545,9 @@ describe("ProjectViewerPage", () => {
     act(() => store.dispatch(editingDraftReplaced(project)));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
     act(() =>
-      store.dispatch(editorRoomShapePlacementPointerMoved({ x: 0, z: 0 }))
+      store.dispatch(
+        editorRoomShapePlacementPointerMoved({ point: { x: 0, z: 0 } })
+      )
     );
 
     expect(
@@ -2944,6 +3015,214 @@ describe("ProjectViewerPage", () => {
     expect(
       store.getState().projectEditor.draft!.building.levels[0]!.rooms[0]!.type
     ).toBe("BEDROOM");
+  });
+
+  it("shows both rigid matches and commits an exact horizontal shared Wall once", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(emptyProjectFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+
+    const svg = (await screen.findByRole("img")) as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 100, clientY: 400, pointerId: 405 });
+    fireEvent.click(svg, { clientX: 100, clientY: 400 });
+
+    const baseLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(baseLevel.rooms).toHaveLength(1);
+    expect(baseLevel.walls).toHaveLength(4);
+    const sharedBoundaryWall = baseLevel.walls[3]!;
+    expect(sharedBoundaryWall.start).toEqual({ x: 600, z: -400 });
+    expect(sharedBoundaryWall.end).toEqual({ x: 100, z: -400 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+    fireEvent.pointerMove(svg, { clientX: 103, clientY: 97, pointerId: 406 });
+
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-room-shape",
+      origin: { x: 100, z: -100 },
+      shape: { dimensions: { width: 500, depth: 300 } }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toHaveLength(2);
+    expect(screen.getAllByTestId("room-shape-snap-marker")).toHaveLength(2);
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+    expect(
+      screen.queryByText(
+        "This footprint conflicts with existing Walls and cannot be reconciled safely here."
+      )
+    ).toBeNull();
+
+    const historyBeforeCommit =
+      store.getState().projectEditor.history.past.length;
+    fireEvent.click(svg, { clientX: 103, clientY: 97 });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.rooms).toHaveLength(2);
+    expect(level.walls).toHaveLength(7);
+    expect(store.getState().projectEditor.history.past).toHaveLength(
+      historyBeforeCommit + 1
+    );
+    const sharedWall = level.walls.find(
+      (wall) => wall.id === sharedBoundaryWall.id
+    );
+    expect(sharedWall?.roomIds).toEqual([
+      baseLevel.rooms[0]!.id,
+      level.rooms[1]!.id
+    ]);
+    expect(level.rooms[1]!.boundary[1]).toEqual({
+      wallId: sharedBoundaryWall.id,
+      direction: "REVERSE"
+    });
+    expect(
+      level.walls.filter(
+        (wall) =>
+          wall.start.x === 600 &&
+          wall.start.z === -400 &&
+          wall.end.x === 100 &&
+          wall.end.z === -400
+      )
+    ).toHaveLength(1);
+  });
+
+  it("previews and commits a partial shared edge as one canonical history action", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(emptyProjectFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+
+    const svg = (await screen.findByRole("img")) as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 100, clientY: 400, pointerId: 407 });
+    fireEvent.click(svg, { clientX: 100, clientY: 400 });
+
+    const baseLevel = structuredClone(
+      store.getState().projectEditor.draft!.building.levels[0]!
+    );
+    const baseRoomId = baseLevel.rooms[0]!.id;
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "400" }
+    });
+    fireEvent.pointerMove(svg, { clientX: 103, clientY: 97, pointerId: 408 });
+
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-room-shape",
+      origin: { x: 100, z: -100 },
+      shape: {
+        kind: "RECTANGLE",
+        dimensions: { width: 400, depth: 300 },
+        rotation: 0
+      }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toHaveLength(1);
+    expect(screen.getAllByTestId("room-shape-snap-marker")).toHaveLength(1);
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+
+    fireEvent.click(svg, { clientX: 103, clientY: 97 });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    const newRoom = level.rooms[1]!;
+    const shared = level.walls.find((wall) => wall.roomIds.length === 2)!;
+    const residual = level.walls.find(
+      (wall) =>
+        wall.roomIds.length === 1 &&
+        wall.roomIds[0] === baseRoomId &&
+        Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z) === 100
+    );
+    expect(level.rooms).toHaveLength(2);
+    expect(level.walls).toHaveLength(8);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+    expect(
+      Math.hypot(shared.end.x - shared.start.x, shared.end.z - shared.start.z)
+    ).toBe(400);
+    expect(shared.roomIds).toEqual([baseRoomId, newRoom.id]);
+    expect(residual).toBeTruthy();
+    expect(level.rooms[0]!.boundary).toHaveLength(5);
+    expect(newRoom.boundary).toHaveLength(4);
+    expect(
+      level.walls.filter(
+        (wall) => wall.roomIds.length === 1 && wall.roomIds[0] === newRoom.id
+      )
+    ).toHaveLength(3);
+  });
+
+  it("keeps free placement unsnapped and preserves the Alt bypass", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(emptyProjectFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+    const svg = (await screen.findByRole("img")) as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 100, clientY: 400, pointerId: 409 });
+    fireEvent.click(svg, { clientX: 100, clientY: 400 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "400" }
+    });
+    fireEvent.pointerMove(svg, {
+      clientX: 103,
+      clientY: 97,
+      pointerId: 410,
+      altKey: true
+    });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      origin: { x: 103, z: -97 },
+      shape: {
+        dimensions: { width: 400, depth: 300 },
+        rotation: 0
+      }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toBeUndefined();
+    expect(screen.queryByTestId("room-shape-snap-marker")).toBeNull();
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+
+    fireEvent.pointerMove(svg, { clientX: 700, clientY: 100, pointerId: 411 });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      origin: { x: 700, z: -100 }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toBeUndefined();
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+    fireEvent.click(svg, { clientX: 700, clientY: 100 });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.rooms).toHaveLength(2);
+    expect(level.walls).toHaveLength(8);
+    expect(level.walls.every((wall) => wall.roomIds.length === 1)).toBe(true);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
   });
 
   it("previews U/T templates and compiles a semantic preset without persisting preset identity", async () => {

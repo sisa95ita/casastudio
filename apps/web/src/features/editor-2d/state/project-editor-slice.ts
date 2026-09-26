@@ -24,6 +24,7 @@ import { createGeometrySelectionState } from "../../geometry-2d/selection/geomet
 import type { RootState } from "../../../app/store/store";
 import type { ProjectEditorTool } from "./project-editor-tools";
 import type { DrawWallSnapCandidate } from "../tools/wall/project-wall-snapping";
+import type { RoomShapeSnapMatch } from "../tools/room/room-shape-snapping";
 import type { PrecisionTranslationResult } from "../../geometry-2d/precision/precision-assistance-2d";
 import type { OpeningPlacementCandidate } from "../tools/opening/project-opening-editing";
 import {
@@ -192,6 +193,7 @@ export type ProjectEditorTransientState = {
     | FurnitureInteraction
     | null;
   readonly snapCandidate?: DrawWallSnapCandidate;
+  readonly roomShapeSnapMatches?: readonly RoomShapeSnapMatch[];
 };
 
 /** Session-local precision assistance preferences expressed in Project units. */
@@ -447,7 +449,9 @@ const projectEditorSlice = createSlice({
       state.draft = cloneProject(previous);
       state.dirty = JSON.stringify(previous) !== state.baseSnapshot;
       if (
-        !previous.building.levels.some((level) => level.id === state.activeLevelId)
+        !previous.building.levels.some(
+          (level) => level.id === state.activeLevelId
+        )
       ) {
         state.activeLevelId = previous.building.levels[0]?.id ?? null;
       }
@@ -771,10 +775,18 @@ const projectEditorSlice = createSlice({
     },
     editorRoomShapePlacementPointerMoved(
       state,
-      action: PayloadAction<WorldPointXZ>
+      action: PayloadAction<{
+        readonly point: WorldPointXZ;
+        readonly snapCandidate?: DrawWallSnapCandidate;
+        readonly snapMatches?: readonly RoomShapeSnapMatch[];
+      }>
     ) {
       if (state.transient.interaction?.kind === "place-room-shape") {
-        state.transient.interaction.origin = action.payload;
+        state.transient.interaction.origin = action.payload.point;
+        state.transient.snapCandidate = action.payload.snapCandidate;
+        state.transient.roomShapeSnapMatches = action.payload.snapMatches
+          ? [...action.payload.snapMatches]
+          : undefined;
       }
     },
     editorStairAuthoringChanged(

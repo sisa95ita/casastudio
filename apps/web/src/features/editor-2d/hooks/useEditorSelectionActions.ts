@@ -2,10 +2,12 @@ import {
   ValidationErrorCode,
   collapseWallJunction,
   createLevel,
+  deleteLevel,
   deleteOpening,
   deleteRoom,
   deleteWallAndCollapseRedundantTopology,
   dissolveRoom,
+  findHighestLevel,
   isWallRoomBoundaryEdge,
   setWallLength,
   updateLevelProperties,
@@ -417,6 +419,31 @@ export function useEditorSelectionActions({
     ]
   );
 
+  const handleDeleteActiveLevel = useCallback((): boolean => {
+    if (
+      !editor.draft ||
+      !editor.activeLevelId ||
+      workspaceMode !== "edit" ||
+      saveInteractionBlocked
+    )
+      return false;
+    const result = deleteLevel(editor.draft, {
+      levelId: editor.activeLevelId
+    });
+    if (!result.ok) return false;
+    const nextHighest = findHighestLevel(result.project);
+    if (!nextHighest) return false;
+    dispatch(editingDraftReplaced(result.project));
+    dispatch(editorActiveLevelChanged(nextHighest.id));
+    return true;
+  }, [
+    dispatch,
+    editor.activeLevelId,
+    editor.draft,
+    saveInteractionBlocked,
+    workspaceMode
+  ]);
+
   const handleCreateRoom = useCallback(
     (faceKey: string) => {
       if (
@@ -467,6 +494,7 @@ export function useEditorSelectionActions({
     handleUpdateSelectedRoomProperties,
     handleCreateLevel,
     handleUpdateActiveLevel,
+    handleDeleteActiveLevel,
     handleCreateRoom
   };
 }

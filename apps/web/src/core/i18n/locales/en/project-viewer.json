@@ -310,6 +310,7 @@
     "current": "Level: {{level}}",
     "menuLabel": "Project levels",
     "add": "Add level",
+    "createFromBelow": "Create from level below",
     "manage": "Manage levels…",
     "create": "Create level",
     "edit": "Edit level",
@@ -320,6 +321,10 @@
     "cancel": "Cancel",
     "createAction": "Create Level",
     "saveAction": "Save Level",
+    "deleteAction": "Delete level",
+    "deleteTitle": "Delete \"{{level}}\"?",
+    "deleteDescription": "Walls, Rooms, Furniture, Openings and Staircases connected to this Level will also be removed.",
+    "deleteConfirm": "Delete Level",
     "invalid": "Enter a name and a finite physical elevation."
   },
   "toolbar": {
@@ -362,9 +367,7 @@
       "furniture": "Furniture"
     },
     "levelBelow": "Reference level below",
-    "levelBelowNamed": "Reference level below: {{level}}",
-    "createFromBelow": "Create from level below",
-    "createFromBelowDisabled": "Available when this level has no walls or rooms."
+    "levelBelowNamed": "Reference: {{level}}"
   },
   "planSummary": {
     "title": "Plan information",

@@ -63,6 +63,15 @@ type UseProjectWorkspaceShellOptions = {
   readonly onUpdateActiveLevel: ComponentProps<
     typeof ProjectLevelControl
   >["onUpdateActiveLevel"];
+  readonly canCreateFromBelow: ComponentProps<
+    typeof ProjectLevelControl
+  >["canCreateFromBelow"];
+  readonly onCreateFromBelow: ComponentProps<
+    typeof ProjectLevelControl
+  >["onCreateFromBelow"];
+  readonly onDeleteActiveLevel: ComponentProps<
+    typeof ProjectLevelControl
+  >["onDeleteActiveLevel"];
   readonly onModeChange: (mode: ProjectWorkspaceMode | null) => void;
   readonly onRepresentationChange: (
     representation: ProjectWorkspaceRepresentation | null
@@ -100,6 +109,9 @@ export function useProjectWorkspaceShell({
   onViewLevelChange,
   onCreateLevel,
   onUpdateActiveLevel,
+  canCreateFromBelow,
+  onCreateFromBelow,
+  onDeleteActiveLevel,
   onModeChange,
   onRepresentationChange,
   onSave,
@@ -141,6 +153,9 @@ export function useProjectWorkspaceShell({
             }
             onCreateLevel={onCreateLevel}
             onUpdateActiveLevel={onUpdateActiveLevel}
+            canCreateFromBelow={canCreateFromBelow}
+            onCreateFromBelow={onCreateFromBelow}
+            onDeleteActiveLevel={onDeleteActiveLevel}
           />
         ) : undefined,
       headerCenter:
@@ -218,6 +233,7 @@ export function useProjectWorkspaceShell({
       activeProject,
       activeProjectLevel?.name,
       consistencyFailure,
+      canCreateFromBelow,
       dispatch,
       editor,
       inspector,
@@ -226,6 +242,8 @@ export function useProjectWorkspaceShell({
       levelVisibility3D,
       mode,
       onCreateLevel,
+      onCreateFromBelow,
+      onDeleteActiveLevel,
       onFitViewport,
       onModeChange,
       onPersistenceDialogChange,
