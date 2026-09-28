@@ -40,10 +40,14 @@ const corsAllowedOriginsSchema = z
       .map((origin) => origin.trim().replace(/\/$/, ""))
       .filter(Boolean);
 
-    if (origins.length === 0 || origins.some((origin) => !URL.canParse(origin))) {
+    if (
+      origins.length === 0 ||
+      origins.some((origin) => !URL.canParse(origin))
+    ) {
       context.addIssue({
         code: "custom",
-        message: "CORS_ALLOWED_ORIGINS must contain comma-separated absolute URLs"
+        message:
+          "CORS_ALLOWED_ORIGINS must contain comma-separated absolute URLs"
       });
       return z.NEVER;
     }
@@ -65,6 +69,10 @@ const environmentSchema = z.object({
   KEYCLOAK_JWKS_URI: z.url(),
   KEYCLOAK_AUDIENCE: z.string().min(1),
   KEYCLOAK_CLIENT_ID: z.string().min(1),
+  AI_PROVIDER: z.enum(["openai"]).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_REASONING_MODEL: z.string().min(1).default("gpt-5.6-sol"),
+  OPENAI_IMAGE_MODEL: z.string().min(1).default("gpt-image-2.5-sunburst"),
   SWAGGER_ENABLED: booleanFromEnvironment.optional(),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
@@ -93,6 +101,14 @@ export type AppConfiguration = {
     readonly jwksUri: string;
     readonly audience: string;
     readonly clientId: string;
+  };
+  readonly ai: {
+    readonly provider?: "openai";
+    readonly openai: {
+      readonly apiKey?: string;
+      readonly reasoningModel: string;
+      readonly imageModel: string;
+    };
   };
   readonly swaggerEnabled: boolean;
   readonly logLevel:
@@ -129,6 +145,16 @@ function mapEnvironmentToConfiguration(
       jwksUri: environment.KEYCLOAK_JWKS_URI,
       audience: environment.KEYCLOAK_AUDIENCE,
       clientId: environment.KEYCLOAK_CLIENT_ID
+    },
+    ai: {
+      ...(environment.AI_PROVIDER ? { provider: environment.AI_PROVIDER } : {}),
+      openai: {
+        ...(environment.OPENAI_API_KEY
+          ? { apiKey: environment.OPENAI_API_KEY }
+          : {}),
+        reasoningModel: environment.OPENAI_REASONING_MODEL,
+        imageModel: environment.OPENAI_IMAGE_MODEL
+      }
     },
     swaggerEnabled:
       environment.SWAGGER_ENABLED ?? environment.NODE_ENV !== "production",

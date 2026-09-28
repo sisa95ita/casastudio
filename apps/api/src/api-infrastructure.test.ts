@@ -5,7 +5,15 @@ import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { sign } from "jsonwebtoken";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi
+} from "vitest";
 
 import { configureApiApplication } from "./bootstrap/create-api-application";
 import { ApiErrorCode } from "./common/problem-details/api-error-code";
@@ -22,7 +30,8 @@ const defaultTestEnvironment = {
   KEYCLOAK_BASE_URL: "http://localhost:8080",
   KEYCLOAK_REALM: "casastudio",
   KEYCLOAK_ISSUER: "http://issuer.test/realms/casastudio",
-  KEYCLOAK_JWKS_URI: "http://localhost:8080/realms/casastudio/protocol/openid-connect/certs",
+  KEYCLOAK_JWKS_URI:
+    "http://localhost:8080/realms/casastudio/protocol/openid-connect/certs",
   KEYCLOAK_AUDIENCE: "casastudio-api",
   KEYCLOAK_CLIENT_ID: "casastudio-api",
   LOG_LEVEL: "silent"
@@ -65,6 +74,12 @@ describe("API configuration", () => {
         audience: "casastudio-api",
         clientId: "casastudio-api"
       },
+      ai: {
+        openai: {
+          reasoningModel: "gpt-5.6-sol",
+          imageModel: "gpt-image-2.5-sunburst"
+        }
+      },
       swaggerEnabled: true
     });
   });
@@ -83,6 +98,29 @@ describe("API configuration", () => {
         NODE_ENV: "production"
       }).swaggerEnabled
     ).toBe(false);
+  });
+
+  it("keeps AI optional and reads OpenAI configuration only on the server", () => {
+    expect(
+      createValidatedConfiguration(defaultTestEnvironment).ai.provider
+    ).toBeUndefined();
+
+    expect(
+      createValidatedConfiguration({
+        ...defaultTestEnvironment,
+        AI_PROVIDER: "openai",
+        OPENAI_API_KEY: "server-secret",
+        OPENAI_REASONING_MODEL: "gpt-5.6-sol",
+        OPENAI_IMAGE_MODEL: "gpt-image-2.5-sunburst"
+      }).ai
+    ).toEqual({
+      provider: "openai",
+      openai: {
+        apiKey: "server-secret",
+        reasoningModel: "gpt-5.6-sol",
+        imageModel: "gpt-image-2.5-sunburst"
+      }
+    });
   });
 
   it("loads the ignored root local override before repository defaults", () => {
@@ -117,8 +155,12 @@ describe("CORS", () => {
       .set("access-control-request-headers", "authorization")
       .expect(204);
 
-    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
-    expect(response.headers["access-control-allow-headers"]).toContain("Authorization");
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173"
+    );
+    expect(response.headers["access-control-allow-headers"]).toContain(
+      "Authorization"
+    );
 
     await context.app.close();
   });
@@ -133,10 +175,18 @@ describe("CORS", () => {
       .set("access-control-request-headers", "authorization,content-type")
       .expect(204);
 
-    expect(replaceResponse.headers["access-control-allow-methods"]).toContain("POST");
-    expect(replaceResponse.headers["access-control-allow-methods"]).toContain("PUT");
-    expect(replaceResponse.headers["access-control-allow-headers"]).toContain("Authorization");
-    expect(replaceResponse.headers["access-control-allow-headers"]).toContain("Content-Type");
+    expect(replaceResponse.headers["access-control-allow-methods"]).toContain(
+      "POST"
+    );
+    expect(replaceResponse.headers["access-control-allow-methods"]).toContain(
+      "PUT"
+    );
+    expect(replaceResponse.headers["access-control-allow-headers"]).toContain(
+      "Authorization"
+    );
+    expect(replaceResponse.headers["access-control-allow-headers"]).toContain(
+      "Content-Type"
+    );
 
     const deleteResponse = await request(context.app.getHttpServer())
       .options("/api/v1/projects/demo-project")
@@ -145,9 +195,15 @@ describe("CORS", () => {
       .set("access-control-request-headers", "authorization")
       .expect(204);
 
-    expect(deleteResponse.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
-    expect(deleteResponse.headers["access-control-allow-methods"]).toContain("DELETE");
-    expect(deleteResponse.headers["access-control-allow-headers"]).toContain("Authorization");
+    expect(deleteResponse.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173"
+    );
+    expect(deleteResponse.headers["access-control-allow-methods"]).toContain(
+      "DELETE"
+    );
+    expect(deleteResponse.headers["access-control-allow-headers"]).toContain(
+      "Authorization"
+    );
 
     await context.app.close();
   });
@@ -161,7 +217,9 @@ describe("CORS", () => {
       .set("authorization", "Bearer invalid-token")
       .expect(401);
 
-    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173"
+    );
     expect(response.body).toMatchObject({
       code: ApiErrorCode.Unauthorized,
       status: 401
@@ -183,7 +241,9 @@ describe("CORS", () => {
       .set("access-control-request-method", "GET")
       .expect(204);
 
-    expect(response.headers["access-control-allow-origin"]).toBe("http://192.0.2.10:5173");
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://192.0.2.10:5173"
+    );
     await context.app.close();
   });
 
@@ -208,9 +268,13 @@ describe("health endpoints", () => {
 
   it("reports liveness without checking dependencies", async () => {
     const context = await createTestApp();
-    context.prisma.verifyReady.mockRejectedValue(new Error("database unavailable"));
+    context.prisma.verifyReady.mockRejectedValue(
+      new Error("database unavailable")
+    );
 
-    const response = await request(context.app.getHttpServer()).get("/api/v1/health/live");
+    const response = await request(context.app.getHttpServer()).get(
+      "/api/v1/health/live"
+    );
 
     expect(response.status, JSON.stringify(response.body)).toBe(200);
     expect(response.body.status).toBe(HealthStatus.Ok);
@@ -222,7 +286,9 @@ describe("health endpoints", () => {
   it("reports readiness when dependencies are available", async () => {
     const context = await createTestApp();
 
-    const response = await request(context.app.getHttpServer()).get("/api/v1/health/ready").expect(200);
+    const response = await request(context.app.getHttpServer())
+      .get("/api/v1/health/ready")
+      .expect(200);
 
     expect(response.body).toMatchObject({
       status: HealthStatus.Ok,
@@ -237,9 +303,13 @@ describe("health endpoints", () => {
 
   it("returns 503 when PostgreSQL is unavailable", async () => {
     const context = await createTestApp();
-    context.prisma.verifyReady.mockRejectedValue(new Error("database unavailable"));
+    context.prisma.verifyReady.mockRejectedValue(
+      new Error("database unavailable")
+    );
 
-    const response = await request(context.app.getHttpServer()).get("/api/v1/health/ready").expect(503);
+    const response = await request(context.app.getHttpServer())
+      .get("/api/v1/health/ready")
+      .expect(503);
 
     expect(response.body).toMatchObject({
       status: HealthStatus.Error,
@@ -256,7 +326,9 @@ describe("health endpoints", () => {
     const context = await createTestApp();
     context.oidc.verifyReady.mockRejectedValue(new Error("jwks unavailable"));
 
-    const response = await request(context.app.getHttpServer()).get("/api/v1/health/ready").expect(503);
+    const response = await request(context.app.getHttpServer())
+      .get("/api/v1/health/ready")
+      .expect(503);
 
     expect(response.body).toMatchObject({
       status: HealthStatus.Error,
@@ -295,7 +367,9 @@ describe("Problem Details", () => {
   it("normalizes unauthorized responses", async () => {
     const context = await createTestApp();
 
-    const response = await request(context.app.getHttpServer()).get("/api/v1/auth/me").expect(401);
+    const response = await request(context.app.getHttpServer())
+      .get("/api/v1/auth/me")
+      .expect(401);
 
     expect(response.body).toMatchObject({
       code: ApiErrorCode.Unauthorized,
@@ -319,7 +393,9 @@ describe("Problem Details", () => {
       detail: "An unexpected error occurred.",
       status: 500
     });
-    expect(JSON.stringify(response.body)).not.toContain("leaked internal failure");
+    expect(JSON.stringify(response.body)).not.toContain(
+      "leaked internal failure"
+    );
 
     await context.app.close();
   });
@@ -515,7 +591,9 @@ describe("OpenAPI", () => {
       }
     });
 
-    const response = await request(context.app.getHttpServer()).get("/api/docs-json").expect(200);
+    const response = await request(context.app.getHttpServer())
+      .get("/api/docs-json")
+      .expect(200);
 
     expect(response.body.components.securitySchemes.bearer).toMatchObject({
       bearerFormat: "JWT",
@@ -533,7 +611,9 @@ describe("OpenAPI", () => {
       }
     });
 
-    await request(context.app.getHttpServer()).get("/api/docs-json").expect(404);
+    await request(context.app.getHttpServer())
+      .get("/api/docs-json")
+      .expect(404);
 
     await context.app.close();
   });
@@ -543,7 +623,9 @@ describe("PrismaService", () => {
   it("connects and disconnects through Nest lifecycle hooks", async () => {
     const service = new PrismaService(createConfigServiceMock());
     const connect = vi.spyOn(service, "$connect").mockResolvedValue(undefined);
-    const disconnect = vi.spyOn(service, "$disconnect").mockResolvedValue(undefined);
+    const disconnect = vi
+      .spyOn(service, "$disconnect")
+      .mockResolvedValue(undefined);
 
     await service.onModuleInit();
     await service.onModuleDestroy();
@@ -574,8 +656,10 @@ async function createTestApp(options?: {
 
   vi.resetModules();
   const { AppModule } = await import("./app.module");
-  const { PrismaService: RuntimePrismaService } = await import("./persistence/prisma.service");
-  const { OidcHealthService: RuntimeOidcHealthService } = await import("./health/oidc-health.service");
+  const { PrismaService: RuntimePrismaService } =
+    await import("./persistence/prisma.service");
+  const { OidcHealthService: RuntimeOidcHealthService } =
+    await import("./health/oidc-health.service");
   const moduleReference = await Test.createTestingModule({
     imports: [AppModule, ...(options?.extraImports ?? [])]
   })
@@ -598,10 +682,14 @@ async function createTestApp(options?: {
   };
 }
 
-function createConfigServiceMock(): ConstructorParameters<typeof PrismaService>[0] {
+function createConfigServiceMock(): ConstructorParameters<
+  typeof PrismaService
+>[0] {
   return {
     get: (key: keyof ReturnType<typeof createValidatedConfiguration>) => {
-      const configuration = createValidatedConfiguration(defaultTestEnvironment);
+      const configuration = createValidatedConfiguration(
+        defaultTestEnvironment
+      );
 
       return configuration[key];
     }
@@ -660,7 +748,10 @@ function createSigningKeys() {
           keyid: keyId,
           ...(options?.includeAudience === false
             ? {}
-            : { audience: options?.audience ?? defaultTestEnvironment.KEYCLOAK_AUDIENCE })
+            : {
+                audience:
+                  options?.audience ?? defaultTestEnvironment.KEYCLOAK_AUDIENCE
+              })
         }
       )
   };

@@ -98,6 +98,61 @@ describe("API configuration", () => {
 });
 
 describe("CasaStudioApiClient", () => {
+  it("posts only the Room target, instruction, and renderer-neutral reference for AI design", async () => {
+    const proposal = {
+      id: "design-one",
+      status: "succeeded",
+      createdAt: "2026-09-28T10:00:00.000Z",
+      target: {
+        kind: "room",
+        projectId: "project-one",
+        levelId: "ground",
+        roomId: "living"
+      },
+      artifact: {
+        kind: "image",
+        uri: "data:image/png;base64,ZGVzaWdu",
+        mimeType: "image/png"
+      }
+    };
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValue(Response.json(proposal));
+    const client = createClient(fetchImplementation);
+    const request = {
+      levelId: "ground",
+      roomId: "living",
+      instructions: "Warm and minimal",
+      referenceView: {
+        image: {
+          dataUrl: "data:image/jpeg;base64,cmVm",
+          mimeType: "image/jpeg" as const,
+          width: 1280,
+          height: 720
+        },
+        camera: {
+          projection: "perspective" as const,
+          position: { x: 1, y: 2, z: 3 },
+          direction: { x: 0, y: 0, z: -1 },
+          up: { x: 0, y: 1, z: 0 },
+          verticalFovDegrees: 45
+        }
+      }
+    };
+
+    await expect(
+      client.generateRoomDesign("project-one", request)
+    ).resolves.toEqual(proposal);
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      "http://localhost:3000/api/v1/projects/project-one/design-proposals",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(request)
+      })
+    );
+    expect(JSON.stringify(request)).not.toContain("OPENAI_API_KEY");
+  });
+
   it("lists Projects and creates one with the minimal request DTO", async () => {
     const fetchImplementation = vi
       .fn()

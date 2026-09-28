@@ -56,6 +56,6 @@ import { PROJECTS_REPOSITORY } from "./persistence/projects-repository.token";
       useExisting: PrismaProjectRepository
     }
   ],
-  exports: [PROJECTS_REPOSITORY]
+  exports: [PROJECTS_REPOSITORY, AuthorizedProjectLoader]
 })
 export class ProjectsModule {}

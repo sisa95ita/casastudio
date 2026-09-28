@@ -23,5 +23,14 @@ export enum ApiErrorCode {
   ProjectWriteFailed = "PROJECT_WRITE_FAILED",
   ProjectGeometryBuildFailed = "PROJECT_GEOMETRY_BUILD_FAILED",
   ProjectGeometryInvalid = "PROJECT_GEOMETRY_INVALID",
-  ProjectGeometrySerializationFailed = "PROJECT_GEOMETRY_SERIALIZATION_FAILED"
+  ProjectGeometrySerializationFailed = "PROJECT_GEOMETRY_SERIALIZATION_FAILED",
+  AiProviderNotConfigured = "AI_PROVIDER_NOT_CONFIGURED",
+  AiProviderUnavailable = "AI_PROVIDER_UNAVAILABLE",
+  AiAuthenticationFailed = "AI_AUTHENTICATION_FAILED",
+  AiRateLimited = "AI_RATE_LIMITED",
+  AiGenerationTimeout = "AI_GENERATION_TIMEOUT",
+  AiInvalidProviderResponse = "AI_INVALID_PROVIDER_RESPONSE",
+  AiGenerationFailed = "AI_GENERATION_FAILED",
+  AiMissingReference = "AI_MISSING_REFERENCE",
+  AiUnsupportedTarget = "AI_UNSUPPORTED_TARGET"
 }

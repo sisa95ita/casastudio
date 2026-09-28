@@ -1,3 +1,4 @@
+import type { DesignProposal, DesignReferenceView } from "@casastudio/ai";
 import { ProjectSchema, type Project } from "@casastudio/schema";
 
 /** Field-level diagnostic returned by a CasaStudio Problem Details response. */
@@ -64,6 +65,36 @@ export type ReplaceProjectRequest = {
   readonly baseRevision: number;
   readonly project: Project;
 };
+
+/** Browser request for one transient Room proposal. Context is re-derived server-side. */
+export type GenerateRoomDesignRequest = {
+  readonly levelId: string;
+  readonly roomId: string;
+  readonly instructions: string;
+  readonly referenceView: DesignReferenceView;
+};
+
+/** Defensively validates the provider-neutral proposal returned by the API. */
+export function parseDesignProposal(value: unknown): DesignProposal {
+  const proposal = requireRecord(value, "Design proposal");
+  const target = requireRecord(proposal.target, "Design proposal target");
+  const artifact = requireRecord(proposal.artifact, "Design proposal artifact");
+  const uri = requireString(artifact.uri, "Design proposal artifact URI");
+  const mimeType = requireString(
+    artifact.mimeType,
+    "Design proposal artifact MIME type"
+  );
+  if (
+    proposal.status !== "succeeded" ||
+    target.kind !== "room" ||
+    artifact.kind !== "image" ||
+    !["image/png", "image/jpeg", "image/webp"].includes(mimeType) ||
+    !uri.startsWith(`data:${mimeType};base64,`)
+  ) {
+    throw new Error("Design proposal has an unsupported shape.");
+  }
+  return value as DesignProposal;
+}
 
 /** Two-dimensional coordinate in a geometry snapshot. */
 export type GeometryPoint2D = { readonly x: number; readonly z: number };

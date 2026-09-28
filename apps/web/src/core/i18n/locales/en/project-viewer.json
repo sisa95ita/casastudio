@@ -54,6 +54,18 @@
       "all": "All Levels",
       "active": "Active Level"
     },
+    "ai": {
+      "title": "AI Interior Designer",
+      "roomTarget": "Selected Room · reference from this 3D view",
+      "instructions": "Design direction",
+      "placeholder": "Warm minimal living room with natural materials",
+      "generate": "Generate design",
+      "generating": "Generating…",
+      "referencePreparing": "Preparing the 3D reference view…",
+      "proposal": "Design proposal",
+      "proposalAlt": "AI-generated interior design proposal for the selected Room",
+      "failure": "The design could not be generated. Try again."
+    },
     "empty": {
       "title": "No architectural geometry",
       "detail": "This Project has no Walls, Room Floors, or Stairs yet. The physical ground and camera workspace remain available."

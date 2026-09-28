@@ -1042,6 +1042,18 @@ img {
   transform: translate(-50%, -50%);
 }
 
+.project-3d-ai-panel {
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  padding: 14px;
+  pointer-events: auto;
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: min(330px, calc(100% - 32px));
+  z-index: 4;
+}
+
 .project-3d-inspector {
   min-width: 0;
 }

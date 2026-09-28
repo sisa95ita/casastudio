@@ -16,6 +16,7 @@ import { Edges, OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import type { MetricLengthUnit } from "@casastudio/schema";
+import type { DesignReferenceView } from "@casastudio/ai";
 import {
   Component,
   createContext,
@@ -44,6 +45,11 @@ import {
   Vector3,
   type DirectionalLight
 } from "three";
+
+import {
+  AiRoomDesignPanel,
+  type DesignReferenceViewCapture
+} from "./AiRoomDesignPanel";
 
 import {
   createFloorSolid3D,
@@ -169,6 +175,8 @@ export function Project3DViewer({
     useState<ArchitecturalEntityIdentity3D>();
   const [orbitDragging, setOrbitDragging] = useState(false);
   const [furnitureManipulating, setFurnitureManipulating] = useState(false);
+  const [referenceViewCapture, setReferenceViewCapture] =
+    useState<DesignReferenceViewCapture>();
   const [cancelManipulationRequest, setCancelManipulationRequest] = useState(0);
   const pointerGestureRef = useRef<PointerGesture3D | undefined>(undefined);
   const webGlSupported = useMemo(detectWebGLSupport, []);
@@ -185,6 +193,11 @@ export function Project3DViewer({
     [visibleBounds]
   );
   const selectedKey = getArchitecturalEntityKey3D(selection);
+  const handleReferenceViewCaptureChange = useCallback(
+    (capture?: DesignReferenceViewCapture) =>
+      setReferenceViewCapture(() => capture),
+    []
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -490,7 +503,8 @@ export function Project3DViewer({
                 outputColorSpace: SRGBColorSpace,
                 toneMapping: ACESFilmicToneMapping,
                 toneMappingExposure:
-                  architecturalPresentationProfile3D.lighting.exposure
+                  architecturalPresentationProfile3D.lighting.exposure,
+                preserveDrawingBuffer: true
               }}
               onCreated={() => setRendererStatus("ready")}
               onPointerMissed={() => {
@@ -519,6 +533,7 @@ export function Project3DViewer({
                 furnitureManipulation={furnitureManipulation}
                 cancelManipulationRequest={cancelManipulationRequest}
                 onManipulationActiveChange={setFurnitureManipulating}
+                onReferenceViewCaptureChange={handleReferenceViewCaptureChange}
               />
             </Canvas>
           </Project3DRenderErrorBoundary>
@@ -539,6 +554,14 @@ export function Project3DViewer({
               {t("threeD.empty.detail")}
             </Typography>
           </Box>
+        ) : null}
+        {webGlSupported && selection?.kind === "room" ? (
+          <AiRoomDesignPanel
+            projectId={model.sourceProjectId}
+            levelId={selection.levelId}
+            roomId={selection.id}
+            capture={referenceViewCapture}
+          />
         ) : null}
       </Box>
     </Paper>
@@ -614,6 +637,9 @@ type ArchitecturalFoundationSceneProps = {
   readonly furnitureManipulation?: FurnitureManipulation3D;
   readonly cancelManipulationRequest: number;
   readonly onManipulationActiveChange: (active: boolean) => void;
+  readonly onReferenceViewCaptureChange: (
+    capture?: DesignReferenceViewCapture
+  ) => void;
 };
 
 /** Screen-space pointer gesture used to distinguish selection clicks from Orbit drags. */
@@ -648,7 +674,8 @@ function ArchitecturalFoundationScene({
   onSelectionChange,
   furnitureManipulation,
   cancelManipulationRequest,
-  onManipulationActiveChange
+  onManipulationActiveChange,
+  onReferenceViewCaptureChange
 }: ArchitecturalFoundationSceneProps) {
   const controlsRef = useRef<React.ElementRef<typeof OrbitControls>>(null);
   const [manipulationSession, setManipulationSession] =
@@ -656,7 +683,7 @@ function ArchitecturalFoundationScene({
   const manipulationSessionRef = useRef(manipulationSession);
   const furnitureManipulationRef = useRef(furnitureManipulation);
   const handledCancelRequestRef = useRef(cancelManipulationRequest);
-  const { camera, size } = useThree();
+  const { camera, size, gl, scene } = useThree();
   const ground = useMemo(
     () => createGroundReference3D(levels, bounds),
     [bounds, levels]
@@ -667,6 +694,48 @@ function ArchitecturalFoundationScene({
   );
   manipulationSessionRef.current = manipulationSession;
   furnitureManipulationRef.current = furnitureManipulation;
+  const captureReferenceView = useCallback((): DesignReferenceView => {
+    gl.render(scene, camera);
+    const source = gl.domElement;
+    const maxWidth = 1280;
+    const scale = Math.min(1, maxWidth / source.width);
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    const output = document.createElement("canvas");
+    output.width = width;
+    output.height = height;
+    const context = output.getContext("2d");
+    if (!context) throw new Error("Reference image capture is unavailable.");
+    context.drawImage(source, 0, 0, width, height);
+    const direction = camera.getWorldDirection(new Vector3());
+    return Object.freeze({
+      image: Object.freeze({
+        dataUrl: output.toDataURL("image/jpeg", 0.88),
+        mimeType: "image/jpeg",
+        width,
+        height
+      }),
+      camera: Object.freeze({
+        projection: "perspective",
+        position: Object.freeze({
+          x: camera.position.x,
+          y: camera.position.y,
+          z: camera.position.z
+        }),
+        direction: Object.freeze({
+          x: direction.x,
+          y: direction.y,
+          z: direction.z
+        }),
+        up: Object.freeze({ x: camera.up.x, y: camera.up.y, z: camera.up.z }),
+        verticalFovDegrees: "fov" in camera ? camera.fov : 45
+      })
+    });
+  }, [camera, gl, scene]);
+  useEffect(() => {
+    onReferenceViewCaptureChange(captureReferenceView);
+    return () => onReferenceViewCaptureChange(undefined);
+  }, [captureReferenceView, onReferenceViewCaptureChange]);
   const cancelManipulation = useCallback(() => {
     if (!manipulationSessionRef.current) return;
     furnitureManipulation?.onCancel();

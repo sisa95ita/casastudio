@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { APP_FILTER } from "@nestjs/core";
 
 import { AuthModule } from "./auth/auth.module";
+import { AiModule } from "./ai/ai.module";
 import { StructuredLoggingModule } from "./bootstrap/logging.module";
 import { ProblemDetailsFilter } from "./common/problem-details/problem-details.filter";
 import { CasaStudioConfigModule } from "./config/casastudio-config.module";
@@ -16,7 +17,14 @@ import { ProjectsModule } from "./projects/projects.module";
  * boundary.
  */
 @Module({
-  imports: [CasaStudioConfigModule, StructuredLoggingModule, HealthModule, AuthModule, ProjectsModule],
+  imports: [
+    CasaStudioConfigModule,
+    StructuredLoggingModule,
+    HealthModule,
+    AuthModule,
+    ProjectsModule,
+    AiModule
+  ],
   providers: [
     {
       provide: APP_FILTER,

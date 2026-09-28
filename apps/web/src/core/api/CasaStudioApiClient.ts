@@ -1,14 +1,18 @@
+import type { DesignProposal } from "@casastudio/ai";
+
 import {
   isApiProblem,
   parseProjectListResponse,
   parseProjectGeometryResponse,
   parseProjectResponse,
+  parseDesignProposal,
   type ApiProblem,
   type CreateProjectRequest,
   type ProjectListResponse,
   type ProjectGeometryResponse,
   type ProjectResponse,
-  type ReplaceProjectRequest
+  type ReplaceProjectRequest,
+  type GenerateRoomDesignRequest
 } from "./api-types";
 
 /** Function that returns a current in-memory bearer token or reports no session. */
@@ -219,6 +223,29 @@ export class CasaStudioApiClient {
     } catch (error) {
       throw new ProjectReplacementResponseError(
         "The Project was persisted, but the API returned an invalid replacement response.",
+        { cause: error }
+      );
+    }
+  }
+
+  /** Generates a transient Room proposal without sending canonical Project JSON. */
+  async generateRoomDesign(
+    projectId: string,
+    request: GenerateRoomDesignRequest,
+    signal?: AbortSignal
+  ): Promise<DesignProposal> {
+    const body = await this.requestJson(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/design-proposals`,
+      { method: "POST", body: request, signal }
+    );
+    try {
+      return parseDesignProposal(body);
+    } catch (error) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid design proposal.",
+        undefined,
+        undefined,
         { cause: error }
       );
     }
