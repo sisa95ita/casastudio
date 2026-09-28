@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { Project } from "@casastudio/schema";
+import type { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../persistence/prisma.service";
 import { ProjectAggregateMapper } from "./project-aggregate.mapper";
@@ -26,6 +27,11 @@ type LockedProjectRow = {
   readonly ownerSubject: string;
   readonly domainCreatedAt: string;
 };
+
+const PROJECT_AGGREGATE_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 30_000
+} as const;
 
 /**
  * Prisma-backed implementation of the internal Project repository.
@@ -177,7 +183,7 @@ export class PrismaProjectRepository implements ProjectsRepository {
     ownerSubject: string
   ): Promise<LoadedProject> {
     try {
-      return await this.prismaService.$transaction(async (tx) => {
+      return await this.runAggregateTransaction(async (tx) => {
         await this.writer.createProjectInTransaction(tx, project, {
           ownerSubject,
           createdBySubject: ownerSubject,
@@ -220,7 +226,7 @@ export class PrismaProjectRepository implements ProjectsRepository {
     input: ReplaceProjectInput
   ): Promise<ReplaceProjectResult> {
     try {
-      return await this.prismaService.$transaction(async (tx) => {
+      return await this.runAggregateTransaction(async (tx) => {
         const rows = await tx.$queryRaw<readonly LockedProjectRow[]>`
           SELECT "id", "revision", "ownerSubject", "domainCreatedAt"
           FROM "Project"
@@ -343,6 +349,15 @@ export class PrismaProjectRepository implements ProjectsRepository {
         updatedAt: aggregate.updatedAt
       }
     };
+  }
+
+  private runAggregateTransaction<T>(
+    callback: (transactionClient: Prisma.TransactionClient) => Promise<T>
+  ): Promise<T> {
+    return this.prismaService.$transaction(
+      callback,
+      PROJECT_AGGREGATE_TRANSACTION_OPTIONS
+    );
   }
 }
 

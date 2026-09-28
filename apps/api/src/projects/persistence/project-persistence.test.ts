@@ -7,7 +7,15 @@ import {
 } from "@casastudio/schema";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi
+} from "vitest";
 
 import { PrismaService } from "../../persistence/prisma.service";
 import {
@@ -61,6 +69,32 @@ describe("ProjectAggregateMapper", () => {
     expect(JSON.stringify(demoProject)).not.toContain(
       "CasaStudio Canonical Project"
     );
+  });
+});
+
+describe("PrismaProjectRepository transaction limits", () => {
+  it("allows aggregate replacements to outlive Prisma's default interactive transaction timeout", async () => {
+    const queryRaw = vi.fn(async () => []);
+    const transaction = vi.fn(
+      async (callback: (transactionClient: unknown) => Promise<unknown>) =>
+        callback({ $queryRaw: queryRaw })
+    );
+    const repository = new PrismaProjectRepository({
+      $transaction: transaction
+    } as unknown as PrismaService);
+
+    await expect(
+      repository.replaceProject({
+        projectId: canonicalProject.id,
+        baseRevision: canonicalProject.revision,
+        project: canonicalProject,
+        actorSubject: testOwnerSubject
+      })
+    ).resolves.toEqual({ status: "not-found" });
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 30_000
+    });
   });
 });
 

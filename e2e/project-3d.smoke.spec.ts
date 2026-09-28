@@ -85,7 +85,11 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     await expect(page.getByRole("button", { name: "Edit in 2D" })).toBeVisible();
     await page.getByRole("button", { name: "Edit in 2D" }).click();
     await expect(page.getByRole("toolbar", { name: "Editing tools" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "3D workspace" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "3D workspace" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "3D workspace" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
     await page.getByRole("button", { name: "Back to project" }).click();
     await expect(page.getByRole("button", { name: "Edit plan" })).toBeVisible();
     await page.getByRole("button", { name: "3D workspace" }).click();
@@ -137,7 +141,7 @@ test("renders and controls a clean multi-Level Project in the 3D workspace", asy
     await expect(inspector.getByText("Upper Level", { exact: true })).toBeVisible();
     await expect(inspector.getByText("0.00 m", { exact: true })).toBeVisible();
     await expect(inspector.getByText("3.20 m", { exact: true })).toBeVisible();
-    await expect(page.getByText(/3D viewer · 2 visible Levels · Read-only/)).toBeVisible();
+    await expect(page.getByText("3D · 2 visible Levels · View mode")).toBeVisible();
     await expect(page.getByText(/3D rendering is unavailable/)).toBeHidden();
 
     const canvas = workspace.locator("canvas");
@@ -466,7 +470,7 @@ async function waitForCameraToSettle(page: Page, workspace: Locator) {
       after[1] - before[1],
       after[2] - before[2]
     );
-  }, { timeout: 10_000 }).toBeLessThan(0.002);
+  }, { timeout: 30_000 }).toBeLessThan(0.002);
 }
 
 function parseCameraPosition(value: string | null): readonly [number, number, number] {

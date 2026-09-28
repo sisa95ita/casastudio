@@ -37,7 +37,7 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (outgoing) => {
     if (outgoing.url().startsWith(apiBaseUrl)) {
-      authorization ||= outgoing.headers().authorization ?? "";
+      authorization = outgoing.headers().authorization ?? authorization;
     }
   });
 
@@ -286,6 +286,11 @@ test("authors, persists, reloads, deeply edits, and navigates a complete multi-L
     await page.getByRole("spinbutton", { name: "Flight 1 steps", exact: true }).fill("16");
     await page.getByRole("spinbutton", { name: "Tread depth", exact: true }).fill("22");
     const groundStair = await roomPoint(viewport.getByTestId("geometry-polygon").last(), 0.1, 0.8);
+    await page.mouse.move(groundStair.x, groundStair.y);
+    await expect(viewport.getByTestId("stair-preview")).toHaveAttribute("data-valid", "false");
+    await page.getByRole("combobox", { name: "Source Room", exact: true }).click();
+    await page.getByRole("option", { name: /^Hall ·/ }).click();
+    await expect(page.locator('[role="listbox"]')).toHaveCount(0);
     await page.mouse.move(groundStair.x, groundStair.y);
     await expect(viewport.getByTestId("stair-preview")).toHaveAttribute("data-valid", "true");
     await page.mouse.click(groundStair.x, groundStair.y);
