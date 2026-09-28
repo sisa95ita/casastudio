@@ -64,6 +64,9 @@
       "referencePreparing": "Preparing the 3D reference view…",
       "proposal": "Design proposal",
       "proposalAlt": "AI-generated interior design proposal for the selected Room",
+      "openPreview": "Open full-size preview",
+      "previewTitle": "Design proposal preview",
+      "closePreview": "Close preview",
       "failure": "The design could not be generated. Try again."
     },
     "empty": {

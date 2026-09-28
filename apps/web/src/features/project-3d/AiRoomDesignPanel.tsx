@@ -1,9 +1,15 @@
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
+import OpenInFullRoundedIcon from "@mui/icons-material/OpenInFullRounded";
 import {
   Alert,
   Box,
   Button,
+  ButtonBase,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Paper,
   Stack,
   TextField,
@@ -38,6 +44,7 @@ export function AiRoomDesignPanel({
   const [proposal, setProposal] = useState<DesignProposal>();
   const [error, setError] = useState<string>();
   const [generating, setGenerating] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const generate = async () => {
     if (!capture || !instructions.trim() || generating) return;
@@ -118,15 +125,99 @@ export function AiRoomDesignPanel({
             <Typography variant="caption" color="text.secondary">
               {t("threeD.ai.proposal")}
             </Typography>
+            <ButtonBase
+              aria-label={t("threeD.ai.openPreview")}
+              onClick={() => setPreviewOpen(true)}
+              sx={{
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 1,
+                display: "block",
+                mt: 0.5,
+                overflow: "hidden",
+                position: "relative",
+                width: "100%",
+                "&.Mui-focusVisible": {
+                  outline: "3px solid",
+                  outlineColor: "primary.main",
+                  outlineOffset: 2
+                }
+              }}
+            >
+              <Box
+                component="img"
+                src={proposal.artifact.uri}
+                alt={t("threeD.ai.proposalAlt")}
+                sx={{ display: "block", width: "100%" }}
+              />
+              <Box
+                sx={{
+                  alignItems: "center",
+                  backgroundColor: "rgba(17, 24, 39, 0.82)",
+                  borderRadius: 0.75,
+                  bottom: 8,
+                  color: "common.white",
+                  display: "flex",
+                  gap: 0.5,
+                  px: 1,
+                  py: 0.5,
+                  position: "absolute",
+                  right: 8
+                }}
+              >
+                <OpenInFullRoundedIcon sx={{ fontSize: 15 }} />
+                <Typography component="span" variant="caption">
+                  {t("threeD.ai.openPreview")}
+                </Typography>
+              </Box>
+            </ButtonBase>
+          </Box>
+        ) : null}
+      </Stack>
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        aria-labelledby="ai-design-preview-title"
+        maxWidth={false}
+        sx={{
+          "& .MuiDialog-paper": {
+            maxHeight: "calc(100dvh - 32px)",
+            maxWidth: "calc(100vw - 32px)",
+            width: "auto"
+          }
+        }}
+      >
+        <DialogTitle id="ai-design-preview-title">
+          {t("threeD.ai.previewTitle")}
+        </DialogTitle>
+        <DialogContent
+          dividers
+          sx={{ alignItems: "center", display: "flex", justifyContent: "center", p: 1 }}
+        >
+          {proposal ? (
             <Box
               component="img"
               src={proposal.artifact.uri}
               alt={t("threeD.ai.proposalAlt")}
-              sx={{ borderRadius: 1, display: "block", mt: 0.5, width: "100%" }}
+              style={{
+                maxHeight: "calc(100dvh - 160px)",
+                maxWidth: "calc(100vw - 64px)",
+                objectFit: "contain"
+              }}
+              sx={{
+                display: "block",
+                height: "auto",
+                width: "auto"
+              }}
             />
-          </Box>
-        ) : null}
-      </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button autoFocus onClick={() => setPreviewOpen(false)}>
+            {t("threeD.ai.closePreview")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 }
