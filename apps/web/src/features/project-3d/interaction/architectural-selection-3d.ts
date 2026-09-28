@@ -1,3 +1,5 @@
+import type { FurnitureModel3D } from "../model/furniture-3d-model";
+import { stairFlightPoint3D, type Staircase3D } from "../model/staircase-3d-model";
 import type {
   ArchitecturalScene3DModel,
   Door3D,
@@ -16,7 +18,9 @@ export type ArchitecturalSelectionKind3D =
   | "door"
   | "window"
   | "wall-opening"
-  | "room";
+  | "room"
+  | "staircase"
+  | "furniture";
 
 /** Stable identity shared by selection, hover, renderer hit targets, and Inspector state. */
 export type ArchitecturalEntityIdentity3D = Readonly<{
@@ -38,12 +42,15 @@ export type ArchitecturalSelection3D = Readonly<{
   window?: Window3D;
   wallOpening?: WallOpening3D;
   floor?: Floor3D;
+  staircase?: Staircase3D;
+  furniture?: FurnitureModel3D;
 }>;
 
 /** Semantic world point used by deterministic browser interaction acceptance. */
 export type ArchitecturalSelectionTarget3D = Readonly<{
   identity: ArchitecturalEntityIdentity3D;
   point: ScenePoint3D;
+  part?: "slab" | "landing" | "floor-side";
 }>;
 
 /** Resolves a canonical entity identity exclusively from the immutable presentation model. */
@@ -76,6 +83,7 @@ export function collectArchitecturalSelectionTargets3D(
   levels: readonly Level3D[]
 ): readonly ArchitecturalSelectionTarget3D[] {
   return Object.freeze(levels.flatMap((level) => [
+    ...level.furniture.map((item) => ({ identity: Object.freeze({ kind: "furniture" as const, id: item.id, levelId: level.id }), point: Object.freeze({ ...item.position, y: item.position.y + item.height * 0.5 }) })),
     ...level.walls.flatMap((wall) => {
       const section = wall.sections[0];
       const wallTargets: ArchitecturalSelectionTarget3D[] = section ? [{
@@ -106,17 +114,37 @@ export function collectArchitecturalSelectionTargets3D(
         }))
       ];
     }),
+    ...level.staircases.flatMap((stair) => {
+      const flight = stair.flights[0];
+      const step = flight?.steps[Math.floor(flight.steps.length / 2)];
+      if (!flight || !step) return [];
+      const along = (step.startAlong + step.endAlong) / 2;
+      const identity = Object.freeze({ kind: "staircase" as const, id: stair.id, levelId: level.id });
+      return [
+        { identity, point: stairFlightPoint3D(flight, along, 0, step.elevation) },
+        { identity, part: "slab" as const, point: stairFlightPoint3D(flight, along, flight.width / 2,
+          flight.start.y + flight.rise * along / flight.run - flight.slabVerticalDepth / 2) },
+        ...stair.landings.map((landing) => ({ identity, part: "landing" as const,
+          point: { x: landing.center.x + landing.forward.x * landing.depth * 0.4,
+            y: landing.center.y, z: landing.center.z + landing.forward.z * landing.depth * 0.4 } }))
+      ];
+    }),
     ...level.floors.flatMap((floor) => {
       const triangle = floor.triangles[0];
       if (!triangle) return [];
       const points = triangle.map((index) => floor.contour[index]!);
+      const identity = Object.freeze({ kind: "room" as const, id: floor.roomId, levelId: level.id });
+      const first = floor.contour[0]!, second = floor.contour[1]!;
       return [{
-        identity: Object.freeze({ kind: "room" as const, id: floor.roomId, levelId: level.id }),
+        identity,
         point: Object.freeze({
           x: points.reduce((sum, point) => sum + point.x, 0) / 3,
-          y: floor.y + 0.004,
+          y: floor.y,
           z: points.reduce((sum, point) => sum + point.z, 0) / 3
         })
+      }, {
+        identity, part: "floor-side" as const,
+        point: Object.freeze({ x: (first.x + second.x) / 2, y: (floor.y + floor.bottomY) / 2, z: (first.z + second.z) / 2 })
       }];
     })
   ]));
@@ -127,6 +155,14 @@ function resolveSelectionInLevel3D(
   level: Level3D,
   identity: ArchitecturalEntityIdentity3D
 ): ArchitecturalSelection3D | undefined {
+  if (identity.kind === "furniture") {
+    const furniture = level.furniture.find((item) => item.id === identity.id);
+    return furniture ? Object.freeze({ ...identity, levelName: level.name, roomId: furniture.roomId, furniture }) : undefined;
+  }
+  if (identity.kind === "staircase") {
+    const staircase = level.staircases.find((candidate) => candidate.id === identity.id);
+    return staircase ? Object.freeze({ ...identity, levelName: level.name, staircase }) : undefined;
+  }
   if (identity.kind === "room") {
     const floor = level.floors.find((candidate) => candidate.roomId === identity.id);
     return floor ? Object.freeze({

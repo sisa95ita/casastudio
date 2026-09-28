@@ -25,6 +25,7 @@ import {
   formatDisplayValue,
   type Opening,
   type FurnitureItem,
+  type Level,
   type Project,
   type Room,
   type StairFlight,
@@ -219,6 +220,7 @@ export function ProjectPropertiesDetails({
   room,
   roomLevelElevation,
   stair,
+  levels = [],
   roomMeasurement,
   endpointAvailability,
   selectedVertexRemovable = false,
@@ -258,6 +260,7 @@ export function ProjectPropertiesDetails({
     readonly staircase: Staircase;
     readonly part?: StairFlight | StairLanding;
   };
+  readonly levels?: readonly Level[];
   readonly roomMeasurement?: RoomMeasurement;
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly selectedVertexRemovable?: boolean;
@@ -422,12 +425,14 @@ export function ProjectPropertiesDetails({
           <ProjectStairPropertiesDetails
             staircase={stair.staircase}
             units={units}
+            levels={levels}
             onUpdate={onUpdateStair ?? (() => false)}
           />
         ) : null}
         <ProjectStairSelectionDetails
           selection={stair}
           units={units}
+          levels={levels}
           editable={editable}
           onDelete={onDeleteStair ?? (() => undefined)}
         />

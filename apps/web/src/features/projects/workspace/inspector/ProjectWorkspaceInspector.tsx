@@ -17,7 +17,7 @@ import type {
   Wall
 } from "@casastudio/schema";
 import { Box, Tab, Tabs, Typography } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 import { useCasaTranslation } from "../../../../core/i18n";
 import { ProjectLayerControls } from "../../../editor-2d/components/ProjectLayerControls";
@@ -36,6 +36,7 @@ import type {
   StairAuthoringParameters,
   StairParameterChanges,
   StairProposal,
+  StairSourceRoomCandidate,
   StairTemplate
 } from "../../../editor-2d/tools/stair/project-stair-authoring";
 import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentation/geometry-presentation-model-2d";
@@ -65,11 +66,16 @@ type ProjectWorkspaceInspectorProps = {
     readonly staircase: Staircase;
     readonly part?: StairFlight | StairLanding;
   };
+  readonly levels?: readonly Level[];
   readonly stairAuthoring?: {
     readonly levels: readonly Level[];
     readonly owningLevelId: string;
     readonly targetLevelId: string;
     readonly targetRoomId?: string;
+    readonly sourceRoomCandidates: readonly StairSourceRoomCandidate[];
+    readonly sourceRoomId?: string;
+    readonly sourceRoomAmbiguous: boolean;
+    readonly rotation: number;
     readonly template: StairTemplate;
     readonly parameters: StairAuthoringParameters;
     readonly proposal?: StairProposal;
@@ -95,6 +101,9 @@ type ProjectWorkspaceInspectorProps = {
   readonly endpointAvailability?: WallEndpointEditingAvailability;
   readonly selectedVertexRemovable: boolean;
   readonly units?: Project["units"];
+  readonly levelBelow?: ComponentProps<
+    typeof ProjectLayerControls
+  >["levelBelow"];
   readonly onDeleteWall: () => void;
   readonly onAddWallVertex: () => void;
   readonly onRemoveVertex: () => void;
@@ -133,6 +142,8 @@ type ProjectWorkspaceInspectorProps = {
     levelId: string,
     roomId?: string
   ) => void;
+  readonly onStairAuthoringSourceRoomChange: (roomId?: string) => void;
+  readonly onStairAuthoringRotationChange: (rotation: number) => void;
   readonly onStairAuthoringTurnChange: (turn: "LEFT" | "RIGHT") => void;
   readonly onStairAuthoringParametersChange: (
     parameters: StairAuthoringParameters
@@ -163,6 +174,7 @@ export function ProjectWorkspaceInspector({
   selectedRoom,
   selectedRoomLevelElevation,
   selectedStair,
+  levels = [],
   stairAuthoring,
   selectedRoomMeasurement,
   levelMeasurement,
@@ -172,6 +184,7 @@ export function ProjectWorkspaceInspector({
   endpointAvailability,
   selectedVertexRemovable,
   units,
+  levelBelow,
   onDeleteWall,
   onAddWallVertex,
   onRemoveVertex,
@@ -193,6 +206,8 @@ export function ProjectWorkspaceInspector({
   onUpdateStair,
   onStairAuthoringTemplateChange,
   onStairAuthoringDestinationChange,
+  onStairAuthoringSourceRoomChange,
+  onStairAuthoringRotationChange,
   onStairAuthoringTurnChange,
   onStairAuthoringParametersChange,
   onConfirmStairAuthoring,
@@ -254,6 +269,7 @@ export function ProjectWorkspaceInspector({
             onOptionsChange={onOptionsChange}
             measurement={levelMeasurement}
             units={units}
+            levelBelow={levelBelow}
           />
         ) : units &&
           furniture &&
@@ -268,6 +284,8 @@ export function ProjectWorkspaceInspector({
             {...stairAuthoring}
             units={units}
             onDestinationChange={onStairAuthoringDestinationChange}
+            onSourceRoomChange={onStairAuthoringSourceRoomChange}
+            onRotationChange={onStairAuthoringRotationChange}
             onTurnDirectionChange={onStairAuthoringTurnChange}
             onTemplateChange={onStairAuthoringTemplateChange}
             onParametersChange={onStairAuthoringParametersChange}
@@ -297,6 +315,7 @@ export function ProjectWorkspaceInspector({
             room={selectedRoom}
             roomLevelElevation={selectedRoomLevelElevation}
             stair={selectedStair}
+            levels={levels}
             roomMeasurement={selectedRoomMeasurement}
             endpointAvailability={endpointAvailability}
             selectedVertexRemovable={selectedVertexRemovable}

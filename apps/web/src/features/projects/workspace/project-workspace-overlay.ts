@@ -279,6 +279,10 @@ export function createProjectWorkspaceOverlay({
           }
         : undefined,
     snapCandidate: editor.transient.snapCandidate,
+    roomShapeSnapMatches:
+      editor.activeTool === "room"
+        ? editor.transient.roomShapeSnapMatches
+        : undefined,
     snapMarkerPurpose:
       editor.activeTool === "measure" ? "measurement" : "authoring",
     selectedWall,

@@ -241,6 +241,19 @@ function createProjectWithDoor(): Project {
   return project;
 }
 
+function createProjectWithEmptyUpperLevel(): Project {
+  const project = structuredClone(demoProjectFixture);
+  project.building.levels.push({
+    id: "first-floor",
+    name: "First Floor",
+    elevation: 300,
+    rooms: [],
+    walls: [],
+    staircases: []
+  });
+  return project;
+}
+
 async function renderEditingProject(project = demoProjectFixture) {
   const result = renderConnectedRoute(createApiClient(projectFetch(project)));
   fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
@@ -619,6 +632,17 @@ describe("ProjectViewerPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
 
     const workspace = await screen.findByTestId("project-3d-workspace");
+    expect(screen.getByRole("heading", { name: "3D workspace" })).toBeTruthy();
+    expect(screen.getByText("Explore the Project in 3D.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "3D Properties" })).toBeTruthy();
+    expect(
+      screen.getByText("Select an object to inspect its properties.")
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("contentinfo", { name: "Test status bar" })
+      ).getByText("3D · 1 visible Level · View mode")
+    ).toBeTruthy();
     expect(workspace.getAttribute("data-architectural-wall-count")).toBe("7");
     expect(
       workspace.getAttribute("data-architectural-wall-section-count")
@@ -678,53 +702,377 @@ describe("ProjectViewerPage", () => {
       await screen.findByRole("toolbar", { name: "Editing tools" })
     ).toBeTruthy();
     expect(screen.queryByTestId("project-3d-workspace")).toBeNull();
-    expect(screen.queryByRole("button", { name: "3D workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "3D workspace" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Back to project" })
     ).toBeTruthy();
   });
 
-  it("keeps 3D unavailable during Edit so the local draft is never discarded", async () => {
+  it("keeps the same local draft available when Edit switches to 3D", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
     act(() => store.dispatch(editingSessionMarkedDirty()));
 
-    expect(screen.queryByRole("button", { name: "3D workspace" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    expect(await screen.findByTestId("project-3d-workspace")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Move and rotate Furniture in 3D. Architectural geometry remains read-only."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Select Furniture to edit it, or another object to inspect its properties."
+      )
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("contentinfo", { name: "Test status bar" })
+      ).getByText("3D · 1 visible Level · Edit mode")
+    ).toBeTruthy();
     expect(store.getState().projectEditor.mode).toBe("edit");
     expect(store.getState().projectEditor.dirty).toBe(true);
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
-  it("returns from an edited Level through View and 3D to the same clean Level", async () => {
-    const { store } = renderConnectedRoute(createApiClient(multiLevel3DFetch()));
+  it("moves selected Furniture through the shared 3D draft and history boundary", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push({
+      id: "3d-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+
     fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
-    fireEvent.click(screen.getByRole("button", { name: "Level: Ground Floor" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    const workspace = await screen.findByTestId("project-3d-workspace");
+    expect(workspace.getAttribute("data-furniture-editable")).toBe("false");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select Wall left-room-north-wall"
+      })
+    );
+    expect(screen.getByText("Read-only in 3D")).toBeTruthy();
+    expect(screen.queryByTestId("furniture-properties")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    await waitFor(() =>
+      expect(workspace.getAttribute("data-furniture-editable")).toBe("true")
+    );
+    expect(screen.getByTestId("furniture-properties")).toBeTruthy();
+    expect(screen.queryByText("Read-only in 3D")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start moving Chair" }));
+    await waitFor(() =>
+      expect(store.getState().projectEditor.transient.interaction?.kind).toBe(
+        "furniture"
+      )
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview moving Chair" })
+    );
+    await waitFor(() =>
+      expect(
+        store.getState().projectEditor.transient.interaction
+      ).toMatchObject({ item: { position: { x: 120, z: 110 } } })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Finish moving Chair" })
+    );
+
+    await waitFor(() =>
+      expect(
+        store
+          .getState()
+          .projectEditor.draft?.building.furniture.find(
+            (item) => item.id === "3d-chair"
+          )?.position
+      ).toEqual({ x: 120, z: 110 })
+    );
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      store.getState().projectEditor.draft?.building.furniture[0]?.position
+    ).toEqual({ x: 100, z: 100 });
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(
+      store.getState().projectEditor.draft?.building.furniture[0]?.position
+    ).toEqual({ x: 120, z: 110 });
+  });
+
+  it("keeps Furniture manipulation callbacks absent in read-only 3D View", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push({
+      id: "view-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "3D workspace" })
+    );
+    const workspace = await screen.findByTestId("project-3d-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    expect(workspace.getAttribute("data-furniture-editable")).toBe("false");
+    expect(
+      screen.queryByRole("button", { name: "Start moving Chair" })
+    ).toBeNull();
+    expect(store.getState().projectEditor.mode).toBe("view");
+    expect(store.getState().projectEditor.draft).toBeNull();
+  });
+
+  it("reuses Project-space Furniture nudges and shared history shortcuts in 3D Edit", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push({
+      id: "3d-nudge-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    const position = () =>
+      store
+        .getState()
+        .projectEditor.draft?.building.furniture.find(
+          (item) => item.id === "3d-nudge-chair"
+        )?.position;
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    await screen.findByTestId("project-3d-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+    expect(store.getState().projectEditor.dirty).toBe(true);
+
+    fireEvent.keyDown(window, { key: "ArrowRight", shiftKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    const xInput = within(screen.getByTestId("furniture-properties")).getByRole(
+      "spinbutton",
+      { name: "X (cm)" }
+    );
+    fireEvent.keyDown(xInput, { key: "ArrowLeft" });
+    fireEvent.keyDown(xInput, { key: "z", ctrlKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    fireEvent.keyDown(window, { key: "z", metaKey: true, shiftKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(position()).toEqual({ x: 100, z: 101 });
+    fireEvent.keyDown(window, { key: "y", ctrlKey: true });
+    expect(position()).toEqual({ x: 110, z: 101 });
+  });
+
+  it("gates 3D nudging by mode, semantic selection, validation, and selection count", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.furniture.push(
+      {
+        id: "3d-gated-chair",
+        roomId: "left-room",
+        definitionId: "generic-chair",
+        position: { x: 30, z: 30 },
+        rotation: 0,
+        width: 40,
+        depth: 40,
+        height: 80
+      },
+      {
+        id: "3d-gated-table",
+        roomId: "left-room",
+        definitionId: "generic-table",
+        position: { x: 200, z: 100 },
+        rotation: 0,
+        width: 80,
+        depth: 80,
+        height: 75
+      }
+    );
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    const chairPosition = () =>
+      store
+        .getState()
+        .projectEditor.draft?.building.furniture.find(
+          (item) => item.id === "3d-gated-chair"
+        )?.position;
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "3D workspace" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(store.getState().projectEditor.draft).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit in 2D" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    await screen.findByTestId("project-3d-workspace");
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select Wall left-room-north-wall"
+      })
+    );
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    fireEvent.keyDown(window, { key: "ArrowLeft", shiftKey: true });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(0);
+    expect(store.getState().projectEditor.dirty).toBe(false);
+
+    act(() => {
+      store.dispatch(
+        editorSelectionChanged({
+          selected: [
+            { kind: "FURNITURE", geometryId: "3d-gated-chair" },
+            { kind: "FURNITURE", geometryId: "3d-gated-table" }
+          ],
+          hovered: undefined
+        })
+      );
+    });
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(chairPosition()).toEqual({ x: 30, z: 30 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(0);
+  });
+
+  it("nudges elevated Furniture without persisting a vertical coordinate", async () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.levels[0]!.rooms[0]!.elevation = 270;
+    project.building.furniture.push({
+      id: "3d-raised-chair",
+      roomId: "left-room",
+      definitionId: "generic-chair",
+      position: { x: 100, z: 100 },
+      rotation: 0,
+      width: 40,
+      depth: 40,
+      height: 80
+    });
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
+    await screen.findByTestId("project-3d-workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Select Chair" }));
+    expect(screen.getByTestId("furniture-floor").textContent).toBe("2.70 m");
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    const item = store
+      .getState()
+      .projectEditor.draft?.building.furniture.find(
+        (candidate) => candidate.id === "3d-raised-chair"
+      );
+    expect(item?.position).toEqual({ x: 100, z: 101 });
+    expect(item?.roomId).toBe("left-room");
+    expect(item && "y" in item.position).toBe(false);
+    expect(screen.getByTestId("furniture-floor").textContent).toBe("2.70 m");
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+  });
+
+  it("returns from an edited Level through View and 3D to the same clean Level", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(multiLevel3DFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
     const levelId = store.getState().projectEditor.activeLevelId;
     fireEvent.click(screen.getByRole("button", { name: "Back to project" }));
-    expect(await screen.findByRole("button", { name: "Level: Upper Level" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Level: Upper Level" })
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "3D workspace" }));
     fireEvent.click(await screen.findByRole("button", { name: "Edit in 2D" }));
     expect(store.getState().projectEditor.activeLevelId).toBe(levelId);
     expect(store.getState().projectEditor.dirty).toBe(false);
   });
 
-  it.each(["Openings", "Stair"])("keeps %s authoring usable after Level changes and Undo", async (tool) => {
-    const { store } = renderConnectedRoute(createApiClient(multiLevel3DFetch()));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
-    fireEvent.click(screen.getByRole("button", { name: tool }));
-    fireEvent.click(screen.getByRole("button", { name: "Level: Ground Floor" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
-    const kind = tool === "Stair" ? "place-stair" : "place-opening";
-    await waitFor(() => expect(store.getState().projectEditor.transient.interaction?.kind).toBe(kind));
-    expect(store.getState().projectEditor.dirty).toBe(false);
-    act(() => store.dispatch(editingDraftReplaced({ ...store.getState().projectEditor.draft!, name: "Temporary change" })));
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(store.getState().projectEditor.transient.interaction?.kind).toBe(kind));
-    expect(screen.getByRole("combobox", { name: tool === "Stair" ? "Target Level" : "Type" })).toBeTruthy();
-    expect(store.getState().projectEditor.dirty).toBe(false);
-  });
+  it.each(["Openings", "Stair"])(
+    "keeps %s authoring usable after Level changes and Undo",
+    async (tool) => {
+      const { store } = renderConnectedRoute(
+        createApiClient(multiLevel3DFetch())
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+      fireEvent.click(screen.getByRole("button", { name: tool }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Level: Ground Floor" })
+      );
+      fireEvent.click(screen.getByRole("menuitem", { name: "Upper Level" }));
+      const kind = tool === "Stair" ? "place-stair" : "place-opening";
+      await waitFor(() =>
+        expect(store.getState().projectEditor.transient.interaction?.kind).toBe(
+          kind
+        )
+      );
+      expect(store.getState().projectEditor.dirty).toBe(false);
+      act(() =>
+        store.dispatch(
+          editingDraftReplaced({
+            ...store.getState().projectEditor.draft!,
+            name: "Temporary change"
+          })
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      await waitFor(() =>
+        expect(store.getState().projectEditor.transient.interaction?.kind).toBe(
+          kind
+        )
+      );
+      expect(
+        screen.getByRole("combobox", {
+          name: tool === "Stair" ? "Target Level" : "Type"
+        })
+      ).toBeTruthy();
+      expect(store.getState().projectEditor.dirty).toBe(false);
+    }
+  );
 
   it("clears hidden architectural selections without dirtying or deleting their canonical content", async () => {
     const { store } = renderConnectedRoute(createApiClient(successFetch()));
@@ -732,7 +1080,7 @@ describe("ProjectViewerPage", () => {
     const original = store.getState().projectEditor.draft;
     for (const [layer, selector] of [
       ["Rooms", '[data-testid="geometry-polygon"]'],
-      ["Walls", '.architectural-wall-hit-target']
+      ["Walls", ".architectural-wall-hit-target"]
     ]) {
       fireEvent.click(document.querySelector(selector!)!);
       expect(store.getState().projectEditor.selection).toHaveLength(1);
@@ -963,7 +1311,7 @@ describe("ProjectViewerPage", () => {
     ).toBeNull();
     expect(buildSpy).toHaveBeenCalledWith(store.getState().projectEditor.draft);
     expect(store.getState().projectEditor.draft).not.toBe(demoProjectFixture);
-    expect(screen.queryByRole("button", { name: "2D workspace" })).toBeNull();
+    expect(screen.getByRole("button", { name: "2D workspace" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Back to project" })
     ).toBeTruthy();
@@ -1344,6 +1692,160 @@ describe("ProjectViewerPage", () => {
     expect(within(inspector).getByText("24.00 m²")).toBeTruthy();
     expect(within(inspector).getByText("8.00 m")).toBeTruthy();
     expect(within(inspector).getByText("3.00 m")).toBeTruthy();
+  });
+
+  it("keeps the Level-below reference presentation-only and copies Walls atomically", async () => {
+    const project = createProjectWithEmptyUpperLevel();
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    const inspector = screen.getByRole("complementary", {
+      name: "Test inspector"
+    });
+    expect(
+      within(inspector).queryByRole("switch", {
+        name: "Reference level below"
+      })
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Create from level below" })
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
+
+    const referenceToggle = await within(inspector).findByRole("switch", {
+      name: "Reference level below"
+    });
+    expect(referenceToggle).toHaveProperty("checked", true);
+    expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    const draftBeforeToggle = JSON.stringify(
+      store.getState().projectEditor.draft
+    );
+
+    fireEvent.click(referenceToggle);
+    expect(screen.queryByTestId("reference-level-below")).toBeNull();
+    expect(store.getState().projectEditor.dirty).toBe(false);
+    expect(store.getState().projectEditor.history.past).toHaveLength(0);
+    expect(JSON.stringify(store.getState().projectEditor.draft)).toBe(
+      draftBeforeToggle
+    );
+
+    fireEvent.click(referenceToggle);
+    expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", {
+        name: "Create from level below"
+      })
+    );
+
+    const state = store.getState().projectEditor;
+    const lower = state.draft!.building.levels[0]!;
+    const upper = state.draft!.building.levels.find(
+      (level) => level.id === "first-floor"
+    )!;
+    expect(upper.walls).toHaveLength(lower.walls.length);
+    expect(upper.walls.map((wall) => wall.id)).not.toEqual(
+      lower.walls.map((wall) => wall.id)
+    );
+    expect(
+      upper.walls.map((wall) => [wall.start, wall.end, wall.thickness])
+    ).toEqual(
+      lower.walls.map((wall) => [wall.start, wall.end, wall.thickness])
+    );
+    expect(upper.walls.every((wall) => wall.openings.length === 0)).toBe(true);
+    expect(upper.rooms).toEqual([]);
+    expect(upper.staircases).toEqual([]);
+    expect(state.history.past).toHaveLength(1);
+    expect(state.dirty).toBe(true);
+    expect(screen.getByTestId("reference-level-below")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+    expect(
+      screen.queryByRole("menuitem", {
+        name: "Create from level below"
+      })
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      store.getState().projectEditor.draft!.building.levels.at(-1)!.walls
+    ).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(
+      store.getState().projectEditor.draft!.building.levels.at(-1)!.walls
+    ).toHaveLength(lower.walls.length);
+  });
+
+  it("omits Create from below for an upper Level that already has a Room", async () => {
+    const project = createProjectWithEmptyUpperLevel();
+    project.building.levels.at(-1)!.rooms.push({
+      id: "upper-room",
+      name: "Upper Room",
+      type: "OTHER",
+      boundary: []
+    });
+    renderConnectedRoute(createApiClient(projectFetch(project)));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+
+    expect(
+      screen.queryByRole("menuitem", { name: "Create from level below" })
+    ).toBeNull();
+  });
+
+  it("deletes only the active highest Level as one undoable action", async () => {
+    const project = createProjectWithEmptyUpperLevel();
+    const { store } = renderConnectedRoute(
+      createApiClient(projectFetch(project))
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "First Floor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Level: First Floor" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Manage levels…" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete level" }));
+    expect(
+      screen.getByText(
+        "Walls, Rooms, Furniture, Openings and Staircases connected to this Level will also be removed."
+      )
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete Level" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    expect(
+      store
+        .getState()
+        .projectEditor.draft!.building.levels.map((level) => level.id)
+    ).toEqual(["ground-floor"]);
+    expect(store.getState().projectEditor.activeLevelId).toBe("ground-floor");
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store.getState().projectEditor.draft!.building.levels).toHaveLength(
+      2
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(store.getState().projectEditor.draft!.building.levels).toHaveLength(
+      1
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Manage levels…" }));
+    expect(screen.queryByRole("button", { name: "Delete level" })).toBeNull();
   });
 
   it("commits Room metadata and dissolution once each with semantic undo", async () => {
@@ -2043,7 +2545,9 @@ describe("ProjectViewerPage", () => {
     act(() => store.dispatch(editingDraftReplaced(project)));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
     act(() =>
-      store.dispatch(editorRoomShapePlacementPointerMoved({ x: 0, z: 0 }))
+      store.dispatch(
+        editorRoomShapePlacementPointerMoved({ point: { x: 0, z: 0 } })
+      )
     );
 
     expect(
@@ -2134,9 +2638,7 @@ describe("ProjectViewerPage", () => {
       await screen.findByRole("option", { name: "Left Room" })
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("option", { name: "Left Room" }));
-    fireEvent.click(
-      within(inspector).getByRole("radio", { name: "L-shaped" })
-    );
+    fireEvent.click(within(inspector).getByRole("radio", { name: "L-shaped" }));
     fireEvent.pointerMove(svg, { clientX: 620, clientY: 180, pointerId: 711 });
     const stairInteraction =
       store.getState().projectEditor.transient.interaction;
@@ -2144,9 +2646,7 @@ describe("ProjectViewerPage", () => {
       stairInteraction?.kind === "place-stair"
         ? stairInteraction.start
         : undefined;
-    fireEvent.click(
-      within(inspector).getByRole("radio", { name: "Straight" })
-    );
+    fireEvent.click(within(inspector).getByRole("radio", { name: "Straight" }));
     expect(
       screen
         .getByTestId("stair-preview")
@@ -2156,9 +2656,7 @@ describe("ProjectViewerPage", () => {
       kind: "place-stair",
       start: anchoredStart
     });
-    fireEvent.click(
-      within(inspector).getByRole("radio", { name: "L-shaped" })
-    );
+    fireEvent.click(within(inspector).getByRole("radio", { name: "L-shaped" }));
     expect(
       screen
         .getByTestId("stair-preview")
@@ -2172,6 +2670,15 @@ describe("ProjectViewerPage", () => {
     });
     fireEvent.change(firstSteps, { target: { value: "4" } });
     fireEvent.change(secondSteps, { target: { value: "13" } });
+    const authoringRotation = within(inspector).getByRole("spinbutton", {
+      name: "Rotation"
+    });
+    fireEvent.change(authoringRotation, { target: { value: "37" } });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-stair",
+      rotation: 37
+    });
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
     const confirm = within(inspector).getByRole("button", {
       name: "Create Stair"
     });
@@ -2190,6 +2697,16 @@ describe("ProjectViewerPage", () => {
     });
     expect(level.staircases[0]?.flights).toHaveLength(2);
     expect(level.staircases[0]?.landings).toHaveLength(1);
+    expect(level.staircases[0]).not.toHaveProperty("rotation");
+    const authoredDirection = level.staircases[0]!.flights[0]!;
+    expect(
+      (Math.atan2(
+        authoredDirection.end.z - authoredDirection.start.z,
+        authoredDirection.end.x - authoredDirection.start.x
+      ) *
+        180) /
+        Math.PI
+    ).toBeCloseTo(37);
     expect(
       level.staircases[0]?.flights.map((flight) => flight.stepCount)
     ).toEqual([4, 13]);
@@ -2236,6 +2753,33 @@ describe("ProjectViewerPage", () => {
     ).toBe(100);
     expect(store.getState().projectEditor.history.past).toHaveLength(3);
 
+    const beforeRotation = structuredClone(
+      store.getState().projectEditor.draft!.building.levels[0]!.staircases[0]!
+    );
+    const selectedRotation = within(inspector).getByRole("spinbutton", {
+      name: "Rotation"
+    });
+    fireEvent.change(selectedRotation, { target: { value: "90" } });
+    fireEvent.blur(selectedRotation);
+    const rotated =
+      store.getState().projectEditor.draft!.building.levels[0]!.staircases[0]!;
+    expect(rotated.flights[0]!.start).toEqual(beforeRotation.flights[0]!.start);
+    expect(rotated.flights.map((flight) => flight.id)).toEqual(
+      beforeRotation.flights.map((flight) => flight.id)
+    );
+    expect(
+      rotated.flights.map((flight) => [
+        flight.startElevation,
+        flight.endElevation
+      ])
+    ).toEqual(
+      beforeRotation.flights.map((flight) => [
+        flight.startElevation,
+        flight.endElevation
+      ])
+    );
+    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+
     const stairBody = document.querySelector(
       ".architectural-stair-flight__body"
     )!;
@@ -2260,7 +2804,7 @@ describe("ProjectViewerPage", () => {
     expect(translated.flights.at(-1)!.endElevation).toBe(
       beforeTranslation.flights.at(-1)!.endElevation
     );
-    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+    expect(store.getState().projectEditor.history.past).toHaveLength(5);
 
     const adjustmentHandle = screen
       .getByTestId("selected-stair-overlay")
@@ -2273,13 +2817,13 @@ describe("ProjectViewerPage", () => {
     fireEvent.pointerMove(svg, { clientX: 700, clientY: 220, pointerId: 712 });
     expect(screen.getByTestId("stair-preview")).toBeTruthy();
     fireEvent.pointerUp(svg, { clientX: 700, clientY: 220, pointerId: 712 });
-    expect(store.getState().projectEditor.history.past).toHaveLength(4);
+    expect(store.getState().projectEditor.history.past).toHaveLength(5);
 
     fireEvent.keyDown(window, { key: "Delete" });
     expect(
       store.getState().projectEditor.draft!.building.levels[0]!.staircases
     ).toEqual([]);
-    expect(store.getState().projectEditor.history.past).toHaveLength(5);
+    expect(store.getState().projectEditor.history.past).toHaveLength(6);
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(
       store.getState().projectEditor.draft!.building.levels[0]!.staircases
@@ -2292,7 +2836,7 @@ describe("ProjectViewerPage", () => {
     await activateEditorTool("Stair");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(store.getState().projectEditor.activeTool).toBe("select");
-    expect(store.getState().projectEditor.history.past).toHaveLength(5);
+    expect(store.getState().projectEditor.history.past).toHaveLength(6);
   });
 
   it("toggles Room authoring off and clears transient state on the second toolbar click", async () => {
@@ -2473,6 +3017,214 @@ describe("ProjectViewerPage", () => {
     ).toBe("BEDROOM");
   });
 
+  it("shows both rigid matches and commits an exact horizontal shared Wall once", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(emptyProjectFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+
+    const svg = (await screen.findByRole("img")) as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 100, clientY: 400, pointerId: 405 });
+    fireEvent.click(svg, { clientX: 100, clientY: 400 });
+
+    const baseLevel = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(baseLevel.rooms).toHaveLength(1);
+    expect(baseLevel.walls).toHaveLength(4);
+    const sharedBoundaryWall = baseLevel.walls[3]!;
+    expect(sharedBoundaryWall.start).toEqual({ x: 600, z: -400 });
+    expect(sharedBoundaryWall.end).toEqual({ x: 100, z: -400 });
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+    fireEvent.pointerMove(svg, { clientX: 103, clientY: 97, pointerId: 406 });
+
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-room-shape",
+      origin: { x: 100, z: -100 },
+      shape: { dimensions: { width: 500, depth: 300 } }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toHaveLength(2);
+    expect(screen.getAllByTestId("room-shape-snap-marker")).toHaveLength(2);
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+    expect(
+      screen.queryByText(
+        "This footprint conflicts with existing Walls and cannot be reconciled safely here."
+      )
+    ).toBeNull();
+
+    const historyBeforeCommit =
+      store.getState().projectEditor.history.past.length;
+    fireEvent.click(svg, { clientX: 103, clientY: 97 });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.rooms).toHaveLength(2);
+    expect(level.walls).toHaveLength(7);
+    expect(store.getState().projectEditor.history.past).toHaveLength(
+      historyBeforeCommit + 1
+    );
+    const sharedWall = level.walls.find(
+      (wall) => wall.id === sharedBoundaryWall.id
+    );
+    expect(sharedWall?.roomIds).toEqual([
+      baseLevel.rooms[0]!.id,
+      level.rooms[1]!.id
+    ]);
+    expect(level.rooms[1]!.boundary[1]).toEqual({
+      wallId: sharedBoundaryWall.id,
+      direction: "REVERSE"
+    });
+    expect(
+      level.walls.filter(
+        (wall) =>
+          wall.start.x === 600 &&
+          wall.start.z === -400 &&
+          wall.end.x === 100 &&
+          wall.end.z === -400
+      )
+    ).toHaveLength(1);
+  });
+
+  it("previews and commits a partial shared edge as one canonical history action", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(emptyProjectFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+
+    const svg = (await screen.findByRole("img")) as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 100, clientY: 400, pointerId: 407 });
+    fireEvent.click(svg, { clientX: 100, clientY: 400 });
+
+    const baseLevel = structuredClone(
+      store.getState().projectEditor.draft!.building.levels[0]!
+    );
+    const baseRoomId = baseLevel.rooms[0]!.id;
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "400" }
+    });
+    fireEvent.pointerMove(svg, { clientX: 103, clientY: 97, pointerId: 408 });
+
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      kind: "place-room-shape",
+      origin: { x: 100, z: -100 },
+      shape: {
+        kind: "RECTANGLE",
+        dimensions: { width: 400, depth: 300 },
+        rotation: 0
+      }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toHaveLength(1);
+    expect(screen.getAllByTestId("room-shape-snap-marker")).toHaveLength(1);
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+    expect(store.getState().projectEditor.history.past).toHaveLength(1);
+
+    fireEvent.click(svg, { clientX: 103, clientY: 97 });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    const newRoom = level.rooms[1]!;
+    const shared = level.walls.find((wall) => wall.roomIds.length === 2)!;
+    const residual = level.walls.find(
+      (wall) =>
+        wall.roomIds.length === 1 &&
+        wall.roomIds[0] === baseRoomId &&
+        Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z) === 100
+    );
+    expect(level.rooms).toHaveLength(2);
+    expect(level.walls).toHaveLength(8);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+    expect(
+      Math.hypot(shared.end.x - shared.start.x, shared.end.z - shared.start.z)
+    ).toBe(400);
+    expect(shared.roomIds).toEqual([baseRoomId, newRoom.id]);
+    expect(residual).toBeTruthy();
+    expect(level.rooms[0]!.boundary).toHaveLength(5);
+    expect(newRoom.boundary).toHaveLength(4);
+    expect(
+      level.walls.filter(
+        (wall) => wall.roomIds.length === 1 && wall.roomIds[0] === newRoom.id
+      )
+    ).toHaveLength(3);
+  });
+
+  it("keeps free placement unsnapped and preserves the Alt bypass", async () => {
+    const { store } = renderConnectedRoute(
+      createApiClient(emptyProjectFetch())
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "500" }
+    });
+    const svg = (await screen.findByRole("img")) as unknown as SVGSVGElement;
+    prepareSvgPointerCoordinates(svg);
+    fireEvent.pointerMove(svg, { clientX: 100, clientY: 400, pointerId: 409 });
+    fireEvent.click(svg, { clientX: 100, clientY: 400 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Room" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "400" }
+    });
+    fireEvent.pointerMove(svg, {
+      clientX: 103,
+      clientY: 97,
+      pointerId: 410,
+      altKey: true
+    });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      origin: { x: 103, z: -97 },
+      shape: {
+        dimensions: { width: 400, depth: 300 },
+        rotation: 0
+      }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toBeUndefined();
+    expect(screen.queryByTestId("room-shape-snap-marker")).toBeNull();
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+
+    fireEvent.pointerMove(svg, { clientX: 700, clientY: 100, pointerId: 411 });
+    expect(store.getState().projectEditor.transient.interaction).toMatchObject({
+      origin: { x: 700, z: -100 }
+    });
+    expect(
+      store.getState().projectEditor.transient.roomShapeSnapMatches
+    ).toBeUndefined();
+    expect(
+      screen.getByTestId("room-shape-preview").getAttribute("data-valid")
+    ).toBe("true");
+    fireEvent.click(svg, { clientX: 700, clientY: 100 });
+
+    const level = store.getState().projectEditor.draft!.building.levels[0]!;
+    expect(level.rooms).toHaveLength(2);
+    expect(level.walls).toHaveLength(8);
+    expect(level.walls.every((wall) => wall.roomIds.length === 1)).toBe(true);
+    expect(store.getState().projectEditor.history.past).toHaveLength(2);
+  });
+
   it("previews U/T templates and compiles a semantic preset without persisting preset identity", async () => {
     const { store } = renderConnectedRoute(
       createApiClient(emptyProjectFetch())
@@ -2497,7 +3249,8 @@ describe("ProjectViewerPage", () => {
     expect(uPreview.querySelector("polygon")!.getAttribute("points")).not.toBe(
       uPoints
     );
-    const roomInteraction = store.getState().projectEditor.transient.interaction;
+    const roomInteraction =
+      store.getState().projectEditor.transient.interaction;
     const anchoredOrigin =
       roomInteraction?.kind === "place-room-shape"
         ? roomInteraction.origin
@@ -5120,7 +5873,10 @@ describe("ProjectViewerPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Elevation above Level" }), { target: { value: "180" } });
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Elevation above Level" }),
+      { target: { value: "180" } }
+    );
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getByRole("tab", { name: "Layers" }));
     fireEvent.click(screen.getByRole("switch", { name: "Walls" }));
@@ -5133,10 +5889,19 @@ describe("ProjectViewerPage", () => {
       (await screen.findByTestId("geometry-polygon")).getAttribute("class")
     ).not.toContain("geometry-entity-selected");
     fireEvent.click(screen.getByRole("tab", { name: "Layers" }));
-    expect((screen.getByRole("switch", { name: "Walls" }) as HTMLInputElement).checked).toBe(true);
+    expect(
+      (screen.getByRole("switch", { name: "Walls" }) as HTMLInputElement)
+        .checked
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Edit plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Room" }));
-    expect((screen.getByRole("spinbutton", { name: "Elevation above Level" }) as HTMLInputElement).value).toBe("0");
+    expect(
+      (
+        screen.getByRole("spinbutton", {
+          name: "Elevation above Level"
+        }) as HTMLInputElement
+      ).value
+    ).toBe("0");
   });
 
   it("keeps late data from an old project ID out of the new route", async () => {

@@ -12,6 +12,7 @@ import { lazy, Suspense, type ComponentProps, type ReactNode } from "react";
 import { EditorToolbar } from "../../../editor-2d/components/EditorToolbar";
 import { GeometryViewerPanel } from "../../../geometry-2d/viewer/GeometryViewerPanel";
 import type { ArchitecturalEntityIdentity3D } from "../../../project-3d/interaction/architectural-selection-3d";
+import type { FurnitureManipulation3D } from "../../../project-3d/Project3DViewer";
 import type {
   ArchitecturalScene3DModel,
   LevelVisibility3D
@@ -29,6 +30,7 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 type ProjectWorkspaceCanvasProps = {
   readonly representation: ProjectWorkspaceRepresentation;
+  readonly mode: "view" | "edit";
   readonly editorToolbarProps?: ComponentProps<typeof EditorToolbar>;
   readonly scene3D?: ArchitecturalScene3DModel;
   readonly activeLevelId3D?: string;
@@ -38,6 +40,7 @@ type ProjectWorkspaceCanvasProps = {
   readonly onSelection3DChange: (
     selection?: ArchitecturalEntityIdentity3D
   ) => void;
+  readonly furnitureManipulation3D?: FurnitureManipulation3D;
   readonly editBuildFailed: boolean;
   readonly presentationFailed: boolean;
   readonly presentationError?: unknown;
@@ -50,6 +53,7 @@ type ProjectWorkspaceCanvasProps = {
 /** Composes the workspace toolbar, 2D/3D canvas, and responsive inspector surfaces. */
 export function ProjectWorkspaceCanvas({
   representation,
+  mode,
   editorToolbarProps,
   scene3D,
   activeLevelId3D,
@@ -57,6 +61,7 @@ export function ProjectWorkspaceCanvas({
   onLevelVisibility3DChange,
   selection3D,
   onSelection3DChange,
+  furnitureManipulation3D,
   editBuildFailed,
   presentationFailed,
   presentationError,
@@ -84,12 +89,14 @@ export function ProjectWorkspaceCanvas({
             }
           >
             <Project3DViewer
+              mode={mode}
               model={scene3D}
               activeLevelId={activeLevelId3D}
               visibility={levelVisibility3D}
               onVisibilityChange={onLevelVisibility3DChange}
               selection={selection3D}
               onSelectionChange={onSelection3DChange}
+              furnitureManipulation={furnitureManipulation3D}
             />
           </Suspense>
         ) : (

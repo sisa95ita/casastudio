@@ -8,6 +8,12 @@ export type ArchitecturalCameraPose3D = Readonly<{
   far: number;
 }>;
 
+/** Scale-aware OrbitControls limits derived without reading mounted Three objects. */
+export type ArchitecturalOrbitLimits3D = Readonly<{
+  minDistance: number;
+  maxDistance: number;
+}>;
+
 /** Normalized viewport position whose X grows rightward and Y grows downward. */
 export type ArchitecturalScreenPoint3D = Readonly<{
   x: number;
@@ -31,12 +37,15 @@ export const emptyArchitecturalSceneBounds3D: SceneBounds3D = Object.freeze({
   size: Object.freeze({ x: 5, y: 0, z: 5 })
 });
 
-/** Yaw-free elevated direction used by initial and reset framing. */
+/** Elevated three-quarter direction used by initial and reset framing. */
 export const architecturalPlanAlignedDirection3D: ScenePoint3D = Object.freeze({
-  x: 0,
-  y: 0.6,
-  z: 0.8
+  x: 0.52,
+  y: 0.72,
+  z: 1
 });
+
+/** Deterministic breathing room around complete physical scene bounds. */
+export const architecturalCameraFramingPadding3D = 1.18;
 
 /** Calculates a restrained oblique camera pose from physical scene bounds. */
 export function createArchitecturalCameraPose3D(
@@ -49,18 +58,11 @@ export function createArchitecturalCameraPose3D(
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   const verticalFov = verticalFieldOfViewDegrees * Math.PI / 180;
   const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * safeAspect);
-  const sceneRadius = Math.max(
-    Math.hypot(
-      framingBounds.size.x,
-      framingBounds.size.y,
-      framingBounds.size.z
-    ) / 2,
-    1
-  );
+  const sceneRadius = getArchitecturalSceneRadius3D(framingBounds);
   const limitingFov = Math.min(verticalFov, horizontalFov);
   const distance = Math.max(
     3,
-    sceneRadius / Math.sin(limitingFov / 2) * 1.2
+    sceneRadius / Math.sin(limitingFov / 2) * architecturalCameraFramingPadding3D
   );
   const directionLength = Math.hypot(
     viewingDirection.x,
@@ -83,6 +85,10 @@ export function createArchitecturalCameraPose3D(
     z: safeDirection.z / safeDirectionLength
   };
   const target = Object.freeze({ ...framingBounds.center });
+  const clipping = createArchitecturalCameraClippingPlanes3D(
+    framingBounds,
+    distance
+  );
   return Object.freeze({
     position: Object.freeze({
       x: target.x + direction.x * distance,
@@ -90,9 +96,39 @@ export function createArchitecturalCameraPose3D(
       z: target.z + direction.z * distance
     }),
     target,
-    near: Math.max(0.01, distance / 1000),
-    far: Math.max(100, distance + sceneRadius * 20)
+    ...clipping
   });
+}
+
+/** Derives practical clipping planes for close inspection and whole-building views. */
+export function createArchitecturalCameraClippingPlanes3D(
+  bounds: SceneBounds3D | undefined,
+  cameraDistance: number
+): Readonly<{ near: number; far: number }> {
+  const radius = getArchitecturalSceneRadius3D(bounds ?? emptyArchitecturalSceneBounds3D);
+  const safeDistance = Number.isFinite(cameraDistance) && cameraDistance > 0
+    ? cameraDistance
+    : radius * 3;
+  return Object.freeze({
+    near: Math.max(0.01, Math.min(0.1, radius / 1000)),
+    far: Math.max(100, safeDistance + radius * 6)
+  });
+}
+
+/** Derives useful zoom limits from complete renderer-neutral scene bounds. */
+export function createArchitecturalOrbitLimits3D(
+  bounds: SceneBounds3D | undefined
+): ArchitecturalOrbitLimits3D {
+  const radius = getArchitecturalSceneRadius3D(bounds ?? emptyArchitecturalSceneBounds3D);
+  return Object.freeze({
+    minDistance: Math.max(0.08, Math.min(0.5, radius * 0.02)),
+    maxDistance: Math.max(25, radius * 10)
+  });
+}
+
+/** Returns a nonzero radius that contains every corner of the given bounds. */
+function getArchitecturalSceneRadius3D(bounds: SceneBounds3D): number {
+  return Math.max(Math.hypot(bounds.size.x, bounds.size.y, bounds.size.z) / 2, 1);
 }
 
 /**

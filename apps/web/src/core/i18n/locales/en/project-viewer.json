@@ -39,13 +39,16 @@
     "threeD": "3D workspace"
   },
   "threeD": {
-    "title": "Architectural 3D viewer",
-    "description": "Read-only Walls, Openings, and Room Floors derived from the authoritative Project.",
+    "title": "3D workspace",
+    "viewDescription": "Explore the Project in 3D.",
+    "editDescription": "Move and rotate Furniture in 3D. Architectural geometry remains read-only.",
     "loading": "Loading the 3D workspace…",
     "fit": "Fit to building",
     "reset": "Reset camera",
-    "status_one": "3D viewer · {{count}} visible Level · Read-only",
-    "status_other": "3D viewer · {{count}} visible Levels · Read-only",
+    "status_one": "3D · {{count}} visible Level · View mode",
+    "status_other": "3D · {{count}} visible Levels · View mode",
+    "editStatus_one": "3D · {{count}} visible Level · Edit mode",
+    "editStatus_other": "3D · {{count}} visible Levels · Edit mode",
     "visibility": {
       "label": "3D Level visibility",
       "all": "All Levels",
@@ -53,17 +56,17 @@
     },
     "empty": {
       "title": "No architectural geometry",
-      "detail": "This Project has no Walls or explicit Room Floors yet. The physical ground and camera workspace remain available."
+      "detail": "This Project has no Walls, Room Floors, or Stairs yet. The physical ground and camera workspace remain available."
     },
     "inspector": {
-      "title": "3D viewer",
-      "readOnly": "This representation is read-only and does not change Project geometry.",
+      "title": "3D Properties",
       "project": "Project",
       "referenceReady": "Architectural geometry ready",
       "empty": "Empty architectural geometry",
       "selection": "Selection",
-      "nothingSelected": "Nothing selected",
-      "selectionHint": "Select a Wall, Door, Window, Wall Opening, or Room Floor in the viewer.",
+      "emptySelectionView": "Select an object to inspect its properties.",
+      "emptySelectionEdit": "Select Furniture to edit it, or another object to inspect its properties.",
+      "readOnlyEntity": "Read-only in 3D",
       "visibleLevels": "Visible Levels",
       "noVisibleLevels": "No architectural Level is visible.",
       "fields": {
@@ -77,22 +80,37 @@
         "swingSide": "Swing side",
         "wall": "Wall",
         "level": "Level",
-        "name": "Room name",
+        "name": "Name",
         "roomType": "Room type",
-        "area": "Area"
+        "area": "Area",
+        "flights": "Flights",
+        "steps": "Steps",
+        "landings": "Landings",
+        "sourceElevation": "Source elevation",
+        "destinationElevation": "Destination elevation",
+        "source": "Source",
+        "destination": "Destination",
+        "definition": "Definition",
+        "category": "Category",
+        "room": "Room",
+        "floorElevation": "Floor elevation",
+        "depth": "Depth",
+        "rotation": "Rotation"
       },
       "types": {
         "wall": "Wall",
         "door": "Door",
         "window": "Window",
         "wallOpening": "Wall Opening",
-        "room": "Room"
+        "room": "Room",
+        "staircase": "Staircase",
+        "furniture": "Furniture"
       }
     },
     "errors": {
       "unsupportedTitle": "3D rendering is unavailable",
       "unsupportedDetail": "This browser or device could not initialize WebGL. You can continue using the 2D workspace.",
-      "runtimeTitle": "The 3D viewer stopped rendering",
+      "runtimeTitle": "The 3D workspace stopped rendering",
       "runtimeDetail": "The Project remains available. Return to 2D or retry the 3D workspace in a WebGL-capable browser.",
       "derivationTitle": "The 3D scene could not be prepared",
       "derivationDetail": "The authoritative Project is still available in 2D. No Project data was changed."
@@ -209,6 +227,11 @@
   },
   "stairAuthoring": {
     "title": "Stair authoring",
+    "from": "From",
+    "to": "To",
+    "sourceRoom": "Source Room",
+    "levelFloor": "Level floor",
+    "chooseSourceRoom": "Choose the source floor",
     "targetLevel": "Target Level",
     "targetRoom": "Target Room (optional)",
     "noTargetRoom": "Level floor",
@@ -218,6 +241,7 @@
     "left": "Left",
     "right": "Right",
     "connectionSummary": "From {{from}} to {{to}}",
+    "rotationHelp": "0° follows Project +X; positive angles turn toward Project +Z.",
     "templates": {
       "straight": "Straight",
       "lShaped": "L-shaped",
@@ -231,7 +255,8 @@
     "invalid": {
       "NO_RISE": "The destination must be above the stair start. Choose a higher Level or an elevated Room.",
       "TOO_SHORT": "The run is too short for the selected step count and tread depth. Extend the preview.",
-      "INVALID_PARAMETERS": "Width, Flight step counts, and tread depth must be positive valid values."
+      "INVALID_PARAMETERS": "Width, Flight step counts, and tread depth must be positive valid values.",
+      "AMBIGUOUS_SOURCE": "Rooms overlap at the start anchor. Choose the intended source Room or Level floor."
     }
   },
   "openingAuthoring": {
@@ -285,6 +310,7 @@
     "current": "Level: {{level}}",
     "menuLabel": "Project levels",
     "add": "Add level",
+    "createFromBelow": "Create from level below",
     "manage": "Manage levels…",
     "create": "Create level",
     "edit": "Edit level",
@@ -295,6 +321,10 @@
     "cancel": "Cancel",
     "createAction": "Create Level",
     "saveAction": "Save Level",
+    "deleteAction": "Delete level",
+    "deleteTitle": "Delete \"{{level}}\"?",
+    "deleteDescription": "Walls, Rooms, Furniture, Openings and Staircases connected to this Level will also be removed.",
+    "deleteConfirm": "Delete Level",
     "invalid": "Enter a name and a finite physical elevation."
   },
   "toolbar": {
@@ -335,7 +365,9 @@
       "dimensions": "Dimensions",
       "annotations": "Annotations",
       "furniture": "Furniture"
-    }
+    },
+    "levelBelow": "Reference level below",
+    "levelBelowNamed": "Reference: {{level}}"
   },
   "planSummary": {
     "title": "Plan information",
@@ -420,6 +452,9 @@
     },
     "stair": {
       "invalid": "The staircase could not be created or changed because its connection or geometry is invalid."
+    },
+    "levelCopy": {
+      "invalid": "The level below could not be copied because the resulting project would be invalid."
     }
   },
   "wall": {
@@ -580,6 +615,9 @@
     "labels": {
       "type": "Type",
       "template": "Template",
+      "from": "From",
+      "to": "To",
+      "rotation": "Rotation",
       "width": "Width",
       "stepCount": "Step count",
       "flight1Steps": "Flight 1 steps",

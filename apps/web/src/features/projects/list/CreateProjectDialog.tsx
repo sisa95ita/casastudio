@@ -55,7 +55,10 @@ export function CreateProjectDialog({
     setSubmitted(true);
     if (validation.error || mutation.isPending) return;
     mutation.mutate(validation.preparedName, {
-      onSuccess: (response) => navigate(`/app/projects/${response.project.id}`)
+      onSuccess: (response) =>
+        navigate(`/app/projects/${response.project.id}`, {
+          state: { startInEdit: true }
+        })
     });
   };
   return (

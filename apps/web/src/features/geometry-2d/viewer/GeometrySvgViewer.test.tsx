@@ -790,6 +790,15 @@ describe("GeometrySvgViewer", () => {
       <GeometrySvgViewer
         {...createViewerProps(level)}
         architecturalModel={architecturalPresentationModel}
+        referenceArchitecturalModel={architecturalPresentationModel}
+        referenceSnapTargets={[
+          {
+            geometryId: "reference:ground:wall:start",
+            wallId: "wall",
+            point: { x: 0, z: 0 },
+            screenPoint: { x: 0, y: 0 }
+          }
+        ]}
         dimensionModel={dimensionModel}
         furnitureModel={{
           items: [item],
@@ -812,6 +821,9 @@ describe("GeometrySvgViewer", () => {
     const index = (name: string) =>
       layers.indexOf(container.querySelector(`[data-layer="${name}"]`)!);
     expect(index("polygons")).toBeLessThan(index("architectural-walls"));
+    expect(index("reference-level-below")).toBeLessThan(
+      index("architectural-walls")
+    );
     expect(index("polygons")).toBeLessThan(index("furniture"));
     expect(index("architectural-walls")).toBeLessThan(
       index("architectural-openings")
@@ -820,6 +832,97 @@ describe("GeometrySvgViewer", () => {
     expect(index("room-metrics")).toBeLessThan(index("automatic-dimensions"));
     expect(index("automatic-dimensions")).toBeLessThan(index("editor-overlay"));
     expect(container.querySelector('[data-layer="furniture"] text')).toBeNull();
+  });
+
+  it("renders the lower-Level reference with aligned coordinates and no selection identity", () => {
+    const level = getPlaygroundLevel();
+    const handleSelectionStateChange = vi.fn();
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        architecturalModel={architecturalPresentationModel}
+        referenceArchitecturalModel={architecturalPresentationModel}
+        referenceSnapTargets={[
+          {
+            geometryId: "reference:ground:wall:start",
+            wallId: "wall",
+            point: { x: 0, z: 0 },
+            screenPoint: { x: 0, y: 0 }
+          }
+        ]}
+        options={defaultGeometryDisplayOptions}
+        onSelectionStateChange={handleSelectionStateChange}
+      />
+    );
+
+    const reference = screen.getByTestId("reference-level-below");
+    const referenceWall = reference.querySelector(
+      '[data-reference-wall-id="wall"]'
+    );
+    const activeWall = screen.getByTestId("architectural-wall-body");
+    expect(referenceWall?.getAttribute("points")).toBe(
+      activeWall.getAttribute("points")
+    );
+    expect(reference.querySelector("[data-geometry-kind]")).toBeNull();
+    expect(
+      reference.querySelector(
+        '[data-reference-vertex-id="reference:ground:wall:start"]'
+      )
+    ).toBeTruthy();
+    fireEvent.click(referenceWall!);
+    expect(handleSelectionStateChange).not.toHaveBeenCalled();
+  });
+
+  it("renders every Room vertex match produced by one rigid translation", () => {
+    const level = getPlaygroundLevel();
+    render(
+      <GeometrySvgViewer
+        {...createViewerProps(level)}
+        options={defaultGeometryDisplayOptions}
+        editorOverlay={{
+          snapCandidate: {
+            kind: "vertex",
+            geometryId: "kitchen-top:start",
+            point: { x: 0, z: 0 },
+            visualDistancePixels: 3
+          },
+          roomShapeSnapMatches: [
+            {
+              sourceVertexIndex: 1,
+              primary: true,
+              snapCandidate: {
+                kind: "vertex",
+                geometryId: "kitchen-top:start",
+                point: { x: 0, z: 0 },
+                visualDistancePixels: 3
+              }
+            },
+            {
+              sourceVertexIndex: 2,
+              primary: false,
+              snapCandidate: {
+                kind: "vertex",
+                geometryId: "kitchen-top:end",
+                point: { x: 500, z: 0 },
+                visualDistancePixels: 0
+              }
+            }
+          ]
+        }}
+      />
+    );
+
+    const markers = screen.getAllByTestId("room-shape-snap-marker");
+    expect(markers).toHaveLength(2);
+    expect(
+      markers.map((marker) => marker.getAttribute("data-primary"))
+    ).toEqual(["true", "false"]);
+    expect(
+      screen
+        .getByTestId("room-shape-snap-markers")
+        .getAttribute("pointer-events")
+    ).toBe("none");
+    expect(screen.queryByTestId("draw-wall-snap-marker")).toBeNull();
   });
 
   it("renders a stable empty state for levels with no runtime geometry", () => {

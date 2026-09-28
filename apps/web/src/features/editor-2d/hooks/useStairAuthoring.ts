@@ -20,8 +20,10 @@ import {
   type ProjectEditorState
 } from "../state/project-editor-slice";
 import {
+  angleToProjectPlanVector,
   createStairIdentifiers,
   createStairProposal,
+  getStairSourceRoomCandidates,
   getSuggestedStairParameters,
   type StairAuthoringParameters,
   type StairTemplate
@@ -50,6 +52,48 @@ export function useStairAuthoring({
     editor.transient.interaction?.kind === "place-stair"
       ? editor.transient.interaction
       : undefined;
+  const sourceRoomCandidates = useMemo(() =>
+    activeProject && stairPlacement?.start
+      ? getStairSourceRoomCandidates(
+          activeProject,
+          stairPlacement.owningLevelId,
+          stairPlacement.start
+        )
+      : [],
+    [activeProject, stairPlacement?.owningLevelId, stairPlacement?.start]
+  );
+  const explicitSourceRoomValid = Boolean(
+    stairPlacement?.sourceRoomSelectionExplicit &&
+    stairPlacement.fromRoomId &&
+    sourceRoomCandidates.some((candidate) =>
+      candidate.roomId === stairPlacement.fromRoomId
+    )
+  );
+  const explicitLevelFloor = Boolean(
+    stairPlacement?.sourceRoomSelectionExplicit && !stairPlacement.fromRoomId
+  );
+  const resolvedFromRoomId = explicitSourceRoomValid
+    ? stairPlacement?.fromRoomId
+    : !explicitLevelFloor && sourceRoomCandidates.length === 1
+      ? sourceRoomCandidates[0]!.roomId
+      : undefined;
+  const sourceRoomAmbiguous = sourceRoomCandidates.length > 1 &&
+    !explicitSourceRoomValid && !explicitLevelFloor;
+  useEffect(() => {
+    if (
+      stairPlacement?.sourceRoomSelectionExplicit &&
+      stairPlacement.fromRoomId &&
+      stairPlacement.start &&
+      !sourceRoomCandidates.some((candidate) =>
+        candidate.roomId === stairPlacement.fromRoomId
+      )
+    ) {
+      dispatch(editorStairAuthoringChanged({
+        fromRoomId: undefined,
+        sourceRoomSelectionExplicit: false
+      }));
+    }
+  }, [dispatch, sourceRoomCandidates, stairPlacement]);
   const stairProposal = useMemo(() => {
     if (
       !activeProject ||
@@ -63,11 +107,12 @@ export function useStairAuthoring({
       stairPlacement.parameters.kind === "STRAIGHT"
         ? stairPlacement.parameters.flightStepCount
         : stairPlacement.parameters.firstFlightStepCount;
+    const direction = angleToProjectPlanVector(stairPlacement.rotation);
+    if (!direction) return undefined;
+    const firstRun = firstStepCount * stairPlacement.parameters.treadDepth;
     const control = {
-      x:
-        stairPlacement.start.x +
-        firstStepCount * stairPlacement.parameters.treadDepth,
-      z: stairPlacement.start.z
+      x: stairPlacement.start.x + direction.x * firstRun,
+      z: stairPlacement.start.z + direction.z * firstRun
     };
     return createStairProposal({
       project: activeProject,
@@ -78,6 +123,8 @@ export function useStairAuthoring({
           ? { toRoomId: stairPlacement.toRoomId }
           : {})
       },
+      ...(resolvedFromRoomId ? { fromRoomId: resolvedFromRoomId } : {}),
+      sourceRoomAmbiguous,
       template: stairPlacement.template,
       parameters: stairPlacement.parameters,
       start: stairPlacement.start,
@@ -86,7 +133,13 @@ export function useStairAuthoring({
       identifiers: stairPlacement.identifiers,
       name: `Stair ${(activeProjectLevel?.staircases.length ?? 0) + 1}`
     });
-  }, [activeProject, activeProjectLevel?.staircases.length, stairPlacement]);
+  }, [
+    activeProject,
+    activeProjectLevel?.staircases.length,
+    resolvedFromRoomId,
+    sourceRoomAmbiguous,
+    stairPlacement
+  ]);
 
   const handleStairDestinationChange = useCallback(
     (toLevelId: string, toRoomId?: string) => {
@@ -145,6 +198,17 @@ export function useStairAuthoring({
     },
     [dispatch]
   );
+
+  const handleStairRotationChange = useCallback((rotation: number) => {
+    dispatch(editorStairAuthoringChanged({ rotation }));
+  }, [dispatch]);
+
+  const handleStairSourceRoomChange = useCallback((fromRoomId?: string) => {
+    dispatch(editorStairAuthoringChanged({
+      fromRoomId,
+      sourceRoomSelectionExplicit: true
+    }));
+  }, [dispatch]);
 
   const handleCancelStairAuthoring = useCallback(() => {
     dispatch(editorActiveToolChanged("select"));
@@ -216,9 +280,14 @@ export function useStairAuthoring({
   return {
     stairPlacement,
     stairProposal,
+    sourceRoomCandidates,
+    resolvedFromRoomId,
+    sourceRoomAmbiguous,
     handleStairDestinationChange,
     handleStairTemplateChange,
     handleStairParametersChange,
+    handleStairRotationChange,
+    handleStairSourceRoomChange,
     handleCancelStairAuthoring,
     handleConfirmStairAuthoring
   };

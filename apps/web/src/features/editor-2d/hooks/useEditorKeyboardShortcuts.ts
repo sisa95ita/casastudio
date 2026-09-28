@@ -48,6 +48,7 @@ type UseEditorKeyboardShortcutsOptions = {
     openingType: "DOOR" | "WINDOW" | "OPENING"
   ) => void;
   readonly selectionCount?: number;
+  readonly furnitureNudgeEnabled3D?: boolean;
   readonly handleDeleteSelection?: () => void;
   readonly handleNudgeSelection?: (delta: {
     readonly x: number;
@@ -79,6 +80,7 @@ export function useEditorKeyboardShortcuts({
   handleCancelStairAuthoring,
   handleOpeningAuthoringTypeChange,
   selectionCount = 0,
+  furnitureNudgeEnabled3D = false,
   handleDeleteSelection,
   handleNudgeSelection
 }: UseEditorKeyboardShortcutsOptions) {
@@ -88,7 +90,6 @@ export function useEditorKeyboardShortcuts({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (workspaceRepresentation !== "2d") return;
       if (shortcutsOpen || saveInteractionBlocked) return;
       const target = event.target as HTMLElement | null;
       if (
@@ -113,6 +114,22 @@ export function useEditorKeyboardShortcuts({
           return;
         }
       }
+      if (workspaceRepresentation === "3d") {
+        if (
+          workspaceMode === "edit" &&
+          !modifier &&
+          !isTextInput &&
+          furnitureNudgeEnabled3D &&
+          transient.interaction === null
+        ) {
+          const delta = getEditorNudgeDelta(event);
+          if (delta) {
+            event.preventDefault();
+            handleNudgeSelection?.(delta);
+          }
+        }
+        return;
+      }
       if (workspaceMode === "edit" && !modifier && !isTextInput) {
         if (
           event.key === "Escape" &&
@@ -128,17 +145,7 @@ export function useEditorKeyboardShortcuts({
           selectionCount > 0 &&
           event.key.startsWith("Arrow")
         ) {
-          const distance = event.shiftKey ? 10 : 1;
-          const delta =
-            event.key === "ArrowLeft"
-              ? { x: -distance, z: 0 }
-              : event.key === "ArrowRight"
-                ? { x: distance, z: 0 }
-                : event.key === "ArrowUp"
-                  ? { x: 0, z: distance }
-                  : event.key === "ArrowDown"
-                    ? { x: 0, z: -distance }
-                    : undefined;
+          const delta = getEditorNudgeDelta(event);
           if (delta) {
             event.preventDefault();
             handleNudgeSelection?.(delta);
@@ -280,6 +287,7 @@ export function useEditorKeyboardShortcuts({
     handleOpeningAuthoringTypeChange,
     handleDeleteSelection,
     handleNudgeSelection,
+    furnitureNudgeEnabled3D,
     selectionCount,
     transient.interaction,
     transient.snapCandidate,
@@ -293,4 +301,23 @@ export function useEditorKeyboardShortcuts({
     workspaceMode,
     workspaceRepresentation
   ]);
+}
+
+const editorNudgeStep = Object.freeze({ small: 1, large: 10 });
+
+function getEditorNudgeDelta(
+  event: Pick<KeyboardEvent, "key" | "shiftKey">
+): { readonly x: number; readonly z: number } | undefined {
+  const distance = event.shiftKey
+    ? editorNudgeStep.large
+    : editorNudgeStep.small;
+  return event.key === "ArrowLeft"
+    ? { x: -distance, z: 0 }
+    : event.key === "ArrowRight"
+      ? { x: distance, z: 0 }
+      : event.key === "ArrowUp"
+        ? { x: 0, z: distance }
+        : event.key === "ArrowDown"
+          ? { x: 0, z: -distance }
+          : undefined;
 }

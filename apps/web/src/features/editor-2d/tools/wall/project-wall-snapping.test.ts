@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentation/geometry-presentation-model-2d";
-import { resolveDrawWallSnapCandidate } from "./project-wall-snapping";
+import {
+  createReferenceLevelSnapTargets,
+  resolveDrawWallSnapCandidate
+} from "./project-wall-snapping";
 
 describe("resolveDrawWallSnapCandidate", () => {
   it("prefers an exact canonical Vertex over a nearby Wall interior", () => {
@@ -184,6 +187,72 @@ describe("resolveDrawWallSnapCandidate", () => {
 
     expect(withoutGrid.kind).toBe("vertex");
     expect(withGrid.kind).toBe("vertex");
+  });
+
+  it("uses reference endpoints positionally after current-Level topology", () => {
+    const referenceTargets = [
+      {
+        geometryId: "reference:lower:wall:start",
+        wallId: "lower-wall",
+        point: { x: 9, z: -1 },
+        screenPoint: { x: 9, y: 1 }
+      }
+    ];
+    expect(
+      resolveDrawWallSnapCandidate({ x: 8, y: 2 }, createModel(), {
+        worldPoint: { x: 8, z: -2 },
+        referenceTargets
+      }).kind
+    ).toBe("vertex");
+
+    const model = createModel();
+    model.vertices = [];
+    model.boundaryEdges = [];
+    expect(
+      resolveDrawWallSnapCandidate({ x: 8, y: 2 }, model, {
+        worldPoint: { x: 8, z: -2 },
+        referenceTargets
+      })
+    ).toMatchObject({
+      kind: "reference-vertex",
+      wallId: "lower-wall",
+      point: { x: 9, z: -1 }
+    });
+  });
+
+  it("keeps every incident Wall identity on a de-duplicated reference vertex", () => {
+    const targets = createReferenceLevelSnapTargets(
+      {
+        id: "lower",
+        walls: [
+          {
+            id: "wall-a",
+            start: { x: 0, z: 0 },
+            end: { x: 500, z: 0 },
+            height: 300,
+            thickness: 20,
+            roomIds: [],
+            openings: []
+          },
+          {
+            id: "wall-b",
+            start: { x: 500, z: 0 },
+            end: { x: 500, z: 300 },
+            height: 300,
+            thickness: 20,
+            roomIds: [],
+            openings: []
+          }
+        ]
+      },
+      { worldToScreen: (point) => ({ x: point.x, y: -point.z }) }
+    );
+
+    expect(targets).toHaveLength(3);
+    expect(
+      targets.find((target) => target.point.x === 500 && target.point.z === 0)
+        ?.wallIds
+    ).toEqual(["wall-a", "wall-b"]);
   });
 
   it("bypasses architectural and grid assistance for an Alt gesture sample", () => {

@@ -63,6 +63,15 @@ type UseProjectWorkspaceShellOptions = {
   readonly onUpdateActiveLevel: ComponentProps<
     typeof ProjectLevelControl
   >["onUpdateActiveLevel"];
+  readonly canCreateFromBelow: ComponentProps<
+    typeof ProjectLevelControl
+  >["canCreateFromBelow"];
+  readonly onCreateFromBelow: ComponentProps<
+    typeof ProjectLevelControl
+  >["onCreateFromBelow"];
+  readonly onDeleteActiveLevel: ComponentProps<
+    typeof ProjectLevelControl
+  >["onDeleteActiveLevel"];
   readonly onModeChange: (mode: ProjectWorkspaceMode | null) => void;
   readonly onRepresentationChange: (
     representation: ProjectWorkspaceRepresentation | null
@@ -100,6 +109,9 @@ export function useProjectWorkspaceShell({
   onViewLevelChange,
   onCreateLevel,
   onUpdateActiveLevel,
+  canCreateFromBelow,
+  onCreateFromBelow,
+  onDeleteActiveLevel,
   onModeChange,
   onRepresentationChange,
   onSave,
@@ -141,10 +153,13 @@ export function useProjectWorkspaceShell({
             }
             onCreateLevel={onCreateLevel}
             onUpdateActiveLevel={onUpdateActiveLevel}
+            canCreateFromBelow={canCreateFromBelow}
+            onCreateFromBelow={onCreateFromBelow}
+            onDeleteActiveLevel={onDeleteActiveLevel}
           />
         ) : undefined,
       headerCenter:
-        !isPhone && project && !consistencyFailure && mode === "view" ? (
+        !isPhone && project && !consistencyFailure ? (
           <WorkspaceRepresentationControl
             representation={representation}
             disabled={saveInteractionBlocked}
@@ -177,7 +192,7 @@ export function useProjectWorkspaceShell({
       inspector: isTablet || isPhone ? undefined : inspector,
       status:
         representation === "3d" && scene3D ? (
-          t("threeD.status", {
+          t(mode === "edit" ? "threeD.editStatus" : "threeD.status", {
             count: getVisibleLevelReferences3D(
               scene3D,
               levelVisibility3D,
@@ -218,6 +233,7 @@ export function useProjectWorkspaceShell({
       activeProject,
       activeProjectLevel?.name,
       consistencyFailure,
+      canCreateFromBelow,
       dispatch,
       editor,
       inspector,
@@ -226,6 +242,8 @@ export function useProjectWorkspaceShell({
       levelVisibility3D,
       mode,
       onCreateLevel,
+      onCreateFromBelow,
+      onDeleteActiveLevel,
       onFitViewport,
       onModeChange,
       onPersistenceDialogChange,

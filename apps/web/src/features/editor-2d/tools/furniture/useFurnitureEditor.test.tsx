@@ -408,7 +408,7 @@ describe("Furniture controller and Properties", () => {
     const id = result.current.editor.draft!.building.furniture[0]!.id;
     act(() => result.current.dispatch(editorActiveToolChanged("select")));
     act(() => c().beginGesture(id, "move", pointer(160, 160), 1));
-    act(() => c().pointerMove(pointer(180, 190), 1));
+    act(() => c().pointerMoveProject({ x: 180, z: 190 }, 1));
     expect(c().item?.position).toEqual({ x: 170, z: 180 });
     expect(
       result.current.editor.draft!.building.furniture[0]!.position
@@ -426,7 +426,7 @@ describe("Furniture controller and Properties", () => {
       height: 95
     });
     act(() => c().beginGesture(id, "rotate", pointer(190, 280), 2));
-    act(() => c().pointerMove(pointer(270, 200), 2));
+    act(() => c().pointerMoveProject({ x: 270, z: 200 }, 2));
     expect(c().item!.rotation).toBeCloseTo(815.25);
     expect(c().selected!.rotation).toBe(725.25);
     act(() => c().endGesture(true));
@@ -523,6 +523,16 @@ describe("Furniture controller and Properties", () => {
     act(() => c().update({ roomId: "living" }));
     expect(c().room?.floorElevation).toBe(0);
     act(() => c().update({ position: { x: 800, z: 400 } }));
+    const historyBeforeAmbiguous3DGesture =
+      result.current.editor.history.past.length;
+    act(() => c().beginGesture(id, "move", pointer(800, 400), 20));
+    act(() => c().pointerMoveProject({ x: 350, z: 350 }, 20));
+    act(() => c().endGesture(true, false));
+    expect(c().transient).toBeUndefined();
+    expect(c().selected?.position).toEqual({ x: 800, z: 400 });
+    expect(result.current.editor.history.past).toHaveLength(
+      historyBeforeAmbiguous3DGesture
+    );
     act(() => c().beginGesture(id, "move", pointer(800, 400), 2));
     act(() => c().pointerMove(pointer(350, 350), 2));
     act(() => c().endGesture(true));

@@ -3,14 +3,21 @@ import {
   getVisibleLevelReferences3D
 } from "../features/project-3d/model/architectural-scene-3d-model";
 import type { Project3DViewerProps } from "../features/project-3d/Project3DViewer";
+import { threePlanPointToProject } from "../features/project-3d/interaction/furniture-manipulation-3d";
+import { useCasaTranslation } from "../core/i18n";
 
 /** Lightweight renderer boundary for page tests that exercise 2D and 3D mode integration. */
 export function Project3DViewerTestDouble({
+  mode,
   model,
   activeLevelId,
   visibility,
-  onVisibilityChange
+  onVisibilityChange,
+  selection,
+  onSelectionChange,
+  furnitureManipulation
 }: Project3DViewerProps) {
+  const { t } = useCasaTranslation("project-viewer");
   const visibleLevels = getVisibleLevelReferences3D(
     model,
     visibility,
@@ -94,7 +101,19 @@ export function Project3DViewerTestDouble({
           ? JSON.stringify({ min: visibleBounds.min, max: visibleBounds.max })
           : ""
       }
+      data-furniture-editable={Boolean(furnitureManipulation)}
+      data-furniture-preview-valid={
+        furnitureManipulation?.preview
+          ? furnitureManipulation.previewValid
+          : undefined
+      }
     >
+      <h2>{t("threeD.title")}</h2>
+      <p>
+        {t(
+          mode === "edit" ? "threeD.editDescription" : "threeD.viewDescription"
+        )}
+      </p>
       <button type="button" onClick={() => onVisibilityChange("all")}>
         All Levels
       </button>
@@ -107,6 +126,76 @@ export function Project3DViewerTestDouble({
       </button>
       <button type="button">Fit to building</button>
       <button type="button">Reset camera</button>
+      {visibleLevels.flatMap((level) =>
+        level.walls.map((wall) => (
+          <button
+            key={`${level.id}:wall:${wall.id}`}
+            type="button"
+            onClick={() =>
+              onSelectionChange({
+                kind: "wall",
+                id: wall.id,
+                levelId: level.id
+              })
+            }
+          >
+            Select Wall {wall.id}
+          </button>
+        ))
+      )}
+      {visibleLevels.flatMap((level) =>
+        level.furniture.map((item) => {
+          const identity = {
+            kind: "furniture" as const,
+            id: item.id,
+            levelId: level.id
+          };
+          const selected =
+            selection?.kind === "furniture" && selection.id === item.id;
+          const center = furnitureManipulation
+            ? threePlanPointToProject(
+                item.position,
+                furnitureManipulation.sourceUnit
+              )
+            : undefined;
+          return (
+            <div key={item.id}>
+              <button type="button" onClick={() => onSelectionChange(identity)}>
+                Select {item.name}
+              </button>
+              {selected && furnitureManipulation && center ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      furnitureManipulation.onBegin(item.id, "move", center, 1)
+                    }
+                  >
+                    Start moving {item.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      furnitureManipulation.onMove(
+                        { x: center.x + 20, z: center.z + 10 },
+                        1
+                      )
+                    }
+                  >
+                    Preview moving {item.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => furnitureManipulation.onEnd(true)}
+                  >
+                    Finish moving {item.name}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          );
+        })
+      )}
       <div data-testid="project-3d-canvas" />
     </section>
   );

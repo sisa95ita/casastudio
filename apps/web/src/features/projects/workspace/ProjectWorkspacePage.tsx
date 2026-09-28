@@ -27,8 +27,13 @@ import {
   useTheme
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useBlocker, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useBlocker,
+  useLocation,
+  useNavigate,
+  useParams
+} from "react-router-dom";
 
 import { useCasaStudioApi } from "../../../core/api/ApiProvider";
 import type {
@@ -74,6 +79,7 @@ import {
   createArchitecturalScene3DModel,
   type LevelVisibility3D
 } from "../../project-3d/model/architectural-scene-3d-model";
+import { createFurnitureModel3D } from "../../project-3d/model/furniture-3d-model";
 import { useProjectGeometryQuery } from "../data/geometry-queries";
 import { useReplaceProjectMutation } from "../data/project-mutations";
 import { useProjectQuery } from "../data/project-queries";
@@ -126,6 +132,11 @@ import {
   resolveFurniturePrecisionTranslation
 } from "../../editor-2d/precision/project-precision-assistance";
 import {
+  canCreateFromLevelBelow,
+  createFromLevelBelow,
+  findNearestLowerLevel
+} from "../../editor-2d/tools/level/project-level-below";
+import {
   createDraftWall,
   createRoomIdentifier,
   createWallIdentifier,
@@ -137,10 +148,12 @@ import {
   newWallDefaults
 } from "../../editor-2d/tools/wall/project-wall-editing";
 import {
+  createReferenceLevelSnapTargets,
   resolveDrawWallSnapCandidate,
   resolveGridSnapCandidate,
   resolveProjectPointSnapCandidate
 } from "../../editor-2d/tools/wall/project-wall-snapping";
+import { resolveRoomShapeVertexSnap } from "../../editor-2d/tools/room/room-shape-snapping";
 import {
   commitOpeningPlacementCandidate,
   createOpeningIdentifier,
@@ -214,6 +227,8 @@ function isSelectionLayerVisible(
 /** Renders the authoritative View and local-draft Edit workspace for one Project. */
 export function ProjectWorkspacePage() {
   const { projectId = "" } = useParams<{ projectId: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useCasaTranslation("project-viewer");
   const theme = useTheme();
   const isPhone = useMediaQuery(theme.breakpoints.down("sm"));
@@ -255,6 +270,9 @@ export function ProjectWorkspacePage() {
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [editingError, setEditingError] = useState<EditingErrorKey>();
+  const [levelBelowReferenceVisible, setLevelBelowReferenceVisible] =
+    useState(true);
+  const autoEditProjectRef = useRef<string | undefined>(undefined);
 
   const projectResponse = projectQuery.data;
   const geometryResponse = geometryQuery.data;
@@ -278,47 +296,10 @@ export function ProjectWorkspacePage() {
       shortcutsOpen,
       saveInteractionBlocked
     );
-  const scene3DResult = useMemo(() => {
-    if (!projectResponse || !geometryResponse || consistencyFailure)
-      return undefined;
-    try {
-      return {
-        ok: true as const,
-        model: createArchitecturalScene3DModel(
-          projectResponse.project,
-          geometryResponse.geometry
-        )
-      };
-    } catch (error) {
-      return { ok: false as const, error };
-    }
-  }, [consistencyFailure, geometryResponse, projectResponse]);
-
   const viewLevels = geometryResponse?.geometry.levels ?? [];
   const selectedViewLevel =
     viewLevels.find((level) => level.sourceLevelId === selectedViewLevelId) ??
     viewLevels[0];
-  const activeLevelId3D = selectedViewLevel?.sourceLevelId;
-  const resolvedSelection3D = useMemo(
-    () =>
-      scene3DResult?.ok && selection3D
-        ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
-        : undefined,
-    [scene3DResult, selection3D]
-  );
-
-  useEffect(() => {
-    if (
-      selection3D &&
-      !isArchitecturalSelectionVisible3D(
-        resolvedSelection3D,
-        levelVisibility3D,
-        activeLevelId3D
-      )
-    )
-      setSelection3D(undefined);
-  }, [activeLevelId3D, levelVisibility3D, resolvedSelection3D, selection3D]);
-
   useEffect(() => {
     setSelection3D(undefined);
   }, [projectId]);
@@ -361,21 +342,194 @@ export function ProjectWorkspacePage() {
   const activeProjectLevel = activeProject?.building.levels.find(
     (level) => level.id === selectedLevel?.sourceLevelId
   );
+  const levelBelow =
+    workspaceMode === "edit" && editor.draft
+      ? findNearestLowerLevel(editor.draft, editor.activeLevelId)
+      : undefined;
+  const selectionOperationLevel = useMemo(() => {
+    if (
+      workspaceRepresentation !== "3d" ||
+      selection3D?.kind !== "furniture" ||
+      !activeProject
+    )
+      return activeProjectLevel;
+    const item = activeProject.building.furniture.find(
+      (candidate) => candidate.id === selection3D.id
+    );
+    return item
+      ? activeProject.building.levels.find((level) =>
+          level.rooms.some((room) => room.id === item.roomId)
+        )
+      : activeProjectLevel;
+  }, [activeProject, activeProjectLevel, selection3D, workspaceRepresentation]);
   const furniture = useFurnitureEditor({
     project: activeProject,
-    levelId: activeProjectLevel?.id,
+    levelId:
+      workspaceRepresentation === "3d" && selection3D?.kind === "furniture"
+        ? selection3D.levelId
+        : activeProjectLevel?.id,
     editor,
     dispatch,
     selection: selectionState,
-    editable:
-      workspaceMode === "edit" &&
-      !saveInteractionBlocked &&
-      workspaceRepresentation === "2d",
+    editable: workspaceMode === "edit" && !saveInteractionBlocked,
     visible: displayOptions.furniture !== false,
     zoom: activeViewport.zoom,
     snapToGrid: editor.precision.snapToGrid,
     gridSpacing: editor.precision.gridSpacing
   });
+  const activeLevelId3D =
+    workspaceMode === "edit"
+      ? (activeProjectLevel?.id ?? undefined)
+      : selectedViewLevel?.sourceLevelId;
+  const scene3DResult = useMemo(() => {
+    if (
+      workspaceRepresentation !== "3d" ||
+      !activeProject ||
+      consistencyFailure
+    )
+      return undefined;
+    try {
+      return {
+        ok: true as const,
+        model: createArchitecturalScene3DModel(
+          activeProject,
+          workspaceMode === "view" ? geometryResponse?.geometry : undefined
+        )
+      };
+    } catch (error) {
+      return { ok: false as const, error };
+    }
+  }, [
+    activeProject,
+    consistencyFailure,
+    geometryResponse,
+    workspaceMode,
+    workspaceRepresentation
+  ]);
+  const resolvedSelection3D = useMemo(
+    () =>
+      scene3DResult?.ok && selection3D
+        ? resolveArchitecturalSelection3D(scene3DResult.model, selection3D)
+        : undefined,
+    [scene3DResult, selection3D]
+  );
+  const furnitureKeyboardEditable3D = Boolean(
+    workspaceMode === "edit" &&
+    workspaceRepresentation === "3d" &&
+    editor.activeTool === "select" &&
+    !saveInteractionBlocked &&
+    selection3D?.kind === "furniture" &&
+    resolvedSelection3D?.kind === "furniture" &&
+    isArchitecturalSelectionVisible3D(
+      resolvedSelection3D,
+      levelVisibility3D,
+      activeLevelId3D
+    ) &&
+    selectionState.selected.length === 1 &&
+    selectionState.selected[0]?.kind === "FURNITURE" &&
+    selectionState.selected[0].geometryId === selection3D.id
+  );
+  const furniturePreview3D = useMemo(() => {
+    const transient = furniture.transient;
+    if (!activeProject || !transient?.item) return undefined;
+    const source = transient.sourceId
+      ? activeProject.building.furniture.find(
+          (item) => item.id === transient.sourceId
+        )
+      : undefined;
+    return createFurnitureModel3D(
+      activeProject,
+      transient.item.roomId || !source
+        ? transient.item
+        : { ...transient.item, roomId: source.roomId }
+    );
+  }, [activeProject, furniture.transient]);
+  const furnitureManipulation3D = useMemo(
+    () =>
+      furnitureKeyboardEditable3D &&
+      selection3D?.kind === "furniture" &&
+      activeProject
+        ? {
+            sourceUnit: activeProject.units.length,
+            preview: furniturePreview3D,
+            previewValid: furniture.previewValid,
+            onBegin: (
+              id: string,
+              intent: "move" | "rotate",
+              point: Readonly<{ x: number; z: number }>,
+              pointerId: number
+            ) =>
+              furniture.beginGesture(
+                id,
+                intent,
+                { worldPoint: point },
+                pointerId
+              ),
+            onMove: furniture.pointerMoveProject,
+            onEnd: (dragged: boolean) => furniture.endGesture(dragged, false),
+            onCancel: furniture.cancel
+          }
+        : undefined,
+    [
+      activeProject,
+      editor.activeTool,
+      furniture,
+      furnitureKeyboardEditable3D,
+      furniturePreview3D,
+      selection3D?.kind,
+      selection3D?.id
+    ]
+  );
+
+  useEffect(() => {
+    if (
+      selection3D &&
+      !isArchitecturalSelectionVisible3D(
+        resolvedSelection3D,
+        levelVisibility3D,
+        activeLevelId3D
+      )
+    )
+      setSelection3D(undefined);
+  }, [activeLevelId3D, levelVisibility3D, resolvedSelection3D, selection3D]);
+  useEffect(() => {
+    if (workspaceMode !== "edit" || workspaceRepresentation !== "3d") return;
+    const selected = selectionState.selected;
+    if (selected.length !== 1 || selected[0]?.kind !== "FURNITURE") return;
+    const id = selected[0].geometryId;
+    const level = scene3DResult?.ok
+      ? scene3DResult.model.levels.find((entry) =>
+          entry.furniture.some((item) => item.id === id)
+        )
+      : undefined;
+    if (level) setSelection3D({ kind: "furniture", id, levelId: level.id });
+  }, [
+    scene3DResult,
+    selectionState.selected,
+    workspaceMode,
+    workspaceRepresentation
+  ]);
+
+  const handleSelection3DChange = useCallback(
+    (identity?: ArchitecturalEntityIdentity3D) => {
+      setSelection3D(identity);
+      if (workspaceMode !== "edit") return;
+      if (!identity) {
+        dispatch(editorSelectionCleared());
+      } else if (identity.kind === "furniture") {
+        dispatch(
+          editorSelectionChanged(
+            createGeometrySelectionState([
+              { kind: "FURNITURE", geometryId: identity.id }
+            ])
+          )
+        );
+      } else {
+        dispatch(editorSelectionCleared());
+      }
+    },
+    [dispatch, workspaceMode]
+  );
   useEffect(() => {
     const selected = selectionState.selected.filter((entry) =>
       isSelectionLayerVisible(entry, displayOptions)
@@ -443,7 +597,20 @@ export function ProjectWorkspacePage() {
             selectionState
           )
         : undefined;
-      return { ok: true as const, model, architecturalModel };
+      const referenceArchitecturalModel =
+        workspaceMode === "edit" && levelBelow && levelBelowReferenceVisible
+          ? createArchitecturalPresentationModel2D(
+              levelBelow,
+              transform,
+              emptySelectionState
+            )
+          : undefined;
+      return {
+        ok: true as const,
+        model,
+        architecturalModel,
+        referenceArchitecturalModel
+      };
     } catch (error) {
       return { ok: false as const, error };
     }
@@ -453,8 +620,29 @@ export function ProjectWorkspacePage() {
     selectedLevel,
     selectionState,
     workspaceMode,
-    activeProjectLevel
+    activeProjectLevel,
+    levelBelow,
+    levelBelowReferenceVisible
   ]);
+  const referenceSnapTargets = useMemo(
+    () =>
+      workspaceMode === "edit" &&
+      levelBelowReferenceVisible &&
+      levelBelow &&
+      (editor.activeTool === "room" || editor.activeTool === "draw-wall")
+        ? createReferenceLevelSnapTargets(
+            levelBelow,
+            createViewportTransform2D(activeViewport)
+          )
+        : [],
+    [
+      activeViewport,
+      editor.activeTool,
+      levelBelow,
+      levelBelowReferenceVisible,
+      workspaceMode
+    ]
+  );
 
   const selectionFootprints = useMemo(() => {
     if (!presentationResult?.ok || !activeProjectLevel || !activeProject)
@@ -478,30 +666,33 @@ export function ProjectWorkspacePage() {
   ]);
   const selectionRoots = useMemo(
     () =>
-      activeProject && activeProjectLevel && presentationResult?.ok
+      activeProject && selectionOperationLevel && presentationResult?.ok
         ? resolveProjectSelectionRoots(
             activeProject,
-            activeProjectLevel,
+            selectionOperationLevel,
             presentationResult.model,
             selectionState.selected
           )
         : [],
     [
       activeProject,
-      activeProjectLevel,
+      selectionOperationLevel,
       presentationResult,
       selectionState.selected
     ]
   );
   const selectionCapabilities = useMemo(
     () =>
-      activeProjectLevel
-        ? getProjectSelectionCapabilities(activeProjectLevel, selectionRoots)
+      selectionOperationLevel
+        ? getProjectSelectionCapabilities(
+            selectionOperationLevel,
+            selectionRoots
+          )
         : getProjectSelectionCapabilities(
             { walls: [], rooms: [], staircases: [] } as never,
             []
           ),
-    [activeProjectLevel, selectionRoots]
+    [selectionOperationLevel, selectionRoots]
   );
 
   const selectedEditWall = useMemo(() => {
@@ -729,9 +920,14 @@ export function ProjectWorkspacePage() {
   const {
     stairPlacement,
     stairProposal,
+    sourceRoomCandidates,
+    resolvedFromRoomId,
+    sourceRoomAmbiguous,
     handleStairDestinationChange,
     handleStairTemplateChange,
     handleStairParametersChange,
+    handleStairRotationChange,
+    handleStairSourceRoomChange,
     handleCancelStairAuthoring,
     handleConfirmStairAuthoring
   } = useStairAuthoring({
@@ -804,11 +1000,65 @@ export function ProjectWorkspacePage() {
     setEditingError(undefined);
     setSaveFeedback(undefined);
     setShortcutsOpen(false);
+    setLevelBelowReferenceVisible(true);
 
     return () => {
       dispatch(projectRouteExited(projectId));
     };
   }, [dispatch, projectId]);
+
+  useEffect(() => {
+    const startInEdit = Boolean(
+      (location.state as { readonly startInEdit?: boolean } | null)?.startInEdit
+    );
+    if (
+      !startInEdit ||
+      autoEditProjectRef.current === projectId ||
+      !projectResponse ||
+      !geometryResponse ||
+      consistencyFailure ||
+      ownsEditingSession ||
+      isPhone
+    ) {
+      return;
+    }
+
+    const groundLevel = projectResponse.project.building.levels.reduce<
+      (typeof projectResponse.project.building.levels)[number] | undefined
+    >(
+      (lowest, level) =>
+        !lowest || level.elevation < lowest.elevation ? level : lowest,
+      undefined
+    );
+    autoEditProjectRef.current = projectId;
+    setWorkspaceRepresentation("2d");
+    setSelection3D(undefined);
+    dispatch(
+      editingSessionEntered({
+        project: projectResponse.project,
+        baseRevision: projectResponse.sourceRevision,
+        preferredLevelId: groundLevel?.id
+      })
+    );
+    dispatch(geometrySelectionReset());
+    setPersistenceDialog("none");
+    void navigate(location.pathname, { replace: true, state: null });
+  }, [
+    consistencyFailure,
+    dispatch,
+    geometryResponse,
+    isPhone,
+    location.state,
+    location.pathname,
+    navigate,
+    ownsEditingSession,
+    projectId,
+    projectResponse
+  ]);
+
+  useEffect(() => {
+    if (levelBelow) setLevelBelowReferenceVisible(true);
+  }, [editor.activeLevelId, levelBelow?.id]);
 
   useEffect(() => {
     if (!shouldProtectNavigation) {
@@ -965,6 +1215,7 @@ export function ProjectWorkspacePage() {
         const level = editor.draft.building.levels.find(
           (candidate) => candidate.id === editor.activeLevelId
         );
+        const identifierBudget = wallCount * ((level?.walls.length ?? 0) + 1);
         const room = {
           id: roomId,
           name: `Room ${(level?.rooms.length ?? 0) + 1}`,
@@ -986,7 +1237,10 @@ export function ProjectWorkspacePage() {
                 origin,
                 shape: validatedRoomShape,
                 room,
-                wallIds: Array.from({ length: wallCount }, () =>
+                wallIds: Array.from({ length: identifierBudget }, () =>
+                  createWallIdentifier()
+                ),
+                splitWallIds: Array.from({ length: identifierBudget * 2 }, () =>
                   createWallIdentifier()
                 ),
                 wallHeight: newWallDefaults.height,
@@ -1098,6 +1352,7 @@ export function ProjectWorkspacePage() {
                       ).worldToScreen(editor.transient.interaction.startPoint)
                     }
                   : undefined,
+              referenceTargets: referenceSnapTargets,
               grid: {
                 enabled: editor.precision.snapToGrid,
                 spacing: editor.precision.gridSpacing,
@@ -1165,6 +1420,7 @@ export function ProjectWorkspacePage() {
       validRoomElevation,
       activeViewport,
       presentationResult,
+      referenceSnapTargets,
       roomPlacementValidation,
       saveInteractionBlocked,
       workspaceMode
@@ -1386,33 +1642,52 @@ export function ProjectWorkspacePage() {
         editor.transient.interaction?.kind === "place-room-shape" &&
         validatedRoomShape
       ) {
-        const snapCandidate = presentationResult?.ok
-          ? resolveProjectPointSnapCandidate(
-              pointer.svgPoint,
-              presentationResult.model,
-              {
-                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
-                bypass: pointer.altKey,
-                worldPoint: pointer.worldPoint,
-                grid: {
+        const shapeSnap =
+          !pointer.altKey && presentationResult?.ok && activeProjectLevel
+            ? resolveRoomShapeVertexSnap(
+                pointer.worldPoint,
+                validatedRoomShape,
+                presentationResult.model,
+                createViewportTransform2D(activeViewport),
+                {
+                  currentLevel: activeProjectLevel,
+                  cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                  referenceTargets: referenceSnapTargets
+                }
+              )
+            : undefined;
+        const snapCandidate = shapeSnap
+          ? shapeSnap.primaryMatch.snapCandidate
+          : presentationResult?.ok
+            ? resolveProjectPointSnapCandidate(
+                pointer.svgPoint,
+                presentationResult.model,
+                {
+                  cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit,
+                  bypass: pointer.altKey,
+                  worldPoint: pointer.worldPoint,
+                  grid: {
+                    enabled: editor.precision.snapToGrid,
+                    spacing: editor.precision.gridSpacing,
+                    worldToSvgScale: activeViewport.zoom
+                  }
+                }
+              )
+            : pointer.altKey
+              ? undefined
+              : resolveGridSnapCandidate(pointer.worldPoint, {
                   enabled: editor.precision.snapToGrid,
                   spacing: editor.precision.gridSpacing,
-                  worldToSvgScale: activeViewport.zoom
-                }
-              }
-            )
-          : pointer.altKey
-            ? undefined
-            : resolveGridSnapCandidate(pointer.worldPoint, {
-                enabled: editor.precision.snapToGrid,
-                spacing: editor.precision.gridSpacing,
-                worldToSvgScale: activeViewport.zoom,
-                cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
-              });
+                  worldToSvgScale: activeViewport.zoom,
+                  cssPixelsPerSvgUnit: pointer.cssPixelsPerSvgUnit
+                });
         dispatch(
-          editorRoomShapePlacementPointerMoved(
-            snapCandidate?.point ?? pointer.worldPoint
-          )
+          editorRoomShapePlacementPointerMoved({
+            point:
+              shapeSnap?.origin ?? snapCandidate?.point ?? pointer.worldPoint,
+            snapCandidate,
+            snapMatches: shapeSnap?.matches
+          })
         );
       } else if (
         workspaceMode === "edit" &&
@@ -1536,6 +1811,7 @@ export function ProjectWorkspacePage() {
                     ).worldToScreen(editor.transient.interaction.startPoint)
                   }
                 : undefined,
+            referenceTargets: referenceSnapTargets,
             grid: {
               enabled: editor.precision.snapToGrid,
               spacing: editor.precision.gridSpacing,
@@ -1594,6 +1870,7 @@ export function ProjectWorkspacePage() {
       activeProject,
       activeProjectLevel,
       presentationResult,
+      referenceSnapTargets,
       selectionFootprints,
       selectionRoots,
       selectionState.selected,
@@ -1862,7 +2139,7 @@ export function ProjectWorkspacePage() {
   } = useEditorSelectionTransformActions({
     dispatch,
     editor,
-    activeProjectLevel,
+    activeProjectLevel: selectionOperationLevel,
     selectionRoots,
     selectionCapabilities,
     saveInteractionBlocked,
@@ -1882,6 +2159,7 @@ export function ProjectWorkspacePage() {
     handleUpdateSelectedRoomProperties,
     handleCreateLevel,
     handleUpdateActiveLevel,
+    handleDeleteActiveLevel,
     handleCreateRoom
   } = useEditorSelectionActions({
     dispatch,
@@ -1945,6 +2223,7 @@ export function ProjectWorkspacePage() {
     handleCancelStairAuthoring,
     handleOpeningAuthoringTypeChange,
     selectionCount: selectionState.selected.length,
+    furnitureNudgeEnabled3D: furnitureKeyboardEditable3D,
     handleDeleteSelection,
     handleNudgeSelection
   });
@@ -2002,14 +2281,15 @@ export function ProjectWorkspacePage() {
       if (
         !representation ||
         representation === workspaceRepresentation ||
-        saveInteractionBlocked ||
-        (representation === "3d" && workspaceMode === "edit")
+        saveInteractionBlocked
       )
         return;
+      dispatch(editorTransientInteractionCleared());
+      if (workspaceMode === "edit" && representation === "3d")
+        dispatch(editorActiveToolChanged("select"));
       setWorkspaceRepresentation(representation);
-      if (representation === "2d") setSelection3D(undefined);
     },
-    [saveInteractionBlocked, workspaceMode, workspaceRepresentation]
+    [dispatch, saveInteractionBlocked, workspaceMode, workspaceRepresentation]
   );
 
   const {
@@ -2052,19 +2332,50 @@ export function ProjectWorkspacePage() {
     [dispatch, workspaceMode]
   );
 
+  const handleCreateFromLevelBelow = useCallback(() => {
+    if (
+      saveInteractionBlocked ||
+      workspaceMode !== "edit" ||
+      !editor.draft ||
+      !editor.activeLevelId
+    ) {
+      return;
+    }
+    const result = createFromLevelBelow(editor.draft, editor.activeLevelId);
+    if (!result.ok) {
+      if (result.reason === "INVALID_PROJECT") {
+        setEditingError("errors.levelCopy.invalid");
+      }
+      return;
+    }
+    setEditingError(undefined);
+    dispatch(editorSelectionCleared());
+    dispatch(editingDraftReplaced(result.project));
+  }, [
+    dispatch,
+    editor.activeLevelId,
+    editor.draft,
+    saveInteractionBlocked,
+    workspaceMode
+  ]);
+
   const inspector = useMemo(() => {
     if (
       workspaceRepresentation === "3d" &&
-      projectResponse &&
+      activeProject &&
       scene3DResult?.ok
     ) {
       return (
         <Project3DInspector
-          projectName={projectResponse.project.name}
+          mode={workspaceMode}
+          projectName={activeProject.name}
           model={scene3DResult.model}
           visibility={levelVisibility3D}
           activeLevelId={activeLevelId3D}
           selection={resolvedSelection3D}
+          furniture={furniture}
+          units={activeProject.units}
+          editable={workspaceMode === "edit" && !saveInteractionBlocked}
         />
       );
     }
@@ -2131,7 +2442,12 @@ export function ProjectWorkspacePage() {
         }
         selectedRoom={selectedRoom}
         selectedRoomLevelElevation={activeProjectLevel?.elevation}
-        selectedStair={selectedStair}
+        selectedStair={
+          stairAdjustmentProposal && selectedStair
+            ? { ...selectedStair, staircase: stairAdjustmentProposal.staircase }
+            : selectedStair
+        }
+        levels={activeProject?.building.levels ?? []}
         stairAuthoring={
           stairPlacement?.toLevelId && stairPlacement.template
             ? {
@@ -2141,6 +2457,12 @@ export function ProjectWorkspacePage() {
                 ...(stairPlacement.toRoomId
                   ? { targetRoomId: stairPlacement.toRoomId }
                   : {}),
+                sourceRoomCandidates,
+                ...(resolvedFromRoomId
+                  ? { sourceRoomId: resolvedFromRoomId }
+                  : {}),
+                sourceRoomAmbiguous,
+                rotation: stairPlacement.rotation,
                 template: stairPlacement.template,
                 parameters: stairPlacement.parameters,
                 proposal: stairProposal,
@@ -2150,6 +2472,15 @@ export function ProjectWorkspacePage() {
         }
         selectedRoomMeasurement={selectedRoomMeasurement}
         levelMeasurement={activeLevelMeasurement}
+        levelBelow={
+          workspaceMode === "edit" && levelBelow
+            ? {
+                name: levelBelow.name,
+                visible: levelBelowReferenceVisible,
+                onVisibleChange: setLevelBelowReferenceVisible
+              }
+            : undefined
+        }
         endpointAvailability={selectedWallEndpointAvailability}
         selectedVertexRemovable={selectedVertexRemovable}
         units={projectResponse?.project.units}
@@ -2177,6 +2508,8 @@ export function ProjectWorkspacePage() {
         onUpdateStair={handleUpdateSelectedStair}
         onStairAuthoringTemplateChange={handleStairTemplateChange}
         onStairAuthoringDestinationChange={handleStairDestinationChange}
+        onStairAuthoringSourceRoomChange={handleStairSourceRoomChange}
+        onStairAuthoringRotationChange={handleStairRotationChange}
         onStairAuthoringTurnChange={(turnDirection) =>
           dispatch(editorStairAuthoringChanged({ turnDirection }))
         }
@@ -2217,9 +2550,14 @@ export function ProjectWorkspacePage() {
     activeProjectLevel?.elevation,
     stairPlacement,
     stairProposal,
+    sourceRoomCandidates,
+    resolvedFromRoomId,
+    sourceRoomAmbiguous,
     selectedStair,
     selectedRoomMeasurement,
     activeLevelMeasurement,
+    levelBelow,
+    levelBelowReferenceVisible,
     editor.transient.interaction,
     editor.activeTool,
     roomDetectionActive,
@@ -2251,6 +2589,8 @@ export function ProjectWorkspacePage() {
     handleUpdateSelectedStair,
     handleStairTemplateChange,
     handleStairDestinationChange,
+    handleStairSourceRoomChange,
+    handleStairRotationChange,
     handleStairParametersChange,
     handleConfirmStairAuthoring,
     handleCancelStairAuthoring,
@@ -2259,11 +2599,13 @@ export function ProjectWorkspacePage() {
     handleAlignSelection,
     handleDistributeSelection,
     handleDisplayOptionsChange,
+    handleCreateFromLevelBelow,
     workspaceRepresentation,
     scene3DResult,
     levelVisibility3D,
     activeLevelId3D,
-    resolvedSelection3D
+    resolvedSelection3D,
+    saveInteractionBlocked
   ]);
 
   const handleViewLevelChange = useCallback(
@@ -2296,6 +2638,14 @@ export function ProjectWorkspacePage() {
     onViewLevelChange: handleViewLevelChange,
     onCreateLevel: handleCreateLevel,
     onUpdateActiveLevel: handleUpdateActiveLevel,
+    canCreateFromBelow: Boolean(
+      workspaceMode === "edit" &&
+      !saveInteractionBlocked &&
+      editor.draft &&
+      canCreateFromLevelBelow(editor.draft, editor.activeLevelId)
+    ),
+    onCreateFromBelow: handleCreateFromLevelBelow,
+    onDeleteActiveLevel: handleDeleteActiveLevel,
     onModeChange: handleModeChange,
     onRepresentationChange: handleRepresentationChange,
     onSave: handleSave,
@@ -2379,6 +2729,7 @@ export function ProjectWorkspacePage() {
       />
       <ProjectWorkspaceCanvas
         representation={workspaceRepresentation}
+        mode={workspaceMode}
         editorToolbarProps={
           workspaceRepresentation === "2d" && workspaceMode === "edit"
             ? {
@@ -2396,7 +2747,8 @@ export function ProjectWorkspacePage() {
         levelVisibility3D={levelVisibility3D}
         onLevelVisibility3DChange={setLevelVisibility3D}
         selection3D={selection3D}
-        onSelection3DChange={setSelection3D}
+        onSelection3DChange={handleSelection3DChange}
+        furnitureManipulation3D={furnitureManipulation3D}
         editBuildFailed={Boolean(editBuildFailed)}
         presentationFailed={Boolean(presentationFailed)}
         presentationError={
@@ -2410,6 +2762,9 @@ export function ProjectWorkspacePage() {
                 headingId: "project-geometry-viewer-heading",
                 presentationModel: presentationResult.model,
                 architecturalModel: presentationResult.architecturalModel,
+                referenceArchitecturalModel:
+                  presentationResult.referenceArchitecturalModel,
+                referenceSnapTargets,
                 dimensionModel,
                 options: resolvedDisplayOptions,
                 viewport: activeViewport,

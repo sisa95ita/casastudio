@@ -1009,7 +1009,6 @@ img {
 }
 
 .project-3d-viewer__canvas {
-  background: #f7f3ec;
   flex: 1 1 auto;
   min-height: 260px;
   overscroll-behavior: contain;
@@ -1333,6 +1332,40 @@ img {
   fill: var(--casa-plan-structure);
   stroke: var(--casa-plan-selection) !important;
   stroke-width: 1.8;
+}
+
+.architectural-level-reference {
+  opacity: 0.46;
+  pointer-events: none;
+}
+
+.architectural-level-reference__wall {
+  fill: #c7cdd0;
+  stroke: #7f8b91;
+  stroke-dasharray: 5 4;
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-level-reference__opening-gap {
+  stroke: rgba(253, 252, 249, 0.9);
+  stroke-width: 7;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-level-reference__opening-mark {
+  stroke: #65747b;
+  stroke-dasharray: 3 3;
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+}
+
+.architectural-level-reference__vertex {
+  fill: rgba(101, 116, 123, 0.56);
+  pointer-events: none;
+  stroke: rgba(253, 252, 249, 0.9);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 
 .architectural-wall-hit-target,
@@ -1838,9 +1871,23 @@ img {
   fill: rgba(199, 85, 50, 0.2);
 }
 
+.geometry-wall-snap-marker--reference-vertex {
+  fill: rgba(101, 116, 123, 0.2);
+  stroke: #65747b;
+}
+
 .geometry-wall-snap-marker__inner {
   fill: var(--casa-terracotta);
   pointer-events: none;
+}
+
+.geometry-room-shape-snap-marker--secondary {
+  opacity: 0.78;
+}
+
+.geometry-room-shape-snap-marker.geometry-wall-snap-marker--reference-vertex
+  + .geometry-wall-snap-marker__inner {
+  fill: #65747b;
 }
 
 .geometry-precision-guides {

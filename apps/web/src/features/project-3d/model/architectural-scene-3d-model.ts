@@ -1,4 +1,9 @@
-import { GeometryEngine } from "@casastudio/geometry";
+import { createFurnitureModels3D, type FurnitureModel3D } from "./furniture-3d-model";
+import {
+  createArchitecturalWallEndpointInterfaces,
+  GeometryEngine,
+  type ArchitecturalWallEndpointInterfaces
+} from "@casastudio/geometry";
 import {
   convertPhysicalLength,
   getDoorHingeSide,
@@ -11,6 +16,13 @@ import {
   type RoomType,
   type Wall
 } from "@casastudio/schema";
+
+import { architectural3DProfile, type Architectural3DProfile } from "./architectural-3d-profile";
+import { createStaircase3D, type Staircase3D } from "./staircase-3d-model";
+import {
+  extrudeConvexPlanPolygon3D,
+  type ArchitecturalSolid3D
+} from "./architectural-solid-3d";
 
 import type { GeometrySnapshot } from "../../../core/api/api-types";
 
@@ -127,6 +139,17 @@ export type WallSection3D = Readonly<{
   top: number;
 }>;
 
+/** One Opening-aware Wall section with its final resolved physical footprint. */
+export type WallBodySection3D = WallSection3D & Readonly<{
+  contour: readonly [
+    ScenePlanVector3D,
+    ScenePlanVector3D,
+    ScenePlanVector3D,
+    ScenePlanVector3D
+  ];
+  solid: ArchitecturalSolid3D;
+}>;
+
 /** Stable meter-scaled local frame and solids derived from one canonical Wall. */
 export type Wall3D = Readonly<{
   id: string;
@@ -138,6 +161,7 @@ export type Wall3D = Readonly<{
   height: number;
   openings: readonly Opening3D[];
   sections: readonly WallSection3D[];
+  bodySections: readonly WallBodySection3D[];
   doors: readonly Door3D[];
   windows: readonly Window3D[];
   wallOpenings: readonly WallOpening3D[];
@@ -145,6 +169,9 @@ export type Wall3D = Readonly<{
 
 /** One triangle indexing the canonical contour of an architectural Floor. */
 export type FloorTriangle3D = readonly [number, number, number];
+
+/** Canonical semantic backing for one ordered Floor contour edge. */
+export type FloorBoundaryKind3D = "WALL" | "FREE";
 
 /** Horizontal architectural Floor derived from one explicit Room polygon. */
 export type Floor3D = Readonly<{
@@ -154,7 +181,10 @@ export type Floor3D = Readonly<{
   roomType?: RoomType;
   area: number;
   y: number;
+  bottomY: number;
+  thickness: number;
   contour: readonly ScenePlanVector3D[];
+  boundaryKinds: readonly FloorBoundaryKind3D[];
   triangles: readonly FloorTriangle3D[];
 }>;
 
@@ -168,6 +198,8 @@ export type Level3D = Readonly<{
   segments: readonly LevelReferenceSegment3D[];
   walls: readonly Wall3D[];
   floors: readonly Floor3D[];
+  staircases: readonly Staircase3D[];
+  furniture: readonly FurnitureModel3D[];
 }>;
 
 /** Backwards-compatible name for the architectural Level presentation contract. */
@@ -395,12 +427,27 @@ function freezeScenePoint(x: number, y: number, z: number): ScenePoint3D {
  */
 export function createArchitecturalScene3DModel(
   project: Project,
-  geometrySnapshot?: GeometrySnapshot
+  geometrySnapshot?: GeometrySnapshot,
+  profile: Architectural3DProfile = architectural3DProfile
 ): ArchitecturalScene3DModel {
+  assertPositiveFinite(profile.floorThickness, "Floor thickness");
+  assertPositiveFinite(profile.stairSlabThickness, "Stair slab thickness");
   const sourceUnit = project.units.length;
+  const furnitureModels = createFurnitureModels3D(project);
   const floorSources = collectFloorContourSources(project, geometrySnapshot);
   const levels = project.building.levels.map<Level3D>((level) => {
-    const walls = level.walls.map((wall) => createWall3D(wall, level.elevation, sourceUnit));
+    const endpointInterfaces = new Map(
+      createArchitecturalWallEndpointInterfaces(level).map((interfaces) => [
+        interfaces.wallId,
+        interfaces
+      ])
+    );
+    const walls = level.walls.map((wall) => createWall3D(
+      wall,
+      level.elevation,
+      sourceUnit,
+      endpointInterfaces.get(wall.id)
+    ));
     const segments = walls.map<LevelReferenceSegment3D>((wall) => Object.freeze({
       start: Object.freeze({ x: wall.origin.x, z: wall.origin.z }),
       end: Object.freeze({
@@ -419,11 +466,16 @@ export function createArchitecturalScene3DModel(
         roomType: floorSource.roomType,
         area: Math.abs(signedContourArea(contour)),
         y: toThreeLength(floorSource.floorElevation, floorSource.unit),
+        bottomY: toThreeLength(floorSource.floorElevation, floorSource.unit) - profile.floorThickness,
+        thickness: profile.floorThickness,
         contour: Object.freeze(contour),
+        boundaryKinds: floorSource.boundaryKinds,
         triangles: triangulateFloorContour3D(contour)
       });
     });
-    const bounds3D = collectArchitecturalBounds3D(walls, floors);
+    const staircases = level.staircases.map((staircase) => createStaircase3D(staircase, sourceUnit, profile));
+    const furniture = Object.freeze(furnitureModels.filter((item) => item.levelId === level.id));
+    const bounds3D = collectArchitecturalBounds3D(walls, floors, staircases, furniture);
     return Object.freeze({
       id: level.id,
       name: level.name,
@@ -437,7 +489,9 @@ export function createArchitecturalScene3DModel(
       }) : undefined,
       segments: Object.freeze(segments),
       walls: Object.freeze(walls),
-      floors: Object.freeze(floors)
+      floors: Object.freeze(floors),
+      staircases: Object.freeze(staircases),
+      furniture
     });
   });
   const bounds = collectSceneBounds3D(levels);
@@ -458,6 +512,7 @@ type FloorContourSource3D = Readonly<{
   unit: MetricLengthUnit;
   floorElevation: number;
   points: readonly Readonly<{ x: number; z: number }>[];
+  boundaryKinds: readonly FloorBoundaryKind3D[];
 }>;
 
 /** Reuses trusted Geometry Engine Room topology instead of interpreting Room boundaries again. */
@@ -475,18 +530,21 @@ function collectFloorContourSources(
       const edgeUsesById = new Map(
         level.boundaryEdgeUses.map((edgeUse) => [edgeUse.id, edgeUse])
       );
+      const boundaryEdgesById = new Map(
+        level.boundaryEdges.map((edge) => [edge.id, edge])
+      );
       const contours = level.polygons.map<FloorContourSource3D>((polygon) => {
         const room = roomsById.get(polygon.sourceRoomId);
         const loop = loopsById.get(polygon.outerLoopId);
         if (!loop || loop.kind !== "OUTER") {
           throw new Error(`Room "${polygon.sourceRoomId}" has no valid outer Geometry loop.`);
         }
-        const points = loop.boundaryEdgeUseIds.map((edgeUseId) => {
+        const edgeUses = loop.boundaryEdgeUseIds.map((edgeUseId) => {
           const edgeUse = edgeUsesById.get(edgeUseId);
           if (!edgeUse || edgeUse.loopId !== loop.id) {
             throw new Error(`Room "${polygon.sourceRoomId}" has an invalid Geometry edge use.`);
           }
-          return Object.freeze({ ...edgeUse.start });
+          return edgeUse;
         });
         return Object.freeze({
           roomId: polygon.sourceRoomId,
@@ -494,7 +552,14 @@ function collectFloorContourSources(
           roomType: room?.type,
           unit: geometrySnapshot.units.length,
           floorElevation: polygon.floorElevation,
-          points: Object.freeze(points)
+          points: Object.freeze(edgeUses.map((edgeUse) => Object.freeze({ ...edgeUse.start }))),
+          boundaryKinds: Object.freeze(edgeUses.map((edgeUse) => {
+            const edge = boundaryEdgesById.get(edgeUse.boundaryEdgeId);
+            if (!edge) {
+              throw new Error(`Room "${polygon.sourceRoomId}" has a missing Geometry boundary edge.`);
+            }
+            return edge.sourceKind;
+          }))
         });
       });
       return [level.sourceLevelId, Object.freeze(contours)] as const;
@@ -526,7 +591,10 @@ function collectFloorContourSources(
           points: Object.freeze(polygon.outerLoop.vertices.map((vertex) => Object.freeze({
             x: vertex.x,
             z: vertex.z
-          })))
+          }))),
+          boundaryKinds: Object.freeze(
+            polygon.outerLoop.edgeUses.map((edgeUse) => edgeUse.boundaryEdge.sourceKind)
+          )
         });
       }))
     ] as const;
@@ -537,7 +605,8 @@ function collectFloorContourSources(
 export function createWall3D(
   wall: Wall,
   levelElevation: number,
-  sourceUnit: MetricLengthUnit
+  sourceUnit: MetricLengthUnit,
+  endpointInterfaces?: ArchitecturalWallEndpointInterfaces
 ): Wall3D {
   const origin = projectPointToThree(wall.start, levelElevation, sourceUnit);
   const end = projectPointToThree(wall.end, levelElevation, sourceUnit);
@@ -578,6 +647,26 @@ export function createWall3D(
       wallOpenings.push(createWallOpening3D(wallFrame, opening3D));
     }
   });
+  const sections = decomposeWallSections3D(length, height, openings, wall.id);
+  const sceneInterfaces = endpointInterfaces
+    ? Object.freeze({
+        start: Object.freeze({
+          left: projectPlanPointToThree(endpointInterfaces.start.left, sourceUnit),
+          right: projectPlanPointToThree(endpointInterfaces.start.right, sourceUnit)
+        }),
+        end: Object.freeze({
+          left: projectPlanPointToThree(endpointInterfaces.end.left, sourceUnit),
+          right: projectPlanPointToThree(endpointInterfaces.end.right, sourceUnit)
+        })
+      })
+    : undefined;
+  const bodySections = sections.map((section) =>
+    createWallBodySection3D(
+      section,
+      { origin, u, n, length, thickness },
+      sceneInterfaces
+    )
+  );
   return Object.freeze({
     id: wall.id,
     origin,
@@ -587,10 +676,44 @@ export function createWall3D(
     thickness,
     height,
     openings: Object.freeze(openings),
-    sections: decomposeWallSections3D(length, height, openings, wall.id),
+    sections,
+    bodySections: Object.freeze(bodySections),
     doors: Object.freeze(doors),
     windows: Object.freeze(windows),
     wallOpenings: Object.freeze(wallOpenings)
+  });
+}
+
+type SceneWallEndpointInterfaces3D = Readonly<{
+  start: Readonly<{ left: ScenePlanVector3D; right: ScenePlanVector3D }>;
+  end: Readonly<{ left: ScenePlanVector3D; right: ScenePlanVector3D }>;
+}>;
+
+/** Extrudes one Wall-owned section after applying only its outer endpoint interfaces. */
+function createWallBodySection3D(
+  section: WallSection3D,
+  wall: Pick<Wall3D, "origin" | "u" | "n" | "length" | "thickness">,
+  interfaces?: SceneWallEndpointInterfaces3D
+): WallBodySection3D {
+  const pointAt = (along: number, canonicalLeft: boolean): ScenePlanVector3D => {
+    const normal = (canonicalLeft ? -1 : 1) * wall.thickness / 2;
+    return Object.freeze({
+      x: wall.origin.x + wall.u.x * along + wall.n.x * normal,
+      z: wall.origin.z + wall.u.z * along + wall.n.z * normal
+    });
+  };
+  const contour: WallBodySection3D["contour"] = Object.freeze([
+    section.start === 0 && interfaces ? interfaces.start.left : pointAt(section.start, true),
+    section.start === 0 && interfaces ? interfaces.start.right : pointAt(section.start, false),
+    section.end === wall.length && interfaces ? interfaces.end.right : pointAt(section.end, false),
+    section.end === wall.length && interfaces ? interfaces.end.left : pointAt(section.end, true)
+  ]);
+  const bottomY = wall.origin.y + section.bottom;
+  const topY = wall.origin.y + section.top;
+  return Object.freeze({
+    ...section,
+    contour,
+    solid: extrudeConvexPlanPolygon3D(contour, bottomY, topY)
   });
 }
 
@@ -732,43 +855,44 @@ export function getLevelReferenceOrientation3D(level: Level3D): LevelReferenceOr
 function collectSceneBounds3D(levels: readonly Level3D[]): SceneBounds3D | undefined {
   return createBoundsFromPoints(levels.flatMap((level) => [
     ...collectWallBoundsPoints(level.walls),
-    ...collectFloorBoundsPoints(level.floors)
+    ...collectFloorBoundsPoints(level.floors),
+    ...level.furniture.flatMap((item) => [item.bounds.min, item.bounds.max]),
+    ...level.staircases.flatMap((stair) => stair.bounds ? [stair.bounds.min, stair.bounds.max] : [])
   ]));
 }
 
 /** Collects bounds for one Level's actual architectural renderables. */
 function collectArchitecturalBounds3D(
   walls: readonly Wall3D[],
-  floors: readonly Floor3D[]
+  floors: readonly Floor3D[],
+  staircases: readonly Staircase3D[],
+  furniture: readonly FurnitureModel3D[]
 ): SceneBounds3D | undefined {
   return createBoundsFromPoints([
     ...collectWallBoundsPoints(walls),
-    ...collectFloorBoundsPoints(floors)
+    ...collectFloorBoundsPoints(floors),
+    ...furniture.flatMap((item) => [item.bounds.min, item.bounds.max]),
+    ...staircases.flatMap((stair) => stair.bounds ? [stair.bounds.min, stair.bounds.max] : [])
   ]);
 }
 
 /** Expands Floor contours into world points for physical bounds. */
 function collectFloorBoundsPoints(floors: readonly Floor3D[]): ScenePoint3D[] {
   return floors.flatMap((floor) =>
-    floor.contour.map((point) => ({ x: point.x, y: floor.y, z: point.z }))
+    floor.contour.flatMap((point) => [floor.y, floor.bottomY].map((y) => ({ x: point.x, y, z: point.z })))
   );
 }
 
 /** Expands Wall solids and entity corners into world points for exact rendered bounds. */
 function collectWallBoundsPoints(walls: readonly Wall3D[]): ScenePoint3D[] {
   return walls.flatMap((wall) => [
-    ...wall.sections.flatMap((section) => {
-      const halfThickness = wall.thickness / 2;
-      return [section.start, section.end].flatMap((along) =>
-        [section.bottom, section.top].flatMap((vertical) =>
-          [-halfThickness, halfThickness].map((normal) => ({
-            x: wall.origin.x + wall.u.x * along + wall.n.x * normal,
-            y: wall.origin.y + vertical,
-            z: wall.origin.z + wall.u.z * along + wall.n.z * normal
-          }))
-        )
-      );
-    }),
+    ...wall.bodySections.flatMap((section) =>
+      section.contour.flatMap((point) => [section.bottom, section.top].map((vertical) => ({
+        x: point.x,
+        y: wall.origin.y + vertical,
+        z: point.z
+      })))
+    ),
     ...wall.doors.flatMap((door) => collectPanelBoundsPoints(door.leaf)),
     ...wall.windows.flatMap((window) => [
       ...window.frameBars.flatMap((bar) => collectPanelBoundsPoints({
@@ -798,7 +922,7 @@ function collectPanelBoundsPoints(panel: ArchitecturalPanel3D): ScenePoint3D[] {
 }
 
 /** Creates immutable axis-aligned bounds for a finite non-empty point set. */
-function createBoundsFromPoints(points: readonly ScenePoint3D[]): SceneBounds3D | undefined {
+export function createBoundsFromPoints(points: readonly ScenePoint3D[]): SceneBounds3D | undefined {
   if (points.length === 0) return undefined;
   if (points.some((point) =>
     !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)

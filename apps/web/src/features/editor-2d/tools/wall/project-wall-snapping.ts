@@ -1,6 +1,8 @@
 import type { GeometryPresentationModel2D } from "../../../geometry-2d/presentation/geometry-presentation-model-2d";
+import type { Level } from "@casastudio/schema";
 import type {
   SvgViewportPoint,
+  ViewportTransform2D,
   WorldPointXZ
 } from "../../../geometry-2d/viewport/viewport-transform-2d";
 import { precisionTolerance } from "../../../geometry-2d/precision/precision-assistance-2d";
@@ -15,6 +17,7 @@ export const drawWallSnapConfiguration = Object.freeze({
 export const drawWallSnapPriority = Object.freeze([
   "vertex",
   "wall-endpoint",
+  "reference-vertex",
   "wall-midpoint",
   "wall-intersection",
   "wall-interior",
@@ -33,6 +36,10 @@ type SnapBase = {
 export type DrawWallSnapCandidate =
   | (SnapBase & { readonly kind: "vertex" })
   | (SnapBase & { readonly kind: "wall-endpoint"; readonly wallId: string })
+  | (SnapBase & {
+      readonly kind: "reference-vertex";
+      readonly wallId: string;
+    })
   | (SnapBase & { readonly kind: "wall-midpoint"; readonly wallId: string })
   | (SnapBase & {
       readonly kind: "wall-intersection";
@@ -60,12 +67,64 @@ export type DrawWallSnapOptions = {
     readonly worldPoint: WorldPointXZ;
     readonly svgPoint: SvgViewportPoint;
   };
+  /** Positional lower-Level targets considered after current-Level topology. */
+  readonly referenceTargets?: readonly ReferenceLevelSnapTarget[];
   readonly grid?: {
     readonly enabled: boolean;
     readonly spacing: number;
     readonly worldToSvgScale: number;
   };
 };
+
+/** Non-canonical positional target derived from a lower-Level Wall endpoint. */
+export type ReferenceLevelSnapTarget = {
+  readonly geometryId: string;
+  readonly wallId: string;
+  /** Every lower-Level Wall incident to this de-duplicated endpoint. */
+  readonly wallIds?: readonly string[];
+  readonly point: WorldPointXZ;
+  readonly screenPoint: SvgViewportPoint;
+};
+
+/** Derives stable, de-duplicated lower-Level Wall endpoint snap targets. */
+export function createReferenceLevelSnapTargets(
+  level: Pick<Level, "id" | "walls">,
+  transform: Pick<ViewportTransform2D, "worldToScreen">
+): readonly ReferenceLevelSnapTarget[] {
+  const targets = new Map<string, ReferenceLevelSnapTarget>();
+  for (const wall of level.walls) {
+    for (const [endpoint, point] of [
+      ["start", wall.start],
+      ["end", wall.end]
+    ] as const) {
+      const coordinateKey = `${point.x}:${point.z}`;
+      const candidate = {
+        geometryId: `reference:${level.id}:${wall.id}:${endpoint}`,
+        wallId: wall.id,
+        wallIds: [wall.id],
+        point,
+        screenPoint: transform.worldToScreen(point)
+      };
+      const existing = targets.get(coordinateKey);
+      if (!existing) targets.set(coordinateKey, candidate);
+      else {
+        const preferred =
+          candidate.geometryId.localeCompare(existing.geometryId) < 0
+            ? candidate
+            : existing;
+        targets.set(coordinateKey, {
+          ...preferred,
+          wallIds: [
+            ...new Set([...(existing.wallIds ?? [existing.wallId]), wall.id])
+          ].sort()
+        });
+      }
+    }
+  }
+  return [...targets.values()].sort((first, second) =>
+    first.geometryId.localeCompare(second.geometryId)
+  );
+}
 
 /**
  * Resolves one Draw Wall point by stable screen-space priority.
@@ -147,6 +206,24 @@ export function resolveDrawWallSnapCandidate(
     )
   );
   if (endpoint) return endpoint;
+
+  const referenceVertex = chooseNearest(
+    (options.referenceTargets ?? []).flatMap((target) => {
+      const distance = svgDistance(pointer, target.screenPoint);
+      return withinTolerance(distance)
+        ? [
+            {
+              kind: "reference-vertex" as const,
+              geometryId: target.geometryId,
+              wallId: target.wallId,
+              point: target.point,
+              visualDistancePixels: distance * cssScale
+            }
+          ]
+        : [];
+    })
+  );
+  if (referenceVertex) return referenceVertex;
 
   const midpoint = chooseNearest(
     wallEdges.flatMap((edge) => {

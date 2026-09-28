@@ -158,7 +158,8 @@ describe("Project editor state", () => {
     expect(state.transient.interaction).toMatchObject({
       kind: "place-stair",
       owningLevelId: state.activeLevelId,
-      turnDirection: "LEFT"
+      turnDirection: "LEFT",
+      rotation: 0
     });
     const draft = state.draft;
     state = projectEditorReducer(
@@ -178,7 +179,8 @@ describe("Project editor state", () => {
           staircaseId: "staircase-test",
           flightIds: ["flight-one", "flight-two"],
           landingIds: ["landing-one"]
-        }
+        },
+        rotation: 37
       })
     );
     state = projectEditorReducer(
@@ -188,7 +190,8 @@ describe("Project editor state", () => {
     expect(state.transient.interaction).toMatchObject({
       kind: "place-stair",
       start: { x: 300, z: 0 },
-      control: { x: 300, z: 0 }
+      control: { x: 300, z: 0 },
+      rotation: 37
     });
     expect(state.transient.interaction).toMatchObject({
       parameters: { firstFlightStepCount: 4, secondFlightStepCount: 13 }

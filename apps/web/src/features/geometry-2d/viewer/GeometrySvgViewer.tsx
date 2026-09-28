@@ -70,7 +70,11 @@ import {
   createWallOpeningPlanGeometry,
   createWindowPlanGeometry
 } from "@casastudio/geometry";
-import type { DrawWallSnapCandidate } from "../../editor-2d/tools/wall/project-wall-snapping";
+import type {
+  DrawWallSnapCandidate,
+  ReferenceLevelSnapTarget
+} from "../../editor-2d/tools/wall/project-wall-snapping";
+import type { RoomShapeSnapMatch } from "../../editor-2d/tools/room/room-shape-snapping";
 import type { PrecisionGuide2D } from "../precision/precision-assistance-2d";
 
 /**
@@ -168,6 +172,10 @@ export type GeometrySvgViewerProps = {
   readonly onFurniturePointerCancel?: () => void;
   readonly presentationModel: GeometryPresentationModel2D;
   readonly architecturalModel?: ArchitecturalPresentationModel2D;
+  /** Non-interactive lower-Level architecture sharing the active viewport transform. */
+  readonly referenceArchitecturalModel?: ArchitecturalPresentationModel2D;
+  /** Tool-contextual, non-interactive lower-Level Wall endpoint markers. */
+  readonly referenceSnapTargets?: readonly ReferenceLevelSnapTarget[];
   readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
@@ -342,6 +350,8 @@ export type GeometryEditorOverlay = {
     readonly draggingEndpoint?: WallEndpoint;
   };
   readonly snapCandidate?: DrawWallSnapCandidate;
+  /** All Room preview vertices matched by the active rigid translation. */
+  readonly roomShapeSnapMatches?: readonly RoomShapeSnapMatch[];
   readonly snapMarkerPurpose?: "authoring" | "measurement";
   readonly selectedJunction?: {
     readonly position: WorldPointXZ;
@@ -391,6 +401,8 @@ export function GeometrySvgViewer({
   onFurniturePointerCancel,
   presentationModel,
   architecturalModel,
+  referenceArchitecturalModel,
+  referenceSnapTargets = [],
   dimensionModel,
   options,
   viewport,
@@ -466,6 +478,10 @@ export function GeometrySvgViewer({
   const rendersSvgViewport = Boolean(
     bounds ||
     architecturalModel?.staircases.length ||
+    referenceArchitecturalModel?.walls.length ||
+    referenceArchitecturalModel?.doors.length ||
+    referenceArchitecturalModel?.windows.length ||
+    referenceArchitecturalModel?.openings.length ||
     interaction.drawWallEnabled ||
     interaction.measurementEnabled ||
     interaction.roomShapePlacementEnabled ||
@@ -1360,6 +1376,61 @@ export function GeometrySvgViewer({
         </g>
       ) : null}
 
+      {referenceArchitecturalModel ? (
+        <g
+          data-layer="reference-level-below"
+          data-testid="reference-level-below"
+          className="architectural-level-reference"
+          aria-hidden="true"
+        >
+          {referenceArchitecturalModel.joins.map((join, index) => (
+            <circle
+              key={`${join.point.x}:${join.point.y}:${index}`}
+              className="architectural-level-reference__wall"
+              cx={formatSvgNumber(join.point.x)}
+              cy={formatSvgNumber(join.point.y)}
+              r={formatSvgNumber(join.radius)}
+            />
+          ))}
+          {referenceArchitecturalModel.walls.flatMap((wall) =>
+            wall.bodySvgPoints.map((points, index) => (
+              <polygon
+                key={`${wall.geometryId}:${index}`}
+                data-reference-wall-id={wall.geometryId}
+                className="architectural-level-reference__wall"
+                points={points}
+              />
+            ))
+          )}
+          {[
+            ...referenceArchitecturalModel.doors,
+            ...referenceArchitecturalModel.windows,
+            ...referenceArchitecturalModel.openings
+          ].map((opening) => (
+            <g key={opening.geometryId}>
+              <line
+                className="architectural-level-reference__opening-gap"
+                {...lineAttributes(opening.spanStart, opening.spanEnd)}
+              />
+              <line
+                className="architectural-level-reference__opening-mark"
+                {...lineAttributes(opening.spanStart, opening.spanEnd)}
+              />
+            </g>
+          ))}
+          {referenceSnapTargets.map((target) => (
+            <circle
+              key={target.geometryId}
+              data-reference-vertex-id={target.geometryId}
+              className="architectural-level-reference__vertex"
+              cx={formatSvgNumber(target.screenPoint.x)}
+              cy={formatSvgNumber(target.screenPoint.y)}
+              r="3.5"
+            />
+          ))}
+        </g>
+      ) : null}
+
       {architecturalModel && options.architecturalWalls ? (
         <g data-layer="architectural-walls">
           <g aria-hidden="true" data-layer="wall-joins">
@@ -2181,6 +2252,10 @@ function GeometryEditorOverlayLayer({
   const snapPoint = overlay?.snapCandidate
     ? transform.worldToScreen(overlay.snapCandidate.point)
     : undefined;
+  const roomShapeSnapPoints = overlay?.roomShapeSnapMatches?.map((match) => ({
+    ...match,
+    screenPoint: transform.worldToScreen(match.snapCandidate.point)
+  }));
   const junctionPoint = overlay?.selectedJunction
     ? transform.worldToScreen(overlay.selectedJunction.previewPosition)
     : undefined;
@@ -2510,7 +2585,41 @@ function GeometryEditorOverlayLayer({
           })}
         </g>
       ) : null}
-      {snapPoint &&
+      {roomShapeSnapPoints?.length ? (
+        <g
+          aria-hidden="true"
+          data-testid="room-shape-snap-markers"
+          pointerEvents="none"
+        >
+          {roomShapeSnapPoints.map((match) => (
+            <g
+              key={`${match.sourceVertexIndex}:${match.snapCandidate.geometryId}`}
+              data-testid="room-shape-snap-marker"
+              data-source-vertex-index={match.sourceVertexIndex}
+              data-primary={match.primary ? "true" : "false"}
+              data-snap-kind={match.snapCandidate.kind}
+            >
+              <circle
+                className={`geometry-wall-snap-marker geometry-wall-snap-marker--${match.snapCandidate.kind} geometry-room-shape-snap-marker${match.primary ? " geometry-room-shape-snap-marker--primary" : " geometry-room-shape-snap-marker--secondary"}`}
+                cx={formatSvgNumber(match.screenPoint.x)}
+                cy={formatSvgNumber(match.screenPoint.y)}
+                r={match.primary ? "8" : "6"}
+              />
+              {match.snapCandidate.kind === "vertex" ||
+              match.snapCandidate.kind === "reference-vertex" ? (
+                <circle
+                  className="geometry-wall-snap-marker__inner"
+                  cx={formatSvgNumber(match.screenPoint.x)}
+                  cy={formatSvgNumber(match.screenPoint.y)}
+                  r={match.primary ? "3" : "2.5"}
+                />
+              ) : null}
+            </g>
+          ))}
+        </g>
+      ) : null}
+      {!roomShapeSnapPoints?.length &&
+      snapPoint &&
       overlay?.snapCandidate &&
       overlay.snapCandidate.kind !== "free" ? (
         <g
@@ -2525,9 +2634,15 @@ function GeometryEditorOverlayLayer({
             className={`geometry-wall-snap-marker geometry-wall-snap-marker--${overlay.snapCandidate.kind}`}
             cx={formatSvgNumber(snapPoint.x)}
             cy={formatSvgNumber(snapPoint.y)}
-            r={overlay.snapCandidate.kind === "vertex" ? "8" : "6"}
+            r={
+              overlay.snapCandidate.kind === "vertex" ||
+              overlay.snapCandidate.kind === "reference-vertex"
+                ? "8"
+                : "6"
+            }
           />
-          {overlay.snapCandidate.kind === "vertex" ? (
+          {overlay.snapCandidate.kind === "vertex" ||
+          overlay.snapCandidate.kind === "reference-vertex" ? (
             <circle
               className="geometry-wall-snap-marker__inner"
               cx={formatSvgNumber(snapPoint.x)}

@@ -1,5 +1,7 @@
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
+import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import {
@@ -47,6 +49,9 @@ type ProjectLevelControlProps = {
     readonly name: string;
     readonly elevation: number;
   }) => boolean;
+  readonly canCreateFromBelow: boolean;
+  readonly onCreateFromBelow: () => void;
+  readonly onDeleteActiveLevel: () => boolean;
 };
 
 /** Renders level selection with structural actions available only while editing. */
@@ -60,7 +65,10 @@ export function ProjectLevelControl({
   onViewLevelChange,
   onEditLevelChange,
   onCreateLevel,
-  onUpdateActiveLevel
+  onUpdateActiveLevel,
+  canCreateFromBelow,
+  onCreateFromBelow,
+  onDeleteActiveLevel
 }: ProjectLevelControlProps) {
   const { t } = useCasaTranslation("project-viewer");
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -68,6 +76,7 @@ export function ProjectLevelControl({
   const [name, setName] = useState("");
   const [elevation, setElevation] = useState("");
   const [invalid, setInvalid] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const levels =
     mode === "edit"
       ? draftLevelIds
@@ -85,6 +94,15 @@ export function ProjectLevelControl({
   const activeDraftLevel = draftLevelIds.find(
     (level) => level.id === activeEditLevelId
   );
+  const highestDraftLevel = draftLevelIds.reduce<
+    (typeof draftLevelIds)[number] | undefined
+  >(
+    (highest, level) =>
+      !highest || level.elevation >= highest.elevation ? level : highest,
+    undefined
+  );
+  const canDeleteActiveLevel =
+    draftLevelIds.length > 1 && highestDraftLevel?.id === activeEditLevelId;
 
   const closeMenu = () => setAnchorEl(null);
   const selectLevel = (levelId: string) => {
@@ -117,10 +135,15 @@ export function ProjectLevelControl({
     }
     const accepted =
       dialogMode === "create"
-      ? onCreateLevel(properties)
-      : onUpdateActiveLevel(properties);
+        ? onCreateLevel(properties)
+        : onUpdateActiveLevel(properties);
     setInvalid(!accepted);
     if (accepted) setDialogMode(null);
+  };
+  const confirmDelete = () => {
+    if (!onDeleteActiveLevel()) return;
+    setDeleteConfirmationOpen(false);
+    setDialogMode(null);
   };
 
   if (!value || !activeLevel) return null;
@@ -139,7 +162,7 @@ export function ProjectLevelControl({
         aria-controls={anchorEl ? "project-level-menu" : undefined}
         onClick={(event: MouseEvent<HTMLButtonElement>) =>
           setAnchorEl(event.currentTarget)
-              }
+        }
       >
         {activeLevel.name}
       </Button>
@@ -149,8 +172,8 @@ export function ProjectLevelControl({
         open={Boolean(anchorEl)}
         onClose={closeMenu}
         slotProps={{ list: { "aria-label": t("levelSelector.menuLabel") } }}
-            >
-              {levels.map((level) => (
+      >
+        {levels.map((level) => (
           <MenuItem
             key={level.id}
             selected={level.id === value}
@@ -162,15 +185,28 @@ export function ProjectLevelControl({
               ) : null}
             </ListItemIcon>
             <ListItemText>{level.name}</ListItemText>
-                </MenuItem>
-              ))}
+          </MenuItem>
+        ))}
         {mode === "edit" ? <Divider /> : null}
         {mode === "edit" ? (
           <MenuItem onClick={() => openDialog("create")}>
             <ListItemIcon>
-                <AddRoundedIcon fontSize="small" />
+              <AddRoundedIcon fontSize="small" />
             </ListItemIcon>
             <ListItemText>{t("levelSelector.add")}</ListItemText>
+          </MenuItem>
+        ) : null}
+        {mode === "edit" && canCreateFromBelow ? (
+          <MenuItem
+            onClick={() => {
+              closeMenu();
+              onCreateFromBelow();
+            }}
+          >
+            <ListItemIcon>
+              <ContentCopyRoundedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>{t("levelSelector.createFromBelow")}</ListItemText>
           </MenuItem>
         ) : null}
         {mode === "edit" ? (
@@ -226,6 +262,16 @@ export function ProjectLevelControl({
           </Stack>
         </DialogContent>
         <DialogActions>
+          {dialogMode === "edit" && canDeleteActiveLevel ? (
+            <Button
+              color="error"
+              startIcon={<DeleteOutlineRoundedIcon />}
+              onClick={() => setDeleteConfirmationOpen(true)}
+              sx={{ mr: "auto" }}
+            >
+              {t("levelSelector.deleteAction")}
+            </Button>
+          ) : null}
           <Button onClick={() => setDialogMode(null)}>
             {t("levelSelector.cancel")}
           </Button>
@@ -235,6 +281,29 @@ export function ProjectLevelControl({
                 ? "levelSelector.createAction"
                 : "levelSelector.saveAction"
             )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={deleteConfirmationOpen}
+        onClose={() => setDeleteConfirmationOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {t("levelSelector.deleteTitle", {
+            level: activeDraftLevel?.name ?? ""
+          })}
+        </DialogTitle>
+        <DialogContent dividers>
+          {t("levelSelector.deleteDescription")}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmationOpen(false)}>
+            {t("levelSelector.cancel")}
+          </Button>
+          <Button color="error" variant="contained" onClick={confirmDelete}>
+            {t("levelSelector.deleteConfirm")}
           </Button>
         </DialogActions>
       </Dialog>

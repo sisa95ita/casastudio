@@ -475,7 +475,7 @@ describe("Projects workspace", () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(2);
   });
 
-  it("creates a trimmed Project and navigates to its authoritative View", async () => {
+  it("creates a trimmed Project and opens a clean Ground Floor 2D edit session", async () => {
     const created = {
       ...demoProjectFixture,
       id: "project-new",
@@ -514,7 +514,23 @@ describe("Projects workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "New Casa" })
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Edit plan" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Back to project" })
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit plan" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Level: Ground Floor" })
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "2D workspace" })
+        .getAttribute("aria-pressed")
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(screen.getByText("No unsaved changes")).toBeTruthy();
     await waitFor(() =>
       expect(fetchImplementation).toHaveBeenCalledWith(
         "http://api.test/api/v1/projects",

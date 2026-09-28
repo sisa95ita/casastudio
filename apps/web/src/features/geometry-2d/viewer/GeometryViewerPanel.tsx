@@ -61,6 +61,8 @@ export type GeometryViewerPanelProps = Pick<
   readonly headingId: string;
   readonly presentationModel: GeometryPresentationModel2D;
   readonly architecturalModel?: ArchitecturalPresentationModel2D;
+  readonly referenceArchitecturalModel?: ArchitecturalPresentationModel2D;
+  readonly referenceSnapTargets?: GeometrySvgViewerProps["referenceSnapTargets"];
   readonly dimensionModel?: ArchitecturalDimensionPresentationModel2D;
   readonly options: GeometryDisplayOptions;
   readonly viewport: ViewportState;
@@ -138,6 +140,8 @@ export function GeometryViewerPanel({
   headingId,
   presentationModel,
   architecturalModel,
+  referenceArchitecturalModel,
+  referenceSnapTargets,
   dimensionModel,
   options,
   viewport,
@@ -248,6 +252,8 @@ export function GeometryViewerPanel({
           onFurniturePointerCancel={onFurniturePointerCancel}
           presentationModel={presentationModel}
           architecturalModel={architecturalModel}
+          referenceArchitecturalModel={referenceArchitecturalModel}
+          referenceSnapTargets={referenceSnapTargets}
           dimensionModel={dimensionModel}
           options={options}
           viewport={viewport}

@@ -54,10 +54,10 @@ describe("architectural 3D presentation model", () => {
     expect(model.worldLengthUnit).toBe("m");
     expect(model.hasArchitecturalGeometry).toBe(true);
     expect(model.bounds).toEqual({
-      min: { x: -0.1, y: 0, z: -3.1 },
+      min: { x: -0.1, y: -0.18, z: -3.1 },
       max: { x: 8.1, y: 3, z: 0.1 },
-      center: { x: 4, y: 1.5, z: -1.5 },
-      size: { x: 8.2, y: 3, z: 3.2 }
+      center: { x: 4, y: 1.41, z: -1.5 },
+      size: { x: 8.2, y: 3.18, z: 3.2 }
     });
     expect(Object.isFrozen(model)).toBe(true);
     expect(Object.isFrozen(model.levels[0]?.segments)).toBe(true);
@@ -84,9 +84,9 @@ describe("architectural 3D presentation model", () => {
     const model = createArchitecturalScene3DModel(project);
 
     expect(model.levels.map((level) => level.y)).toEqual([-0.5, 0, 3.2]);
-    expect(model.bounds?.min.y).toBe(-0.5);
+    expect(model.bounds?.min.y).toBeCloseTo(-0.68);
     expect(model.bounds?.max.y).toBe(6.2);
-    expect(model.bounds?.size.y).toBe(6.7);
+    expect(model.bounds?.size.y).toBeCloseTo(6.88);
   });
 
   it("filters Active Level references and refits only visible physical content", () => {
@@ -96,9 +96,9 @@ describe("architectural 3D presentation model", () => {
     expect(getVisibleLevelReferences3D(model, "active", "level-upper").map((level) => level.id))
       .toEqual(["level-upper"]);
     expect(collectVisibleSceneBounds3D(model, "active", "level-upper")).toMatchObject({
-      min: { y: 3.2 },
+      min: { y: 3.02 },
       max: { y: 6.2 },
-      size: { y: 3 }
+      size: { y: 3.18 }
     });
     expect(getVisibleLevelReferences3D(model, "active", "missing")).toEqual([]);
     expect(collectVisibleSceneBounds3D(model, "active", "missing")).toBeUndefined();
@@ -141,6 +141,112 @@ describe("architectural 3D presentation model", () => {
       center: { x: 2, y: 2.5, z: 0 },
       size: { x: 4, y: 3, z: 0.2 }
     });
+  });
+
+  it("extrudes endpoint-resolved Wall bodies without standalone junction geometry", () => {
+    const project = createWallOnlyProject(createWall({ id: "east" }));
+    project.building.levels[0]!.walls.push(createWall({
+      id: "north",
+      end: { x: 0, z: 400 },
+      height: 250,
+      thickness: 30
+    }));
+
+    const model = createArchitecturalScene3DModel(project);
+    const level = model.levels[0]!;
+    const east = level.walls.find((wall) => wall.id === "east")!;
+    const north = level.walls.find((wall) => wall.id === "north")!;
+    const eastBody = east.bodySections[0]!;
+    const northBody = north.bodySections[0]!;
+
+    expect(level).not.toHaveProperty("wallJunctions");
+    expect(eastBody.contour.slice(0, 2)).toEqual([
+      { x: 0.15, z: -0.1 },
+      { x: -0.15, z: 0.1 }
+    ]);
+    expect(northBody.contour.slice(0, 2)).toEqual([
+      { x: -0.15, z: 0.1 },
+      { x: 0.15, z: -0.1 }
+    ]);
+    expect(eastBody.solid.positions).toHaveLength(108);
+    expect(northBody.solid.positions).toHaveLength(108);
+    expect(eastBody.solid.positions.every(Number.isFinite)).toBe(true);
+    expectSolidTrianglesFaceAwayFrom(
+      eastBody.solid.positions,
+      {
+        x: eastBody.contour.reduce((sum, point) => sum + point.x, 0) / 4,
+        y: east.origin.y + east.height / 2,
+        z: eastBody.contour.reduce((sum, point) => sum + point.z, 0) / 4
+      }
+    );
+    expect(model.bounds?.min.x).toBe(-0.15);
+    expect(model.bounds?.max.y).toBe(3);
+  });
+
+  it("applies endpoint interfaces only to Opening sections that touch the Wall end", () => {
+    const project = createWallOnlyProject(createWall({
+      id: "east",
+      openings: [{
+        id: "near-window",
+        type: "WINDOW",
+        offsetFromStart: 20,
+        width: 50,
+        elevation: 90,
+        height: 120
+      }]
+    }));
+    project.building.levels[0]!.walls.push(createWall({
+      id: "north",
+      end: { x: 0, z: 400 }
+    }));
+
+    const east = createArchitecturalScene3DModel(project).levels[0]!.walls
+      .find((wall) => wall.id === "east")!;
+    const endpointSections = east.bodySections.filter((section) => section.start === 0);
+    const interiorSections = east.bodySections.filter((section) => section.start === 0.2);
+
+    expect(east.openings[0]).toMatchObject({ offsetFromStart: 0.2, width: 0.5 });
+    expect(endpointSections).toHaveLength(1);
+    expect(endpointSections[0]!.contour[0]).toEqual({ x: 0.1, z: -0.1 });
+    expect(interiorSections).toHaveLength(2);
+    expect(interiorSections.every((section) => section.contour[0].x === 0.2)).toBe(true);
+    expect(isSolidAt(east.sections, 0.45, 1.5)).toBe(false);
+  });
+
+  it("keeps a through Wall continuous while trimming a T branch to its face", () => {
+    const project = createWallOnlyProject(createWall({
+      id: "west",
+      end: { x: -400, z: 0 }
+    }));
+    project.building.levels[0]!.walls.push(
+      createWall({ id: "east" }),
+      createWall({ id: "north", end: { x: 0, z: 400 } })
+    );
+
+    const level = createArchitecturalScene3DModel(project).levels[0]!;
+    const west = level.walls.find((wall) => wall.id === "west")!.bodySections[0]!;
+    const east = level.walls.find((wall) => wall.id === "east")!.bodySections[0]!;
+    const north = level.walls.find((wall) => wall.id === "north")!.bodySections[0]!;
+
+    expect(west.contour.slice(0, 2)).toEqual([
+      { x: 0, z: 0.1 },
+      { x: 0, z: -0.1 }
+    ]);
+    expect(east.contour.slice(0, 2)).toEqual([
+      { x: 0, z: -0.1 },
+      { x: 0, z: 0.1 }
+    ]);
+    expect(north.contour.slice(0, 2)).toEqual([
+      { x: -0.1, z: -0.1 },
+      { x: 0.1, z: -0.1 }
+    ]);
+    expect(level).not.toHaveProperty("wallJunctions");
+    expect(level.bounds).toEqual(expect.objectContaining({
+      minX: expect.any(Number),
+      minZ: expect.any(Number),
+      maxX: expect.any(Number),
+      maxZ: expect.any(Number)
+    }));
   });
 
   it("decomposes a Wall without Openings into one full solid", () => {
@@ -331,7 +437,7 @@ describe("architectural 3D presentation model", () => {
     expect(model.levels[0]).not.toHaveProperty("slabs");
   });
 
-  it("includes elevated Floor Y in scene bounds without introducing Stair render entities", () => {
+  it("includes elevated Floor Y in scene bounds alongside empty canonical Stair aggregates", () => {
     const project = structuredClone(demoProjectFixture);
     project.building.levels[0]!.rooms[0]!.elevation = 450;
     project.building.levels[0]!.staircases = [{
@@ -347,7 +453,7 @@ describe("architectural 3D presentation model", () => {
 
     expect(model.bounds?.max.y).toBe(4.5);
     expect(model).not.toHaveProperty("staircases");
-    expect(model.levels[0]).not.toHaveProperty("staircases");
+    expect(model.levels[0]?.staircases[0]?.flights).toEqual([]);
   });
 
   it("triangulates irregular and concave contours to their exact polygon area", () => {
@@ -530,4 +636,32 @@ function signedArea(points: readonly { readonly x: number; readonly z: number }[
     const next = points[(index + 1) % points.length]!;
     return area + point.x * next.z - next.x * point.z;
   }, 0) / 2;
+}
+
+function expectSolidTrianglesFaceAwayFrom(
+  positions: readonly number[],
+  interior: Readonly<{ x: number; y: number; z: number }>
+): void {
+  for (let index = 0; index < positions.length; index += 9) {
+    const a = { x: positions[index]!, y: positions[index + 1]!, z: positions[index + 2]! };
+    const b = { x: positions[index + 3]!, y: positions[index + 4]!, z: positions[index + 5]! };
+    const c = { x: positions[index + 6]!, y: positions[index + 7]!, z: positions[index + 8]! };
+    const ab = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    const ac = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
+    const normal = {
+      x: ab.y * ac.z - ab.z * ac.y,
+      y: ab.z * ac.x - ab.x * ac.z,
+      z: ab.x * ac.y - ab.y * ac.x
+    };
+    const centroid = {
+      x: (a.x + b.x + c.x) / 3,
+      y: (a.y + b.y + c.y) / 3,
+      z: (a.z + b.z + c.z) / 3
+    };
+    expect(
+      normal.x * (centroid.x - interior.x) +
+      normal.y * (centroid.y - interior.y) +
+      normal.z * (centroid.z - interior.z)
+    ).toBeGreaterThan(0);
+  }
 }
