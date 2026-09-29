@@ -14,6 +14,7 @@ import {
   createArchitecturalCameraPose3D,
   type ArchitecturalCameraPose3D
 } from "./architectural-camera-3d";
+import { deriveRoomReferenceWallIds3D } from "../presentation/room-reference-relevance-3d";
 
 export const automaticRoomReferenceKinds = Object.freeze([
   "room-axonometric",
@@ -51,9 +52,7 @@ export function createRoomReferencePlans3D(
   );
   if (!level || !floor || floor.contour.length < 3) return Object.freeze([]);
 
-  const wallIds = Object.freeze([
-    ...new Set(floor.boundaryWallIds.filter((id): id is string => Boolean(id)))
-  ]);
+  const wallIds = deriveRoomReferenceWallIds3D(floor, level.walls);
   const stairs = level.staircases.filter(
     (stair) =>
       stair.fromRoomId === target.roomId || stair.toRoomId === target.roomId

@@ -1,4 +1,4 @@
-import { Group, LineSegments, PerspectiveCamera } from "three";
+import { Group, LineSegments, PerspectiveCamera, type Object3D } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { RoomReferencePlan3D } from "../camera/room-reference-camera-3d";
@@ -15,7 +15,14 @@ describe("Room reference presentation isolation", () => {
     const targetWall = namedGroup("architectural-wall:wall-a");
     const opening = namedGroup("architectural-window:window-a");
     targetWall.add(opening);
+    const relevantNonBoundaryWall = namedGroup("architectural-wall:wall-internal");
+    const relevantDoor = namedGroup("architectural-door:door-internal");
+    const relevantWindow = namedGroup("architectural-window:window-internal");
+    const relevantWallOpening = namedGroup("architectural-wall-opening:opening-internal");
+    relevantNonBoundaryWall.add(relevantDoor, relevantWindow, relevantWallOpening);
     const otherWall = namedGroup("architectural-wall:wall-b");
+    const excludedOpening = namedGroup("architectural-window:window-b");
+    otherWall.add(excludedOpening);
     const stair = namedGroup("architectural-staircase:stair-a");
     const otherStair = namedGroup("architectural-staircase:stair-b");
     const furniture = namedGroup("furniture:chair-a");
@@ -26,6 +33,7 @@ describe("Room reference presentation isolation", () => {
       targetFloor,
       otherFloor,
       targetWall,
+      relevantNonBoundaryWall,
       otherWall,
       stair,
       otherStair,
@@ -46,7 +54,12 @@ describe("Room reference presentation isolation", () => {
     expect(otherFloor.visible).toBe(false);
     expect(targetWall.visible).toBe(true);
     expect(opening.visible).toBe(true);
+    expect(relevantNonBoundaryWall.visible).toBe(true);
+    expect(relevantDoor.visible).toBe(true);
+    expect(relevantWindow.visible).toBe(true);
+    expect(relevantWallOpening.visible).toBe(true);
     expect(otherWall.visible).toBe(false);
+    expect(isEffectivelyVisible(excludedOpening)).toBe(false);
     expect(stair.visible).toBe(true);
     expect(otherStair.visible).toBe(false);
     expect(furniture.visible).toBe(true);
@@ -59,6 +72,7 @@ describe("Room reference presentation isolation", () => {
     expect(otherLevel.visible).toBe(false);
     expect(otherFloor.visible).toBe(true);
     expect(otherWall.visible).toBe(true);
+    expect(excludedOpening.visible).toBe(true);
     expect(otherStair.visible).toBe(true);
     expect(otherFurniture.visible).toBe(true);
     expect(outline.visible).toBe(true);
@@ -70,6 +84,15 @@ function namedGroup(name: string): Group {
   const group = new Group();
   group.name = name;
   return group;
+}
+
+function isEffectivelyVisible(object: Object3D): boolean {
+  let current: Object3D | null = object;
+  while (current) {
+    if (!current.visible) return false;
+    current = current.parent;
+  }
+  return true;
 }
 
 function createPlan(): RoomReferencePlan3D {
@@ -94,7 +117,7 @@ function createPlan(): RoomReferencePlan3D {
       center: { x: 1, y: 1.5, z: 1 },
       size: { x: 2, y: 3, z: 2 }
     },
-    wallIds: ["wall-a"],
+    wallIds: ["wall-a", "wall-internal"],
     staircaseIds: ["stair-a"],
     furnitureIds: ["chair-a"]
   };

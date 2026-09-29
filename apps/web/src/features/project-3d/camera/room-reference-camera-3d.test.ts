@@ -1,13 +1,19 @@
 import type { DesignTarget } from "@casastudio/ai";
 import { describe, expect, it } from "vitest";
 
+import { demoProjectFixture } from "../../../test/demo-project-fixture";
 import type {
   ArchitecturalScene3DModel,
   Floor3D,
   LevelReference3D,
-  ScenePlanVector3D
+  ScenePlanVector3D,
+  Wall3D
 } from "../model/architectural-scene-3d-model";
-import { triangulateFloorContour3D } from "../model/architectural-scene-3d-model";
+import {
+  createArchitecturalScene3DModel,
+  createWall3D,
+  triangulateFloorContour3D
+} from "../model/architectural-scene-3d-model";
 import { createRoomReferencePlans3D } from "./room-reference-camera-3d";
 
 const target = Object.freeze({
@@ -73,6 +79,40 @@ describe("Room-aware reference cameras", () => {
     expect(changed[0]!.target.roomId).toBe("other");
     expect(changed[0]!.pose.target).not.toEqual(selected[0]!.pose.target);
   });
+
+  it("derives non-boundary relevance without mutating canonical Project ownership or Openings", () => {
+    const project = structuredClone(demoProjectFixture);
+    project.building.levels[0]!.walls.push({
+      id: "independent-interior-wall",
+      start: { x: 100, z: 100 },
+      end: { x: 300, z: 100 },
+      height: 300,
+      thickness: 20,
+      roomIds: [],
+      openings: [{
+        id: "independent-window",
+        type: "WINDOW",
+        offsetFromStart: 50,
+        width: 100,
+        elevation: 100,
+        height: 100
+      }]
+    });
+    const before = structuredClone(project);
+    const model = createArchitecturalScene3DModel(project);
+
+    const plans = createRoomReferencePlans3D(model, {
+      kind: "room",
+      projectId: project.id,
+      levelId: "ground-floor",
+      roomId: "left-room"
+    });
+
+    expect(plans).toHaveLength(3);
+    expect(plans.every((plan) => plan.wallIds.includes("independent-interior-wall")))
+      .toBe(true);
+    expect(project).toEqual(before);
+  });
 });
 
 function createSyntheticModel(): ArchitecturalScene3DModel {
@@ -100,11 +140,6 @@ function createSyntheticModel(): ArchitecturalScene3DModel {
     3,
     ["other-a", "other-b", "other-c", "other-d"]
   );
-  const wallIds = [
-    ...concave.boundaryWallIds,
-    ...other.boundaryWallIds,
-    "unrelated-wall"
-  ].filter((id): id is string => Boolean(id));
   const upper = {
     id: "upper",
     name: "Upper",
@@ -112,18 +147,11 @@ function createSyntheticModel(): ArchitecturalScene3DModel {
     y: 3,
     segments: [],
     floors: [concave, other],
-    walls: wallIds.map((id) => ({
-      id,
-      height: 3,
-      origin: { x: 0, y: 3, z: 0 },
-      bodySections: [
-        {
-          bottom: 0,
-          top: 3,
-          contour: concave.contour.slice(0, 4)
-        }
-      ]
-    })),
+    walls: [
+      ...createFloorWalls(concave),
+      ...createFloorWalls(other),
+      createTestWall("unrelated-wall", { x: 20, z: -2 }, { x: 22, z: -2 }, 3)
+    ],
     staircases: [
       { id: "target-stair", fromRoomId: "concave", toRoomId: "down" },
       { id: "unrelated-stair", fromRoomId: "other", toRoomId: "down" }
@@ -149,6 +177,35 @@ function createSyntheticModel(): ArchitecturalScene3DModel {
     levels: Object.freeze([lower, upper]),
     hasArchitecturalGeometry: true
   });
+}
+
+function createFloorWalls(floor: Floor3D): Wall3D[] {
+  return floor.boundaryWallIds.flatMap((id, index) => {
+    if (!id) return [];
+    return [createTestWall(
+      id,
+      floor.contour[index]!,
+      floor.contour[(index + 1) % floor.contour.length]!,
+      floor.y
+    )];
+  });
+}
+
+function createTestWall(
+  id: string,
+  start: ScenePlanVector3D,
+  end: ScenePlanVector3D,
+  y: number
+): Wall3D {
+  return createWall3D({
+    id,
+    start: { x: start.x, z: -start.z },
+    end: { x: end.x, z: -end.z },
+    height: 3,
+    thickness: 0.2,
+    roomIds: [],
+    openings: []
+  }, y, "m");
 }
 
 function createFloor(
