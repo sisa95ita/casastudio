@@ -56,11 +56,11 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
                 type: "input_text",
                 text: buildOpenAIInteriorDesignPrompt(request)
               },
-              {
+              ...request.referenceViews.map((reference) => ({
                 type: "input_image",
-                image_url: request.referenceView.image.dataUrl,
+                image_url: reference.image.dataUrl,
                 detail: "high"
-              }
+              }))
             ]
           }
         ],

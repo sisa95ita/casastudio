@@ -39,21 +39,30 @@ const input = {
   levelId: "ground",
   roomId: "living",
   instructions: "Warm minimal design",
-  referenceView: {
-    image: {
-      dataUrl: "data:image/jpeg;base64,cmVm",
-      mimeType: "image/jpeg" as const,
-      width: 1280,
-      height: 720
-    },
-    camera: {
-      projection: "perspective" as const,
-      position: { x: 1, y: 2, z: 3 },
-      direction: { x: 0, y: 0, z: -1 },
-      up: { x: 0, y: 1, z: 0 },
-      verticalFovDegrees: 45
+  referenceViews: [
+    {
+      kind: "room-axonometric" as const,
+      target: {
+        kind: "room" as const,
+        projectId: "design-project",
+        levelId: "ground",
+        roomId: "living"
+      },
+      image: {
+        dataUrl: "data:image/jpeg;base64,cmVm",
+        mimeType: "image/jpeg" as const,
+        width: 1280,
+        height: 720
+      },
+      camera: {
+        projection: "perspective" as const,
+        position: { x: 1, y: 2, z: 3 },
+        direction: { x: 0, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
+        verticalFovDegrees: 45
+      }
     }
-  }
+  ]
 };
 
 const principal = { subject: "owner", roles: [] };

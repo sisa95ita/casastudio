@@ -185,6 +185,7 @@ export type Floor3D = Readonly<{
   thickness: number;
   contour: readonly ScenePlanVector3D[];
   boundaryKinds: readonly FloorBoundaryKind3D[];
+  boundaryWallIds: readonly (string | undefined)[];
   triangles: readonly FloorTriangle3D[];
 }>;
 
@@ -470,6 +471,7 @@ export function createArchitecturalScene3DModel(
         thickness: profile.floorThickness,
         contour: Object.freeze(contour),
         boundaryKinds: floorSource.boundaryKinds,
+        boundaryWallIds: floorSource.boundaryWallIds,
         triangles: triangulateFloorContour3D(contour)
       });
     });
@@ -513,6 +515,7 @@ type FloorContourSource3D = Readonly<{
   floorElevation: number;
   points: readonly Readonly<{ x: number; z: number }>[];
   boundaryKinds: readonly FloorBoundaryKind3D[];
+  boundaryWallIds: readonly (string | undefined)[];
 }>;
 
 /** Reuses trusted Geometry Engine Room topology instead of interpreting Room boundaries again. */
@@ -559,7 +562,10 @@ function collectFloorContourSources(
               throw new Error(`Room "${polygon.sourceRoomId}" has a missing Geometry boundary edge.`);
             }
             return edge.sourceKind;
-          }))
+          })),
+          boundaryWallIds: Object.freeze(
+            edgeUses.map((edgeUse) => edgeUse.sourceWallId)
+          )
         });
       });
       return [level.sourceLevelId, Object.freeze(contours)] as const;
@@ -594,6 +600,11 @@ function collectFloorContourSources(
           }))),
           boundaryKinds: Object.freeze(
             polygon.outerLoop.edgeUses.map((edgeUse) => edgeUse.boundaryEdge.sourceKind)
+          ),
+          boundaryWallIds: Object.freeze(
+            polygon.outerLoop.edgeUses.map(
+              (edgeUse) => edgeUse.boundaryEdge.sourceWallId
+            )
           )
         });
       }))
@@ -826,13 +837,28 @@ export function getVisibleLevelReferences3D(
   return activeLevel ? Object.freeze([activeLevel]) : Object.freeze([]);
 }
 
+/**
+ * Returns the only Levels allowed to own mounted pointer-event geometry.
+ * Three raycasting ignores Object3D.visible, so inactive Levels must not be
+ * retained as merely invisible interactive scene nodes.
+ */
+export function getInteractableLevelReferences3D(
+  model: ArchitecturalScene3DModel,
+  visibility: LevelVisibility3D,
+  activeLevelId?: string
+): readonly Level3D[] {
+  return getVisibleLevelReferences3D(model, visibility, activeLevelId);
+}
+
 /** Derives physical scene bounds for the currently visible architectural Levels. */
 export function collectVisibleSceneBounds3D(
   model: ArchitecturalScene3DModel,
   visibility: LevelVisibility3D,
   activeLevelId?: string
 ): SceneBounds3D | undefined {
-  return collectSceneBounds3D(getVisibleLevelReferences3D(model, visibility, activeLevelId));
+  return collectSceneBounds3D(
+    getInteractableLevelReferences3D(model, visibility, activeLevelId)
+  );
 }
 
 /** Classifies an ordered closed reference network without creating Three objects. */

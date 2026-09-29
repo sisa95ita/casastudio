@@ -11,20 +11,24 @@ const request = {
   target: { kind: "room", projectId: "p", levelId: "l", roomId: "r" },
   instructions: "Warm minimal design",
   context: {},
-  referenceView: {
-    image: {
-      dataUrl: "data:image/png;base64,cG5n",
-      mimeType: "image/png",
-      width: 1,
-      height: 1
-    },
-    camera: {
-      projection: "perspective",
-      position: { x: 0, y: 1, z: 2 },
-      direction: { x: 0, y: 0, z: -1 },
-      up: { x: 0, y: 1, z: 0 }
+  referenceViews: [
+    {
+      kind: "room-axonometric",
+      target: { kind: "room", projectId: "p", levelId: "l", roomId: "r" },
+      image: {
+        dataUrl: "data:image/png;base64,cG5n",
+        mimeType: "image/png",
+        width: 1,
+        height: 1
+      },
+      camera: {
+        projection: "perspective",
+        position: { x: 0, y: 1, z: 2 },
+        direction: { x: 0, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 }
+      }
     }
-  }
+  ]
 } as unknown as DesignRequest;
 
 describe("InteriorDesignService", () => {
@@ -63,10 +67,12 @@ describe("InteriorDesignService", () => {
     });
     const missing = {
       ...request,
-      referenceView: {
-        ...request.referenceView,
-        image: { ...request.referenceView.image, dataUrl: "" }
-      }
+      referenceViews: [
+        {
+          ...request.referenceViews[0]!,
+          image: { ...request.referenceViews[0]!.image, dataUrl: "" }
+        }
+      ]
     };
 
     await expect(service.generate(missing)).rejects.toBeInstanceOf(

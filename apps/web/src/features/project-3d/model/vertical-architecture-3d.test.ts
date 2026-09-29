@@ -281,7 +281,9 @@ it.each(Object.entries(contours))("closes %s Floor tops, bottoms and sides with 
       return sum + p.x * next.z - next.x * p.z;
     }, 0) / 2);
     const floor = { id: "floor", roomId: "room", area, y: 2.2, bottomY: 2.02, thickness: 0.18,
-      contour, boundaryKinds: contour.map(() => "FREE" as const), triangles: triangulateFloorContour3D(contour) };
+      contour, boundaryKinds: contour.map(() => "FREE" as const),
+      boundaryWallIds: contour.map(() => undefined),
+      triangles: triangulateFloorContour3D(contour) };
     const solid = createFloorSolid3D(floor);
     expect(vertices(solid.top).every((point) => point.y === 2.2)).toBe(true);
     expect(solid.wallEdges.positions).toHaveLength(0);

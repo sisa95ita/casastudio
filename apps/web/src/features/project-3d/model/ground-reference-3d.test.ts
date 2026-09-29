@@ -86,6 +86,7 @@ function floorLevel(
         { x: 0, z: 1 }
       ],
       boundaryKinds: ["FREE", "FREE", "FREE"],
+      boundaryWallIds: [undefined, undefined, undefined],
       triangles: [[0, 1, 2]]
     })),
     staircases: [],

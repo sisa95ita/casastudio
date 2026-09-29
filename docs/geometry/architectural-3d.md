@@ -142,6 +142,15 @@ read-only dimensions, elevations and semantic references. Hover and selection
 use temporary semantic edge overlays, so the surface hierarchy and shared GLB
 materials are never recolored or mutated.
 
+Level visibility is also the interaction-eligibility boundary. In Active Level
+mode, only the active Level is mounted in the interactive R3F scene; in All
+Levels mode, every Level remains mounted and normal nearest-surface depth order
+applies. Inactive Levels are not retained merely as `visible={false}` groups:
+Three raycasting does not use `Object3D.visible`, so such meshes could otherwise
+receive pointer events and stop propagation ahead of a visible surface. Bounds,
+telemetry, rendering, hover and selection all consume the same eligible Level
+set.
+
 Every generated vertex contributes to Stair bounds; Level and scene bounds
 include Stair bounds and both floor elevations. Fit/reset and visibility use
 these same bounds. Wall bounds use the final endpoint-resolved section footprints.

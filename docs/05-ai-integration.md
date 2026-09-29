@@ -13,7 +13,7 @@ The AI-A generation path is read-only with respect to `Project`. It does not sen
 ## Architecture
 
 ```text
-selected canonical Room + user instruction + captured 3D view
+selected canonical Room + user instruction + Room-aware reference views
                               |
                               v
 authenticated CasaStudio API endpoint
@@ -65,13 +65,24 @@ It intentionally excludes unrelated Levels, viewpoints, presentation visibility,
 
 ### DesignReferenceView
 
-The React Three Fiber viewer exposes a capture callback rather than Three.js objects. On generation it renders the current controlled camera, downsizes the canvas to at most 1280 pixels wide, and emits a JPEG data URL plus provider-neutral camera position, direction, up vector, projection, field of view, dimensions, and MIME type. Camera coordinates describe the derived 3D scene; they are visual-reference metadata, never canonical architecture.
+The AI-A current-view screenshot proved the end-to-end pipeline, but an arbitrary OrbitControls position is not a reliable design input: it can be zoomed out to the full building, blocked by another Level or Wall, or aimed away from the selected Room. AI-B1 therefore derives three automatic references from the immutable renderer-neutral Room model:
+
+- `room-axonometric` frames the Room bounds from a stable direction based on its longest contour edge;
+- `room-interior-a` and `room-interior-b` place human-height eyes at two materially separated, triangulation-backed points inside the Room.
+
+The derivation uses the generic Room contour and floor triangles, not width/depth fields or a four-Wall assumption. It respects the Room/Level floor Y, physical Wall height and thickness, and arbitrary plan rotation. Concave L/U/T/free-boundary Rooms use points known to lie inside triangulated floor regions. The inside-Room strategy is the reference-only occlusion policy: it avoids an exterior camera-side Wall without deleting a Wall, inventing an Opening, or persisting cutaway state.
+
+Capture reuses the mounted React Three Fiber scene but renders each temporary perspective camera to a 960×720 offscreen render target. It temporarily masks unrelated Levels, non-target Room floors and furniture, unrelated Walls, unrelated Stairs, the grid/ground, and interaction outlines. It retains target boundary Walls with their Doors, Windows, and Wall Openings; Room-owned Furniture; and Stairs canonically connected to the Room. Every visibility flag and renderer target is restored in `finally`; the controlled user camera and OrbitControls are never moved. The user's current view remains a modeled `current-user-view` reference kind for a future optional workflow, but is not an automatic/default AI-B1 reference.
+
+Each provider-neutral `DesignReferenceView` carries a stable kind, canonical target, image artifact, dimensions/MIME type, and plain camera position/direction/up/FOV metadata. No `THREE.Camera`, `Vector3`, renderer state, or provider concept crosses the boundary.
 
 The request body is bounded to 7 MiB globally and the image field to 6.5 million characters. The API verifies that the declared MIME type matches the data URL. The browser uploads the reference to CasaStudio; it never calls OpenAI.
 
 ### DesignRequest, proposal, and session seam
 
-The provider request combines target, instruction, derived context, reference view, optional preferences/constraints/preservation rules, and an optional iteration seam. The API does not accept client-supplied context.
+The provider request combines target, instruction, derived context, a bounded array of reference views, optional preferences/constraints/preservation rules, and an optional iteration seam. The API does not accept client-supplied context. It validates every image/MIME pair and rejects a reference whose target differs from the requested Room. The OpenAI adapter already translates every reference to an image input so AI-B2 does not require another contract migration; AI-B1 itself makes no provider call.
+
+References are transient. The panel creates them when the selected Room or derived scene changes, retains them in component state, and offers an explicit refresh. It does not recapture per animation frame. Selecting another Room invalidates the set. No image is added to `ProjectSchema`, persistence, or proposal history.
 
 AI-A returns one successful, transient `DesignProposal` containing a stable proposal ID, target, creation time, normalized image artifact, and isolated provider metadata. A small optional session/previous-proposal seam and opaque provider continuation map are present for AI-C, but no chat system is implemented. `structuredSuggestions` is reserved for future typed results; AI-A does not create them.
 
@@ -111,21 +122,24 @@ AI-A adds no database table or migration. Requests, sessions, proposals, uploade
 
 AI-B should introduce an application-owned artifact repository and object storage if a durable proposal gallery is required. Reference images and generated images should then have retention, ownership, authorization, deletion, content-type, size, and lifecycle policies outside `ProjectSchema`.
 
-## Optional live smoke test
+## AI-B1 manual reference acceptance
 
-Normal tests use fakes/mocks and never make paid calls. To exercise the real Room/reference pipeline manually:
+Normal tests use fakes/mocks and never make paid calls. Before AI-B2, manually inspect references without choosing **Generate design**:
 
-1. Put the four AI variables above in the ignored root `.env.local` with a valid key.
-2. Start dependencies and the app using the normal local workflow (`pnpm e2e:infra:up`, `pnpm e2e:prepare`, then `pnpm app:dev`).
-3. Sign in, open a Project with a renderable Room, switch to 3D, and select the Room floor.
-4. Frame the desired view, enter a short direction in **AI Interior Designer**, and choose **Generate design**.
-5. Confirm the proposal image appears, architectural Project data/revision does not change, and no key appears in browser network request bodies or bundles.
+1. Start the normal local application; no `OPENAI_API_KEY` is required.
+2. Select a representative rectangular Room in 3D and open all three thumbnails under **Reference views**.
+3. Move/zoom/orbit the user camera, press **Refresh**, and confirm reference framing is unchanged.
+4. Repeat with rotated and L/U/T/free-boundary Rooms, elevated Rooms, and a multi-Level Project.
+5. Inspect that target boundary Walls, Openings, connected Stairs, floor elevation, and existing Room Furniture remain represented, while unrelated Levels/Rooms do not dominate.
+6. Close each dialog with its button and Escape and confirm focus returns to its thumbnail.
+7. Do not choose **Generate design** during AI-B1 acceptance.
 
-This call is optional, paid, and intentionally excluded from `pnpm test` and CI.
+Visual reference quality is deliberately a human acceptance decision and is not claimed by automated tests.
 
 ## Evolution
 
-- **AI-B:** durable artifact storage/gallery, job progress for long latency, richer style and preservation controls, polished target framing, and product UX.
+- **AI-B2:** manually tune/approve reference composition, then exercise the multi-reference provider input and improve provider prompting as a separate change. Live generation remains opt-in manual work.
+- **Later AI phases:** durable artifact storage/gallery, job progress for long latency, richer style and preservation controls, and product UX.
 - **Gemini/other providers:** implement `InteriorDesignProvider`; reuse target, context, reference, request, proposal, and failure contracts. Provider choice can later be resolved per user/tenant without changing these contracts.
 - **User-configured providers:** keep credentials in a future server-side secret facility above the provider factory. Never put keys in `ProjectSchema` or browser state.
 - **AI Editing Assistant:** translate future proposals into reviewed, typed CasaStudio editing operations. Never allow an LLM to mutate raw Project JSON.

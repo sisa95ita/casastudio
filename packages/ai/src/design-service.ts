@@ -15,7 +15,16 @@ export class InteriorDesignService {
   ) {}
 
   async generate(request: DesignRequest): Promise<DesignProposal> {
-    if (!request.referenceView.image.dataUrl) {
+    if (
+      request.referenceViews.length === 0 ||
+      request.referenceViews.some(
+        (reference) =>
+          !reference.image.dataUrl ||
+          reference.target.projectId !== request.target.projectId ||
+          reference.target.levelId !== request.target.levelId ||
+          reference.target.roomId !== request.target.roomId
+      )
+    ) {
       throw new DesignGenerationError(
         "missing_reference",
         "A visual reference is required to generate a design."

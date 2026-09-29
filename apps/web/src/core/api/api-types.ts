@@ -71,7 +71,7 @@ export type GenerateRoomDesignRequest = {
   readonly levelId: string;
   readonly roomId: string;
   readonly instructions: string;
-  readonly referenceView: DesignReferenceView;
+  readonly referenceViews: readonly DesignReferenceView[];
 };
 
 /** Defensively validates the provider-neutral proposal returned by the API. */

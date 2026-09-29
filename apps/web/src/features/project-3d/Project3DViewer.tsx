@@ -16,7 +16,7 @@ import { Edges, OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import type { MetricLengthUnit } from "@casastudio/schema";
-import type { DesignReferenceView } from "@casastudio/ai";
+import type { DesignReferenceView, DesignTarget } from "@casastudio/ai";
 import {
   Component,
   createContext,
@@ -40,10 +40,14 @@ import {
   MeshBasicMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
+  PerspectiveCamera,
   Plane,
   SRGBColorSpace,
   Vector3,
-  type DirectionalLight
+  WebGLRenderTarget,
+  type DirectionalLight,
+  type Scene,
+  type WebGLRenderer
 } from "three";
 
 import {
@@ -70,9 +74,13 @@ import {
 } from "./camera/architectural-camera-3d";
 import { CameraController } from "./camera/CameraController";
 import {
+  createRoomReferencePlans3D,
+  type RoomReferencePlan3D
+} from "./camera/room-reference-camera-3d";
+import {
   collectVisibleSceneBounds3D,
+  getInteractableLevelReferences3D,
   getLevelReferenceOrientation3D,
-  getVisibleLevelReferences3D,
   type ArchitecturalScene3DModel,
   type Door3D,
   type Floor3D,
@@ -100,6 +108,7 @@ import {
   createArchitecturalKeyLight3D,
   type ArchitecturalMaterialRole3D
 } from "./presentation/architectural-presentation-3d";
+import { applyRoomReferenceVisibility3D } from "./presentation/room-reference-visibility-3d";
 
 /** Furniture-only edit callbacks backed by the canonical Project editing session. */
 export type FurnitureManipulation3D = Readonly<{
@@ -181,7 +190,7 @@ export function Project3DViewer({
   const pointerGestureRef = useRef<PointerGesture3D | undefined>(undefined);
   const webGlSupported = useMemo(detectWebGLSupport, []);
   const visibleLevels = useMemo(
-    () => getVisibleLevelReferences3D(model, visibility, activeLevelId),
+    () => getInteractableLevelReferences3D(model, visibility, activeLevelId),
     [activeLevelId, model, visibility]
   );
   const visibleBounds = useMemo(
@@ -193,6 +202,18 @@ export function Project3DViewer({
     [visibleBounds]
   );
   const selectedKey = getArchitecturalEntityKey3D(selection);
+  const referenceTarget = useMemo<DesignTarget | undefined>(
+    () =>
+      selection?.kind === "room"
+        ? Object.freeze({
+            kind: "room" as const,
+            projectId: model.sourceProjectId,
+            levelId: selection.levelId,
+            roomId: selection.id
+          })
+        : undefined,
+    [model.sourceProjectId, selection]
+  );
   const handleReferenceViewCaptureChange = useCallback(
     (capture?: DesignReferenceViewCapture) =>
       setReferenceViewCapture(() => capture),
@@ -523,6 +544,7 @@ export function Project3DViewer({
               <ArchitecturalFoundationScene
                 levels={visibleLevels}
                 bounds={visibleBounds}
+                referenceTarget={referenceTarget}
                 fitRequest={fitRequest}
                 resetRequest={resetRequest}
                 onCameraChange={setCameraTelemetry}
@@ -625,6 +647,7 @@ class Project3DRenderErrorBoundary extends Component<
 type ArchitecturalFoundationSceneProps = {
   readonly levels: readonly LevelReference3D[];
   readonly bounds?: SceneBounds3D;
+  readonly referenceTarget?: DesignTarget;
   readonly fitRequest: number;
   readonly resetRequest: number;
   readonly onCameraChange: (telemetry: ArchitecturalCameraTelemetry3D) => void;
@@ -665,6 +688,7 @@ type FurnitureManipulationSession3D = {
 function ArchitecturalFoundationScene({
   levels,
   bounds,
+  referenceTarget,
   fitRequest,
   resetRequest,
   onCameraChange,
@@ -694,44 +718,31 @@ function ArchitecturalFoundationScene({
   );
   manipulationSessionRef.current = manipulationSession;
   furnitureManipulationRef.current = furnitureManipulation;
-  const captureReferenceView = useCallback((): DesignReferenceView => {
-    gl.render(scene, camera);
-    const source = gl.domElement;
-    const maxWidth = 1280;
-    const scale = Math.min(1, maxWidth / source.width);
-    const width = Math.max(1, Math.round(source.width * scale));
-    const height = Math.max(1, Math.round(source.height * scale));
-    const output = document.createElement("canvas");
-    output.width = width;
-    output.height = height;
-    const context = output.getContext("2d");
-    if (!context) throw new Error("Reference image capture is unavailable.");
-    context.drawImage(source, 0, 0, width, height);
-    const direction = camera.getWorldDirection(new Vector3());
-    return Object.freeze({
-      image: Object.freeze({
-        dataUrl: output.toDataURL("image/jpeg", 0.88),
-        mimeType: "image/jpeg",
-        width,
-        height
-      }),
-      camera: Object.freeze({
-        projection: "perspective",
-        position: Object.freeze({
-          x: camera.position.x,
-          y: camera.position.y,
-          z: camera.position.z
-        }),
-        direction: Object.freeze({
-          x: direction.x,
-          y: direction.y,
-          z: direction.z
-        }),
-        up: Object.freeze({ x: camera.up.x, y: camera.up.y, z: camera.up.z }),
-        verticalFovDegrees: "fov" in camera ? camera.fov : 45
-      })
-    });
-  }, [camera, gl, scene]);
+  const referencePlans = useMemo(
+    () =>
+      referenceTarget
+        ? createRoomReferencePlans3D(
+            {
+              sourceProjectId: referenceTarget.projectId,
+              worldLengthUnit: "m",
+              levels,
+              bounds,
+              hasArchitecturalGeometry: Boolean(bounds)
+            },
+            referenceTarget
+          )
+        : [],
+    [bounds, levels, referenceTarget]
+  );
+  const captureReferenceView = useCallback(async (): Promise<
+    readonly DesignReferenceView[]
+  > => {
+    if (!referenceTarget || referencePlans.length === 0)
+      throw new Error("Room reference image capture is unavailable.");
+    return Object.freeze(
+      referencePlans.map((plan) => captureRoomReference(gl, scene, plan))
+    );
+  }, [gl, referencePlans, referenceTarget, scene]);
   useEffect(() => {
     onReferenceViewCaptureChange(captureReferenceView);
     return () => onReferenceViewCaptureChange(undefined);
@@ -857,6 +868,7 @@ function ArchitecturalFoundationScene({
       />
       <ArchitecturalKeyLight bounds={bounds} />
       <mesh
+        name="architectural-reference-ground"
         rotation={[-Math.PI / 2, 0, 0]}
         position={[ground.centerX, ground.y, ground.centerZ]}
         onPointerOver={() => onHoverChange(undefined)}
@@ -876,6 +888,7 @@ function ArchitecturalFoundationScene({
         />
       </mesh>
       <gridHelper
+        name="architectural-reference-grid"
         args={[
           ground.size,
           ground.divisions,
@@ -927,6 +940,107 @@ function ArchitecturalFoundationScene({
       />
     </ArchitecturalMaterialsProvider3D>
   );
+}
+
+const referenceImageWidth = 960;
+const referenceImageHeight = 720;
+
+/** Renders one isolated Room recipe without changing the live camera or canvas. */
+function captureRoomReference(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  plan: RoomReferencePlan3D
+): DesignReferenceView {
+  const renderTarget = new WebGLRenderTarget(
+    referenceImageWidth,
+    referenceImageHeight
+  );
+  renderTarget.texture.colorSpace = SRGBColorSpace;
+  const referenceCamera = new PerspectiveCamera(
+    plan.verticalFovDegrees,
+    referenceImageWidth / referenceImageHeight,
+    plan.pose.near,
+    plan.pose.far
+  );
+  referenceCamera.position.set(
+    plan.pose.position.x,
+    plan.pose.position.y,
+    plan.pose.position.z
+  );
+  referenceCamera.up.set(0, 1, 0);
+  referenceCamera.lookAt(
+    plan.pose.target.x,
+    plan.pose.target.y,
+    plan.pose.target.z
+  );
+  referenceCamera.updateProjectionMatrix();
+  referenceCamera.updateMatrixWorld();
+
+  const restoreVisibility = applyRoomReferenceVisibility3D(scene, plan);
+  const previousRenderTarget = renderer.getRenderTarget();
+  const previousXrEnabled = renderer.xr.enabled;
+  const pixels = new Uint8Array(referenceImageWidth * referenceImageHeight * 4);
+  try {
+    renderer.xr.enabled = false;
+    renderer.setRenderTarget(renderTarget);
+    renderer.clear();
+    renderer.render(scene, referenceCamera);
+    renderer.readRenderTargetPixels(
+      renderTarget,
+      0,
+      0,
+      referenceImageWidth,
+      referenceImageHeight,
+      pixels
+    );
+  } finally {
+    renderer.setRenderTarget(previousRenderTarget);
+    renderer.xr.enabled = previousXrEnabled;
+    restoreVisibility();
+    renderTarget.dispose();
+  }
+
+  const output = document.createElement("canvas");
+  output.width = referenceImageWidth;
+  output.height = referenceImageHeight;
+  const context = output.getContext("2d");
+  if (!context) throw new Error("Reference image capture is unavailable.");
+  const image = context.createImageData(
+    referenceImageWidth,
+    referenceImageHeight
+  );
+  const rowSize = referenceImageWidth * 4;
+  for (let row = 0; row < referenceImageHeight; row += 1) {
+    const sourceStart = (referenceImageHeight - 1 - row) * rowSize;
+    image.data.set(
+      pixels.subarray(sourceStart, sourceStart + rowSize),
+      row * rowSize
+    );
+  }
+  context.putImageData(image, 0, 0);
+  const direction = new Vector3();
+  referenceCamera.getWorldDirection(direction);
+  return Object.freeze({
+    kind: plan.kind,
+    target: plan.target,
+    image: Object.freeze({
+      dataUrl: output.toDataURL("image/jpeg", 0.88),
+      mimeType: "image/jpeg" as const,
+      width: referenceImageWidth,
+      height: referenceImageHeight
+    }),
+    camera: Object.freeze({
+      projection: "perspective" as const,
+      position: plan.pose.position,
+      direction: Object.freeze({
+        x: direction.x,
+        y: direction.y,
+        z: direction.z
+      }),
+      up: Object.freeze({ x: 0, y: 1, z: 0 }),
+      verticalFovDegrees: plan.verticalFovDegrees
+    })
+  });
 }
 
 /** Positions the only shadow-casting light and its camera from physical bounds. */

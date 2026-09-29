@@ -104,8 +104,16 @@ export type DesignContext = Readonly<{
   }>;
 }>;
 
+export type DesignReferenceViewKind =
+  | "room-axonometric"
+  | "room-interior-a"
+  | "room-interior-b"
+  | "current-user-view";
+
 /** Browser-produced visual evidence; no renderer object crosses this boundary. */
 export type DesignReferenceView = Readonly<{
+  kind: DesignReferenceViewKind;
+  target: DesignTarget;
   image: Readonly<{
     dataUrl: string;
     mimeType: "image/png" | "image/jpeg" | "image/webp";
@@ -125,7 +133,7 @@ export type DesignRequest = Readonly<{
   target: DesignTarget;
   instructions: string;
   context: DesignContext;
-  referenceView: DesignReferenceView;
+  referenceViews: readonly DesignReferenceView[];
   preferences?: Readonly<Record<string, string>>;
   constraints?: readonly string[];
   elementsToPreserve?: readonly string[];

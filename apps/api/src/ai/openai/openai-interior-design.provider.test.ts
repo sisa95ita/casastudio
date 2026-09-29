@@ -40,21 +40,52 @@ const request = {
       elevationAxis: "+Y"
     }
   },
-  referenceView: {
-    image: {
-      dataUrl: "data:image/jpeg;base64,cmVm",
-      mimeType: "image/jpeg",
-      width: 1280,
-      height: 720
+  referenceViews: [
+    {
+      kind: "room-axonometric",
+      target: {
+        kind: "room",
+        projectId: "project",
+        levelId: "ground",
+        roomId: "living"
+      },
+      image: {
+        dataUrl: "data:image/jpeg;base64,cmVm",
+        mimeType: "image/jpeg",
+        width: 1280,
+        height: 720
+      },
+      camera: {
+        projection: "perspective",
+        position: { x: 1, y: 2, z: 3 },
+        direction: { x: 0, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
+        verticalFovDegrees: 45
+      }
     },
-    camera: {
-      projection: "perspective",
-      position: { x: 1, y: 2, z: 3 },
-      direction: { x: 0, y: 0, z: -1 },
-      up: { x: 0, y: 1, z: 0 },
-      verticalFovDegrees: 45
+    {
+      kind: "room-interior-a",
+      target: {
+        kind: "room",
+        projectId: "project",
+        levelId: "ground",
+        roomId: "living"
+      },
+      image: {
+        dataUrl: "data:image/jpeg;base64,cmVmLTI=",
+        mimeType: "image/jpeg",
+        width: 960,
+        height: 720
+      },
+      camera: {
+        projection: "perspective",
+        position: { x: 2, y: 1.5, z: 2 },
+        direction: { x: -1, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
+        verticalFovDegrees: 58
+      }
     }
-  }
+  ]
 } satisfies DesignRequest;
 
 describe("OpenAIInteriorDesignProvider", () => {
@@ -104,7 +135,11 @@ describe("OpenAIInteriorDesignProvider", () => {
             content: expect.arrayContaining([
               expect.objectContaining({
                 type: "input_image",
-                image_url: request.referenceView.image.dataUrl
+                image_url: request.referenceViews[0]!.image.dataUrl
+              }),
+              expect.objectContaining({
+                type: "input_image",
+                image_url: request.referenceViews[1]!.image.dataUrl
               })
             ])
           })

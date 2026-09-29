@@ -46,23 +46,34 @@ async function renderGeneratedProposal() {
       projectId="project-1"
       levelId="level-1"
       roomId="room-1"
-      capture={() => ({
-        image: {
-          dataUrl: "data:image/png;base64,cmVmZXJlbmNl",
-          mimeType: "image/png",
-          width: 1024,
-          height: 768
-        },
-        camera: {
-          projection: "perspective",
-          position: { x: 0, y: 2, z: 5 },
-          direction: { x: 0, y: 0, z: -1 },
-          up: { x: 0, y: 1, z: 0 },
-          verticalFovDegrees: 45
+      capture={async () => [
+        {
+          kind: "room-axonometric",
+          target: {
+            kind: "room",
+            projectId: "project-1",
+            levelId: "level-1",
+            roomId: "room-1"
+          },
+          image: {
+            dataUrl: "data:image/png;base64,cmVmZXJlbmNl",
+            mimeType: "image/png",
+            width: 1024,
+            height: 768
+          },
+          camera: {
+            projection: "perspective",
+            position: { x: 0, y: 2, z: 5 },
+            direction: { x: 0, y: 0, z: -1 },
+            up: { x: 0, y: 1, z: 0 },
+            verticalFovDegrees: 45
+          }
         }
-      })}
+      ]}
     />
   );
+
+  await screen.findByRole("button", { name: "Room axonometric" });
 
   fireEvent.change(screen.getByRole("textbox", { name: "Design direction" }), {
     target: { value: instructions }
@@ -82,6 +93,56 @@ afterEach(() => {
 });
 
 describe("AiRoomDesignPanel proposal preview", () => {
+  it("opens and closes the automatic reference preview accessibly without generating", async () => {
+    render(
+      <AiRoomDesignPanel
+        projectId="project-1"
+        levelId="level-1"
+        roomId="room-1"
+        capture={async () => [
+          {
+            kind: "room-axonometric",
+            target: {
+              kind: "room",
+              projectId: "project-1",
+              levelId: "level-1",
+              roomId: "room-1"
+            },
+            image: {
+              dataUrl: "data:image/png;base64,cmVmZXJlbmNl",
+              mimeType: "image/png",
+              width: 960,
+              height: 720
+            },
+            camera: {
+              projection: "perspective",
+              position: { x: 1, y: 2, z: 3 },
+              direction: { x: 0, y: 0, z: -1 },
+              up: { x: 0, y: 1, z: 0 }
+            }
+          }
+        ]}
+      />
+    );
+    const trigger = await screen.findByRole("button", {
+      name: "Room axonometric"
+    });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Room axonometric"
+    });
+    expect(
+      within(dialog).getByRole("img", { name: "Room axonometric" })
+    ).toBeTruthy();
+    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("opens the generated image at a viewport-contained size and closes explicitly", async () => {
     const previewTrigger = await renderGeneratedProposal();
     previewTrigger.focus();
@@ -98,7 +159,9 @@ describe("AiRoomDesignPanel proposal preview", () => {
     expect(previewImage.style.maxWidth).toBe("calc(100vw - 64px)");
     expect(previewImage.style.maxHeight).toBe("calc(100dvh - 160px)");
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close preview" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close preview" })
+    );
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.activeElement).toBe(previewTrigger);

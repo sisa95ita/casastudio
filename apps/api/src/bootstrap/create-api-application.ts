@@ -40,8 +40,8 @@ export function configureApiApplication(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     origin: configuration.corsAllowedOrigins
   });
-  // A captured reference view is transported as a bounded data URL for AI-A.
-  // This remains below the DTO's stricter 6 MiB field limit.
+  // Transient Room references are transported as bounded data URLs.
+  // Deterministic 960x720 JPEGs keep the complete array below this limit.
   (app as NestExpressApplication).useBodyParser("json", { limit: "7mb" });
   app.setGlobalPrefix("api");
   app.enableVersioning({

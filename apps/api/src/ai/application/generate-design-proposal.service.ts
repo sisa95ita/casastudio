@@ -44,7 +44,19 @@ export class GenerateDesignProposalService {
     };
 
     try {
-      validateReferenceImage(input.referenceView.image);
+      input.referenceViews.forEach((reference) => {
+        validateReferenceImage(reference.image);
+        if (
+          reference.target.projectId !== projectId ||
+          reference.target.levelId !== input.levelId ||
+          reference.target.roomId !== input.roomId
+        ) {
+          throw new DesignGenerationError(
+            "unsupported_target",
+            "A visual reference does not match the requested Room."
+          );
+        }
+      });
       const context = deriveDesignContext(loadedProject.project, target);
       const service = new InteriorDesignService(this.provider, {
         createId: () => `design-${randomUUID()}`,
@@ -54,7 +66,7 @@ export class GenerateDesignProposalService {
         target,
         instructions: input.instructions,
         context,
-        referenceView: input.referenceView
+        referenceViews: input.referenceViews
       });
     } catch (error) {
       if (!(error instanceof DesignGenerationError)) throw error;
@@ -68,7 +80,7 @@ export class GenerateDesignProposalService {
 }
 
 function validateReferenceImage(
-  image: GenerateRoomDesignRequestDto["referenceView"]["image"]
+  image: GenerateRoomDesignRequestDto["referenceViews"][number]["image"]
 ): void {
   const prefix = `data:${image.mimeType};base64,`;
   if (!image.dataUrl.startsWith(prefix)) {

@@ -16,13 +16,15 @@ import {
   Typography
 } from "@mui/material";
 import type { DesignProposal, DesignReferenceView } from "@casastudio/ai";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ApiRequestError } from "../../core/api/CasaStudioApiClient";
 import { useCasaStudioApi } from "../../core/api/ApiProvider";
 import { useCasaTranslation } from "../../core/i18n";
 
-export type DesignReferenceViewCapture = () => DesignReferenceView;
+export type DesignReferenceViewCapture = () => Promise<
+  readonly DesignReferenceView[]
+>;
 
 type AiRoomDesignPanelProps = {
   readonly projectId: string;
@@ -45,18 +47,44 @@ export function AiRoomDesignPanel({
   const [error, setError] = useState<string>();
   const [generating, setGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [referenceViews, setReferenceViews] = useState<
+    readonly DesignReferenceView[]
+  >([]);
+  const [referencePreparing, setReferencePreparing] = useState(false);
+  const [referencePreview, setReferencePreview] =
+    useState<DesignReferenceView>();
+
+  const refreshReferences = useCallback(async () => {
+    if (!capture || referencePreparing) return;
+    setReferencePreparing(true);
+    setError(undefined);
+    try {
+      setReferenceViews(await capture());
+    } catch {
+      setError(t("threeD.ai.referenceFailure"));
+    } finally {
+      setReferencePreparing(false);
+    }
+  }, [capture, referencePreparing, t]);
+
+  useEffect(() => {
+    setReferenceViews([]);
+    setReferencePreview(undefined);
+    if (capture) void refreshReferences();
+    // Capture identity is the meaningful Room/project invalidation boundary.
+  }, [capture]);
 
   const generate = async () => {
-    if (!capture || !instructions.trim() || generating) return;
+    if (referenceViews.length === 0 || !instructions.trim() || generating)
+      return;
     setGenerating(true);
     setError(undefined);
     try {
-      const referenceView = capture();
       const result = await api.generateRoomDesign(projectId, {
         levelId,
         roomId,
         instructions: instructions.trim(),
-        referenceView
+        referenceViews
       });
       setProposal(result);
     } catch (cause) {
@@ -88,6 +116,58 @@ export function AiRoomDesignPanel({
             </Typography>
           </Box>
         </Stack>
+        <Box>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: "center", justifyContent: "space-between" }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              {t("threeD.ai.references")}
+            </Typography>
+            <Button
+              size="small"
+              disabled={!capture || referencePreparing}
+              onClick={() => void refreshReferences()}
+            >
+              {t("threeD.ai.refreshReferences")}
+            </Button>
+          </Stack>
+          <Stack direction="row" spacing={0.75}>
+            {referenceViews.map((reference) => (
+              <ButtonBase
+                key={reference.kind}
+                aria-label={t(`threeD.ai.referenceKinds.${reference.kind}`)}
+                onClick={() => setReferencePreview(reference)}
+                sx={{
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 1,
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  "&.Mui-focusVisible": {
+                    outline: "3px solid",
+                    outlineColor: "primary.main",
+                    outlineOffset: 2
+                  }
+                }}
+              >
+                <Box
+                  component="img"
+                  src={reference.image.dataUrl}
+                  alt={t(`threeD.ai.referenceKinds.${reference.kind}`)}
+                  sx={{
+                    aspectRatio: "4 / 3",
+                    display: "block",
+                    objectFit: "cover",
+                    width: "100%"
+                  }}
+                />
+              </ButtonBase>
+            ))}
+          </Stack>
+        </Box>
         <TextField
           size="small"
           multiline
@@ -109,12 +189,14 @@ export function AiRoomDesignPanel({
               <AutoAwesomeRoundedIcon />
             )
           }
-          disabled={!capture || !instructions.trim() || generating}
+          disabled={
+            referenceViews.length === 0 || !instructions.trim() || generating
+          }
           onClick={generate}
         >
           {generating ? t("threeD.ai.generating") : t("threeD.ai.generate")}
         </Button>
-        {!capture ? (
+        {!capture || referencePreparing ? (
           <Typography variant="caption" color="text.secondary">
             {t("threeD.ai.referencePreparing")}
           </Typography>
@@ -192,7 +274,12 @@ export function AiRoomDesignPanel({
         </DialogTitle>
         <DialogContent
           dividers
-          sx={{ alignItems: "center", display: "flex", justifyContent: "center", p: 1 }}
+          sx={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "center",
+            p: 1
+          }}
         >
           {proposal ? (
             <Box
@@ -214,6 +301,38 @@ export function AiRoomDesignPanel({
         </DialogContent>
         <DialogActions>
           <Button autoFocus onClick={() => setPreviewOpen(false)}>
+            {t("threeD.ai.closePreview")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(referencePreview)}
+        onClose={() => setReferencePreview(undefined)}
+        aria-labelledby="ai-reference-preview-title"
+        maxWidth={false}
+      >
+        <DialogTitle id="ai-reference-preview-title">
+          {referencePreview
+            ? t(`threeD.ai.referenceKinds.${referencePreview.kind}`)
+            : t("threeD.ai.references")}
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 1 }}>
+          {referencePreview ? (
+            <Box
+              component="img"
+              src={referencePreview.image.dataUrl}
+              alt={t(`threeD.ai.referenceKinds.${referencePreview.kind}`)}
+              style={{
+                maxHeight: "calc(100dvh - 160px)",
+                maxWidth: "calc(100vw - 64px)",
+                objectFit: "contain"
+              }}
+              sx={{ display: "block", height: "auto", width: "auto" }}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button autoFocus onClick={() => setReferencePreview(undefined)}>
             {t("threeD.ai.closePreview")}
           </Button>
         </DialogActions>

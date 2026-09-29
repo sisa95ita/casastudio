@@ -1,5 +1,7 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsIn,
   IsInt,
   IsNumber,
@@ -60,7 +62,43 @@ export class DesignReferenceCameraDto {
   verticalFovDegrees!: number;
 }
 
+export class DesignReferenceTargetDto {
+  @IsIn(["room"])
+  kind!: "room";
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  projectId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  levelId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  roomId!: string;
+}
+
 export class DesignReferenceViewDto {
+  @IsIn([
+    "room-axonometric",
+    "room-interior-a",
+    "room-interior-b",
+    "current-user-view"
+  ])
+  kind!:
+    | "room-axonometric"
+    | "room-interior-a"
+    | "room-interior-b"
+    | "current-user-view";
+
+  @ValidateNested()
+  @Type(() => DesignReferenceTargetDto)
+  target!: DesignReferenceTargetDto;
+
   @ValidateNested()
   @Type(() => DesignReferenceImageDto)
   image!: DesignReferenceImageDto;
@@ -86,7 +124,9 @@ export class GenerateRoomDesignRequestDto {
   @MaxLength(2_000)
   instructions!: string;
 
-  @ValidateNested()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(4)
+  @ValidateNested({ each: true })
   @Type(() => DesignReferenceViewDto)
-  referenceView!: DesignReferenceViewDto;
+  referenceViews!: DesignReferenceViewDto[];
 }
