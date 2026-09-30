@@ -15,8 +15,19 @@ export class InteriorDesignService {
   ) {}
 
   async generate(request: DesignRequest): Promise<DesignProposal> {
+    const requiredReferenceKinds = [
+      "room-axonometric",
+      "room-interior-a",
+      "room-interior-b"
+    ] as const;
+    const referenceKinds = request.referenceViews.map(
+      (reference) => reference.kind
+    );
     if (
       request.referenceViews.length === 0 ||
+      requiredReferenceKinds.some(
+        (kind) => referenceKinds.filter((candidate) => candidate === kind).length !== 1
+      ) ||
       request.referenceViews.some(
         (reference) =>
           !reference.image.dataUrl ||
@@ -49,9 +60,16 @@ export class InteriorDesignService {
         : {}),
       providerMetadata: Object.freeze({
         provider: this.provider.name,
-        ...(result.requestId ? { requestId: result.requestId } : {}),
         ...(result.continuation ? { continuation: result.continuation } : {})
-      })
+      }),
+      ...(result.telemetry
+        ? {
+            telemetry: Object.freeze({
+              provider: this.provider.name,
+              ...result.telemetry
+            })
+          }
+        : {})
     });
   }
 }

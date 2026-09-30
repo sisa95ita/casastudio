@@ -7,12 +7,21 @@ import {
 
 import {
   buildOpenAIInteriorDesignInstructions,
-  buildOpenAIInteriorDesignPrompt
+  buildOpenAIInteriorDesignPrompt,
+  describeOpenAIReferenceRole
 } from "./openai-prompt-builder";
 
 export type OpenAIInteriorDesignConfiguration = Readonly<{
   reasoningModel: string;
   imageModel: string;
+  imageQuality: "low" | "medium" | "high" | "xhigh" | "max" | "auto";
+  imageSize: string;
+  imageFormat: "png" | "jpeg" | "webp";
+}>;
+
+export type OpenAIInteriorDesignClock = Readonly<{
+  monotonicNow: () => number;
+  now: () => Date;
 }>;
 
 type OpenAIImageGenerationCall = Readonly<{
@@ -20,11 +29,24 @@ type OpenAIImageGenerationCall = Readonly<{
   id?: string;
   result?: string | null;
   status?: string;
+  output_format?: "png" | "jpeg" | "webp" | null;
+  quality?: string | null;
+  size?: string | null;
 }>;
 
 export type OpenAIResponseLike = Readonly<{
-  id?: string;
+  model?: string;
   output?: readonly Readonly<{ type: string; [key: string]: unknown }>[];
+  usage?: Readonly<{
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    input_tokens_details?: Readonly<{
+      cached_tokens?: number;
+      cache_write_tokens?: number;
+    }>;
+    output_tokens_details?: Readonly<{ reasoning_tokens?: number }>;
+  }>;
 }>;
 
 export interface OpenAIResponsesClient {
@@ -37,13 +59,18 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
 
   constructor(
     private readonly configuration: OpenAIInteriorDesignConfiguration,
-    private readonly client: OpenAIResponsesClient
+    private readonly client: OpenAIResponsesClient,
+    private readonly clock: OpenAIInteriorDesignClock = {
+      monotonicNow: () => performance.now(),
+      now: () => new Date()
+    }
   ) {}
 
   async generateDesign(
     request: DesignRequest
   ): Promise<InteriorDesignProviderResult> {
     let response: OpenAIResponseLike;
+    const startedAt = this.clock.monotonicNow();
     try {
       response = await this.client.create({
         model: this.configuration.reasoningModel,
@@ -56,11 +83,17 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
                 type: "input_text",
                 text: buildOpenAIInteriorDesignPrompt(request)
               },
-              ...request.referenceViews.map((reference) => ({
-                type: "input_image",
-                image_url: reference.image.dataUrl,
-                detail: "high"
-              }))
+              ...orderedReferences(request).flatMap((reference) => [
+                {
+                  type: "input_text",
+                  text: describeOpenAIReferenceRole(reference.kind)
+                },
+                {
+                  type: "input_image",
+                  image_url: reference.image.dataUrl,
+                  detail: "high"
+                }
+              ])
             ]
           }
         ],
@@ -68,9 +101,13 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
           {
             type: "image_generation",
             model: this.configuration.imageModel,
-            action: "generate"
+            action: "generate",
+            quality: this.configuration.imageQuality,
+            size: this.configuration.imageSize,
+            output_format: this.configuration.imageFormat
           }
-        ]
+        ],
+        tool_choice: { type: "image_generation" }
       });
     } catch (error) {
       throw normalizeOpenAIError(error);
@@ -93,18 +130,82 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
       );
     }
 
+    const completedAt = this.clock.now();
+    const format = imageCall.output_format ?? this.configuration.imageFormat;
+    const dimensions = parseImageSize(
+      imageCall.size ?? this.configuration.imageSize
+    );
     return Object.freeze({
       artifact: Object.freeze({
         kind: "image",
-        uri: `data:image/png;base64,${imageCall.result}`,
-        mimeType: "image/png"
+        uri: `data:image/${format};base64,${imageCall.result}`,
+        mimeType: `image/${format}`,
+        ...dimensions
       }),
-      ...(response.id ? { requestId: response.id } : {}),
-      ...(response.id
-        ? { continuation: Object.freeze({ previousResponseId: response.id }) }
-        : {})
+      telemetry: Object.freeze({
+        orchestrationModel:
+          typeof response.model === "string"
+            ? response.model
+            : this.configuration.reasoningModel,
+        imageModel: this.configuration.imageModel,
+        durationMs: Math.max(0, Math.round(this.clock.monotonicNow() - startedAt)),
+        generatedAt: completedAt.toISOString(),
+        image: Object.freeze({
+          ...dimensions,
+          format,
+          quality: imageCall.quality ?? this.configuration.imageQuality
+        }),
+        ...normalizeUsage(response.usage)
+      })
     });
   }
+}
+
+function orderedReferences(request: DesignRequest) {
+  const priority = new Map([
+    ["room-interior-a", 0],
+    ["room-axonometric", 1],
+    ["room-interior-b", 2],
+    ["current-user-view", 3]
+  ]);
+  return [...request.referenceViews].sort(
+    (left, right) =>
+      (priority.get(left.kind) ?? Number.MAX_SAFE_INTEGER) -
+      (priority.get(right.kind) ?? Number.MAX_SAFE_INTEGER)
+  );
+}
+
+function parseImageSize(
+  size: string
+): { readonly width?: number; readonly height?: number } {
+  const match = /^(\d+)x(\d+)$/.exec(size);
+  if (!match) return {};
+  return { width: Number(match[1]), height: Number(match[2]) };
+}
+
+function normalizeUsage(
+  usage: OpenAIResponseLike["usage"]
+): { readonly usage: NonNullable<InteriorDesignProviderResult["telemetry"]>["usage"] } | Record<string, never> {
+  if (!usage) return {};
+  return {
+    usage: Object.freeze({
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      totalTokens: usage.total_tokens,
+      ...(usage.input_tokens_details?.cached_tokens !== undefined
+        ? { cachedInputTokens: usage.input_tokens_details.cached_tokens }
+        : {}),
+      ...(usage.input_tokens_details?.cache_write_tokens !== undefined
+        ? {
+            cacheWriteInputTokens:
+              usage.input_tokens_details.cache_write_tokens
+          }
+        : {}),
+      ...(usage.output_tokens_details?.reasoning_tokens !== undefined
+        ? { reasoningTokens: usage.output_tokens_details.reasoning_tokens }
+        : {})
+    })
+  };
 }
 
 function normalizeOpenAIError(error: unknown): DesignGenerationError {
@@ -116,6 +217,18 @@ function normalizeOpenAIError(error: unknown): DesignGenerationError {
   const status = typeof record.status === "number" ? record.status : undefined;
   const code = typeof record.code === "string" ? record.code : undefined;
   const name = typeof record.name === "string" ? record.name : undefined;
+
+  if (
+    status === 404 ||
+    code === "model_not_found" ||
+    code === "model_access_denied"
+  ) {
+    return new DesignGenerationError(
+      "model_access_failed",
+      "The configured AI model is unavailable to this server.",
+      { cause: error }
+    );
+  }
 
   if (status === 401 || status === 403) {
     return new DesignGenerationError(

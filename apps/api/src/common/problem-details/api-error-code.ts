@@ -27,6 +27,7 @@ export enum ApiErrorCode {
   AiProviderNotConfigured = "AI_PROVIDER_NOT_CONFIGURED",
   AiProviderUnavailable = "AI_PROVIDER_UNAVAILABLE",
   AiAuthenticationFailed = "AI_AUTHENTICATION_FAILED",
+  AiModelAccessFailed = "AI_MODEL_ACCESS_FAILED",
   AiRateLimited = "AI_RATE_LIMITED",
   AiGenerationTimeout = "AI_GENERATION_TIMEOUT",
   AiInvalidProviderResponse = "AI_INVALID_PROVIDER_RESPONSE",

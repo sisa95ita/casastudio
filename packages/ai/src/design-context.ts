@@ -64,6 +64,7 @@ export function deriveDesignContext(
       ...(room.description ? { description: room.description } : {}),
       elevation: roomElevation,
       floorElevation: level.elevation + roomElevation,
+      ...deriveArea(boundary),
       boundary: Object.freeze(boundary),
       ...deriveExtents(boundary)
     }),
@@ -172,6 +173,17 @@ export function deriveDesignContext(
       elevationAxis: "+Y"
     })
   });
+}
+
+function deriveArea(
+  boundary: readonly DesignBoundarySegment[]
+): { readonly area: number } | Record<string, never> {
+  if (boundary.length < 3) return {};
+  const twiceSignedArea = boundary.reduce(
+    (sum, edge) => sum + edge.start.x * edge.end.z - edge.end.x * edge.start.z,
+    0
+  );
+  return { area: Math.abs(twiceSignedArea) / 2 };
 }
 
 function deriveBoundary(

@@ -72,7 +72,15 @@ const environmentSchema = z.object({
   AI_PROVIDER: z.enum(["openai"]).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_REASONING_MODEL: z.string().min(1).default("gpt-5.6-sol"),
-  OPENAI_IMAGE_MODEL: z.string().min(1).default("gpt-image-2.5-sunburst"),
+  OPENAI_IMAGE_MODEL: z.string().min(1).default("gpt-image-2.5-flare"),
+  OPENAI_IMAGE_QUALITY: z
+    .enum(["low", "medium", "high", "xhigh", "max", "auto"])
+    .default("medium"),
+  OPENAI_IMAGE_SIZE: z
+    .string()
+    .regex(/^\d+x\d+$/)
+    .default("1536x1024"),
+  OPENAI_IMAGE_FORMAT: z.enum(["png", "jpeg", "webp"]).default("png"),
   SWAGGER_ENABLED: booleanFromEnvironment.optional(),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
@@ -108,6 +116,15 @@ export type AppConfiguration = {
       readonly apiKey?: string;
       readonly reasoningModel: string;
       readonly imageModel: string;
+      readonly imageQuality:
+        | "low"
+        | "medium"
+        | "high"
+        | "xhigh"
+        | "max"
+        | "auto";
+      readonly imageSize: string;
+      readonly imageFormat: "png" | "jpeg" | "webp";
     };
   };
   readonly swaggerEnabled: boolean;
@@ -153,7 +170,10 @@ function mapEnvironmentToConfiguration(
           ? { apiKey: environment.OPENAI_API_KEY }
           : {}),
         reasoningModel: environment.OPENAI_REASONING_MODEL,
-        imageModel: environment.OPENAI_IMAGE_MODEL
+        imageModel: environment.OPENAI_IMAGE_MODEL,
+        imageQuality: environment.OPENAI_IMAGE_QUALITY,
+        imageSize: environment.OPENAI_IMAGE_SIZE,
+        imageFormat: environment.OPENAI_IMAGE_FORMAT
       }
     },
     swaggerEnabled:

@@ -2,6 +2,7 @@ export type DesignFailureCode =
   | "provider_not_configured"
   | "provider_unavailable"
   | "authentication_failed"
+  | "model_access_failed"
   | "rate_limited"
   | "generation_timeout"
   | "invalid_provider_response"

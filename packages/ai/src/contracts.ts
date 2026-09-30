@@ -83,6 +83,7 @@ export type DesignContext = Readonly<{
     description?: string;
     elevation: number;
     floorElevation: number;
+    area?: number;
     boundary: readonly DesignBoundarySegment[];
     extents?: Readonly<{
       minX: number;
@@ -152,6 +153,37 @@ export type DesignArtifact = Readonly<{
   height?: number;
 }>;
 
+/** Provider-neutral usage reported by one generation request. */
+export type DesignGenerationUsage = Readonly<{
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens?: number;
+  cacheWriteInputTokens?: number;
+  reasoningTokens?: number;
+}>;
+
+/** Safe, normalized generation metadata used to compare development profiles. */
+export type DesignGenerationTelemetry = Readonly<{
+  provider: string;
+  orchestrationModel?: string;
+  imageModel?: string;
+  durationMs: number;
+  generatedAt: string;
+  image: Readonly<{
+    width?: number;
+    height?: number;
+    format: "png" | "jpeg" | "webp";
+    quality?: string;
+  }>;
+  usage?: DesignGenerationUsage;
+  estimatedCost?: Readonly<{
+    amount: number;
+    currency: "USD";
+    basis: string;
+  }>;
+}>;
+
 export type DesignProposal = Readonly<{
   id: string;
   target: DesignTarget;
@@ -164,8 +196,8 @@ export type DesignProposal = Readonly<{
   }>;
   providerMetadata?: Readonly<{
     provider: string;
-    requestId?: string;
     continuation?: Readonly<Record<string, string>>;
   }>;
+  telemetry?: DesignGenerationTelemetry;
   structuredSuggestions?: readonly unknown[];
 }>;

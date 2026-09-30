@@ -37,7 +37,10 @@ import { UnconfiguredInteriorDesignProvider } from "./unconfigured-interior-desi
         return new OpenAIInteriorDesignProvider(
           {
             reasoningModel: configuration.openai.reasoningModel,
-            imageModel: configuration.openai.imageModel
+            imageModel: configuration.openai.imageModel,
+            imageQuality: configuration.openai.imageQuality,
+            imageSize: configuration.openai.imageSize,
+            imageFormat: configuration.openai.imageFormat
           },
           {
             create: async (input) =>

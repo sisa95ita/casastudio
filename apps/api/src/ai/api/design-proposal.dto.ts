@@ -124,7 +124,7 @@ export class GenerateRoomDesignRequestDto {
   @MaxLength(2_000)
   instructions!: string;
 
-  @ArrayMinSize(1)
+  @ArrayMinSize(3)
   @ArrayMaxSize(4)
   @ValidateNested({ each: true })
   @Type(() => DesignReferenceViewDto)

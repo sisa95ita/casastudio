@@ -61,6 +61,50 @@ const input = {
         up: { x: 0, y: 1, z: 0 },
         verticalFovDegrees: 45
       }
+    },
+    {
+      kind: "room-interior-a" as const,
+      target: {
+        kind: "room" as const,
+        projectId: "design-project",
+        levelId: "ground",
+        roomId: "living"
+      },
+      image: {
+        dataUrl: "data:image/jpeg;base64,aW50LWE=",
+        mimeType: "image/jpeg" as const,
+        width: 960,
+        height: 720
+      },
+      camera: {
+        projection: "perspective" as const,
+        position: { x: 2, y: 2, z: 3 },
+        direction: { x: -1, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
+        verticalFovDegrees: 45
+      }
+    },
+    {
+      kind: "room-interior-b" as const,
+      target: {
+        kind: "room" as const,
+        projectId: "design-project",
+        levelId: "ground",
+        roomId: "living"
+      },
+      image: {
+        dataUrl: "data:image/jpeg;base64,aW50LWI=",
+        mimeType: "image/jpeg" as const,
+        width: 960,
+        height: 720
+      },
+      camera: {
+        projection: "perspective" as const,
+        position: { x: -2, y: 2, z: -3 },
+        direction: { x: 1, y: 0, z: 1 },
+        up: { x: 0, y: 1, z: 0 },
+        verticalFovDegrees: 45
+      }
     }
   ]
 };

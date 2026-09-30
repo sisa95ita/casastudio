@@ -33,7 +33,7 @@ type AiRoomDesignPanelProps = {
   readonly capture?: DesignReferenceViewCapture;
 };
 
-/** Minimal AI-A spike UI for a selected canonical Room. */
+/** Transient AI interior-design UI for a selected canonical Room. */
 export function AiRoomDesignPanel({
   projectId,
   levelId,
@@ -253,6 +253,59 @@ export function AiRoomDesignPanel({
                 </Typography>
               </Box>
             </ButtonBase>
+            {proposal.telemetry ? (
+              <Box
+                aria-label={t("threeD.ai.telemetry.title")}
+                sx={{
+                  bgcolor: "action.hover",
+                  borderRadius: 1,
+                  mt: 0.75,
+                  px: 1,
+                  py: 0.75
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {t("threeD.ai.telemetry.title")}
+                </Typography>
+                <Typography variant="caption" component="div">
+                  {t("threeD.ai.telemetry.models", {
+                    provider: proposal.telemetry.provider,
+                    model: proposal.telemetry.orchestrationModel ?? "—",
+                    imageModel: proposal.telemetry.imageModel ?? "—"
+                  })}
+                </Typography>
+                <Typography variant="caption" component="div">
+                  {t("threeD.ai.telemetry.output", {
+                    duration: formatDuration(proposal.telemetry.durationMs),
+                    dimensions:
+                      proposal.telemetry.image.width &&
+                      proposal.telemetry.image.height
+                        ? `${proposal.telemetry.image.width}×${proposal.telemetry.image.height}`
+                        : "—",
+                    format: proposal.telemetry.image.format.toUpperCase(),
+                    quality: proposal.telemetry.image.quality ?? "—"
+                  })}
+                </Typography>
+                {proposal.telemetry.usage ? (
+                  <Typography variant="caption" component="div">
+                    {t("threeD.ai.telemetry.usage", {
+                      input: proposal.telemetry.usage.inputTokens,
+                      output: proposal.telemetry.usage.outputTokens,
+                      cached: proposal.telemetry.usage.cachedInputTokens ?? 0,
+                      total: proposal.telemetry.usage.totalTokens
+                    })}
+                  </Typography>
+                ) : null}
+                {proposal.telemetry.estimatedCost ? (
+                  <Typography variant="caption" component="div">
+                    {t("threeD.ai.telemetry.estimatedCost", {
+                      amount: proposal.telemetry.estimatedCost.amount.toFixed(4),
+                      currency: proposal.telemetry.estimatedCost.currency
+                    })}
+                  </Typography>
+                ) : null}
+              </Box>
+            ) : null}
           </Box>
         ) : null}
       </Stack>
@@ -339,4 +392,10 @@ export function AiRoomDesignPanel({
       </Dialog>
     </Paper>
   );
+}
+
+function formatDuration(durationMs: number): string {
+  return durationMs < 1_000
+    ? `${durationMs} ms`
+    : `${(durationMs / 1_000).toFixed(1)} s`;
 }

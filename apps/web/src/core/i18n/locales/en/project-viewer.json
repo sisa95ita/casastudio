@@ -76,6 +76,13 @@
       "openPreview": "Open full-size preview",
       "previewTitle": "Design proposal preview",
       "closePreview": "Close preview",
+      "telemetry": {
+        "title": "Generation details",
+        "models": "Provider: {{provider}} · Model: {{model}} · Image model: {{imageModel}}",
+        "output": "Duration: {{duration}} · Output: {{dimensions}} {{format}} · Quality: {{quality}}",
+        "usage": "Usage: {{input}} input · {{output}} output · {{cached}} cached · {{total}} total tokens",
+        "estimatedCost": "Estimated API cost: {{currency}} {{amount}}"
+      },
       "failure": "The design could not be generated. Try again."
     },
     "empty": {

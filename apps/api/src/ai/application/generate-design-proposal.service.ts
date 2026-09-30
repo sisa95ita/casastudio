@@ -108,6 +108,11 @@ function toApiProblem(error: DesignGenerationError): ApiProblemError {
       ApiErrorCode.AiAuthenticationFailed,
       "AI provider authentication failed"
     ],
+    model_access_failed: [
+      HttpStatus.SERVICE_UNAVAILABLE,
+      ApiErrorCode.AiModelAccessFailed,
+      "AI model unavailable"
+    ],
     rate_limited: [
       HttpStatus.TOO_MANY_REQUESTS,
       ApiErrorCode.AiRateLimited,

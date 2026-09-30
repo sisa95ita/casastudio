@@ -77,7 +77,10 @@ describe("API configuration", () => {
       ai: {
         openai: {
           reasoningModel: "gpt-5.6-sol",
-          imageModel: "gpt-image-2.5-sunburst"
+          imageModel: "gpt-image-2.5-flare",
+          imageQuality: "medium",
+          imageSize: "1536x1024",
+          imageFormat: "png"
         }
       },
       swaggerEnabled: true
@@ -111,14 +114,20 @@ describe("API configuration", () => {
         AI_PROVIDER: "openai",
         OPENAI_API_KEY: "server-secret",
         OPENAI_REASONING_MODEL: "gpt-5.6-sol",
-        OPENAI_IMAGE_MODEL: "gpt-image-2.5-sunburst"
+        OPENAI_IMAGE_MODEL: "gpt-image-2.5-sunburst",
+        OPENAI_IMAGE_QUALITY: "high",
+        OPENAI_IMAGE_SIZE: "1024x1536",
+        OPENAI_IMAGE_FORMAT: "webp"
       }).ai
     ).toEqual({
       provider: "openai",
       openai: {
         apiKey: "server-secret",
         reasoningModel: "gpt-5.6-sol",
-        imageModel: "gpt-image-2.5-sunburst"
+        imageModel: "gpt-image-2.5-sunburst",
+        imageQuality: "high",
+        imageSize: "1024x1536",
+        imageFormat: "webp"
       }
     });
   });

@@ -137,6 +137,7 @@ describe("deriveDesignContext", () => {
     expect(context.room).toMatchObject({
       id: "living",
       floorElevation: 0,
+      area: 120000,
       extents: { width: 400, depth: 300 }
     });
     expect(context.walls).toHaveLength(1);

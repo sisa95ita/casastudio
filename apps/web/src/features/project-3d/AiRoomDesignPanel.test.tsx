@@ -35,7 +35,26 @@ const proposal = {
     mimeType: "image/png" as const,
     uri: "data:image/png;base64,cHJvcG9zYWw="
   },
-  createdAt: "2026-09-28T12:00:00.000Z"
+  createdAt: "2026-09-28T12:00:00.000Z",
+  telemetry: {
+    provider: "openai",
+    orchestrationModel: "gpt-5.6-sol",
+    imageModel: "gpt-image-2.5-flare",
+    durationMs: 1234,
+    generatedAt: "2026-09-28T12:00:00.000Z",
+    image: {
+      width: 1536,
+      height: 1024,
+      format: "png" as const,
+      quality: "medium"
+    },
+    usage: {
+      inputTokens: 700,
+      outputTokens: 1600,
+      cachedInputTokens: 100,
+      totalTokens: 2300
+    }
+  }
 } satisfies DesignProposal;
 
 const instructions = "Warm minimal living room";
@@ -93,6 +112,19 @@ afterEach(() => {
 });
 
 describe("AiRoomDesignPanel proposal preview", () => {
+  it("shows normalized generation telemetry without provider internals", async () => {
+    await renderGeneratedProposal();
+
+    const telemetry = screen.getByLabelText("Generation details");
+    expect(telemetry.textContent).toContain("gpt-5.6-sol");
+    expect(telemetry.textContent).toContain("gpt-image-2.5-flare");
+    expect(telemetry.textContent).toContain("1.2 s");
+    expect(telemetry.textContent).toContain("1536×1024 PNG");
+    expect(telemetry.textContent).toContain("2300 total tokens");
+    expect(telemetry.textContent).not.toContain("requestId");
+    expect(telemetry.textContent).not.toContain("response");
+  });
+
   it("opens and closes the automatic reference preview accessibly without generating", async () => {
     render(
       <AiRoomDesignPanel
