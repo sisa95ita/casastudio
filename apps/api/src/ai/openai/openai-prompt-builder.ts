@@ -5,19 +5,23 @@ import type {
 } from "@casastudio/ai";
 
 const referenceRoles: Readonly<
-  Record<DesignReferenceViewKind, { readonly title: string; readonly role: string }>
+  Record<
+    DesignReferenceViewKind,
+    { readonly title: string; readonly role: string }
+  >
 > = Object.freeze({
   "room-interior-a": {
-    title: "PRIMARY OUTPUT VIEW — INTERIOR PERSPECTIVE A",
-    role: "Use this as the primary photographic composition and viewpoint for the generated interior render."
+    title: "REFERENCE 1 — INTERIOR A — BASE IMAGE TO EDIT",
+    role: "EDIT THE FIRST IMAGE. Its composition and camera are authoritative for the final image. Preserve its layout, proportions, framing and perspective; change only interior-design content."
   },
   "room-axonometric": {
-    title: "STRUCTURAL/LAYOUT REFERENCE — ROOM AXONOMETRIC",
-    role: "Use this to preserve the room footprint, wall and partition relationships, opening placement, spatial proportions, and existing movable furniture context. Do not reproduce its dollhouse/axonometric viewpoint."
+    title: "REFERENCE 2 — AXONOMETRIC — STRUCTURAL / LAYOUT EVIDENCE ONLY",
+    role: "Use this only to resolve ambiguity and verify Room footprint, partitions, Walls and Openings. Do NOT copy its camera or viewpoint into the final image or replace the first image's composition."
   },
   "room-interior-b": {
-    title: "SUPPORTING GEOMETRY — INTERIOR PERSPECTIVE B",
-    role: "Use this complementary view to preserve geometry, openings, and wall relationships hidden from the primary view."
+    title:
+      "REFERENCE 3 — INTERIOR B — COMPLEMENTARY ARCHITECTURAL EVIDENCE ONLY",
+    role: "Use this only to resolve ambiguity about architecture not visible in Interior A. Do NOT switch the final viewpoint to this image or replace the first image's composition."
   },
   "current-user-view": {
     title: "OPTIONAL SUPPORTING VIEW — CURRENT USER VIEW",
@@ -28,15 +32,16 @@ const referenceRoles: Readonly<
 /** Stable architectural contract owned by the OpenAI adapter. */
 export function buildOpenAIInteriorDesignInstructions(): string {
   return [
-    "You are CasaStudio's professional interior-design renderer.",
-    "The CasaStudio architectural geometry is authoritative and immutable. All supplied reference images describe the SAME selected Room from different viewpoints and have explicitly labeled roles.",
-    "This task is INTERIOR DESIGN OF AN EXISTING ARCHITECTURE, not ARCHITECTURAL REDESIGN.",
-    "Preserve the Room shape, footprint, proportions, floor and ceiling elevations, every visible or declared Wall, relevant internal/partition Walls, Doors, Windows, Wall Openings, Stairs, and their positions and dimensions.",
-    "Do not add, remove, move, resize, or close structural Walls, Doors, Windows, Wall Openings, or Stairs. Do not invent architectural openings or redesign the architecture.",
+    "EDIT THE FIRST IMAGE into one photorealistic finished interior-design proposal.",
+    "The first image, Interior A, is the BASE IMAGE TO EDIT. Do not recreate the Room from scratch.",
+    "CasaStudio ProjectSchema is the architectural source of truth. Architecture is immutable; DesignContext is supporting semantic evidence. All supplied reference images describe the SAME selected Room from different viewpoints and have explicitly labeled roles.",
+    "Preserve from the first image the exact camera position as closely as possible, camera direction, framing, perspective, Room silhouette, footprint, architectural proportions, visible floor boundaries, and ceiling/floor relationship and elevations.",
+    "Preserve Wall positions, Wall intersections, internal Walls including relevant non-boundary/partition Walls, Doors, Windows, Wall Openings, Stairs, and their positions and dimensions.",
+    "Do not add, remove, move, resize, or close architectural elements. Do not invent openings. Keep the first image's camera and architecture fixed.",
     "Existing Furniture is movable interior content, not architecture. Unless the user explicitly asks to preserve it, Furniture may be retained, replaced, restyled, or visually reorganized.",
-    "The user's design direction may control Furniture, materials, finishes, decoration, lighting, colors, textiles, and movable objects, but it never overrides the architectural constraints above.",
-    "Create one photorealistic, real-world interior-design render. Match the labeled PRIMARY OUTPUT VIEW rather than producing an axonometric, dollhouse, floor-plan, cutaway, or whole-building image.",
-    "Use every supplied reference intentionally and reconcile them with the canonical semantic Room context."
+    "Change ONLY interior-design content: Furniture and its appearance, movable objects, materials, finishes, colors, textiles, lighting fixtures, decorative objects, and styling. The user's design direction controls these choices only and never overrides the architectural editing contract.",
+    "The axonometric and Interior B images are supporting architectural evidence only to resolve ambiguity. Never use their cameras or viewpoints for the final image; never replace the first image's composition.",
+    "Use all three references in ONE image edit. Return ONE final image, with no variants or alternative compositions."
   ].join("\n");
 }
 
@@ -56,7 +61,7 @@ export function buildOpenAIInteriorDesignPrompt(
       ? `Movable/design elements to preserve: ${request.elementsToPreserve.join("; ")}`
       : "Movable/design elements to preserve: none specified.",
     "REFERENCE IMAGE GUIDE",
-    "Each following image is preceded by its semantic role. Use Interior Perspective A as the output composition; use the other views as architectural evidence."
+    "Each following image is preceded by its semantic role. EDIT THE FIRST IMAGE (Interior A); the axonometric and Interior B are supporting evidence only, never alternative compositions."
   ].join("\n\n");
 }
 

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -59,7 +60,7 @@ const proposal = {
 
 const instructions = "Warm minimal living room";
 
-async function renderGeneratedProposal() {
+async function renderReadyPanel() {
   render(
     <AiRoomDesignPanel
       projectId="project-1"
@@ -97,8 +98,11 @@ async function renderGeneratedProposal() {
   fireEvent.change(screen.getByRole("textbox", { name: "Design direction" }), {
     target: { value: instructions }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Generate design" }));
+}
 
+async function renderGeneratedProposal() {
+  await renderReadyPanel();
+  fireEvent.click(screen.getByRole("button", { name: "Generate design" }));
   return screen.findByRole("button", { name: "Open full-size preview" });
 }
 
@@ -112,6 +116,56 @@ afterEach(() => {
 });
 
 describe("AiRoomDesignPanel proposal preview", () => {
+  it("blocks duplicate clicks before rendering and throughout a pending request", async () => {
+    let resolve!: (value: DesignProposal) => void;
+    apiMocks.generateRoomDesign.mockReturnValue(
+      new Promise<DesignProposal>((done) => {
+        resolve = done;
+      })
+    );
+    await renderReadyPanel();
+    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
+    const button = screen.getByRole("button", { name: "Generate design" });
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(button);
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Design direction" }),
+      {
+        target: { value: "New direction while pending" }
+      }
+    );
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+    await act(async () => resolve(proposal));
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Generate design"
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(false);
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases pending state after failure and waits for an explicit new click", async () => {
+    apiMocks.generateRoomDesign.mockRejectedValueOnce(
+      new Error("mock failure")
+    );
+    await renderReadyPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generate design" }));
+    await screen.findByRole("alert");
+    const button = screen.getByRole("button", { name: "Generate design" });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+    fireEvent.click(button);
+    await screen.findByRole("button", { name: "Open full-size preview" });
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(2);
+  });
+
   it("shows normalized generation telemetry without provider internals", async () => {
     await renderGeneratedProposal();
 

@@ -88,19 +88,25 @@ AI-A returns one successful, transient `DesignProposal` containing a stable prop
 
 Generated image bytes are normalized into a standard image data URL before they reach React. This is pragmatic for one transient spike result. Durable galleries should replace it with object storage plus an application-owned artifact URL and metadata record.
 
-## AI-B2 generation-quality strategy
+## AI-B2.2 primary-reference editing
 
-AI-B2 assigns a deterministic role to every automatic reference rather than submitting anonymous images:
+Manual AI-B2 generations produced better photorealism but still reconstructed/reinterpreted the Room. That path used `action: "generate"` with Interior A as composition guidance, so the references could be treated as inspiration for a new scene. AI-B2.2 instead makes deterministic Interior A the base image of an explicit generative edit. Architectural improvement remains unverified until the owners perform paid manual acceptance.
 
-1. `room-interior-a` is sent first and labeled **PRIMARY OUTPUT VIEW**. The result should use its photographic interior composition.
-2. `room-axonometric` is labeled **STRUCTURAL/LAYOUT REFERENCE**. It constrains footprint, Walls, partitions, Openings, proportions, and movable Furniture context, but must not become the output viewpoint.
-3. `room-interior-b` is labeled **SUPPORTING GEOMETRY**. It supplies evidence hidden from perspective A.
+The OpenAI adapter owns this ordering; core contracts remain provider-neutral:
 
-The adapter interleaves each label immediately before its image. Its stable architectural instruction states that every reference describes the same Room; `ProjectSchema` geometry is authoritative; and Walls, relevant internal/partition Walls, Doors, Windows, Wall Openings, Stairs, elevations, and proportions must not be added, removed, moved, resized, or closed. Furniture and visual design elements remain movable unless an explicit preservation instruction says otherwise. The system/provider architectural contract, concise semantic context, and user design direction are separate prompt sections, so style direction does not silently override architecture.
+1. **REFERENCE 1 — Interior A — BASE IMAGE TO EDIT:** first image input; authoritative camera, framing, perspective and final composition.
+2. **REFERENCE 2 — Axonometric — STRUCTURAL / LAYOUT EVIDENCE ONLY:** verify footprint, partitions, Walls and Openings; resolve ambiguity without copying its camera/viewpoint.
+3. **REFERENCE 3 — Interior B — COMPLEMENTARY ARCHITECTURAL EVIDENCE ONLY:** clarify architecture hidden from A without switching viewpoint or replacing A's composition.
 
-The semantic translator does not serialize arbitrary Project JSON. It emits only the Room name/type/description, approximate extents and area, Level and floor elevation, counts and concise dimensions for relevant Walls and Openings, relevant Stairs, existing movable Furniture, and canonical units. IDs, renderer state, unrelated Levels, and implementation details such as boundary traversal direction are excluded.
+Labels are interleaved immediately before the corresponding image. All three describe the same canonical Room and participate in one request. Missing, duplicate, empty or mismatched required references fail through `missing_reference` before the adapter submits any paid request. There is no substitution of a supporting reference as the base.
 
-This strategy strongly constrains generation, but image generation is not guaranteed to reconstruct architecture pixel-perfectly. The generated pixels remain a transient visual proposal. `ProjectSchema` remains authoritative.
+The deterministic provider instruction starts with **EDIT THE FIRST IMAGE** and explicitly forbids recreating the Room from scratch. It preserves camera position as closely as possible, camera direction, framing, perspective, Room silhouette/footprint, Wall positions/intersections, relevant internal/non-boundary Walls, Doors, Windows, Wall Openings, Stairs, visible floor boundaries, architectural proportions and ceiling/floor relationship/elevations. Only Furniture/appearance, movable objects, materials, finishes, colors, textiles, lighting fixtures, decorative objects and styling may change. Architecture is immutable.
+
+CasaStudio owns this contract automatically. Users can write normal design directions such as “Create a warm contemporary guest bedroom with a desk.” User direction and non-architectural constraints remain separate from the architectural instruction and concise supporting DesignContext. The translator emits Room facts, relevant Wall/Opening/Stair dimensions, movable Furniture and units; it does not dump arbitrary Project JSON, IDs or unrelated Rooms/Levels.
+
+The current [OpenAI image prompting guide](https://developers.openai.com/api/docs/guides/image-prompting) recommends naming the edited image, specifying what changes and what stays fixed, using image 1 as the scene for multi-reference edits, and preserving layout/proportions/perspective when turning a drawing into a realistic image. This is a prompt-and-edit strategy, not a CAD constraint system. No mask is introduced; the documented first-image mask rule does not imply that an unmasked edit mechanically locks every pixel. AI-B1 cameras, reference resolution, Room isolation, Wall relevance and Level isolation are unchanged.
+
+Generative editing cannot guarantee pixel-identical geometry, CAD-level dimensional accuracy, mathematically exact projection preservation, or perfect retention of every architectural detail. The goal is to reduce drift; automated tests cannot establish that it does. `ProjectSchema` remains the source of truth. Generated pixels are transient proposals only: no Room-boundary changes, canonical Furniture creation from pixels, architectural edits, or persistence of generated interpretation.
 
 ## OpenAI adapter
 
@@ -108,14 +114,31 @@ The first adapter uses the official `openai` JavaScript SDK and `client.response
 
 - a configurable top-level reasoning/orchestration model;
 - the separated architectural instruction, concise Room context, user direction, role labels, and all three reference images as Responses input;
-- the configurable `image_generation` tool model with forced `action: "generate"`, explicit quality, size, and format;
+- the configurable `image_generation` tool model with forced `action: "edit"`, explicit quality, size, format, and `partial_images: 0`;
+- `tool_choice: { type: "image_generation" }`, `max_tool_calls: 1`, and `parallel_tool_calls: false` to request one final image edit;
 - the generated `image_generation_call.result`, normalized from base64 to a data URL with the configured/reported format.
 
-The development profile is `gpt-5.6-sol` orchestration plus `gpt-image-2.5-flare`, `medium`, `1536x1024`, and PNG. All values are server-side environment configuration; switching to `gpt-image-2.5-sunburst` or another quality requires no application-code change. The official tool documentation supports explicit model, quality, size, format, forced tool choice, and multiple image inputs: [Responses image-generation tool](https://developers.openai.com/api/docs/guides/tools-image-generation). The requested Flare quality settings and token rates are documented on the [GPT-Image-2.5 Flare model page](https://developers.openai.com/api/docs/models/gpt-image-2.5-flare).
+The unchanged development default is `gpt-5.6-sol` orchestration plus `gpt-image-2.5-flare`, `medium`, `1536x1024`, and PNG. All values are server-side environment configuration; switching to `gpt-image-2.5-sunburst` or another quality requires no application-code change. The official tool documentation supports explicit model, quality, size, format, forced tool choice, and multiple image inputs: [Responses image-generation tool](https://developers.openai.com/api/docs/guides/tools-image-generation). [Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst) is the preferred precision-editing profile for architecture-sensitive acceptance; set `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` deliberately on the server. [Flare](https://developers.openai.com/api/docs/models/gpt-image-2.5-flare) remains available for faster/cheaper development iterations and future drafts. Quality is never raised automatically to `xhigh`/`max`.
+
+Official capabilities were checked on **2026-10-02**. The [tool guide](https://developers.openai.com/api/docs/guides/tools-image-generation) documents Sunburst/Flare and earlier GPT Image 2, 1.5, 1 and 1-mini tool models, data-URL/file-ID image inputs, forced tool choice and `action=edit`. Edit mode without an image in context fails; CasaStudio therefore validates the base/reference set locally and never falls back to generate. The image model belongs in the tool, while the orchestration model stays at the top level. The tool guide's supported-mainline list omits some newer models, but the [GPT-5.6 Sol model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol) explicitly lists image generation as supported. Server account access/organization verification can still restrict models; those failures are returned as normalized errors, not worked around automatically.
+
+The [Responses reference](https://developers.openai.com/api/reference/cli/resources/responses/methods/create) defines `max_tool_calls` as the cap across built-in tools. Only image generation is enabled here. No `n`, variants, partial-image streaming, analysis generation, per-reference call, previous-response iteration, speculative/background generation or automatic regeneration is requested. Unexpected zero/multiple image calls or an incomplete result fail without resubmission.
+
+### Budget, concurrency, rate limits and retries
+
+**One explicit Generate design action = at most one intended paid image-generation request.** All three references are included in a single `responses.create`. The frontend retains its disabled pending button and now locks synchronously with a ref before the first await, blocking duplicate events even before React renders. The lock is released on success/failure. Reference capture/refresh only produces local evidence; it never triggers generation. The browser API client performs one POST without automatic retry. The backend performs one provider invocation per valid submission; this narrow UI guard is not a distributed deduplication/job system and does not coordinate independent tabs or separately submitted API requests.
+
+The installed official `openai` SDK **7.23.0** defaults to two retries and retries eligible transport failures/timeouts and HTTP 408/409/429/5xx (subject to provider retry headers). Previously this AI client explicitly allowed one retry. It now sets **`maxRetries: 0`**, retaining the existing 180-second timeout. A lost response/timeout can hide a completed paid generation; submitting a fresh request could incur another charge. No endpoint-specific guarantee was found that justifies relying on retry deduplication, so CasaStudio makes no automatic retry. A human decides whether to submit another explicit request after inspecting the outcome/budget.
+
+[OpenAI rate limits](https://developers.openai.com/api/docs/guides/rate-limits) and [error semantics](https://developers.openai.com/api/docs/guides/error-codes) depend on account/model/tier and can change. CasaStudio hard-codes no RPM/IPM/TPM quotas. HTTP 429 remains `rate_limited` / `AI_RATE_LIMITED` and reaches the UI as HTTP 429 Problem Details. The adapter reads SDK error `headers` for `retry-after-ms` or `Retry-After` seconds/HTTP-date and exposes only a validated rounded delay in the sanitized message. Invalid/absent delays use “Try again later”; Documented credit/spend/usage-limit codes and `insufficient_quota` identify exhausted allowance instead of suggesting that a timed retry restores access. Raw headers/messages/payloads are never sent to React or logged. No countdown, queue, automatic wait/resubmit or aggressive retry is added. Model access, authentication, timeout and availability errors retain normalized handling.
+
+There is no Sunburst→Flare, medium→high, edit→generate or other automatic provider/model/quality/action fallback. Configuration problems and ambiguous results stop at a normalized error so the user can choose the next action.
 
 ### Telemetry and estimated cost policy
 
-The adapter measures elapsed duration around `responses.create` with an injectable monotonic clock and records completion time separately. It normalizes Responses usage into input, output, total, cached-input, cache-write, and reasoning token counts when present. Missing fields stay absent; no value is inferred. The panel shows this metadata below the proposal as secondary development information.
+Telemetry additionally includes optional provider-neutral `generationMode: "edit"`; the existing service carries it into the proposal. The adapter measures elapsed duration around `responses.create` with an injectable monotonic clock and records completion time separately. It normalizes Responses usage into input, output, total, cached-input, cache-write, and reasoning token counts when present. Missing fields stay absent; no value is inferred. The panel shows this metadata below the proposal as secondary development information.
+
+The Responses image call exposes `revised_prompt` cleanly according to the tool guide. AI-B2.2 deliberately does not retain or log it: free-form user-derived text adds diagnostic sanitization/retention concerns, while it is unnecessary for this implementation. It is never canonical DesignContext or normal UI content.
 
 AI-B2 intentionally does **not** calculate an estimated API cost. The current Responses usage is aggregate and does not provide a defensible split between orchestration-model tokens and the image tool's text-input, image-input, and image-output tokens. Official documentation also notes that cached image-generation token counts are not included in Responses output. Applying the distinct rates to one aggregate would fabricate precision. Use normalized usage for comparison and OpenAI Usage/Billing for authoritative cost. Revisit an adapter-local estimator only when the response exposes the necessary modality/model breakdown; pricing constants must then remain centralized and dated. See [image-generation cost and latency](https://developers.openai.com/api/docs/guides/image-generation#cost-and-latency) and [API pricing](https://platform.openai.com/pricing).
 
@@ -143,19 +166,20 @@ AI-A adds no database table or migration. Requests, sessions, proposals, uploade
 
 AI-B should introduce an application-owned artifact repository and object storage if a durable proposal gallery is required. Reference images and generated images should then have retention, ownership, authorization, deletion, content-type, size, and lifecycle policies outside `ProjectSchema`.
 
-## AI-B2 manual generation acceptance
+## AI-B2.2 manual acceptance — owners only
 
-Automated tests use fakes/mocks and never make paid calls. After implementation, an authorized human may use a small paid-call budget:
+**Permanent execution rule:** automated/development agents must not call OpenAI or any paid provider, consume credits, press Generate design for verification, or perform manual visual acceptance without explicit separate authorization. This phase authorizes only documentation inspection and deterministic/mocked lint/test/build checks.
 
-1. Configure the server-side OpenAI variables above and start CasaStudio. Confirm the UI displays all three Room references before each call.
-2. Record the exact design direction and configured orchestration model, image model, quality, size, and format.
-3. **Test A — simple rectangular Room:** make one generation. Evaluate selected-Room identity, proportions, Walls, Doors/Windows, style compliance, and whether the output follows Interior Perspective A rather than the axonometric view.
-4. **Test B — Room with a non-boundary/internal Wall:** make one generation. Evaluate preservation of that Wall and its hosted Opening, where applicable.
-5. **Test C — concave/complex or Stair-related Room:** make one generation only if A/B justify continuing. Evaluate difficult geometry and Stair fidelity.
-6. For every call, record prompt, configuration, displayed models, duration, normalized usage, OpenAI Usage/Billing cost, and architectural-fidelity observations. The UI shows no estimated cost until the API can support one defensibly.
-7. A human decides quality/fidelity acceptance. Automated test success is not visual acceptance.
+Automated success proves request construction and safety behavior, not improved architectural fidelity. Owners perform any paid acceptance themselves:
 
-Stop after the smallest useful number of calls. Failures must leave canonical Project state unchanged.
+1. Choose a small budget and configure the server explicitly: `AI_PROVIDER=openai`, a server-only key, `OPENAI_REASONING_MODEL=gpt-5.6-sol`, `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` for precision acceptance, `OPENAI_IMAGE_QUALITY=medium`, `OPENAI_IMAGE_SIZE=1536x1024`, `OPENAI_IMAGE_FORMAT=png`. Restart the API after configuration changes. Flare remains an explicit alternative; never escalate quality implicitly.
+2. Start CasaStudio, select a target Room in 3D and wait for all three automatic references. Open/inspect Interior A, axonometric and Interior B. Record/screenshot Interior A as the base composition and canonical architecture before generating. Do not alter the accepted reference cameras/resolution.
+3. Record the exact ordinary design direction and model/quality/size/format. For example: “Create a warm contemporary guest bedroom with a desk.” Click **Generate design once**. Confirm it stays disabled while pending and no extra request appears from repeated clicks/reference changes.
+4. **Test A — rectangular Room:** use one call and compare the final image directly with Interior A: camera/direction, framing, perspective, silhouette, visible floor, wall intersections, Doors/Windows/Openings, proportions, ceiling/floor relationship and requested styling. Supporting views should clarify architecture without becoming the final viewpoint.
+5. **Test B — internal/non-boundary Wall:** proceed only if A and budget justify it; use one call and check that Wall plus any hosted Opening, along with A's camera and boundary geometry.
+6. **Test C — concave/complex or Stair-related Room:** proceed only if earlier results justify it; use one call and check difficult geometry/Stairs without changing viewpoint.
+7. For each call record configured/reported models, generation mode from normalized response telemetry, output settings, timestamp, duration, usage, actual OpenAI Usage/Billing cost and drift observations against Interior A/ProjectSchema. Confirm canonical Project data is unchanged. Compare with retained AI-B2 outputs if available without generating a new baseline automatically.
+8. On HTTP 429, honor the sanitized delay and inspect account limits/allowance. On timeout/ambiguous failure, inspect provider outcome/billing before choosing any new explicit call. There is no automatic retry or fallback. Stop after the smallest useful number of calls; the owners alone decide visual acceptance and whether architectural drift improved.
 
 ## Evolution
 

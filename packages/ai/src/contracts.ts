@@ -168,6 +168,7 @@ export type DesignGenerationTelemetry = Readonly<{
   provider: string;
   orchestrationModel?: string;
   imageModel?: string;
+  generationMode?: "edit" | "generate";
   durationMs: number;
   generatedAt: string;
   image: Readonly<{

@@ -32,7 +32,8 @@ import { UnconfiguredInteriorDesignProvider } from "./unconfigured-interior-desi
         const client = new OpenAI({
           apiKey: configuration.openai.apiKey,
           timeout: 180_000,
-          maxRetries: 1
+          // A timeout can hide a completed paid edit. Let the user decide to retry.
+          maxRetries: 0
         });
         return new OpenAIInteriorDesignProvider(
           {

@@ -76,6 +76,7 @@ describe("InteriorDesignService", () => {
         telemetry: {
           orchestrationModel: "reasoning",
           imageModel: "image",
+          generationMode: "edit",
           durationMs: 1200,
           generatedAt: "2026-09-28T10:00:00.000Z",
           image: { width: 1536, height: 1024, format: "png" }
@@ -94,6 +95,7 @@ describe("InteriorDesignService", () => {
       telemetry: {
         provider: "fake",
         orchestrationModel: "reasoning",
+        generationMode: "edit",
         durationMs: 1200
       }
     });

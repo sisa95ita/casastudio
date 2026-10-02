@@ -16,7 +16,7 @@ import {
   Typography
 } from "@mui/material";
 import type { DesignProposal, DesignReferenceView } from "@casastudio/ai";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiRequestError } from "../../core/api/CasaStudioApiClient";
 import { useCasaStudioApi } from "../../core/api/ApiProvider";
@@ -46,6 +46,7 @@ export function AiRoomDesignPanel({
   const [proposal, setProposal] = useState<DesignProposal>();
   const [error, setError] = useState<string>();
   const [generating, setGenerating] = useState(false);
+  const generationPending = useRef(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [referenceViews, setReferenceViews] = useState<
     readonly DesignReferenceView[]
@@ -75,8 +76,14 @@ export function AiRoomDesignPanel({
   }, [capture]);
 
   const generate = async () => {
-    if (referenceViews.length === 0 || !instructions.trim() || generating)
+    if (
+      referenceViews.length === 0 ||
+      !instructions.trim() ||
+      generationPending.current
+    )
       return;
+    // Lock immediately, including duplicate events before React renders pending state.
+    generationPending.current = true;
     setGenerating(true);
     setError(undefined);
     try {
@@ -94,6 +101,7 @@ export function AiRoomDesignPanel({
           : t("threeD.ai.failure")
       );
     } finally {
+      generationPending.current = false;
       setGenerating(false);
     }
   };
@@ -299,7 +307,8 @@ export function AiRoomDesignPanel({
                 {proposal.telemetry.estimatedCost ? (
                   <Typography variant="caption" component="div">
                     {t("threeD.ai.telemetry.estimatedCost", {
-                      amount: proposal.telemetry.estimatedCost.amount.toFixed(4),
+                      amount:
+                        proposal.telemetry.estimatedCost.amount.toFixed(4),
                       currency: proposal.telemetry.estimatedCost.currency
                     })}
                   </Typography>

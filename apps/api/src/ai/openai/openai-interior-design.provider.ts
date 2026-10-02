@@ -72,6 +72,7 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
     let response: OpenAIResponseLike;
     const startedAt = this.clock.monotonicNow();
     try {
+      const references = orderedReferences(request);
       response = await this.client.create({
         model: this.configuration.reasoningModel,
         instructions: buildOpenAIInteriorDesignInstructions(),
@@ -83,7 +84,7 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
                 type: "input_text",
                 text: buildOpenAIInteriorDesignPrompt(request)
               },
-              ...orderedReferences(request).flatMap((reference) => [
+              ...references.flatMap((reference) => [
                 {
                   type: "input_text",
                   text: describeOpenAIReferenceRole(reference.kind)
@@ -101,29 +102,36 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
           {
             type: "image_generation",
             model: this.configuration.imageModel,
-            action: "generate",
+            action: "edit",
+            partial_images: 0,
             quality: this.configuration.imageQuality,
             size: this.configuration.imageSize,
             output_format: this.configuration.imageFormat
           }
         ],
-        tool_choice: { type: "image_generation" }
+        tool_choice: { type: "image_generation" },
+        max_tool_calls: 1,
+        parallel_tool_calls: false
       });
     } catch (error) {
-      throw normalizeOpenAIError(error);
+      throw normalizeOpenAIError(error, this.clock.now());
     }
 
-    const imageCall = response.output?.find(
+    const imageCalls = response.output?.filter(
       (item): item is OpenAIImageGenerationCall =>
         item.type === "image_generation_call"
     );
-    if (!imageCall) {
+    if (imageCalls?.length !== 1) {
       throw new DesignGenerationError(
         "invalid_provider_response",
-        "The AI provider returned no generated image."
+        "The AI provider must return exactly one edited image."
       );
     }
-    if (!imageCall.result) {
+    const imageCall = imageCalls[0]!;
+    if (
+      !imageCall.result ||
+      (imageCall.status && imageCall.status !== "completed")
+    ) {
       throw new DesignGenerationError(
         "generation_failed",
         "The AI provider did not complete image generation."
@@ -148,7 +156,11 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
             ? response.model
             : this.configuration.reasoningModel,
         imageModel: this.configuration.imageModel,
-        durationMs: Math.max(0, Math.round(this.clock.monotonicNow() - startedAt)),
+        generationMode: "edit",
+        durationMs: Math.max(
+          0,
+          Math.round(this.clock.monotonicNow() - startedAt)
+        ),
         generatedAt: completedAt.toISOString(),
         image: Object.freeze({
           ...dimensions,
@@ -162,6 +174,27 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
 }
 
 function orderedReferences(request: DesignRequest) {
+  // Edit mode must never silently substitute another view for the base image.
+  const required = ["room-interior-a", "room-axonometric", "room-interior-b"];
+  if (
+    required.some(
+      (kind) =>
+        request.referenceViews.filter((view) => view.kind === kind).length !== 1
+    ) ||
+    request.referenceViews.some(
+      (view) =>
+        !view.image.dataUrl.startsWith(`data:${view.image.mimeType};base64,`) ||
+        !view.image.dataUrl.split(",")[1] ||
+        view.target.projectId !== request.target.projectId ||
+        view.target.levelId !== request.target.levelId ||
+        view.target.roomId !== request.target.roomId
+    )
+  ) {
+    throw new DesignGenerationError(
+      "missing_reference",
+      "Room editing requires Interior A as the base image and valid matching architectural references."
+    );
+  }
   const priority = new Map([
     ["room-interior-a", 0],
     ["room-axonometric", 1],
@@ -175,17 +208,22 @@ function orderedReferences(request: DesignRequest) {
   );
 }
 
-function parseImageSize(
-  size: string
-): { readonly width?: number; readonly height?: number } {
+function parseImageSize(size: string): {
+  readonly width?: number;
+  readonly height?: number;
+} {
   const match = /^(\d+)x(\d+)$/.exec(size);
   if (!match) return {};
   return { width: Number(match[1]), height: Number(match[2]) };
 }
 
-function normalizeUsage(
-  usage: OpenAIResponseLike["usage"]
-): { readonly usage: NonNullable<InteriorDesignProviderResult["telemetry"]>["usage"] } | Record<string, never> {
+function normalizeUsage(usage: OpenAIResponseLike["usage"]):
+  | {
+      readonly usage: NonNullable<
+        InteriorDesignProviderResult["telemetry"]
+      >["usage"];
+    }
+  | Record<string, never> {
   if (!usage) return {};
   return {
     usage: Object.freeze({
@@ -197,8 +235,7 @@ function normalizeUsage(
         : {}),
       ...(usage.input_tokens_details?.cache_write_tokens !== undefined
         ? {
-            cacheWriteInputTokens:
-              usage.input_tokens_details.cache_write_tokens
+            cacheWriteInputTokens: usage.input_tokens_details.cache_write_tokens
           }
         : {}),
       ...(usage.output_tokens_details?.reasoning_tokens !== undefined
@@ -208,7 +245,10 @@ function normalizeUsage(
   };
 }
 
-function normalizeOpenAIError(error: unknown): DesignGenerationError {
+function normalizeOpenAIError(
+  error: unknown,
+  now: Date
+): DesignGenerationError {
   if (error instanceof DesignGenerationError) return error;
   const record =
     typeof error === "object" && error !== null
@@ -238,9 +278,23 @@ function normalizeOpenAIError(error: unknown): DesignGenerationError {
     );
   }
   if (status === 429) {
+    const retryAfterSeconds = readRetryAfterSeconds(record.headers, now);
+    const allowanceExhausted =
+      record.type === "insufficient_quota" ||
+      [
+        "insufficient_quota",
+        "credit_balance_exhausted",
+        "organization_spend_limit_exceeded",
+        "project_spend_limit_exceeded",
+        "organization_usage_limit_exceeded"
+      ].includes(code ?? "");
     return new DesignGenerationError(
       "rate_limited",
-      "The AI provider is rate limited. Try again later.",
+      allowanceExhausted
+        ? "The AI provider's usage allowance is exhausted. Check the server's provider budget before trying again."
+        : retryAfterSeconds !== undefined
+          ? `The AI provider is rate limited. Try again in ${retryAfterSeconds} seconds.`
+          : "The AI provider is rate limited. Try again later.",
       { cause: error }
     );
   }
@@ -275,4 +329,37 @@ function normalizeOpenAIError(error: unknown): DesignGenerationError {
     "The AI provider could not generate the design.",
     { cause: error }
   );
+}
+
+/** Read only a validated delay; raw headers and upstream messages stay server-side. */
+function readRetryAfterSeconds(
+  headers: unknown,
+  now: Date
+): number | undefined {
+  if (!headers || typeof headers !== "object") return undefined;
+  const values = headers as {
+    get?: (name: string) => unknown;
+    [key: string]: unknown;
+  };
+  const read = (name: string) => {
+    const value =
+      typeof values.get === "function" ? values.get(name) : values[name];
+    return typeof value === "string" && value.length <= 100
+      ? value.trim()
+      : undefined;
+  };
+  const milliseconds = read("retry-after-ms");
+  const retryAfter = read("retry-after");
+  const numeric = /^\d+(?:\.\d+)?$/;
+  const seconds =
+    milliseconds && numeric.test(milliseconds)
+      ? Number(milliseconds) / 1000
+      : retryAfter && numeric.test(retryAfter)
+        ? Number(retryAfter)
+        : retryAfter && /^[A-Za-z]{3},/.test(retryAfter)
+          ? (Date.parse(retryAfter) - now.getTime()) / 1000
+          : undefined;
+  return seconds !== undefined && Number.isFinite(seconds) && seconds >= 0
+    ? Math.ceil(seconds)
+    : undefined;
 }

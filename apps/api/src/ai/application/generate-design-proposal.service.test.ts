@@ -1,4 +1,7 @@
-import type { InteriorDesignProvider } from "@casastudio/ai";
+import {
+  DesignGenerationError,
+  type InteriorDesignProvider
+} from "@casastudio/ai";
 import { createInitialProject } from "@casastudio/schema";
 import { describe, expect, it, vi } from "vitest";
 
@@ -170,5 +173,33 @@ describe("GenerateDesignProposalService", () => {
       detail:
         "AI design generation is not configured on this CasaStudio server."
     });
+  });
+
+  it("retains a sanitized rate-limit failure as HTTP 429 without retrying or changing Project state", async () => {
+    const before = structuredClone(project);
+    const provider: InteriorDesignProvider = {
+      name: "fake",
+      generateDesign: vi
+        .fn()
+        .mockRejectedValue(
+          new DesignGenerationError(
+            "rate_limited",
+            "The AI provider is rate limited. Try again in 12 seconds."
+          )
+        )
+    };
+    const service = new GenerateDesignProposalService(
+      createLoader() as never,
+      provider
+    );
+    await expect(
+      service.generate("design-project", input, principal as never)
+    ).rejects.toMatchObject({
+      status: 429,
+      code: ApiErrorCode.AiRateLimited,
+      detail: "The AI provider is rate limited. Try again in 12 seconds."
+    });
+    expect(provider.generateDesign).toHaveBeenCalledTimes(1);
+    expect(project).toEqual(before);
   });
 });
