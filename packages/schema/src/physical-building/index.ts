@@ -7,6 +7,7 @@ export * from "./opening-editing.js";
 export * from "./plan-translation.js";
 export * from "./reverse-wall-direction.js";
 export * from "./room.js";
+export * from "./room-adjacency.js";
 export * from "./room-shape-authoring.js";
 export * from "./staircase-editing.js";
 export * from "./wall.js";

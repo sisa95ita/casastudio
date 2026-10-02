@@ -59,9 +59,95 @@ The stable IDs reference canonical entities and do not duplicate persisted geome
 - only relevant Walls, thicknesses, and Doors/Windows/Wall Openings;
 - Stairs connected to the Room or otherwise relevant on its Level;
 - only Furniture owned by the target Room;
+- `spatialContext.adjacentSpaces`: direct same-Level neighboring Room identity,
+  name/type, Level/global floor elevation, and distinct canonical passages;
 - canonical centimeters/degrees and the right-handed X/Z horizontal, +Y elevation convention.
 
 It intentionally excludes unrelated Levels, viewpoints, presentation visibility, renderer state, and the rest of the Project aggregate. It is transient derived data; the Project stays authoritative.
+
+### AI-B2.1 — direct local spatial context
+
+A target-only snapshot describes an architectural opening but can omit the
+canonical identity of the space beyond it. The provider then has to invent a
+plausible background. Local topology now communicates that a Door or Wall Opening
+connects the selected Room to a named, typed Room. For example, a Studio's doorway
+may lead to a canonical Bedroom; the Bedroom is context for interpreting the
+doorway, not an additional design target.
+
+`Project → deriveDesignContext → DesignContext → OpenAI prompt` stays server-side
+and deterministic. The reusable `deriveDirectRoomConnections(level, roomId)`
+belongs to `@casastudio/schema/physical-building`, the smallest owner of the
+canonical topology. It has no AI/provider/renderer dependency. It reads Level-local
+maps once per context derivation, never during rendering, and never mutates or
+adds ownership to Project, Rooms, Walls, Openings, Stairs or Furniture.
+
+Supported connection kinds are **`door`** and **`wall-opening`**:
+
+1. A Door's non-empty `connectedRoomIds` explicitly models functional navigation.
+   Exactly two distinct resolvable Rooms, including the target, can resolve the
+   relation even when their boundaries are drafts. Contradictory Wall ownership
+   or known same-side boundary uses invalidate the relation.
+2. Without explicit Door navigation metadata, a Door or Wall Opening requires
+   a host Wall with exactly two same-floor Room owners including the target,
+   reciprocal `Room.boundary` references, and opposite `FORWARD`/`REVERSE` uses.
+   Canonical outer Room loops are persisted counter-clockwise, so opposite uses
+   establish opposite sides of the shared physical Wall. A shared solid Wall or
+   Window creates no Room connection.
+3. Only Rooms in the selected Level and at the same canonical Room floor
+   elevation are included. Walls can have owners in multiple elevation strata;
+   those owners are not automatically neighbors. Openings must fit the canonical
+   Wall and extend above the connected Room floors. Stair context remains
+   independent and unchanged; no vertical graph expansion is added.
+
+This is **topology first, with no proximity/geometry fallback**. Existing
+boundaries and ownership encode supported shared-Wall relationships precisely.
+Overlapping Wall bounding boxes, nearby polygons, separate coincident Walls,
+external/unidentified openings, incomplete/contradictory explicit Door references,
+missing reciprocal boundary references, same-side uses and non-manifold ownership
+do not justify guessing a neighbor. They are omitted; existing target Wall and
+Opening facts remain available without an invented adjacent identity.
+
+**FREE/open-boundary limitation:** `FreeRoomBoundaryEdgeSchema` explicitly states
+that a FREE segment closes a walkable footprint but carries no Wall, opening,
+guard or structural-support meaning. It can also be an exposed elevated slab
+edge. There is no canonical passage identity joining two FREE edges. Even a
+positive-length coincident pair therefore cannot reliably distinguish intentional
+connectivity from geometric contact; FREE overlap and endpoint-only contact both
+produce no adjacency. No tolerance-based matching is introduced for unsupported
+semantics. Explicit open-boundary connectivity needs a later domain decision.
+
+The neutral snapshot groups each neighboring Room once and retains all distinct
+connections (identified internally by neighbor, host Wall and Opening IDs).
+Each passage includes kind, width/height, canonical Wall-start offset, sill
+elevation and target boundary direction when available. Only identity/type/Level
+and floor elevation are copied for neighbors; their boundaries, Walls, Furniture
+and neighbors are not serialized. There is no recursive traversal.
+
+The adapter keeps **ARCHITECTURAL EDIT CONTRACT**, **TARGET ROOM CONTEXT**,
+**LOCAL SPATIAL CONTEXT** and **USER DESIGN DIRECTION** distinct. Local prose
+uses Room names/types and the target-context Wall number instead of internal
+IDs. A visible neighbor in edited Interior A must read consistently with its
+canonical identity/type. The instruction forbids merging Rooms, extending the
+target into its neighbor, changing connecting architecture, revealing hidden
+spaces, or treating the background as a second full design brief. Neighbor
+contents remain non-canonical proposal pixels; the proposal still belongs to one
+target Room.
+
+Provider-only local prose is bounded to **12 directly connected Rooms**, **4
+passages per Room**, and **120 characters per semantic label**. Rank Rooms by
+their widest passage, then stable Room ID; rank passages by width, then stable
+Wall/Opening IDs. This gives wider architectural connections priority, reports
+omitted counts and forbids guessing omitted identities. The provider-neutral
+snapshot retains every direct relation. These limits bound the added spatial
+section, not the pre-existing target-context section; they are not a token or
+cost estimate.
+
+This adds only semantic text to the existing single Responses request. It adds
+no AI analysis, image input, fourth camera/reference, generation, retry, fallback,
+variant, quality change or parallel provider call. AI-B2.2 remains `action=edit`,
+Interior A first/base, axonometric second, Interior B third, `max_tool_calls=1`
+and `parallel_tool_calls=false`. No paid provider call is needed to derive or
+test adjacency, including when `OPENAI_API_KEY` is absent.
 
 ### DesignReferenceView
 
@@ -180,6 +266,38 @@ Automated success proves request construction and safety behavior, not improved 
 6. **Test C — concave/complex or Stair-related Room:** proceed only if earlier results justify it; use one call and check difficult geometry/Stairs without changing viewpoint.
 7. For each call record configured/reported models, generation mode from normalized response telemetry, output settings, timestamp, duration, usage, actual OpenAI Usage/Billing cost and drift observations against Interior A/ProjectSchema. Confirm canonical Project data is unchanged. Compare with retained AI-B2 outputs if available without generating a new baseline automatically.
 8. On HTTP 429, honor the sanitized delay and inspect account limits/allowance. On timeout/ambiguous failure, inspect provider outcome/billing before choosing any new explicit call. There is no automatic retry or fallback. Stop after the smallest useful number of calls; the owners alone decide visual acceptance and whether architectural drift improved.
+
+## AI-B2.1 manual acceptance — owners only
+
+Automated checks establish canonical derivation and request construction only.
+They do not establish improved visual fidelity. This implementation performs no
+live provider calls or manual visual acceptance. Owners can evaluate it as follows:
+
+1. Start the updated API/web using the existing accepted provider/model/quality
+   settings and a budget you choose. Select a target Room with a canonically
+   connected same-Level neighbor whose name/type differ from the target. Confirm
+   either explicit Door connectivity or reciprocal opposite shared-Wall uses
+   with a Door/Wall Opening. Save/export the canonical Project before testing.
+2. Wait for Interior A, axonometric and Interior B. Record Interior A's camera,
+   composition and connecting architecture. Choose a connection visible in
+   Interior A for the first paid case; keep the accepted three references.
+3. Enter an ordinary design direction for the target only, without explaining
+   the neighbor's identity. Click **Generate design once**. Confirm one browser
+   submission, a disabled pending button and `generationMode=edit` telemetry.
+4. Compare the output against Interior A: target camera/framing, silhouette,
+   Walls, Door/Opening dimensions and elevations must remain anchored. If the
+   neighbor is visible, judge whether it reads as its canonical type, remains a
+   separate Room and receives only background treatment. Hidden neighbors must
+   not be newly revealed. Record drift; do not assume the instruction succeeded.
+5. Record models/settings, duration, usage and actual provider billing. Compare
+   with any retained prior output without generating a new baseline automatically.
+   Confirm the canonical Project/revision remains unchanged by generation.
+6. Only if the first result and budget justify it, make another single explicit
+   call for the other supported passage kind or a different neighbor type.
+   Window-only/solid-Wall/FREE-only and other-Level cases are covered by
+   deterministic tests; do not pay for them merely to verify derivation.
+   On timeout or ambiguous failure, inspect billing/outcome before deciding on
+   another action. Owners alone decide acceptance and whether fidelity improved.
 
 ## Evolution
 

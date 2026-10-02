@@ -1,4 +1,5 @@
 import {
+  deriveDirectRoomConnections,
   isWallRoomBoundaryEdge,
   type Project,
   type Room,
@@ -6,6 +7,7 @@ import {
 } from "@casastudio/schema";
 
 import type {
+  DesignAdjacentSpace,
   DesignBoundarySegment,
   DesignContext,
   DesignPoint2D,
@@ -41,10 +43,27 @@ export function deriveDesignContext(
   const boundaryWallIds = new Set(
     boundary.flatMap((segment) => (segment.wallId ? [segment.wallId] : []))
   );
+  const connections = deriveDirectRoomConnections(level, room.id);
+  const connectionWallIds = new Set(
+    connections.map((connection) => connection.wallId)
+  );
   const walls = level.walls.filter(
-    (wall) => boundaryWallIds.has(wall.id) || wall.roomIds.includes(room.id)
+    (wall) =>
+      boundaryWallIds.has(wall.id) ||
+      wall.roomIds.includes(room.id) ||
+      connectionWallIds.has(wall.id)
   );
   const roomElevation = room.elevation ?? 0;
+  const connectionsByRoom = new Map<
+    string,
+    DesignAdjacentSpace["connections"][number][]
+  >();
+  for (const { roomId, ...connection } of connections) {
+    const group = connectionsByRoom.get(roomId) ?? [];
+    group.push(Object.freeze(connection));
+    connectionsByRoom.set(roomId, group);
+  }
+  const roomById = new Map(level.rooms.map((item) => [item.id, item]));
 
   return Object.freeze({
     project: Object.freeze({
@@ -166,6 +185,27 @@ export function deriveDesignContext(
           })
         )
     ),
+    spatialContext: Object.freeze({
+      adjacentSpaces: Object.freeze(
+        [...connectionsByRoom].map(([id, passages]) => {
+          const neighbor = roomById.get(id)!;
+          return Object.freeze({
+            room: Object.freeze({
+              id: neighbor.id,
+              name: neighbor.name,
+              type: neighbor.type,
+              level: Object.freeze({
+                id: level.id,
+                name: level.name,
+                elevation: level.elevation
+              }),
+              floorElevation: level.elevation + (neighbor.elevation ?? 0)
+            }),
+            connections: Object.freeze(passages)
+          });
+        })
+      )
+    }),
     units: Object.freeze({ ...project.units }),
     coordinateSystem: Object.freeze({
       handedness: "right-handed",

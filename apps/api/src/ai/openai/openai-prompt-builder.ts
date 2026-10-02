@@ -32,6 +32,7 @@ const referenceRoles: Readonly<
 /** Stable architectural contract owned by the OpenAI adapter. */
 export function buildOpenAIInteriorDesignInstructions(): string {
   return [
+    "ARCHITECTURAL EDIT CONTRACT",
     "EDIT THE FIRST IMAGE into one photorealistic finished interior-design proposal.",
     "The first image, Interior A, is the BASE IMAGE TO EDIT. Do not recreate the Room from scratch.",
     "CasaStudio ProjectSchema is the architectural source of truth. Architecture is immutable; DesignContext is supporting semantic evidence. All supplied reference images describe the SAME selected Room from different viewpoints and have explicitly labeled roles.",
@@ -41,6 +42,7 @@ export function buildOpenAIInteriorDesignInstructions(): string {
     "Existing Furniture is movable interior content, not architecture. Unless the user explicitly asks to preserve it, Furniture may be retained, replaced, restyled, or visually reorganized.",
     "Change ONLY interior-design content: Furniture and its appearance, movable objects, materials, finishes, colors, textiles, lighting fixtures, decorative objects, and styling. The user's design direction controls these choices only and never overrides the architectural editing contract.",
     "The axonometric and Interior B images are supporting architectural evidence only to resolve ambiguity. Never use their cameras or viewpoints for the final image; never replace the first image's composition.",
+    "Design only the selected target Room. Adjacent Rooms are context only, not secondary design targets. If visible through a canonical connection in Interior A, represent their canonical identity/type, preserve the connecting architecture, and do not merge them into the target Room or treat them as a second design brief. Background contents remain non-canonical proposal pixels.",
     "Use all three references in ONE image edit. Return ONE final image, with no variants or alternative compositions."
   ].join("\n");
 }
@@ -50,8 +52,10 @@ export function buildOpenAIInteriorDesignPrompt(
   request: DesignRequest
 ): string {
   return [
-    "CASASTUDIO STRUCTURED ROOM CONTEXT",
+    "TARGET ROOM CONTEXT — CASASTUDIO STRUCTURED ROOM CONTEXT",
     describeContext(request.context),
+    "LOCAL SPATIAL CONTEXT",
+    describeSpatialContext(request.context),
     "USER DESIGN DIRECTION",
     request.instructions.trim(),
     request.constraints?.length
@@ -135,4 +139,55 @@ function describeContext(context: DesignContext): string {
 
 function format(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+/** Bound only provider prose; the neutral context retains every direct passage. */
+function describeSpatialContext(context: DesignContext): string {
+  const spaces = [...context.spatialContext.adjacentSpaces].sort(
+    (a, b) =>
+      b.connections.reduce((width, item) => Math.max(width, item.width), 0) -
+        a.connections.reduce((width, item) => Math.max(width, item.width), 0) ||
+      compare(a.room.id, b.room.id)
+  );
+  const shown = spaces.slice(0, 12);
+  const lines = [
+    "Only direct same-Level canonical connections are listed. Adjacent Rooms are context only, not secondary design targets. The selected Room remains the sole design target.",
+    "If a listed space is visible through its connection in edited Interior A, depict it consistently with its canonical name/type. Preserve connection geometry; do not merge Rooms, reinterpret the neighbor as an extension of the target, or redesign background architecture. Do not reveal spaces hidden in Interior A or use background context as a second full design brief.",
+    ...(spaces.length
+      ? []
+      : [
+          "No resolved direct Room connections. Do not infer neighbor identity from proximity or an unidentified opening."
+        ])
+  ];
+  for (const space of shown) {
+    const passages = [...space.connections].sort(
+      (a, b) =>
+        b.width - a.width ||
+        compare(a.wallId, b.wallId) ||
+        compare(a.openingId, b.openingId)
+    );
+    const descriptions = passages.slice(0, 4).map((connection) => {
+      const wallIndex = context.walls.findIndex(
+        (wall) => wall.id === connection.wallId
+      );
+      return `${connection.kind === "door" ? "Door" : "Wall Opening"}${wallIndex >= 0 ? ` on Wall ${wallIndex + 1}` : ""}, ${format(connection.width)}w × ${format(connection.height)}h at ${format(connection.offsetFromWallStart)} from canonical Wall start, sill ${format(connection.sillElevation)} ${context.units.length}`;
+    });
+    lines.push(
+      `Directly connected Room ${label(space.room.name)} (type ${label(space.room.type)}), Level ${label(space.room.level.name)}, floor elevation ${format(space.room.floorElevation)} ${context.units.length}: ${descriptions.join("; ")}.${passages.length > 4 ? ` ${passages.length - 4} additional connections omitted.` : ""}`
+    );
+  }
+  if (spaces.length > shown.length) {
+    lines.push(
+      `${spaces.length - shown.length} additional direct spaces omitted. Widest passages take priority; omitted identities must not be guessed.`
+    );
+  }
+  return lines.join("\n");
+}
+
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function label(value: string): string {
+  return JSON.stringify(value.length > 120 ? `${value.slice(0, 119)}…` : value);
 }

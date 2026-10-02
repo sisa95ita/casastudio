@@ -72,6 +72,27 @@ export type DesignFurnitureContext = Readonly<{
   height: number;
 }>;
 
+/** Neighbors explain passages from the target; they are not design targets. */
+export type DesignAdjacentSpace = Readonly<{
+  room: Readonly<{
+    id: string;
+    name: string;
+    type: string;
+    level: Readonly<{ id: string; name: string; elevation: number }>;
+    floorElevation: number;
+  }>;
+  connections: readonly Readonly<{
+    kind: "door" | "wall-opening";
+    wallId: string;
+    openingId: string;
+    width: number;
+    height: number;
+    offsetFromWallStart: number;
+    sillElevation: number;
+    targetBoundaryDirection?: "FORWARD" | "REVERSE";
+  }>[];
+}>;
+
 /** Provider-neutral semantic snapshot derived from canonical Project data. */
 export type DesignContext = Readonly<{
   project: Readonly<{ id: string; name: string; revision: number }>;
@@ -97,6 +118,7 @@ export type DesignContext = Readonly<{
   walls: readonly DesignWallContext[];
   stairs: readonly DesignStairContext[];
   furniture: readonly DesignFurnitureContext[];
+  spatialContext: Readonly<{ adjacentSpaces: readonly DesignAdjacentSpace[] }>;
   units: Readonly<{ length: "cm"; angle: "deg" }>;
   coordinateSystem: Readonly<{
     handedness: "right-handed";

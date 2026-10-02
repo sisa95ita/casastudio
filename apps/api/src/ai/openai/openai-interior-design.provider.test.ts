@@ -91,6 +91,7 @@ const request = {
     ],
     stairs: [],
     furniture: [],
+    spatialContext: { adjacentSpaces: [] },
     units: { length: "cm", angle: "deg" },
     coordinateSystem: {
       handedness: "right-handed",
@@ -104,6 +105,37 @@ const request = {
     reference("room-interior-a", "aW50LWE=")
   ]
 } satisfies DesignRequest;
+
+const spatialRequest: DesignRequest = {
+  ...request,
+  context: {
+    ...request.context,
+    spatialContext: {
+      adjacentSpaces: [
+        {
+          room: {
+            id: "neighbor-secret-id",
+            name: "Guest suite",
+            type: "BEDROOM",
+            level: { id: "ground", name: "Ground", elevation: 0 },
+            floorElevation: 0
+          },
+          connections: [
+            {
+              kind: "door",
+              wallId: "north",
+              openingId: "door-secret-id",
+              width: 90,
+              height: 210,
+              offsetFromWallStart: 250,
+              sillElevation: 0
+            }
+          ]
+        }
+      ]
+    }
+  }
+};
 
 const configuration = {
   reasoningModel: "gpt-5.6-sol",
@@ -149,7 +181,7 @@ describe("OpenAIInteriorDesignProvider", () => {
       now: () => new Date("2026-09-30T10:15:00.000Z")
     });
 
-    await expect(provider.generateDesign(request)).resolves.toEqual({
+    await expect(provider.generateDesign(spatialRequest)).resolves.toEqual({
       artifact: {
         kind: "image",
         uri: "data:image/png;base64,Z2VuZXJhdGVk",
@@ -216,6 +248,8 @@ describe("OpenAIInteriorDesignProvider", () => {
       expect.stringContaining("REFERENCE 2 — AXONOMETRIC"),
       expect.stringContaining("REFERENCE 3 — INTERIOR B")
     ]);
+    expect(labels[0]).toContain("LOCAL SPATIAL CONTEXT");
+    expect(labels[0]).toContain('"Guest suite" (type "BEDROOM")');
     expect(images).toEqual([
       request.referenceViews[2]!.image.dataUrl,
       request.referenceViews[0]!.image.dataUrl,
@@ -484,6 +518,93 @@ describe("OpenAIInteriorDesignProvider", () => {
 });
 
 describe("OpenAI prompt builder", () => {
+  it("translates direct space semantics into a distinct context-only section", () => {
+    const prompt = buildOpenAIInteriorDesignPrompt(spatialRequest);
+    expect(prompt).toContain("TARGET ROOM CONTEXT");
+    expect(prompt).toContain("LOCAL SPATIAL CONTEXT");
+    expect(prompt).toContain(
+      'Directly connected Room "Guest suite" (type "BEDROOM"), Level "Ground"'
+    );
+    expect(prompt).toContain("Door on Wall 1, 90w × 210h at 250");
+    expect(prompt).toContain(
+      "Adjacent Rooms are context only, not secondary design targets"
+    );
+    expect(prompt).toContain("do not merge Rooms");
+    expect(prompt).toContain("Do not reveal spaces hidden in Interior A");
+    expect(prompt).not.toContain("neighbor-secret-id");
+    expect(prompt).not.toContain("door-secret-id");
+    expect(buildOpenAIInteriorDesignInstructions()).toContain(
+      "ARCHITECTURAL EDIT CONTRACT"
+    );
+    expect(buildOpenAIInteriorDesignInstructions()).toContain(
+      "Background contents remain non-canonical proposal pixels"
+    );
+  });
+
+  it("preserves Wall Opening semantics and describes unresolved context safely", () => {
+    const space = spatialRequest.context.spatialContext.adjacentSpaces[0]!;
+    const prompt = buildOpenAIInteriorDesignPrompt({
+      ...spatialRequest,
+      context: {
+        ...spatialRequest.context,
+        spatialContext: {
+          adjacentSpaces: [
+            {
+              ...space,
+              connections: [{ ...space.connections[0]!, kind: "wall-opening" }]
+            }
+          ]
+        }
+      }
+    });
+    expect(prompt).toContain("Wall Opening on Wall 1");
+    expect(buildOpenAIInteriorDesignPrompt(request)).toContain(
+      "No resolved direct Room connections"
+    );
+  });
+
+  it("bounds local prose deterministically, prioritizes wide passages and reports omissions", () => {
+    const base = spatialRequest.context.spatialContext.adjacentSpaces[0]!;
+    const adjacentSpaces = Array.from({ length: 14 }, (_, index) => ({
+      room: {
+        ...base.room,
+        id: `room-${index}`,
+        name: index === 13 ? "x".repeat(500) : `Neighbor ${index}`
+      },
+      connections: Array.from({ length: 6 }, (_, passage) => ({
+        ...base.connections[0]!,
+        openingId: `opening-${passage}`,
+        width: 80 + index * 10 + passage
+      }))
+    }));
+    const withSpaces = (spaces: typeof adjacentSpaces): DesignRequest => ({
+      ...spatialRequest,
+      context: {
+        ...spatialRequest.context,
+        spatialContext: { adjacentSpaces: spaces }
+      }
+    });
+    const prompt = buildOpenAIInteriorDesignPrompt(withSpaces(adjacentSpaces));
+    expect(prompt.match(/Directly connected Room /g)).toHaveLength(12);
+    expect(prompt.match(/Door on Wall 1/g)).toHaveLength(48);
+    expect(prompt).toContain("2 additional direct spaces omitted");
+    expect(prompt).toContain("2 additional connections omitted");
+    expect(prompt).not.toContain('"Neighbor 0"');
+    expect(prompt).not.toContain("x".repeat(121));
+    expect(
+      buildOpenAIInteriorDesignPrompt(
+        withSpaces(
+          [...adjacentSpaces]
+            .reverse()
+            .map((space) => ({
+              ...space,
+              connections: [...space.connections].reverse()
+            }))
+        )
+      )
+    ).toBe(prompt);
+  });
+
   it("makes the base camera authoritative and forbids copying supporting viewpoints", () => {
     expect(describeOpenAIReferenceRole("room-interior-a")).toContain(
       "EDIT THE FIRST IMAGE"
