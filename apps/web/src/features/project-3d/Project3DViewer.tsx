@@ -59,6 +59,7 @@ import {
   createFloorSolid3D,
   floorSurfaceMaterialRoles3D
 } from "./model/floor-solid-3d";
+import { useDesignGeneration } from "./useDesignGeneration";
 import { createGroundReference3D } from "./model/ground-reference-3d";
 import type { ArchitecturalSolid3D } from "./model/architectural-solid-3d";
 import type { Staircase3D } from "./model/staircase-3d-model";
@@ -172,6 +173,7 @@ export function Project3DViewer({
   furnitureManipulation
 }: Project3DViewerProps) {
   const { t } = useCasaTranslation("project-viewer");
+  const designGeneration = useDesignGeneration();
   const [fitRequest, setFitRequest] = useState(0);
   const [resetRequest, setResetRequest] = useState(0);
   const [rendererStatus, setRendererStatus] = useState<
@@ -583,6 +585,14 @@ export function Project3DViewer({
             levelId={selection.levelId}
             roomId={selection.id}
             capture={referenceViewCapture}
+            sceneContext={model}
+            generation={designGeneration}
+            roomName={
+              model.levels
+                .find((level) => level.id === selection.levelId)
+                ?.floors.find((floor) => floor.roomId === selection.id)
+                ?.roomName
+            }
           />
         ) : null}
       </Box>

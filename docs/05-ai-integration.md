@@ -172,7 +172,61 @@ References are transient. The panel creates them when the selected Room or deriv
 
 AI-A returns one successful, transient `DesignProposal` containing a stable proposal ID, target, creation time, normalized image artifact, and isolated provider metadata. AI-B2 adds normalized, safe telemetry: provider, orchestration/image model, measured duration, generation timestamp, output dimensions/format/quality, and token usage when the provider reports it. Raw provider responses, base64 payloads, secrets, and OpenAI request IDs are not displayed. A small optional session/previous-proposal seam remains in the generic contract for AI-C, but no chat system is implemented. `structuredSuggestions` is reserved for future typed results.
 
-Generated image bytes are normalized into a standard image data URL before they reach React. This is pragmatic for one transient spike result. Durable galleries should replace it with object storage plus an application-owned artifact URL and metadata record.
+Generated image bytes are normalized into a standard image data URL before they reach React. AI-B3 keeps at most three of these transient images for the current design context. Durable galleries should replace it with object storage plus an application-owned artifact URL and metadata record.
+
+## AI-B3 proposal UX
+
+The MVP flow is **prepare → generate → wait → inspect → optionally Try another → compare**. Generation remains explicit. No provider semantics, configuration, paid requests, image-quality acceptance, canonical editing, or persistence are introduced by this phase.
+
+### States and explicit actions
+
+The UI distinguishes local reference **preparing**, **ready**, provider **generating**, proposal **success**, and **failure**. All three required reference kinds must be present exactly once, nonempty, and match the Project/Level/Room before Generate is enabled. Empty/whitespace-only direction, incomplete/preparing/failed references, or a pending generation disable submission. Capture failure offers local Refresh; reference preparation and refresh never submit generation.
+
+One Generate design action requests at most one intended provider image generation through one CasaStudio API POST. Once a proposal exists, the primary action becomes **Try another**, described as one new AI generation using the current Room and direction. It calls the same API path once. There is no `n > 1`, fan-out, prefetch, hidden draft, automatic second generation, retry, polling with AI requests, fallback, or quality escalation. The browser, backend, and adapter semantics remain unchanged, including `maxRetries: 0`, one tool call, and disabled parallel tool calls.
+
+Waiting uses MUI's accessible **indeterminate** LinearProgress plus a polite status region. It names the Room belonging to the pending request and says generation may take a few minutes. There are no invented percentages, countdowns, or simulated stages. The previous active proposal stays inspectable during an alternative request; direction text and references stay available. Refresh is disabled during a paid request. Users may edit direction, but that neither cancels nor resubmits the pending request.
+
+The synchronous single-flight guard lives in the 3D viewer, outlasting Room panel deselection/reselection. It releases only when the actual API promise settles, including failures and obsolete completions. A stale result/error cannot unlock early or enter a new context. This is a workspace UI guard, not a server-side idempotency mechanism: independent tabs or leaving/reopening the entire workspace are outside its lifetime.
+
+**No Cancel generation button:** the browser client accepts an AbortSignal, but the controller/service does not propagate browser disconnection into a provider cancellation operation. Aborting fetch, closing a preview, or hiding/unmounting the panel cannot establish that provider work or billing stopped. Obsolete results are ignored; already accepted work is allowed to settle.
+
+### Three transient proposals and context identity
+
+Successful results enter a bounded in-memory list, oldest first. The newest becomes active. The fourth explicit success deterministically evicts the oldest, retaining proposals 2, 3, and 4. Labels retain their sequence number within the current context. Failure does not evict, renumber, or delete an existing success. Each entry contains its own normalized proposal/telemetry, without copied reference images, prompt snapshots, or raw provider responses.
+
+The transient fingerprint combines Project ID, Level ID, Room ID, the immutable canonical scene model identity (including unsaved edits), capture callback identity, a local reference-refresh epoch, and trimmed Design direction. This is deliberately conservative: rebuilding the canonical scene or capture identity clears comparisons even if a change might be visually insignificant. No fingerprint is added to ProjectSchema or sent as a persistence record.
+
+Changing target, canonical scene, capture identity, refreshing references, or materially editing the trimmed direction **clears** the proposal collection and closes its preview. Surrounding whitespace changes do not clear it. Direction edits retain the current references; refresh/context changes prepare a new set. Separate reference and generation epochs prevent late capture/result/error completions from restoring old evidence or proposals. Typing during reference preparation does not invalidate the capture itself. Editing while paid work is pending invalidates its result, while the submission lock remains held until settlement. Returning to an earlier direction/Room does not restore discarded proposals.
+
+Unmount/reload loses proposals, and the collection has no cache, local/session storage, database, object storage, or saved gallery. Eviction/context clearing removes JavaScript and DOM references to discarded data URLs where practical so they can be garbage-collected. Browser garbage-collection timing is not guaranteed; an in-flight request temporarily retains its required evidence until it settles.
+
+### Inspect, compare, and telemetry
+
+Native keyboard-accessible Proposal buttons appear only when there is more than one result. The active button uses `aria-pressed` and a distinct contained appearance. The panel and previews use the existing editor shortcut scope so keyboard inspection does not invoke workspace editing/navigation shortcuts. Selection changes the image, matching normalized telemetry, and full-size preview without calling any API. The selected image is the visual focus and uses containment without cropping. The existing MUI Dialog keeps viewport bounds, Escape/Close, focus trapping/restoration, and native keyboard activation.
+
+Reference inspection remains available for Axonometric, Interior A, Interior B, and Refresh. References expand during preparation and collapse after success. Generation details starts collapsed and closes on proposal selection; it presents provider, orchestration/image models, reported generation mode, timestamp, duration, dimensions/format/quality, and optional usage/cost only from normalized telemetry. No raw payload, secret, internal request structure, or base64 text is displayed as metadata. The panel retains its existing bounded width and scrollable height; multiline direction has a row limit, large images fit the available space, and long telemetry/errors wrap.
+
+### Failure, rate limits, and ambiguous outcomes
+
+Errors use alert semantics and normalized categories: provider not configured, authentication, model access, unavailable, generation failure, invalid response, missing reference, and invalid target. Unknown/raw failures show a generic safe message. HTTP 429 uses the existing sanitized API detail, preserving validated Retry-After seconds, “later” guidance, and exhausted allowance/budget guidance; React renders it as text. No countdown/resubmission is scheduled. Sanitized rate-limit handling and provider safeguards remain unchanged.
+
+Timeout messaging explicitly says the result **could not be confirmed**, a paid generation may have completed, and users should inspect provider usage/billing before choosing another generation. Lost connections and unusable responses receive similar billing-aware guidance. No message claims that nothing was generated or no charge occurred. An existing successful proposal, direction, and reference evidence survive failure in the same context. Pending state releases and a new attempt happens only through an explicit Generate/Try another action.
+
+### Deterministic validation and owner acceptance
+
+The panel behavior suite mocks the CasaStudio API boundary; it never needs a live API key. It covers readiness, required/mismatched references, explicit calls, same-render duplicate Generate/Try another events, indeterminate status, preview containment and focus restoration, three-entry bounds/oldest eviction, image/telemetry selection, preserved successes after failure, normalized categories, safe rate guidance, timeout ambiguity, context/prompt/refresh invalidation, stale asynchronous results, panel remount with a viewer-owned pending lock, and transient unmount lifecycle. Existing backend/adapter tests use fake providers/SDK boundaries and retain budget/canonical-mutation checks. Automated tests establish behavior, not visual fidelity.
+
+**Owner-only manual acceptance (paid actions are your decision):**
+
+1. Start the existing API/web with your accepted provider configuration and a budget you choose. Export the canonical Project/revision for comparison. In a normal desktop 3D workspace select a named Room; confirm preparation then readiness, disabled empty-direction Generate, and all three reference previews. Use keyboard Tab/Enter/Space for buttons and Escape/Close in previews; check restored focus.
+2. Enter a long ordinary Design direction. Click Generate design **once**. Observe indeterminate provider waiting with the Room name and no percentages; confirm disabled submission/Refresh and exactly one design-proposals POST in DevTools. Do not expect aborting the UI to stop billing.
+3. On success inspect the panel image, full-size containment and close/focus behavior. Confirm references collapse but remain inspectable, direction text remains, and Generation details shows the returned normalized model/mode/time/usage. Confirm Project/revision is unchanged. You alone assess generated-image quality.
+4. Only within your chosen budget, click Try another once per additional alternative. Confirm one new POST each time, disabled pending action, newest active, previous results selectable, and image/details/full-size preview all follow selection. Three proposals require three total explicit successes; a fourth is optional and should replace the oldest with retained labels 2/3/4. Automated mocks already cover this rule; do not pay merely to repeat it.
+5. Without generating, edit the direction, refresh references, change Room/Level, or make a canonical edit. Confirm comparisons clear, preparation occurs only where needed, and none of these actions sends a generation POST. Reselecting a Room while a generation is pending must keep submission disabled until settlement. Reload loses proposals.
+6. With a local mocked API boundary or provider disabled, exercise later failure after success, safe 429 delay/exhausted-allowance messages, timeout ambiguity, and explicit retry only. Do not deliberately spend credits to force a failure. For any real timeout inspect provider usage/billing before choosing another paid action.
+7. Repeat layout/keyboard checks at a smaller viewport with long direction/error text and expanded details. Record usability and your own visual acceptance separately; this phase makes no claim of accepted visual quality.
+
+**Remaining scope:** AI-B4 owns durable application artifacts/storage, retention/access/deletion policies, and cross-session retrieval if required. AI-C owns conversation, prior-response continuation, and scoped follow-up editing. Neither is implemented in AI-B3.
 
 ## AI-B2.2 primary-reference editing
 
@@ -222,7 +276,7 @@ There is no Sunburst→Flare, medium→high, edit→generate or other automatic 
 
 ### Telemetry and estimated cost policy
 
-Telemetry additionally includes optional provider-neutral `generationMode: "edit"`; the existing service carries it into the proposal. The adapter measures elapsed duration around `responses.create` with an injectable monotonic clock and records completion time separately. It normalizes Responses usage into input, output, total, cached-input, cache-write, and reasoning token counts when present. Missing fields stay absent; no value is inferred. The panel shows this metadata below the proposal as secondary development information.
+Telemetry additionally includes optional provider-neutral `generationMode: "edit"`; the existing service carries it into the proposal. The adapter measures elapsed duration around `responses.create` with an injectable monotonic clock and records completion time separately. It normalizes Responses usage into input, output, total, cached-input, cache-write, and reasoning token counts when present. Missing fields stay absent; no value is inferred. AI-B3 shows this metadata in a collapsed Generation details section for the selected proposal, including generation mode and timestamp.
 
 The Responses image call exposes `revised_prompt` cleanly according to the tool guide. AI-B2.2 deliberately does not retain or log it: free-form user-derived text adds diagnostic sanitization/retention concerns, while it is unnecessary for this implementation. It is never canonical DesignContext or normal UI content.
 
@@ -250,7 +304,7 @@ When `AI_PROVIDER` is absent—or OpenAI is selected without a key—the API and
 
 AI-A adds no database table or migration. Requests, sessions, proposals, uploaded references, and generated data URLs are process/request-transient. Existing legacy design-rendering fields in `ProjectSchema` are not used by this new path and were not expanded. This avoids making experimental images part of canonical architecture.
 
-AI-B should introduce an application-owned artifact repository and object storage if a durable proposal gallery is required. Reference images and generated images should then have retention, ownership, authorization, deletion, content-type, size, and lifecycle policies outside `ProjectSchema`.
+AI-B4 owns an application-owned artifact repository and object storage if durable proposals are required. Reference images and generated images should then have retention, ownership, authorization, deletion, content-type, size, and lifecycle policies outside `ProjectSchema`.
 
 ## AI-B2.2 manual acceptance — owners only
 
@@ -302,7 +356,8 @@ live provider calls or manual visual acceptance. Owners can evaluate it as follo
 ## Evolution
 
 - **AI-C:** conversational iteration, prior-response continuation, and scoped follow-up changes.
-- **Later AI-B/product work:** durable artifact storage/gallery, job progress for long latency, richer style and explicit Furniture-preservation controls, and quality/cost experiments approved from manual results.
+- **AI-B4:** durable application artifacts/storage and cross-session retrieval with ownership, retention, authorization, and deletion policies.
+- **Later product work:** genuine provider/job progress if supported, richer style and explicit Furniture-preservation controls, and quality/cost experiments approved from manual results.
 - **Gemini/other providers:** implement `InteriorDesignProvider`; reuse target, context, reference, request, proposal, and failure contracts. Provider choice can later be resolved per user/tenant without changing these contracts.
 - **User-configured providers:** keep credentials in a future server-side secret facility above the provider factory. Never put keys in `ProjectSchema` or browser state.
 - **AI Editing Assistant:** translate future proposals into reviewed, typed CasaStudio editing operations. Never allow an LLM to mutate raw Project JSON.

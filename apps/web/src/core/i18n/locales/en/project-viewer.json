@@ -56,7 +56,7 @@
     },
     "ai": {
       "title": "AI Interior Designer",
-      "roomTarget": "Selected Room · automatic Room-aware references",
+      "roomTarget": "Room: {{room}} · automatic Room references",
       "references": "Reference views",
       "refreshReferences": "Refresh",
       "referenceKinds": {
@@ -69,8 +69,8 @@
       "placeholder": "Warm minimal living room with natural materials",
       "generate": "Generate design",
       "generating": "Generating…",
-      "referencePreparing": "Preparing the 3D reference view…",
-      "referenceFailure": "The Room reference views could not be prepared.",
+      "referencePreparing": "Preparing Room references…",
+      "referenceFailure": "The Room references could not be prepared. Refresh the reference views to try again.",
       "proposal": "Design proposal",
       "proposalAlt": "AI-generated interior design proposal for the selected Room",
       "openPreview": "Open full-size preview",
@@ -81,9 +81,38 @@
         "models": "Provider: {{provider}} · Model: {{model}} · Image model: {{imageModel}}",
         "output": "Duration: {{duration}} · Output: {{dimensions}} {{format}} · Quality: {{quality}}",
         "usage": "Usage: {{input}} input · {{output}} output · {{cached}} cached · {{total}} total tokens",
-        "estimatedCost": "Estimated API cost: {{currency}} {{amount}}"
+        "estimatedCost": "Estimated API cost: {{currency}} {{amount}}",
+        "generatedAt": "Generated: {{timestamp}}",
+        "mode": "Generation mode: {{mode}}"
       },
-      "failure": "The design could not be generated. Try again."
+      "failure": "The design request failed. Your direction and references are still available. Choose whether to make another generation request.",
+      "generateHint": "One click requests one AI design generation.",
+      "waiting": "Waiting for the AI provider for {{room}}. Generation may take a few minutes.",
+      "states": {
+        "preparing": "Preparing local Room reference views…",
+        "ready": "References ready. Add a design direction, then generate when you are ready.",
+        "success": "Proposal ready to inspect.",
+        "failure": "The request could not be completed. Review the error before another attempt."
+      },
+      "tryAnother": "Try another",
+      "tryAnotherHint": "Request one new AI generation using the current Room and design direction.",
+      "proposalNumber": "Proposal {{number}}",
+      "compare": "Compare transient proposals",
+      "transientHint": "This session only · up to 3 proposals · oldest replaced when full.",
+      "errors": {
+        "notConfigured": "AI generation is not configured. Ask the server administrator to configure the provider.",
+        "authentication": "The AI provider rejected the server credentials. Ask the server administrator to check the configuration.",
+        "modelAccess": "The configured AI model is unavailable to this account. Ask the server administrator to check model access.",
+        "timeout": "The generation result could not be confirmed before the request timed out. A paid generation may have completed. Check provider usage or billing before choosing to generate again.",
+        "unavailable": "The AI provider is temporarily unavailable. Check provider status before choosing another generation request.",
+        "generation": "The AI provider could not complete this design. Review your direction before choosing another generation request.",
+        "invalidResponse": "The provider returned an unusable design result. Check provider usage or billing before choosing another generation request.",
+        "references": "The required Room references are unavailable. Refresh the reference views before generating again.",
+        "target": "The Room context is no longer valid. Select the Room again and inspect its references.",
+        "connection": "The generation result could not be confirmed because the connection failed. A paid generation may have completed. Check provider usage or billing before choosing to generate again."
+      },
+      "directionHint": "Changing direction clears current proposals.",
+      "refreshHint": "Refreshing clears current proposals."
     },
     "empty": {
       "title": "No architectural geometry",
