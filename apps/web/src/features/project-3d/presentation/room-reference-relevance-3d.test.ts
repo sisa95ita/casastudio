@@ -84,6 +84,7 @@ describe("Room-reference architectural relevance", () => {
     ]);
     const model: ArchitecturalScene3DModel = Object.freeze({
       sourceProjectId: "project",
+    sourceProjectRevision: 1,
       worldLengthUnit: "m",
       levels: Object.freeze([selectedLevel, otherLevel]),
       hasArchitecturalGeometry: true

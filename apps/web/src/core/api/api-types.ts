@@ -1,4 +1,9 @@
-import type { DesignProposal, DesignReferenceView } from "@casastudio/ai";
+import type {
+  DesignProposal,
+  DesignReferenceView,
+  DurableDesignProposal,
+  DesignProposalHistory
+} from "@casastudio/ai";
 import { ProjectSchema, type Project } from "@casastudio/schema";
 
 /** Field-level diagnostic returned by a CasaStudio Problem Details response. */
@@ -89,11 +94,65 @@ export function parseDesignProposal(value: unknown): DesignProposal {
     target.kind !== "room" ||
     artifact.kind !== "image" ||
     !["image/png", "image/jpeg", "image/webp"].includes(mimeType) ||
-    !uri.startsWith(`data:${mimeType};base64,`)
+    !(
+      uri.startsWith(`data:${mimeType};base64,`) ||
+      uri ===
+        `/api/v1/projects/${encodeURIComponent(String(target.projectId))}/design-proposals/${encodeURIComponent(String(proposal.id))}/artifact`
+    )
   ) {
     throw new Error("Design proposal has an unsupported shape.");
   }
   return value as DesignProposal;
+}
+
+export function parseDurableDesignProposal(
+  value: unknown
+): DurableDesignProposal {
+  const p = parseDesignProposal(value);
+  const record = requireRecord(value, "Saved design");
+  requireString(p.id, "Saved design id");
+  requireString(p.target.projectId, "Saved design Project");
+  requireString(p.target.levelId, "Saved design Level");
+  requireString(p.target.roomId, "Saved design Room");
+  if (
+    !Number.isInteger(record.projectRevision) ||
+    Number(record.projectRevision) < 0 ||
+    !Number.isFinite(Date.parse(p.createdAt))
+  )
+    throw new Error("Invalid saved design provenance");
+  requireString(record.instructions, "Saved design direction");
+  if (
+    !/^[a-f0-9]{64}$/.test(
+      requireString(record.referenceFingerprint, "Reference fingerprint")
+    )
+  )
+    throw new Error("Invalid reference fingerprint");
+  const a = requireRecord(p.artifact, "Saved image");
+  if (
+    !Number.isInteger(a.byteSize) ||
+    Number(a.byteSize) <= 0 ||
+    !Number.isInteger(a.width) ||
+    Number(a.width) <= 0 ||
+    !Number.isInteger(a.height) ||
+    Number(a.height) <= 0 ||
+    !/^[a-f0-9]{64}$/.test(requireString(a.sha256, "Image hash")) ||
+    p.artifact.uri.startsWith("data:")
+  )
+    throw new Error("Invalid saved image metadata");
+  return value as DurableDesignProposal;
+}
+
+export function parseDesignProposalHistory(
+  value: unknown
+): DesignProposalHistory {
+  const record = requireRecord(value, "Design history");
+  const proposals = requireArray(record.proposals, "Saved designs");
+  if (proposals.length > 20)
+    throw new Error("Unbounded design history response");
+  return {
+    proposals: proposals.map(parseDurableDesignProposal),
+    nextCursor: optionalString(record.nextCursor, "History cursor")
+  };
 }
 
 /** Two-dimensional coordinate in a geometry snapshot. */

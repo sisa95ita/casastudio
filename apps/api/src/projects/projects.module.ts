@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { PersistenceModule } from "../persistence/persistence.module";
+import { DesignArtifactsModule } from "../ai/artifacts/design-artifacts.module";
 import { ProjectApiMapper } from "./api/project-api.mapper";
 import { ProjectIdPipe } from "./api/project-id.pipe";
 import { ProjectsController } from "./api/projects.controller";
@@ -31,7 +32,7 @@ import { PROJECTS_REPOSITORY } from "./persistence/projects-repository.token";
  */
 @Module({
   controllers: [ProjectsController, ProjectsGeometryController],
-  imports: [PersistenceModule],
+  imports: [PersistenceModule, DesignArtifactsModule],
   providers: [
     AuthorizedProjectLoader,
     CreateProjectService,

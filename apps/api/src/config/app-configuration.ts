@@ -70,6 +70,14 @@ const environmentSchema = z.object({
   KEYCLOAK_AUDIENCE: z.string().min(1),
   KEYCLOAK_CLIENT_ID: z.string().min(1),
   AI_PROVIDER: z.enum(["openai"]).optional(),
+  AI_ARTIFACT_STORAGE: z.literal("filesystem").default("filesystem"),
+  AI_ARTIFACT_DIRECTORY: z.string().min(1).default(".data/design-artifacts"),
+  AI_ARTIFACT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(100_000_000)
+    .default(20_000_000),
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_REASONING_MODEL: z.string().min(1).default("gpt-5.6-sol"),
   OPENAI_IMAGE_MODEL: z.string().min(1).default("gpt-image-2.5-flare"),
@@ -111,18 +119,18 @@ export type AppConfiguration = {
     readonly clientId: string;
   };
   readonly ai: {
+    readonly artifacts: {
+      readonly storage: "filesystem";
+      readonly directory: string;
+      readonly maxBytes: number;
+    };
     readonly provider?: "openai";
     readonly openai: {
       readonly apiKey?: string;
       readonly reasoningModel: string;
       readonly imageModel: string;
       readonly imageQuality:
-        | "low"
-        | "medium"
-        | "high"
-        | "xhigh"
-        | "max"
-        | "auto";
+        "low" | "medium" | "high" | "xhigh" | "max" | "auto";
       readonly imageSize: string;
       readonly imageFormat: "png" | "jpeg" | "webp";
     };
@@ -164,6 +172,11 @@ function mapEnvironmentToConfiguration(
       clientId: environment.KEYCLOAK_CLIENT_ID
     },
     ai: {
+      artifacts: {
+        storage: environment.AI_ARTIFACT_STORAGE,
+        directory: environment.AI_ARTIFACT_DIRECTORY,
+        maxBytes: environment.AI_ARTIFACT_MAX_BYTES
+      },
       ...(environment.AI_PROVIDER ? { provider: environment.AI_PROVIDER } : {}),
       openai: {
         ...(environment.OPENAI_API_KEY

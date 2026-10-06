@@ -1,4 +1,5 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { DESIGN_ARTIFACT_STORE, type DesignArtifactStore } from "../../ai/artifacts/design-artifact.store";
 import type { Project } from "@casastudio/schema";
 import type { Prisma } from "@prisma/client";
 
@@ -46,7 +47,8 @@ export class PrismaProjectRepository implements ProjectsRepository {
   private readonly writer = new ProjectPersistenceWriter();
 
   constructor(
-    @Inject(PrismaService) private readonly prismaService: PrismaService
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject(DESIGN_ARTIFACT_STORE) private readonly artifacts: DesignArtifactStore
   ) {}
 
   /**
@@ -301,7 +303,8 @@ export class PrismaProjectRepository implements ProjectsRepository {
    */
   async deleteProject(input: DeleteProjectInput): Promise<DeleteProjectResult> {
     try {
-      return await this.prismaService.$transaction(async (tx) => {
+      const artifactKeys: string[] = [];
+      const result: DeleteProjectResult = await this.prismaService.$transaction(async (tx) => {
         const rows = await tx.$queryRaw<readonly LockedProjectRow[]>`
           SELECT "id", "revision", "ownerSubject", "domainCreatedAt"
           FROM "Project"
@@ -321,9 +324,19 @@ export class PrismaProjectRepository implements ProjectsRepository {
           return { status: "forbidden" };
         }
 
+        const proposals = await tx.designProposal.findMany({ where: { projectId: current.id }, select: { artifactKey: true } });
+        artifactKeys.push(...proposals.map(p => p.artifactKey));
         await tx.project.delete({ where: { id: current.id } });
         return { status: "deleted" };
       });
+      // The Project row lock and FK serialize concurrent proposal creation/deletion.
+      // Cleanup occurs only after a committed deletion has revoked database access.
+      for (const key of artifactKeys) {
+        await this.artifacts.delete(key).catch(() => {
+          new Logger(PrismaProjectRepository.name).warn({ projectId: input.projectId }, "Project artifact cleanup failed");
+        });
+      }
+      return result;
     } catch (error) {
       if (error instanceof ProjectPersistenceError) {
         throw error;

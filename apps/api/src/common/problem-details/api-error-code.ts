@@ -33,5 +33,6 @@ export enum ApiErrorCode {
   AiInvalidProviderResponse = "AI_INVALID_PROVIDER_RESPONSE",
   AiGenerationFailed = "AI_GENERATION_FAILED",
   AiMissingReference = "AI_MISSING_REFERENCE",
-  AiUnsupportedTarget = "AI_UNSUPPORTED_TARGET"
+  AiUnsupportedTarget = "AI_UNSUPPORTED_TARGET",
+  AiProposalPersistenceFailed = "AI_PROPOSAL_PERSISTENCE_FAILED"
 }

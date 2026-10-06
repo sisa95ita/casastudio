@@ -15,6 +15,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "db:seed": "prisma db seed",
+    "db:seed:design-history": "tsx prisma/seed-design-history.ts",
     "db:reset": "prisma migrate reset --force"
   },
   "dependencies": {

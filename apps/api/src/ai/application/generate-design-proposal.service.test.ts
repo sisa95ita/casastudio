@@ -138,7 +138,8 @@ describe("GenerateDesignProposalService", () => {
     };
     const service = new GenerateDesignProposalService(
       createLoader() as never,
-      provider
+      provider,
+      { persist: vi.fn(async (p) => p) } as never
     );
 
     await expect(
@@ -162,7 +163,8 @@ describe("GenerateDesignProposalService", () => {
   it("maps absent optional provider configuration to safe Problem Details", async () => {
     const service = new GenerateDesignProposalService(
       createLoader() as never,
-      new UnconfiguredInteriorDesignProvider()
+      new UnconfiguredInteriorDesignProvider(),
+      { persist: vi.fn() } as never
     );
 
     await expect(
@@ -190,7 +192,8 @@ describe("GenerateDesignProposalService", () => {
     };
     const service = new GenerateDesignProposalService(
       createLoader() as never,
-      provider
+      provider,
+      { persist: vi.fn(async (p) => p) } as never
     );
     await expect(
       service.generate("design-project", input, principal as never)

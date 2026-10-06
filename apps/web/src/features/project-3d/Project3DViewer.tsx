@@ -582,6 +582,7 @@ export function Project3DViewer({
         {webGlSupported && selection?.kind === "room" ? (
           <AiRoomDesignPanel
             projectId={model.sourceProjectId}
+            projectRevision={model.sourceProjectRevision}
             levelId={selection.levelId}
             roomId={selection.id}
             capture={referenceViewCapture}
@@ -734,10 +735,7 @@ function ArchitecturalFoundationScene({
         ? createRoomReferencePlans3D(
             {
               sourceProjectId: referenceTarget.projectId,
-              worldLengthUnit: "m",
-              levels,
-              bounds,
-              hasArchitecturalGeometry: Boolean(bounds)
+              levels
             },
             referenceTarget
           )

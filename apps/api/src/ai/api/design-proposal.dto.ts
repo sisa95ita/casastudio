@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsIn,
   IsInt,
+  IsOptional,
   IsNumber,
   IsString,
   Matches,
@@ -129,4 +130,21 @@ export class GenerateRoomDesignRequestDto {
   @ValidateNested({ each: true })
   @Type(() => DesignReferenceViewDto)
   referenceViews!: DesignReferenceViewDto[];
+}
+
+export class DesignProposalHistoryQueryDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  levelId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  roomId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  cursor?: string;
 }

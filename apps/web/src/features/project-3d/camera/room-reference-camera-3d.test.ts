@@ -173,6 +173,7 @@ function createSyntheticModel(): ArchitecturalScene3DModel {
   } as unknown as LevelReference3D;
   return Object.freeze({
     sourceProjectId: "project",
+    sourceProjectRevision: 1,
     worldLengthUnit: "m",
     levels: Object.freeze([lower, upper]),
     hasArchitecturalGeometry: true

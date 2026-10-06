@@ -5,15 +5,15 @@
   },
   "status": {
     "loading": "Loading authoritative Project geometry",
-    "saved": "Saved · Level {{level}} · Revision {{revision}}",
-    "editing": "Editing locally · Level {{level}} · Base revision {{revision}}",
+    "saved": "Saved \u00b7 Level {{level}} \u00b7 Revision {{revision}}",
+    "editing": "Editing locally \u00b7 Level {{level}} \u00b7 Base revision {{revision}}",
     "level": "Level {{level}}",
     "polygons": "{{polygons}} spaces",
     "selection": "{{selection}} selected",
     "revision": "Revision {{revision}}",
     "unavailable": "Project geometry unavailable"
   },
-  "loading": "Loading Project and Geometry data…",
+  "loading": "Loading Project and Geometry data\u2026",
   "intro": {
     "eyebrow": "Authoritative project geometry",
     "editEyebrow": "Local project draft"
@@ -23,12 +23,12 @@
     "view": "View",
     "edit": "Edit",
     "editing": "Editing",
-    "editingLevel": "Editing · {{level}}",
+    "editingLevel": "Editing \u00b7 {{level}}",
     "editPlan": "Edit plan",
     "editIn2D": "Edit in 2D",
     "backToProject": "Back to project",
     "clean": "No unsaved changes",
-    "saving": "Saving…",
+    "saving": "Saving\u2026",
     "saved": "Saved",
     "unsaved": "Unsaved changes",
     "readOnly": "Read-only"
@@ -42,13 +42,13 @@
     "title": "3D workspace",
     "viewDescription": "Explore the Project in 3D.",
     "editDescription": "Move and rotate Furniture in 3D. Architectural geometry remains read-only.",
-    "loading": "Loading the 3D workspace…",
+    "loading": "Loading the 3D workspace\u2026",
     "fit": "Fit to building",
     "reset": "Reset camera",
-    "status_one": "3D · {{count}} visible Level · View mode",
-    "status_other": "3D · {{count}} visible Levels · View mode",
-    "editStatus_one": "3D · {{count}} visible Level · Edit mode",
-    "editStatus_other": "3D · {{count}} visible Levels · Edit mode",
+    "status_one": "3D \u00b7 {{count}} visible Level \u00b7 View mode",
+    "status_other": "3D \u00b7 {{count}} visible Levels \u00b7 View mode",
+    "editStatus_one": "3D \u00b7 {{count}} visible Level \u00b7 Edit mode",
+    "editStatus_other": "3D \u00b7 {{count}} visible Levels \u00b7 Edit mode",
     "visibility": {
       "label": "3D Level visibility",
       "all": "All Levels",
@@ -56,7 +56,7 @@
     },
     "ai": {
       "title": "AI Interior Designer",
-      "roomTarget": "Room: {{room}} · automatic Room references",
+      "roomTarget": "Room: {{room}} \u00b7 automatic Room references",
       "references": "Reference views",
       "refreshReferences": "Refresh",
       "referenceKinds": {
@@ -68,8 +68,8 @@
       "instructions": "Design direction",
       "placeholder": "Warm minimal living room with natural materials",
       "generate": "Generate design",
-      "generating": "Generating…",
-      "referencePreparing": "Preparing Room references…",
+      "generating": "Generating\u2026",
+      "referencePreparing": "Preparing Room references\u2026",
       "referenceFailure": "The Room references could not be prepared. Refresh the reference views to try again.",
       "proposal": "Design proposal",
       "proposalAlt": "AI-generated interior design proposal for the selected Room",
@@ -78,9 +78,9 @@
       "closePreview": "Close preview",
       "telemetry": {
         "title": "Generation details",
-        "models": "Provider: {{provider}} · Model: {{model}} · Image model: {{imageModel}}",
-        "output": "Duration: {{duration}} · Output: {{dimensions}} {{format}} · Quality: {{quality}}",
-        "usage": "Usage: {{input}} input · {{output}} output · {{cached}} cached · {{total}} total tokens",
+        "models": "Provider: {{provider}} \u00b7 Model: {{model}} \u00b7 Image model: {{imageModel}}",
+        "output": "Duration: {{duration}} \u00b7 Output: {{dimensions}} {{format}} \u00b7 Quality: {{quality}}",
+        "usage": "Usage: {{input}} input \u00b7 {{output}} output \u00b7 {{cached}} cached \u00b7 {{total}} total tokens",
         "estimatedCost": "Estimated API cost: {{currency}} {{amount}}",
         "generatedAt": "Generated: {{timestamp}}",
         "mode": "Generation mode: {{mode}}"
@@ -89,7 +89,7 @@
       "generateHint": "One click requests one AI design generation.",
       "waiting": "Waiting for the AI provider for {{room}}. Generation may take a few minutes.",
       "states": {
-        "preparing": "Preparing local Room reference views…",
+        "preparing": "Preparing local Room reference views\u2026",
         "ready": "References ready. Add a design direction, then generate when you are ready.",
         "success": "Proposal ready to inspect.",
         "failure": "The request could not be completed. Review the error before another attempt."
@@ -98,7 +98,7 @@
       "tryAnotherHint": "Request one new AI generation using the current Room and design direction.",
       "proposalNumber": "Proposal {{number}}",
       "compare": "Compare transient proposals",
-      "transientHint": "This session only · up to 3 proposals · oldest replaced when full.",
+      "transientHint": "Current session \u00b7 up to 3 comparisons. Every completed design is already saved in Room history.",
       "errors": {
         "notConfigured": "AI generation is not configured. Ask the server administrator to configure the provider.",
         "authentication": "The AI provider rejected the server credentials. Ask the server administrator to check the configuration.",
@@ -109,10 +109,34 @@
         "invalidResponse": "The provider returned an unusable design result. Check provider usage or billing before choosing another generation request.",
         "references": "The required Room references are unavailable. Refresh the reference views before generating again.",
         "target": "The Room context is no longer valid. Select the Room again and inspect its references.",
-        "connection": "The generation result could not be confirmed because the connection failed. A paid generation may have completed. Check provider usage or billing before choosing to generate again."
+        "connection": "The generation result could not be confirmed because the connection failed. A paid generation may have completed. Check provider usage or billing before choosing to generate again.",
+        "persistence": "The design was generated, but CasaStudio could not save the proposal. The paid generation may have completed. Generating again would be a new request."
       },
       "directionHint": "Changing direction clears current proposals.",
-      "refreshHint": "Refreshing clears current proposals."
+      "refreshHint": "Refreshing clears current proposals.",
+      "history": {
+        "title": "Saved Room designs",
+        "hint": "Saved designs remain after reload. Current session comparisons below refer to the same saved designs.",
+        "loading": "Loading saved designs\u2026",
+        "failed": "Saved designs could not be loaded. Use Refresh history to try again.",
+        "empty": "No saved designs for this Room yet.",
+        "refresh": "Refresh history",
+        "older": "Older designs",
+        "historical": "Historical design \u00b7 revision {{revision}}. Current geometry may differ.",
+        "revision": "Project revision {{revision}}",
+        "selected": "Saved design",
+        "saved": "Saved in Room history",
+        "delete": "Delete saved design",
+        "imageLoading": "Loading saved image\u2026",
+        "imageFailed": "The saved image could not be loaded.",
+        "deleteTitle": "Delete this saved design?",
+        "deleteDescription": "This removes the design and its image from Room history and current session comparisons. Project geometry stays unchanged.",
+        "cancel": "Cancel",
+        "confirmDelete": "Delete design",
+        "deleting": "Deleting\u2026",
+        "deleteFailed": "The design could not be deleted. Try again.",
+        "retryImage": "Retry image"
+      }
     },
     "empty": {
       "title": "No architectural geometry",
@@ -182,7 +206,7 @@
     "keepEditing": "Keep editing",
     "cancel": "Cancel",
     "saving": {
-      "title": "Saving project…",
+      "title": "Saving project\u2026",
       "detail": "Please wait while your changes are saved.",
       "progressLabel": "Saving project"
     },
@@ -216,7 +240,7 @@
       "latestTitle": "The latest project could not be loaded",
       "latestDetail": "Your local changes were discarded, but the authoritative Project and Geometry data could not be refreshed.",
       "retry": "Retry loading",
-      "retrying": "Loading latest project…"
+      "retrying": "Loading latest project\u2026"
     }
   },
   "tools": {
@@ -233,7 +257,7 @@
     "undo": "Undo",
     "redo": "Redo",
     "createRoom": "Create Room",
-    "comingSoon": "{{tool}} — coming soon",
+    "comingSoon": "{{tool}} \u2014 coming soon",
     "help": {
       "select": "Select elements in the plan.",
       "draw-wall": "Draw architectural walls.",
@@ -301,7 +325,7 @@
     "left": "Left",
     "right": "Right",
     "connectionSummary": "From {{from}} to {{to}}",
-    "rotationHelp": "0° follows Project +X; positive angles turn toward Project +Z.",
+    "rotationHelp": "0\u00b0 follows Project +X; positive angles turn toward Project +Z.",
     "templates": {
       "straight": "Straight",
       "lShaped": "L-shaped",
@@ -371,7 +395,7 @@
     "menuLabel": "Project levels",
     "add": "Add level",
     "createFromBelow": "Create from level below",
-    "manage": "Manage levels…",
+    "manage": "Manage levels\u2026",
     "create": "Create level",
     "edit": "Edit level",
     "createTitle": "Create level",

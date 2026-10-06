@@ -19,7 +19,11 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import type { DesignProposal, DesignReferenceView } from "@casastudio/ai";
+import type {
+  DesignProposal,
+  DesignReferenceView,
+  DurableDesignProposal
+} from "@casastudio/ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiRequestError } from "../../core/api/CasaStudioApiClient";
@@ -29,6 +33,10 @@ import {
   useDesignGeneration,
   type DesignGeneration
 } from "./useDesignGeneration";
+import {
+  useDesignArtifact,
+  useRoomDesignHistory
+} from "./useRoomDesignHistory";
 
 export type DesignReferenceViewCapture = () => Promise<
   readonly DesignReferenceView[]
@@ -43,6 +51,7 @@ type AiRoomDesignPanelProps = {
   /** Immutable canonical scene identity; also catches unsaved geometry changes. */
   readonly sceneContext?: object;
   readonly generation?: DesignGeneration;
+  readonly projectRevision?: number;
 };
 
 type ReferenceState =
@@ -77,7 +86,7 @@ const emptySession = (context: DesignContextIdentity): DesignSession => ({
   outcome: "idle"
 });
 
-/** Transient AI interior-design UI for a selected canonical Room. */
+/** Session comparisons and durable Room history for a selected canonical Room. */
 export function AiRoomDesignPanel({
   projectId,
   levelId,
@@ -85,9 +94,16 @@ export function AiRoomDesignPanel({
   capture,
   roomName,
   sceneContext,
+  projectRevision,
   generation: sharedGeneration
 }: AiRoomDesignPanelProps) {
   const api = useCasaStudioApi();
+  const history = useRoomDesignHistory(projectId, levelId, roomId);
+  const [historicalId, setHistoricalId] = useState<string>();
+  const [deleteTarget, setDeleteTarget] = useState<DesignProposal>();
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+  const deletePending = useRef(false);
   const { t } = useCasaTranslation("project-viewer");
   const localGeneration = useDesignGeneration();
   // The viewer owns the guard so deselecting/reselecting a Room cannot overlap requests.
@@ -98,6 +114,8 @@ export function AiRoomDesignPanel({
     () => ({ projectId, levelId, roomId, capture, sceneContext }),
     [projectId, levelId, roomId, capture, sceneContext]
   );
+  const activeContext = useRef(context);
+  activeContext.current = context;
   const [instructions, setInstructions] = useState("");
   const [session, setSession] = useState<DesignSession>(() =>
     emptySession(context)
@@ -119,7 +137,21 @@ export function AiRoomDesignPanel({
   const active = current.proposals.find(
     (entry) => entry.number === current.activeNumber
   );
-  const proposal = active?.proposal;
+  const proposal =
+    (historicalId
+      ? history.proposals.find((p) => p.id === historicalId)
+      : undefined) ?? active?.proposal;
+  const selectedProposal = useRef(proposal);
+  selectedProposal.current = proposal;
+  const saved =
+    proposal && "projectRevision" in proposal
+      ? (proposal as DurableDesignProposal)
+      : undefined;
+  const image = useDesignArtifact(proposal);
+  const sessionIds = new Set(
+    current.proposals.map((entry) => entry.proposal.id)
+  );
+  const historyOnly = history.proposals.filter((p) => !sessionIds.has(p.id));
   const phase = generating
     ? "generating"
     : referencePreparing
@@ -184,6 +216,9 @@ export function AiRoomDesignPanel({
     capturePending.current = false;
     setSession(emptySession(context));
     setPreviewOpen(false);
+    setHistoricalId(undefined);
+    setDeleteTarget(undefined);
+    setDeleteError(false);
     setReferencePreview(undefined);
     setReferencesExpanded(true);
     setDetailsExpanded(false);
@@ -244,7 +279,11 @@ export function AiRoomDesignPanel({
           referenceViews
         })
       );
-      if (!result || !mounted.current || ticket !== epoch.current) return;
+      if (!result || !mounted.current) return;
+      // The server has persisted even a completion invalidated by a direction edit.
+      history.add(result);
+      if (ticket !== epoch.current) return;
+      setHistoricalId(undefined);
       setSession((value) =>
         value.context === context
           ? {
@@ -281,6 +320,50 @@ export function AiRoomDesignPanel({
           ? { ...value, outcome: "failure", error: message }
           : value
       );
+    }
+  };
+
+  const deleteProposal = async () => {
+    if (!deleteTarget || deletePending.current) return;
+    const target = deleteTarget;
+    const identity = context;
+    deletePending.current = true;
+    setDeleting(true);
+    setDeleteError(false);
+    try {
+      await api.deleteDesignProposal(target.target.projectId, target.id);
+      if (
+        !mounted.current ||
+        activeContext.current.projectId !== identity.projectId ||
+        activeContext.current.levelId !== identity.levelId ||
+        activeContext.current.roomId !== identity.roomId
+      )
+        return;
+      history.remove(target.id);
+      setSession((value) => {
+        if (value.context !== identity) return value;
+        const proposals = value.proposals.filter(
+          (entry) => entry.proposal.id !== target.id
+        );
+        return {
+          ...value,
+          proposals,
+          activeNumber: proposals.some(
+            (entry) => entry.number === value.activeNumber
+          )
+            ? value.activeNumber
+            : proposals.at(-1)?.number
+        };
+      });
+      setHistoricalId((value) => (value === target.id ? undefined : value));
+      if (selectedProposal.current?.id === target.id) setPreviewOpen(false);
+      setDeleteTarget((value) => (value?.id === target.id ? undefined : value));
+    } catch {
+      if (mounted.current && activeContext.current === identity)
+        setDeleteError(true);
+    } finally {
+      deletePending.current = false;
+      if (mounted.current) setDeleting(false);
     }
   };
 
@@ -417,6 +500,7 @@ export function AiRoomDesignPanel({
         </Typography>
         <Box
           role="status"
+          aria-label={t("threeD.ai.title")}
           aria-live="polite"
           aria-atomic="true"
           sx={{ minHeight: 44 }}
@@ -441,10 +525,97 @@ export function AiRoomDesignPanel({
             {current.error}
           </Alert>
         ) : null}
+        <Box>
+          <Typography variant="subtitle2">
+            {t("threeD.ai.history.title")}
+          </Typography>
+          <Typography variant="caption" component="div">
+            {t("threeD.ai.history.hint")}
+          </Typography>
+          {history.loading ? (
+            <Typography variant="caption" role="status">
+              {t("threeD.ai.history.loading")}
+            </Typography>
+          ) : null}
+          {history.error ? (
+            <Alert severity="error">{t("threeD.ai.history.failed")}</Alert>
+          ) : null}
+          {!history.loading &&
+          !history.error &&
+          history.proposals.length === 0 ? (
+            <Typography variant="caption">
+              {t("threeD.ai.history.empty")}
+            </Typography>
+          ) : null}
+          <Stack
+            spacing={0.5}
+            sx={{ maxHeight: 160, overflowY: "auto", mt: 0.5 }}
+          >
+            {historyOnly.map((p) => (
+              <Button
+                key={p.id}
+                size="small"
+                variant={historicalId === p.id ? "contained" : "outlined"}
+                aria-pressed={historicalId === p.id}
+                onClick={() => {
+                  setHistoricalId(p.id);
+                  setPreviewOpen(false);
+                  setDetailsExpanded(false);
+                }}
+                sx={{
+                  justifyContent: "flex-start",
+                  textAlign: "left",
+                  textTransform: "none"
+                }}
+              >
+                <Box>
+                  <Typography variant="caption" component="div">
+                    {new Date(p.createdAt).toLocaleString()}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    sx={{ overflowWrap: "anywhere" }}
+                  >
+                    {p.instructions}
+                  </Typography>
+                  {projectRevision !== undefined &&
+                  p.projectRevision !== projectRevision ? (
+                    <Typography variant="caption" component="div">
+                      {t("threeD.ai.history.historical", {
+                        revision: p.projectRevision
+                      })}
+                    </Typography>
+                  ) : null}
+                </Box>
+              </Button>
+            ))}
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              disabled={history.loading}
+              onClick={() => void history.load()}
+            >
+              {t("threeD.ai.history.refresh")}
+            </Button>
+            {history.nextCursor ? (
+              <Button
+                size="small"
+                disabled={history.loading}
+                onClick={() => void history.load(history.nextCursor)}
+              >
+                {t("threeD.ai.history.older")}
+              </Button>
+            ) : null}
+          </Stack>
+        </Box>
         {proposal ? (
           <Box>
             <Typography variant="caption" color="text.secondary">
-              {t("threeD.ai.proposalNumber", { number: active?.number })}
+              {historicalId
+                ? t("threeD.ai.history.selected")
+                : t("threeD.ai.proposalNumber", { number: active?.number })}
             </Typography>
             {current.proposals.length > 1 ? (
               <Stack
@@ -464,6 +635,7 @@ export function AiRoomDesignPanel({
                     }
                     aria-pressed={entry.number === active?.number}
                     onClick={() => {
+                      setHistoricalId(undefined);
                       setSession((value) => ({
                         ...value,
                         activeNumber: entry.number
@@ -482,9 +654,64 @@ export function AiRoomDesignPanel({
               color="text.secondary"
               sx={{ mt: 0.5 }}
             >
-              {t("threeD.ai.transientHint")}
+              {historicalId
+                ? t("threeD.ai.history.saved")
+                : t("threeD.ai.transientHint")}
             </Typography>
+            {saved ? (
+              <Box sx={{ my: 0.5 }}>
+                <Typography variant="caption" component="div">
+                  {new Date(saved.createdAt).toLocaleString()} ·{" "}
+                  {t("threeD.ai.history.revision", {
+                    revision: saved.projectRevision
+                  })}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  component="div"
+                  sx={{ overflowWrap: "anywhere" }}
+                >
+                  {saved.instructions}
+                </Typography>
+                {projectRevision !== undefined &&
+                saved.projectRevision !== projectRevision ? (
+                  <Alert severity="info">
+                    {t("threeD.ai.history.historical", {
+                      revision: saved.projectRevision
+                    })}
+                  </Alert>
+                ) : null}
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={() => {
+                    setDeleteTarget(saved);
+                    setDeleteError(false);
+                  }}
+                >
+                  {t("threeD.ai.history.delete")}
+                </Button>
+              </Box>
+            ) : null}
+            {image.error ? (
+              <Alert
+                severity="error"
+                action={
+                  <Button size="small" onClick={image.retry}>
+                    {t("threeD.ai.history.retryImage")}
+                  </Button>
+                }
+              >
+                {t("threeD.ai.history.imageFailed")}
+              </Alert>
+            ) : null}
+            {!image.uri && !image.error ? (
+              <Typography variant="caption" role="status">
+                {t("threeD.ai.history.imageLoading")}
+              </Typography>
+            ) : null}
             <ButtonBase
+              disabled={!image.uri}
               aria-label={t("threeD.ai.openPreview")}
               onClick={() => setPreviewOpen(true)}
               sx={{
@@ -505,7 +732,7 @@ export function AiRoomDesignPanel({
             >
               <Box
                 component="img"
-                src={proposal.artifact.uri}
+                src={image.uri}
                 alt={t("threeD.ai.proposalAlt")}
                 sx={{
                   display: "block",
@@ -648,7 +875,7 @@ export function AiRoomDesignPanel({
           {proposal ? (
             <Box
               component="img"
-              src={proposal.artifact.uri}
+              src={image.uri}
               alt={t("threeD.ai.proposalAlt")}
               style={{
                 maxHeight: "calc(100dvh - 160px)",
@@ -664,8 +891,65 @@ export function AiRoomDesignPanel({
           ) : null}
         </DialogContent>
         <DialogActions>
+          {saved ? (
+            <Button
+              color="error"
+              onClick={() => {
+                setDeleteTarget(saved);
+                setDeleteError(false);
+              }}
+            >
+              {t("threeD.ai.history.delete")}
+            </Button>
+          ) : null}
           <Button autoFocus onClick={() => setPreviewOpen(false)}>
             {t("threeD.ai.closePreview")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onClose={() => {
+          if (!deleting) setDeleteTarget(undefined);
+        }}
+        data-editor-shortcut-scope="true"
+        aria-labelledby="delete-design-title"
+        aria-describedby="delete-design-description"
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle id="delete-design-title">
+          {t("threeD.ai.history.deleteTitle")}
+        </DialogTitle>
+        <DialogContent>
+          <Typography id="delete-design-description">
+            {t("threeD.ai.history.deleteDescription")}
+          </Typography>
+          {deleteError ? (
+            <Alert severity="error">
+              {t("threeD.ai.history.deleteFailed")}
+            </Alert>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            autoFocus
+            disabled={deleting}
+            onClick={() => setDeleteTarget(undefined)}
+          >
+            {t("threeD.ai.history.cancel")}
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleting}
+            onClick={() => void deleteProposal()}
+          >
+            {t(
+              deleting
+                ? "threeD.ai.history.deleting"
+                : "threeD.ai.history.confirmDelete"
+            )}
           </Button>
         </DialogActions>
       </Dialog>
@@ -714,6 +998,7 @@ function formatDuration(durationMs: number): string {
 
 // Stable normalized categories only; unknown/raw failures never reach the UI.
 const generationErrorKeys: Record<string, string> = {
+  AI_PROPOSAL_PERSISTENCE_FAILED: "persistence",
   AI_PROVIDER_NOT_CONFIGURED: "notConfigured",
   AI_AUTHENTICATION_FAILED: "authentication",
   AI_MODEL_ACCESS_FAILED: "modelAccess",

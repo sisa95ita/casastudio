@@ -209,6 +209,7 @@ export type LevelReference3D = Level3D;
 /** Pure renderer-neutral presentation model derived from an authoritative Project. */
 export type ArchitecturalScene3DModel = Readonly<{
   sourceProjectId: string;
+  sourceProjectRevision: number;
   worldLengthUnit: "m";
   levels: readonly Level3D[];
   bounds?: SceneBounds3D;
@@ -499,6 +500,7 @@ export function createArchitecturalScene3DModel(
   const bounds = collectSceneBounds3D(levels);
   return Object.freeze({
     sourceProjectId: project.id,
+    sourceProjectRevision: project.revision,
     worldLengthUnit: "m",
     levels: Object.freeze(levels),
     bounds,

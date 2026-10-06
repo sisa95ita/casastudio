@@ -15,6 +15,7 @@ import { ApiProblemError } from "../../common/problem-details/problem-details-ex
 import { AuthorizedProjectLoader } from "../../projects/application/authorized-project-loader.service";
 import type { GenerateRoomDesignRequestDto } from "../api/design-proposal.dto";
 import { INTERIOR_DESIGN_PROVIDER } from "../interior-design-provider.token";
+import { PersistDesignProposalService } from "./persist-design-proposal.service";
 
 @Injectable()
 export class GenerateDesignProposalService {
@@ -24,7 +25,9 @@ export class GenerateDesignProposalService {
     @Inject(AuthorizedProjectLoader)
     private readonly projectLoader: AuthorizedProjectLoader,
     @Inject(INTERIOR_DESIGN_PROVIDER)
-    private readonly provider: InteriorDesignProvider
+    private readonly provider: InteriorDesignProvider,
+    @Inject(PersistDesignProposalService)
+    private readonly persistence: PersistDesignProposalService
   ) {}
 
   async generate(
@@ -62,12 +65,19 @@ export class GenerateDesignProposalService {
         createId: () => `design-${randomUUID()}`,
         now: () => new Date()
       });
-      return await service.generate({
+      const proposal = await service.generate({
         target,
         instructions: input.instructions,
         context,
         referenceViews: input.referenceViews
       });
+      return await this.persistence.persist(
+        proposal,
+        loadedProject.project.revision,
+        input.instructions,
+        context,
+        input.referenceViews
+      );
     } catch (error) {
       if (!(error instanceof DesignGenerationError)) throw error;
       this.logger.warn(

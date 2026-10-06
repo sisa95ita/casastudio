@@ -10,12 +10,25 @@ import { GenerateDesignProposalService } from "./application/generate-design-pro
 import { INTERIOR_DESIGN_PROVIDER } from "./interior-design-provider.token";
 import { OpenAIInteriorDesignProvider } from "./openai/openai-interior-design.provider";
 import { UnconfiguredInteriorDesignProvider } from "./unconfigured-interior-design.provider";
+import { PersistenceModule } from "../persistence/persistence.module";
+import { DesignArtifactsModule } from "./artifacts/design-artifacts.module";
+import { PersistDesignProposalService } from "./application/persist-design-proposal.service";
+import { DesignProposalHistoryService } from "./application/design-proposal-history.service";
+import { PrismaDesignProposalsRepository } from "./persistence/prisma-design-proposal.repository";
+import { DESIGN_PROPOSALS_REPOSITORY } from "./persistence/design-proposal.repository";
 
 @Module({
-  imports: [ProjectsModule],
+  imports: [ProjectsModule, PersistenceModule, DesignArtifactsModule],
   controllers: [DesignProposalsController],
   providers: [
     GenerateDesignProposalService,
+    PersistDesignProposalService,
+    DesignProposalHistoryService,
+    PrismaDesignProposalsRepository,
+    {
+      provide: DESIGN_PROPOSALS_REPOSITORY,
+      useExisting: PrismaDesignProposalsRepository
+    },
     {
       provide: INTERIOR_DESIGN_PROVIDER,
       inject: [ConfigService],

@@ -224,3 +224,16 @@ export type DesignProposal = Readonly<{
   telemetry?: DesignGenerationTelemetry;
   structuredSuggestions?: readonly unknown[];
 }>;
+
+/** Application-owned history; never part of canonical ProjectSchema. */
+export type DurableDesignProposal = DesignProposal & Readonly<{
+  projectRevision: number;
+  instructions: string;
+  referenceFingerprint: string;
+  artifact: DesignArtifact & Readonly<{ byteSize: number; sha256: string }>;
+}>;
+
+export type DesignProposalHistory = Readonly<{
+  proposals: readonly DurableDesignProposal[];
+  nextCursor?: string;
+}>;

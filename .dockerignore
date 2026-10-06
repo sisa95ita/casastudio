@@ -11,3 +11,4 @@ infra/jenkins
 .DS_Store
 *.log
 .env
+**/.data

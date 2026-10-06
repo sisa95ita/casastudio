@@ -40,7 +40,7 @@ export type RoomReferencePlan3D = Readonly<{
  * contours never require a rectangular or axis-aligned assumption.
  */
 export function createRoomReferencePlans3D(
-  model: ArchitecturalScene3DModel,
+  model: Pick<ArchitecturalScene3DModel, "sourceProjectId" | "levels">,
   target: DesignTarget,
   aspect = 4 / 3
 ): readonly RoomReferencePlan3D[] {

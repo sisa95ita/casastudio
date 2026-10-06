@@ -81,7 +81,7 @@ describe("PrismaProjectRepository transaction limits", () => {
     );
     const repository = new PrismaProjectRepository({
       $transaction: transaction
-    } as unknown as PrismaService);
+    } as unknown as PrismaService, { delete: vi.fn() } as never);
 
     await expect(
       repository.replaceProject({
@@ -115,7 +115,7 @@ describeWithDatabase("relational Project persistence", () => {
     });
     writer = new ProjectPersistenceWriter();
     repository = new PrismaProjectRepository(
-      prisma as unknown as PrismaService
+      prisma as unknown as PrismaService, { delete: vi.fn() } as never
     );
   });
 

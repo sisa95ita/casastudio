@@ -120,6 +120,7 @@ describe("API configuration", () => {
         OPENAI_IMAGE_FORMAT: "webp"
       }).ai
     ).toEqual({
+      artifacts: { storage: "filesystem", directory: ".data/design-artifacts", maxBytes: 20_000_000 },
       provider: "openai",
       openai: {
         apiKey: "server-secret",

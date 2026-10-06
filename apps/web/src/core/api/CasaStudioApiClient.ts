@@ -1,4 +1,4 @@
-import type { DesignProposal } from "@casastudio/ai";
+import type { DesignProposal, DesignProposalHistory } from "@casastudio/ai";
 
 import {
   isApiProblem,
@@ -6,6 +6,7 @@ import {
   parseProjectGeometryResponse,
   parseProjectResponse,
   parseDesignProposal,
+  parseDesignProposalHistory,
   type ApiProblem,
   type CreateProjectRequest,
   type ProjectListResponse,
@@ -228,7 +229,7 @@ export class CasaStudioApiClient {
     }
   }
 
-  /** Generates a transient Room proposal without sending canonical Project JSON. */
+  /** Generates and persists one Room proposal without sending canonical Project JSON. */
   async generateRoomDesign(
     projectId: string,
     request: GenerateRoomDesignRequest,
@@ -249,6 +250,83 @@ export class CasaStudioApiClient {
         { cause: error }
       );
     }
+  }
+
+  async listRoomDesigns(
+    projectId: string,
+    levelId: string,
+    roomId: string,
+    cursor?: string,
+    signal?: AbortSignal
+  ): Promise<DesignProposalHistory> {
+    const query = new URLSearchParams({
+      levelId,
+      roomId,
+      ...(cursor ? { cursor } : {})
+    });
+    const body = await this.requestJson(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/design-proposals?${query}`,
+      { method: "GET", signal }
+    );
+    try {
+      const history = parseDesignProposalHistory(body);
+      if (
+        history.proposals.some(
+          (p) =>
+            p.target.projectId !== projectId ||
+            p.target.levelId !== levelId ||
+            p.target.roomId !== roomId
+        )
+      )
+        throw new Error("Mismatched history scope");
+      return history;
+    } catch (error) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned invalid design history.",
+        undefined,
+        undefined,
+        { cause: error }
+      );
+    }
+  }
+
+  async getDesignArtifact(
+    projectId: string,
+    proposalId: string,
+    signal?: AbortSignal
+  ): Promise<Blob> {
+    const response = await this.request(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/design-proposals/${encodeURIComponent(proposalId)}/artifact`,
+      { method: "GET", signal, accept: "image/png,image/jpeg,image/webp" }
+    );
+    const blob = await response.blob();
+    if (
+      !["image/png", "image/jpeg", "image/webp"].includes(blob.type) ||
+      !blob.size ||
+      blob.size > 100_000_000
+    )
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid saved image."
+      );
+    return blob;
+  }
+
+  async deleteDesignProposal(
+    projectId: string,
+    proposalId: string
+  ): Promise<void> {
+    const response = await this.request(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/design-proposals/${encodeURIComponent(proposalId)}`,
+      { method: "DELETE" }
+    );
+    if (response.status !== 204)
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid proposal deletion response.",
+        response.status
+      );
   }
 
   private async requestJson(
@@ -278,6 +356,7 @@ export class CasaStudioApiClient {
     path: string,
     request: {
       readonly method: "DELETE" | "GET" | "POST" | "PUT";
+      readonly accept?: string;
       readonly body?: unknown;
       readonly signal?: AbortSignal;
     }
@@ -300,7 +379,7 @@ export class CasaStudioApiClient {
       response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
         method: request.method,
         headers: {
-          Accept: "application/json",
+          Accept: request.accept ?? "application/json",
           Authorization: `Bearer ${token}`,
           ...(request.body === undefined
             ? {}

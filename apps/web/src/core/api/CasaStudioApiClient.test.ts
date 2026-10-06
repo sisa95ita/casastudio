@@ -73,6 +73,134 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("authenticated durable proposal delivery", () => {
+  const saved = {
+    id: "design-one",
+    status: "succeeded",
+    target: {
+      kind: "room",
+      projectId: "project",
+      levelId: "level",
+      roomId: "room"
+    },
+    createdAt: "2026-10-05T10:00:00.000Z",
+    projectRevision: 1,
+    instructions: "Warm interior",
+    referenceFingerprint: "b".repeat(64),
+    artifact: {
+      kind: "image",
+      uri: "/api/v1/projects/project/design-proposals/design-one/artifact",
+      mimeType: "image/png",
+      width: 1,
+      height: 1,
+      byteSize: 3,
+      sha256: "a".repeat(64)
+    }
+  };
+
+  it("lists normalized metadata with encoded scope/cursor and a Bearer token, without fetching any image", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ proposals: [saved], nextCursor: "next" }),
+          { status: 200 }
+        )
+      );
+    const result = await createClient(fetch).listRoomDesigns(
+      "project",
+      "level",
+      "room",
+      "cursor/+="
+    );
+    expect(result.proposals[0]).toEqual(saved);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0]!;
+    const query = new URL(url).searchParams;
+    expect(query.get("levelId")).toBe("level");
+    expect(query.get("roomId")).toBe("room");
+    expect(query.get("cursor")).toBe("cursor/+=");
+    expect(init.headers.Authorization).toBe("Bearer access-token");
+  });
+
+  it("fetches image bytes through the authenticated client and DELETE uses the same ownership-scoped API", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2, 3]), {
+          headers: { "Content-Type": "image/png" }
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const client = createClient(fetch);
+    const controller = new AbortController();
+    const blob = await client.getDesignArtifact(
+      "project",
+      "design-one",
+      controller.signal
+    );
+    expect(blob.type).toBe("image/png");
+    expect(blob.size).toBe(3);
+    expect(fetch.mock.calls[0]![0]).toBe(
+      "http://localhost:3000/api/v1/projects/project/design-proposals/design-one/artifact"
+    );
+    expect(fetch.mock.calls[0]![1]).toMatchObject({
+      headers: { Authorization: "Bearer access-token" },
+      signal: controller.signal
+    });
+    await client.deleteDesignProposal("project", "design-one");
+    expect(fetch.mock.calls[1]![1]).toMatchObject({
+      method: "DELETE",
+      headers: { Authorization: "Bearer access-token" }
+    });
+    expect(fetch.mock.calls.every(([, init]) => init.method !== "POST")).toBe(
+      true
+    );
+  });
+
+  it.each([
+    { ...saved, projectRevision: -1 },
+    { ...saved, referenceFingerprint: "invalid" },
+    { ...saved, target: { ...saved.target, roomId: "another-room" } },
+    {
+      ...saved,
+      artifact: { ...saved.artifact, uri: "data:image/png;base64,AQID" }
+    },
+    {
+      ...saved,
+      artifact: {
+        ...saved.artifact,
+        uri: "/api/v1/projects/other/design-proposals/design-one/artifact"
+      }
+    }
+  ])("rejects unsafe/mismatched saved history: %j", async (invalid) => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ proposals: [invalid] }))
+      );
+    await expect(
+      createClient(fetch).listRoomDesigns("project", "level", "room")
+    ).rejects.toMatchObject({ kind: "invalid-response" });
+  });
+
+  it("rejects unsupported binary MIME and missing authentication without provider calls", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("<svg/>", { headers: { "Content-Type": "image/svg+xml" } })
+      );
+    await expect(
+      createClient(fetch).getDesignArtifact("project", "design-one")
+    ).rejects.toMatchObject({ kind: "invalid-response" });
+    fetch.mockClear();
+    await expect(
+      createClient(fetch, null).getDesignArtifact("project", "design-one")
+    ).rejects.toBeInstanceOf(ApiAuthenticationUnavailableError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
 function createClient(
   fetchImplementation: typeof fetch,
   token: string | null = "access-token"

@@ -17,3 +17,4 @@ jenkins_home/
 .env.local
 *.log
 *.tsbuildinfo
+.data/
