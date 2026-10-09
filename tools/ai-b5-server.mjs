@@ -38,9 +38,14 @@ let complete;
 let writes = 0;
 const provider = {
   name: "b5-local-fake",
+  async refineDesign(input) {
+    return this.generateDesign(input);
+  },
   async generateDesign(input) {
     if (complete) throw new Error("Unexpected overlapping generation");
     calls.push({
+      operation: input.baseProposal ? "refine" : "generate",
+      baseProposalId: input.baseProposal?.id,
       target: input.target,
       instructions: input.instructions,
       revision: input.context.project.revision,

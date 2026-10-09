@@ -9,6 +9,9 @@ AI-C has exactly three phases: C1 (Conversation & Proposal Lineage), C2
 (Conversational Design UX), and C3 (Conversational Quality & Validation). See
 [Conversation & Proposal Lineage](ai/conversation-proposal-lineage.md) for the C1
 model, provider-neutral refinement, continuation strategy and C2 API seams.
+[AI-C2 revision workspace](ai/conversational-design-ux.md) is implemented, pending
+owner acceptance. Proposal Review owns refinement and parent-linked branch navigation;
+Try another remains an independent root alternative. C3 is not started.
 
 ## Truth boundaries
 
@@ -366,8 +369,8 @@ live provider calls or manual visual acceptance. Owners can evaluate it as follo
 ## Evolution
 
 - **AI-C1 (implemented):** durable conversation/Proposal lineage, structural branches and provider-neutral refinement with optional provider state.
-- **AI-C2:** Conversational Design UX.
-- **AI-C3:** Conversational Quality & Validation.
+- **AI-C2 (implemented / pending owner acceptance):** [Conversational Design UX](ai/conversational-design-ux.md).
+- **AI-C3 (not started):** Conversational Quality & Validation.
 - **AI-B4 (implemented):** [durable application artifacts and Room history](ai/durable-design-proposals.md), separate from ProjectSchema.
 - **Later product work:** genuine provider/job progress if supported, richer style and explicit Furniture-preservation controls, and quality/cost experiments approved from manual results.
 - **Gemini/other providers:** implement `InteriorDesignProvider`; reuse target, context, reference, request, proposal, and failure contracts. Provider choice can later be resolved per user/tenant without changing these contracts.

@@ -18,7 +18,15 @@ results, one accessibility fix, known limits and owner final manual acceptance.
 No live provider generation was performed. The declared version remains
 `0.4.0-SNAPSHOT`.
 
-Next milestone: **AI-C — Conversational Design Iteration** (not started).
+**AI-C — Conversational Design Iteration** has exactly three phases:
+
+- AI-C1 — Conversation & Proposal Lineage ✅
+- AI-C2 — Conversational Design UX — implemented / pending owner acceptance
+- AI-C3 — Conversational Quality & Validation — not started
+
+See the [revision workspace UX](ai/conversational-design-ux.md) and
+[AI-C2 implementation report](ai/ai-c2-implementation-report.md). No live provider
+calls or owner visual acceptance occurred; multi-turn image quality remains C3.
 
 ## Sprint 0 — Project setup and documentation
 

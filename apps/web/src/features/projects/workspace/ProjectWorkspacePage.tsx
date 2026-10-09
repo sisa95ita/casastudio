@@ -2378,6 +2378,7 @@ export function ProjectWorkspacePage() {
     ) {
       return (
         <Project3DInspector
+          unsavedChanges={editor.dirty}
           referenceCapture={referenceCapture}
           generation={designGeneration}
           mode={workspaceMode}

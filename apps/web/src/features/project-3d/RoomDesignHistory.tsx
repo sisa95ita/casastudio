@@ -28,7 +28,8 @@ export function RoomDesignHistory({
   onClose,
   onSelect,
   onReview,
-  onDelete
+  onDelete,
+  deleteBlocked = false
 }: {
   readonly open: boolean;
   readonly roomLabel: string;
@@ -39,6 +40,7 @@ export function RoomDesignHistory({
   readonly onClose: () => void;
   readonly onSelect: (id: string) => void;
   readonly onReview: () => void;
+  readonly deleteBlocked?: boolean;
   readonly onDelete: (proposal: DurableDesignProposal) => void;
 }) {
   const { t } = useCasaTranslation("project-viewer");
@@ -99,6 +101,13 @@ export function RoomDesignHistory({
                   <Typography variant="caption" component="div">
                     {new Date(p.createdAt).toLocaleString()}
                   </Typography>
+                  <Typography variant="caption" component="div">
+                    {t(
+                      p.lineage
+                        ? "threeD.ai.revisions.revisedStatus"
+                        : "threeD.ai.revisions.rootStatus"
+                    )}
+                  </Typography>
                   <Typography variant="body2" component="div">
                     {p.instructions}
                   </Typography>
@@ -129,6 +138,7 @@ export function RoomDesignHistory({
                 </Button>
                 <Button
                   color="error"
+                  disabled={deleteBlocked}
                   onClick={() => onDelete(proposal as DurableDesignProposal)}
                 >
                   {t("threeD.ai.history.delete")}

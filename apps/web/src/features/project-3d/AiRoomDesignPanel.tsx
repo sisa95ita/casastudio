@@ -1,3 +1,4 @@
+import { useProposalLineage } from "./useProposalLineage";
 import { RoomDesignHistory } from "./RoomDesignHistory";
 import { ProposalReview, type ProposalComparison } from "./ProposalReview";
 import { ProposalArtifactView } from "./ProposalArtifactView";
@@ -50,6 +51,8 @@ type AiRoomDesignPanelProps = {
   readonly sceneContext?: object;
   readonly generation?: DesignGeneration;
   readonly projectRevision?: number;
+  readonly unsavedChanges?: boolean;
+  readonly visible?: boolean;
 };
 
 type ReferenceState =
@@ -93,6 +96,8 @@ export function AiRoomDesignPanel({
   roomName,
   sceneContext,
   projectRevision,
+  unsavedChanges = false,
+  visible = true,
   generation: sharedGeneration
 }: AiRoomDesignPanelProps) {
   const api = useCasaStudioApi();
@@ -100,7 +105,7 @@ export function AiRoomDesignPanel({
   const [historicalId, setHistoricalId] = useState<string>();
   const [deleteTarget, setDeleteTarget] = useState<DesignProposal>();
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState(false);
+  const [deleteError, setDeleteError] = useState<string>();
   const deletePending = useRef(false);
   const deleteCancelButton = useRef<HTMLButtonElement>(null);
   const { t } = useCasaTranslation("project-viewer");
@@ -133,15 +138,61 @@ export function AiRoomDesignPanel({
   const referenceViews =
     current.references.status === "ready" ? current.references.views : [];
   const referencePreparing = current.references.status === "preparing";
-  const active = current.proposals.find(
+  const sessionActive = current.proposals.find(
     (entry) => entry.number === current.activeNumber
   );
-  const proposal = historicalId
-    ? history.proposals.find((p) => p.id === historicalId)
-    : active?.proposal;
+  const [focused, setFocused] = useState<{
+    context: object;
+    proposal: DurableDesignProposal;
+  }>();
+  const [refinementError, setRefinementError] = useState<string>();
+  const [staleContext, setStaleContext] = useState<{
+    context: object;
+    revision: number;
+  }>();
+  const [refinementPending, setRefinementPending] = useState<string>();
+  const selectionEpoch = useRef(0);
+  const refinementLock = useRef(false);
+  const proposal =
+    focused?.context === context
+      ? focused.proposal
+      : historicalId
+        ? history.proposals.find((p) => p.id === historicalId)
+        : sessionActive?.proposal;
+  const active =
+    focused?.context === context
+      ? {
+          proposal: focused.proposal,
+          number: undefined,
+          direction: focused.proposal.instructions
+        }
+      : sessionActive;
   const selectedProposal = useRef(proposal);
   selectedProposal.current = proposal;
   const image = useDesignArtifact(proposal);
+  const lineage = useProposalLineage(
+    proposal,
+    previewOpen || historyOpen,
+    context
+  );
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  useEffect(() => {
+    if (!visible) {
+      ++selectionEpoch.current;
+      setPreviewOpen(false);
+      setHistoryOpen(false);
+    }
+  }, [visible]);
+  const openReview = () => {
+    lineage.refresh();
+    setPreviewOpen(true);
+  };
+  const navigate = (p: DurableDesignProposal) => {
+    ++selectionEpoch.current;
+    setRefinementError(undefined);
+    setFocused({ context, proposal: p });
+  };
   const phase = generating
     ? "generating"
     : referencePreparing
@@ -205,10 +256,13 @@ export function AiRoomDesignPanel({
     const ticket = ++captureEpoch.current;
     capturePending.current = false;
     setSession(emptySession(context));
+    ++selectionEpoch.current;
+    setFocused(undefined);
+    setRefinementError(undefined);
     setPreviewOpen(false);
     setHistoricalId(undefined);
     setDeleteTarget(undefined);
-    setDeleteError(false);
+    setDeleteError(undefined);
     setReferencePreview(undefined);
     setReferencesOpen(false);
     setHistoryOpen(false);
@@ -225,6 +279,7 @@ export function AiRoomDesignPanel({
     ++epoch.current;
     const ticket = ++captureEpoch.current;
     setSession(emptySession(context));
+    setFocused(undefined);
     setPreviewOpen(false);
     setReferencePreview(undefined);
 
@@ -236,6 +291,8 @@ export function AiRoomDesignPanel({
       // Direction edits invalidate proposals, but do not recapture evidence or submit.
       // A pending paid request keeps its lock; its obsolete completion is ignored.
       ++epoch.current;
+      ++selectionEpoch.current;
+      setFocused(undefined);
       setSession((previous) => ({
         ...previous,
         proposals: [],
@@ -272,6 +329,7 @@ export function AiRoomDesignPanel({
       history.add(result);
       if (ticket !== epoch.current) return;
       setHistoricalId(undefined);
+      setFocused(undefined);
       setSession((value) =>
         value.context === context
           ? {
@@ -313,13 +371,99 @@ export function AiRoomDesignPanel({
     }
   };
 
+  const refine = async (change: string): Promise<boolean> => {
+    if (
+      !proposal ||
+      !("projectRevision" in proposal) ||
+      !change.trim() ||
+      generating ||
+      refinementLock.current ||
+      unsavedChanges ||
+      (staleContext?.context === context &&
+        staleContext.revision === proposal.projectRevision) ||
+      projectRevision === undefined ||
+      proposal.projectRevision !== projectRevision ||
+      current.references.status !== "ready" ||
+      deleting
+    )
+      return false;
+    refinementLock.current = true;
+    const base = proposal as DurableDesignProposal;
+    const identity = context;
+    const selection = selectionEpoch.current;
+    setRefinementError(undefined);
+    setRefinementPending(
+      t("threeD.ai.revisions.waiting", {
+        room: roomLabel,
+        proposal: base.instructions
+      })
+    );
+    try {
+      const result = await generation.run(roomLabel, () =>
+        api.refineRoomDesign(projectId, base.id, {
+          levelId,
+          roomId,
+          instructions: change.trim(),
+          referenceViews
+        })
+      );
+      if (!result || !mounted.current) return false;
+      history.add(result);
+      if (activeContext.current !== identity) return true;
+      lineage.refresh();
+      if (
+        selection === selectionEpoch.current &&
+        selectedProposal.current?.id === base.id &&
+        visibleRef.current
+      ) {
+        setFocused({
+          context: identity,
+          proposal: result as DurableDesignProposal
+        });
+      }
+      return true;
+    } catch (cause) {
+      if (
+        mounted.current &&
+        activeContext.current === identity &&
+        selection === selectionEpoch.current
+      ) {
+        let message = t("threeD.ai.revisions.failure");
+        if (cause instanceof ApiRequestError) {
+          const code = cause.problem?.code;
+          if (code === "AI_STALE_CONTEXT") {
+            message = t("threeD.ai.revisions.stale");
+            setStaleContext({
+              context: identity,
+              revision: base.projectRevision
+            });
+          } else if (code === "AI_RATE_LIMITED")
+            message = cause.problem!.detail;
+          else if (code && Object.hasOwn(generationErrorKeys, code))
+            message = t(`threeD.ai.errors.${generationErrorKeys[code]}`);
+          else if (cause.kind === "network")
+            message = t("threeD.ai.errors.connection");
+          else if (cause.status === 408 || cause.status === 504)
+            message = t("threeD.ai.errors.timeout");
+          else if (cause.kind === "invalid-response")
+            message = t("threeD.ai.errors.invalidResponse");
+        }
+        setRefinementError(message);
+      }
+      return false;
+    } finally {
+      refinementLock.current = false;
+      if (mounted.current) setRefinementPending(undefined);
+    }
+  };
+
   const deleteProposal = async () => {
     if (!deleteTarget || deletePending.current) return;
     const target = deleteTarget;
     const identity = context;
     deletePending.current = true;
     setDeleting(true);
-    setDeleteError(false);
+    setDeleteError(undefined);
     try {
       await api.deleteDesignProposal(target.target.projectId, target.id);
       if (
@@ -330,6 +474,8 @@ export function AiRoomDesignPanel({
       )
         return;
       history.remove(target.id);
+      lineage.refresh();
+      if (focused?.proposal.id === target.id) setFocused(undefined);
       setSession((value) => {
         if (value.context !== identity) return value;
         const proposals = value.proposals.filter(
@@ -348,9 +494,16 @@ export function AiRoomDesignPanel({
       setHistoricalId((value) => (value === target.id ? undefined : value));
       if (selectedProposal.current?.id === target.id) setPreviewOpen(false);
       setDeleteTarget((value) => (value?.id === target.id ? undefined : value));
-    } catch {
+    } catch (cause) {
       if (mounted.current && activeContext.current === identity)
-        setDeleteError(true);
+        setDeleteError(
+          t(
+            cause instanceof ApiRequestError &&
+              cause.problem?.code === "AI_PROPOSAL_HAS_DESCENDANTS"
+              ? "threeD.ai.revisions.deleteConflict"
+              : "threeD.ai.history.deleteFailed"
+          )
+        );
     } finally {
       deletePending.current = false;
       if (mounted.current) setDeleting(false);
@@ -358,16 +511,20 @@ export function AiRoomDesignPanel({
   };
 
   const selectSessionProposal = (number: number) => {
+    ++selectionEpoch.current;
+    setFocused(undefined);
+    setRefinementError(undefined);
     setHistoricalId(undefined);
     setSession((value) => ({ ...value, activeNumber: number }));
   };
   const closeReview = () => {
+    ++selectionEpoch.current;
     setPreviewOpen(false);
     if (!historyOpen) setHistoricalId(undefined);
   };
   const showDelete = (target: DurableDesignProposal) => {
     setDeleteTarget(target);
-    setDeleteError(false);
+    setDeleteError(undefined);
   };
 
   return (
@@ -452,7 +609,9 @@ export function AiRoomDesignPanel({
         {active ? (
           <>
             <Typography variant="caption">
-              {t("threeD.ai.proposalNumber", { number: active.number })}
+              {active.number === undefined
+                ? t("threeD.ai.revisions.current")
+                : t("threeD.ai.proposalNumber", { number: active.number })}
             </Typography>
             {current.proposals.length > 1 ? (
               <Stack
@@ -481,7 +640,7 @@ export function AiRoomDesignPanel({
               aria-label={t("threeD.ai.openPreview")}
               onClick={() => {
                 setHistoricalId(undefined);
-                setPreviewOpen(true);
+                openReview();
               }}
               sx={{
                 display: "block",
@@ -649,8 +808,14 @@ export function AiRoomDesignPanel({
           setHistoryOpen(false);
           setHistoricalId(undefined);
         }}
-        onSelect={setHistoricalId}
-        onReview={() => setPreviewOpen(true)}
+        onSelect={(id) => {
+          ++selectionEpoch.current;
+          setFocused(undefined);
+          setRefinementError(undefined);
+          setHistoricalId(id);
+        }}
+        onReview={openReview}
+        deleteBlocked={generating || lineage.children.length > 0}
         onDelete={showDelete}
       />
       <ProposalReview
@@ -660,9 +825,39 @@ export function AiRoomDesignPanel({
         error={image.error}
         retry={image.retry}
         entries={current.proposals}
-        activeNumber={historicalId ? undefined : active?.number}
+        activeNumber={
+          focused?.context === context || historicalId
+            ? undefined
+            : active?.number
+        }
         direction={active?.direction}
         projectRevision={projectRevision}
+        lineage={lineage}
+        onNavigate={navigate}
+        onRefine={refine}
+        refinementPending={
+          generating
+            ? (refinementPending ??
+              t("threeD.ai.waiting", {
+                room:
+                  generation.state.status === "generating"
+                    ? generation.state.roomLabel
+                    : roomLabel
+              }))
+            : undefined
+        }
+        refinementError={refinementError}
+        refinementBlocked={
+          staleContext?.context === context &&
+          proposal &&
+          "projectRevision" in proposal &&
+          staleContext.revision === proposal.projectRevision
+            ? t("threeD.ai.revisions.stale")
+            : unsavedChanges
+              ? t("threeD.ai.revisions.unsaved")
+              : undefined
+        }
+        referencesReady={current.references.status === "ready" && !deleting}
         onSelect={selectSessionProposal}
         onClose={closeReview}
         onDelete={showDelete}
@@ -692,11 +887,7 @@ export function AiRoomDesignPanel({
           <Typography id="delete-design-description">
             {t("threeD.ai.history.deleteDescription")}
           </Typography>
-          {deleteError ? (
-            <Alert severity="error">
-              {t("threeD.ai.history.deleteFailed")}
-            </Alert>
-          ) : null}
+          {deleteError ? <Alert severity="error">{deleteError}</Alert> : null}
         </DialogContent>
         <DialogActions>
           <Button

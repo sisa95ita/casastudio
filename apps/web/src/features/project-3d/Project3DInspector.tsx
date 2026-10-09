@@ -43,6 +43,7 @@ export type Project3DInspectorProps = {
   readonly furniture?: FurnitureEditorController;
   readonly units?: Project["units"];
   readonly editable?: boolean;
+  readonly unsavedChanges?: boolean;
 };
 
 /** Renders coherent Project and Level status without exposing 2D edit controls. */
@@ -57,6 +58,7 @@ export function Project3DInspector({
   selection,
   furniture,
   units,
+  unsavedChanges = false,
   editable = false
 }: Project3DInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
@@ -188,6 +190,8 @@ export function Project3DInspector({
       >
         {selection?.kind === "room" ? (
           <AiRoomDesignPanel
+            visible={inspectorMode === "designer"}
+            unsavedChanges={unsavedChanges}
             projectId={model.sourceProjectId}
             projectRevision={model.sourceProjectRevision}
             levelId={selection.levelId}

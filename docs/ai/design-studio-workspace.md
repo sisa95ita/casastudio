@@ -1,5 +1,9 @@
 # AI-B4.1 — Design Studio workspace
 
+AI-C2 extends this architecture with the [Proposal Review revision workspace](conversational-design-ux.md).
+Review now owns refinement, revision paths and direct branch alternatives; the
+Inspector stays high-level. The sections below record the original AI-B4.1 baseline.
+
 The growing floating AI card obscured the house and put reference evidence, telemetry,
 comparison, prompts and durable history in one crowded flow. The Designer now lives
 in the existing right 3D Inspector. CasaStudio remains one Project workspace.

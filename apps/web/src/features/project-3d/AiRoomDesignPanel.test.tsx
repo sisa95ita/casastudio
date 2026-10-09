@@ -26,6 +26,8 @@ import { AiRoomDesignPanel } from "./AiRoomDesignPanel";
 
 const apiMocks = vi.hoisted(() => ({
   generateRoomDesign: vi.fn(),
+  getDesignConversation: vi.fn(),
+  refineRoomDesign: vi.fn(),
   listRoomDesigns: vi.fn(),
   getDesignArtifact: vi.fn(),
   deleteDesignProposal: vi.fn(),
@@ -210,6 +212,7 @@ beforeEach(() => {
   vi.spyOn(globalThis, "fetch").mockRejectedValue(
     new Error("Live HTTP is forbidden in proposal UX tests")
   );
+  apiMocks.getDesignConversation.mockResolvedValue(null);
   apiMocks.generateRoomDesign.mockResolvedValue(proposal);
   apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [] });
 });
@@ -276,7 +279,7 @@ describe("durable Room history", () => {
       "blob:fixture-1"
     );
     expect(within(review).getByText("Project revision 1")).toBeTruthy();
-    expect(within(review).getByText(instructions)).toBeTruthy();
+    expect(within(review).getAllByText(instructions).length).toBeGreaterThan(0);
     expect(apiMocks.getDesignArtifact).toHaveBeenCalledTimes(1);
     view.unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:fixture-1");
@@ -1225,4 +1228,447 @@ it("gives a stale Proposal Review an accessible empty state without fetching or 
   ).toBeTruthy();
   expect(apiMocks.getDesignArtifact).not.toHaveBeenCalled();
   expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
+});
+
+const root = {
+  ...durable,
+  artifact: { ...durable.artifact, uri: proposal.artifact.uri }
+};
+function revision(
+  id: string,
+  parent: string,
+  turn: number,
+  change: string
+): DurableDesignProposal {
+  return {
+    ...root,
+    id,
+    instructions: change,
+    lineage: {
+      conversationId: "internal-conversation",
+      parentProposalId: parent,
+      turnNumber: turn
+    },
+    artifact: { ...root.artifact, uri: `data:image/png;base64,${id}` }
+  };
+}
+const p2 = revision("p2", root.id, 1, "Change only the sofa");
+const p3 = revision("p3", root.id, 2, "Use darker wood");
+const p4 = revision("p4", p2.id, 3, "Make the lighting warmer");
+function lineagePage(nodes = [p2, p3, p4]) {
+  return {
+    conversation: {
+      id: "internal-conversation",
+      target: root.target,
+      rootProposalId: root.id,
+      createdAt: root.createdAt,
+      updatedAt: root.createdAt
+    },
+    rootProposal: root,
+    iterations: nodes
+  };
+}
+async function savedReview(
+  extra: Partial<Parameters<typeof AiRoomDesignPanel>[0]> = {}
+) {
+  apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [root] });
+  const rendered = render(
+    <AiRoomDesignPanel {...panelProps} projectRevision={1} {...extra} />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "View history" }));
+  const history = await screen.findByRole("dialog", {
+    name: /Room design history/
+  });
+  fireEvent.click(
+    await within(history).findByRole("button", { name: /Warm minimal/ })
+  );
+  fireEvent.click(within(history).getByRole("button", { name: "Open design" }));
+  const dialog = await screen.findByRole("dialog", { name: /Proposal review/ });
+  await waitFor(() =>
+    expect(within(dialog).queryByText("Loading revisions…")).toBeNull()
+  );
+  return { rendered, dialog, history };
+}
+const changeInput = (dialog: HTMLElement) =>
+  within(dialog).getByRole("textbox", { name: "Design change" });
+const reviseButton = (dialog: HTMLElement) =>
+  within(dialog).getByRole("button", { name: "Generate revision" });
+function change(dialog: HTMLElement, value: string) {
+  fireEvent.change(changeInput(dialog), { target: { value } });
+}
+
+describe("AI-C2 proposal revisions", () => {
+  it("refines a pre-C root once, keeps the base pending, selects a durable child and clears its draft", async () => {
+    const pending = deferred<DurableDesignProposal>();
+    apiMocks.refineRoomDesign.mockReturnValue(pending.promise);
+    const { dialog } = await savedReview();
+    expect(within(dialog).getByText("Refining: Root proposal")).toBeTruthy();
+    expect(disabled(reviseButton(dialog))).toBe(true);
+    change(dialog, "   ");
+    expect(disabled(reviseButton(dialog))).toBe(true);
+    change(dialog, "  Change only the sofa  ");
+    const button = reviseButton(dialog);
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(apiMocks.refineRoomDesign).toHaveBeenCalledExactlyOnceWith(
+      "project-1",
+      root.id,
+      {
+        levelId: "level-1",
+        roomId: "room-1",
+        instructions: p2.instructions,
+        referenceViews: references()
+      }
+    );
+    expect(
+      within(dialog).getByRole("img").getAttribute("data-proposal-id")
+    ).toBe(root.id);
+    expect(
+      within(dialog).getByRole("progressbar").hasAttribute("aria-valuenow")
+    ).toBe(false);
+    expect(disabled(button)).toBe(true);
+    apiMocks.getDesignConversation.mockResolvedValue(lineagePage([p2]));
+    await act(async () => pending.resolve(p2));
+    await within(dialog).findByText("Refining: Revision 1");
+    expect((changeInput(dialog) as HTMLTextAreaElement).value).toBe("");
+    expect(
+      within(dialog).getByRole("img").getAttribute("data-proposal-id")
+    ).toBe(p2.id);
+    expect(within(dialog).getByText("Derived from Root proposal")).toBeTruthy();
+    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
+  });
+
+  it("reconstructs paginated ancestry and sibling alternatives; selection changes the base and clears drafts without generation", async () => {
+    apiMocks.getDesignConversation.mockImplementation(
+      async (_project, _id, after) =>
+        after === 0
+          ? { ...lineagePage([p2, p3]), nextAfterTurn: 2 }
+          : lineagePage([p4])
+    );
+    const { dialog } = await savedReview();
+    const children = within(dialog).getByRole("group", {
+      name: "Other revisions from this proposal"
+    });
+    expect(within(children).getAllByRole("button")).toHaveLength(2);
+    change(dialog, "Wrong base draft");
+    fireEvent.click(
+      within(children).getByRole("button", { name: /Revision 1/ })
+    );
+    expect((changeInput(dialog) as HTMLTextAreaElement).value).toBe("");
+    expect(within(dialog).getByText("Refining: Revision 1")).toBeTruthy();
+    const path = within(dialog).getByRole("group", {
+      name: "Current revision path"
+    });
+    expect(path.textContent).not.toContain("Use darker wood");
+    fireEvent.click(
+      within(dialog)
+        .getByRole("group", { name: "Other revisions from this proposal" })
+        .querySelector("button")!
+    );
+    expect(within(path).getAllByRole("button")).toHaveLength(3);
+    expect(within(dialog).getByText("Refining: Revision 3")).toBeTruthy();
+    expect(within(dialog).getByText("Derived from Revision 1")).toBeTruthy();
+    expect(
+      within(dialog).getByRole("img").getAttribute("data-proposal-id")
+    ).toBe(p4.id);
+    expect(dialog.textContent).not.toContain("internal-conversation");
+    expect(dialog.textContent).not.toContain("response_id");
+    expect(apiMocks.refineRoomDesign).not.toHaveBeenCalled();
+    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "AI_GENERATION_FAILED",
+    "AI_PROPOSAL_PERSISTENCE_FAILED",
+    "AI_RATE_LIMITED",
+    "AI_STALE_CONTEXT",
+    "FORBIDDEN"
+  ])(
+    "preserves the draft and base on %s, sanitizes details and never retries",
+    async (code) => {
+      apiMocks.refineRoomDesign.mockRejectedValue(
+        problem(
+          code,
+          code === "AI_RATE_LIMITED"
+            ? "Try again later"
+            : "secret provider payload"
+        )
+      );
+      const { dialog } = await savedReview();
+      change(dialog, "Keep everything except the chair");
+      fireEvent.click(reviseButton(dialog));
+      await waitFor(() =>
+        expect(
+          within(dialog)
+            .getAllByRole("alert")
+            .some((a) =>
+              a.textContent?.includes(
+                code === "AI_RATE_LIMITED"
+                  ? "Try again later"
+                  : code === "AI_STALE_CONTEXT"
+                    ? "geometry has changed"
+                    : code === "AI_PROPOSAL_PERSISTENCE_FAILED"
+                      ? "may have completed"
+                      : code === "AI_GENERATION_FAILED"
+                        ? "could not complete"
+                        : "base proposal is safe"
+              )
+            )
+        ).toBe(true)
+      );
+      expect((changeInput(dialog) as HTMLTextAreaElement).value).toBe(
+        "Keep everything except the chair"
+      );
+      expect(
+        within(dialog).getByRole("img").getAttribute("data-proposal-id")
+      ).toBe(root.id);
+      expect(dialog.textContent).not.toContain("secret provider payload");
+      expect(apiMocks.refineRoomDesign).toHaveBeenCalledTimes(1);
+      if (code === "AI_STALE_CONTEXT") {
+        expect(disabled(reviseButton(dialog))).toBe(true);
+        fireEvent.click(
+          within(dialog).getByRole("button", {
+            name: "Root proposal"
+          })
+        );
+        // Selecting the base again clears its error but cannot bypass known staleness.
+        expect(disabled(reviseButton(dialog))).toBe(true);
+        expect(within(dialog).getByText(/Historical design/)).toBeTruthy();
+      }
+    }
+  );
+
+  it.each([{ projectRevision: 2 }, { unsavedChanges: true }])(
+    "blocks historical or unsaved architecture while keeping lineage viewable: %j",
+    async (extra) => {
+      apiMocks.getDesignConversation.mockResolvedValue(lineagePage());
+      const { dialog } = await savedReview(extra);
+      expect(disabled(reviseButton(dialog))).toBe(true);
+      expect(
+        within(dialog)
+          .getAllByRole("alert")
+          .map((a) => a.textContent)
+          .join()
+      ).toContain(
+        extra.unsavedChanges ? "Save your Project" : "geometry has changed"
+      );
+      expect(
+        within(dialog).getByRole("group", {
+          name: "Other revisions from this proposal"
+        })
+      ).toBeTruthy();
+      expect(apiMocks.refineRoomDesign).not.toHaveBeenCalled();
+    }
+  );
+
+  it("blocks parent deletion; leaf deletion removes its branch and closes its review", async () => {
+    apiMocks.getDesignConversation.mockResolvedValue(lineagePage([p2]));
+    apiMocks.deleteDesignProposal.mockResolvedValue(undefined);
+    const { dialog } = await savedReview();
+    expect(
+      disabled(
+        within(dialog).getByRole("button", { name: "Delete saved design" })
+      )
+    ).toBe(true);
+    expect(within(dialog).getByText(/cannot be deleted yet/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Revision 1/ }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete saved design" })
+    );
+    const confirmation = await screen.findByRole("dialog", {
+      name: "Delete this saved design?"
+    });
+    apiMocks.getDesignConversation.mockResolvedValue(lineagePage([]));
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Delete design" })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: /Proposal review/ })
+      ).toBeNull()
+    );
+    expect(apiMocks.deleteDesignProposal).toHaveBeenCalledExactlyOnceWith(
+      "project-1",
+      p2.id
+    );
+    expect(apiMocks.refineRoomDesign).not.toHaveBeenCalled();
+  });
+
+  it.each(["navigate", "close", "room", "properties"])(
+    "does not let a late revision replace the current UI after %s",
+    async (action) => {
+      apiMocks.getDesignConversation.mockResolvedValue(lineagePage([p2, p3]));
+      const pending = deferred<DurableDesignProposal>();
+      apiMocks.refineRoomDesign.mockReturnValue(pending.promise);
+      const { dialog, rendered } = await savedReview();
+      change(dialog, "Make the lighting warmer");
+      fireEvent.click(reviseButton(dialog));
+      if (action === "navigate")
+        fireEvent.click(
+          within(dialog).getByRole("button", { name: /Revision 2/ })
+        );
+      if (action === "close")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+      if (action === "room")
+        rendered.rerender(
+          <AiRoomDesignPanel
+            {...panelProps}
+            roomId="other"
+            projectRevision={1}
+            capture={async () => references("other")}
+          />
+        );
+      if (action === "properties")
+        rendered.rerender(
+          <AiRoomDesignPanel
+            {...panelProps}
+            projectRevision={1}
+            visible={false}
+          />
+        );
+      await act(async () => pending.resolve(p4));
+      if (action === "navigate")
+        expect(within(dialog).getByText("Refining: Revision 2")).toBeTruthy();
+      else
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("dialog", { name: /Proposal review/ })
+          ).toBeNull()
+        );
+      expect(apiMocks.refineRoomDesign).toHaveBeenCalledTimes(1);
+    }
+  );
+});
+
+describe("AI-C2 recovery and shared work guard", () => {
+  it("shares the refinement lock with Try another after closing Review and recovers the durable child from history", async () => {
+    apiMocks.generateRoomDesign.mockResolvedValue(root);
+    apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [] });
+    const pending = deferred<DurableDesignProposal>();
+    apiMocks.refineRoomDesign.mockReturnValue(pending.promise);
+    render(<AiRoomDesignPanel {...panelProps} projectRevision={1} />);
+    direction();
+    await waitFor(() => expect(disabled(generateButton())).toBe(false));
+    fireEvent.click(generateButton());
+    await screen.findByRole("button", { name: "Open design" });
+    fireEvent.click(previewButton());
+    const dialog = await screen.findByRole("dialog", {
+      name: /Proposal review/
+    });
+    change(dialog, p2.instructions);
+    fireEvent.click(reviseButton(dialog));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(disabled(anotherButton())).toBe(true);
+    fireEvent.click(anotherButton());
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+    apiMocks.getDesignConversation.mockResolvedValue(lineagePage([p2]));
+    await act(async () => pending.resolve(p2));
+    // Closing Review invalidates auto-selection: original root remains the current design.
+    expect(activeImage().getAttribute("data-proposal-id")).toBe(root.id);
+    fireEvent.click(screen.getByRole("button", { name: "View history" }));
+    const history = await screen.findByRole("dialog", {
+      name: /Room design history/
+    });
+    fireEvent.click(
+      within(history).getByRole("button", { name: /Change only the sofa/ })
+    );
+    fireEvent.click(
+      within(history).getByRole("button", { name: "Open design" })
+    );
+    const reopened = await screen.findByRole("dialog", {
+      name: /Proposal review/
+    });
+    await within(reopened).findByText("Derived from Root proposal");
+    expect(apiMocks.refineRoomDesign).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces authoritative descendant conflicts from History without removing any proposal", async () => {
+    apiMocks.deleteDesignProposal.mockRejectedValue(
+      problem("AI_PROPOSAL_HAS_DESCENDANTS", "secret", 409)
+    );
+    const { dialog, history } = await savedReview();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: /Proposal review/ })
+      ).toBeNull()
+    );
+    fireEvent.click(
+      within(history).getByRole("button", { name: "Delete saved design" })
+    );
+    const confirmation = await screen.findByRole("dialog", {
+      name: "Delete this saved design?"
+    });
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Delete design" })
+    );
+    expect(
+      (await within(confirmation).findByRole("alert")).textContent
+    ).toContain("cannot be deleted yet");
+    expect(confirmation.textContent).not.toContain("secret");
+    expect(apiMocks.deleteDesignProposal).toHaveBeenCalledTimes(1);
+    expect(apiMocks.refineRoomDesign).not.toHaveBeenCalled();
+  });
+
+  it("discloses a long change in details and accessible branch labels without exposing internal IDs", async () => {
+    const long = revision(
+      "long",
+      root.id,
+      4,
+      "Preserve the current arrangement and change the finish. ".repeat(30)
+    );
+    apiMocks.getDesignConversation.mockResolvedValue(lineagePage([long]));
+    const { dialog } = await savedReview();
+    const branch = within(dialog).getByRole("button", { name: /Revision 4/ });
+    expect(branch.getAttribute("title")).toBe(long.instructions);
+    expect(branch.tabIndex).toBe(0);
+    fireEvent.click(branch);
+    expect(
+      within(dialog).getAllByText(long.instructions.trim()).length
+    ).toBeGreaterThan(0);
+    expect(
+      within(dialog)
+        .getByRole("button", { name: /Revision 4/ })
+        .getAttribute("aria-pressed")
+    ).toBe("true");
+    expect(
+      within(dialog)
+        .getByRole("button", { name: "Generation details" })
+        .getAttribute("aria-expanded")
+    ).toBe("false");
+    expect(dialog.textContent).not.toContain("internal-conversation");
+  });
+
+  it("offers an explicit read retry after sanitized lineage failure without generation", async () => {
+    apiMocks.getDesignConversation.mockRejectedValueOnce(
+      new Error("secret database failure")
+    );
+    const { dialog } = await savedReview();
+    // savedReview refreshes on open: allow a durable read failure in Review itself.
+    apiMocks.getDesignConversation.mockRejectedValue(
+      new Error("secret database failure")
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: /Proposal review/ })
+      ).toBeNull()
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open design" }));
+    const reopened = await screen.findByRole("dialog", {
+      name: /Proposal review/
+    });
+    await within(reopened).findByText("Revisions could not be loaded.");
+    expect(reopened.textContent).not.toContain("secret database failure");
+    apiMocks.getDesignConversation.mockResolvedValue(lineagePage());
+    fireEvent.click(within(reopened).getByRole("button", { name: "Retry" }));
+    await within(reopened).findByRole("group", {
+      name: "Other revisions from this proposal"
+    });
+    expect(apiMocks.refineRoomDesign).not.toHaveBeenCalled();
+    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
+  });
 });

@@ -387,7 +387,9 @@ test("AI-B lifecycle through real auth, API, fake provider, filesystem and Postg
       "data-proposal-id",
       fourth.id
     );
-    await expect(review.getByText(direction, { exact: true })).toBeVisible();
+    await expect(
+      review.getByText(direction, { exact: true }).last()
+    ).toBeVisible();
     await expect(
       review.getByText(`Current Project revision ${canonical.sourceRevision}`, {
         exact: true
@@ -449,7 +451,9 @@ test("AI-B lifecycle through real auth, API, fake provider, filesystem and Postg
     await revisedHistory
       .getByRole("button", { name: "Open design", exact: true })
       .click();
-    await expect(review.getByRole("alert")).toHaveText(
+    await expect(
+      review.getByRole("alert").filter({ hasText: "Historical design" })
+    ).toHaveText(
       `Historical design · revision ${canonical.sourceRevision}. Current geometry may differ.`
     );
     await review.getByRole("button", { name: "Delete saved design" }).click();
@@ -596,3 +600,284 @@ async function orbit(page: Page, canvas: Locator) {
   );
   await page.mouse.up();
 }
+
+test("AI-C2 durable revision branches through Review with one fake call per explicit change", async ({
+  page,
+  request
+}) => {
+  test.setTimeout(180_000);
+  let authorization = "";
+  let projectId = "";
+  const errors: string[] = [];
+  const posts: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (r) => {
+    if (!r.url().startsWith(api)) return;
+    authorization ||= r.headers().authorization ?? "";
+    if (r.method() === "POST" && r.url().includes("design-proposals"))
+      posts.push(r.url());
+  });
+  const headers = () => ({ Authorization: authorization });
+  const state = async () => (await request.get(`${api}/__ai-b5/state`)).json();
+  const initial = await state();
+  const review = page.getByRole("dialog", { name: /Proposal review/ });
+  const path = review.getByRole("group", { name: "Current revision path" });
+  const children = review.getByRole("group", {
+    name: "Other revisions from this proposal"
+  });
+  try {
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.goto("/app");
+    await page.locator("#username").fill("demo");
+    await page
+      .locator("#password")
+      .fill(process.env.CASASTUDIO_KEYCLOAK_DEMO_PASSWORD!);
+    await page.locator("#kc-login").click();
+    await expect(
+      page.getByRole("heading", { name: "Projects", level: 1 })
+    ).toBeVisible();
+    const created = await request.post(`${api}/api/v1/projects`, {
+      headers: headers(),
+      data: { name: `AI-C2 synthetic ${Date.now()}` }
+    });
+    expect(created.status()).toBe(201);
+    const base = await created.json();
+    projectId = base.project.id;
+    expect(
+      (
+        await request.put(`${api}/api/v1/projects/${projectId}`, {
+          headers: headers(),
+          data: {
+            baseRevision: base.sourceRevision,
+            project: createFixture(base.project)
+          }
+        })
+      ).ok()
+    ).toBe(true);
+    const canonical = await (
+      await request.get(`${api}/api/v1/projects/${projectId}`, {
+        headers: headers()
+      })
+    ).json();
+    const enterRoom = async () => {
+      await enter3D(page);
+      await selectRoom(
+        page,
+        page.getByTestId("project-3d-workspace"),
+        "lower",
+        "target"
+      );
+      await page.getByRole("tab", { name: "Designer", exact: true }).click();
+    };
+    await page.goto(`/app/projects/${projectId}`);
+    await enterRoom();
+    const designer = page.getByRole("region", { name: "AI Interior Designer" });
+    await designer
+      .getByRole("textbox", { name: "Design direction" })
+      .fill("Quiet natural materials");
+    await expect(designer).toHaveAttribute("data-generation-state", "ready");
+    const rootResponse = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" && r.url().endsWith("/design-proposals")
+    );
+    await designer
+      .getByRole("button", { name: "Generate design", exact: true })
+      .click();
+    await expect
+      .poll(async () => (await state()).calls.length)
+      .toBe(initial.calls.length + 1);
+    expect((await request.post(`${api}/__ai-b5/complete`)).status()).toBe(204);
+    const root = (await (await rootResponse).json()) as DurableDesignProposal;
+    await expect(
+      designer.locator(`img[data-proposal-id="${root.id}"]`)
+    ).toBeVisible();
+    // Open the saved root, rather than relying on transient session state.
+    await designer.getByRole("button", { name: "View history" }).click();
+    const history = page.getByRole("dialog", { name: /Room design history/ });
+    await history
+      .getByRole("group", { name: "Saved designs" })
+      .getByRole("button")
+      .first()
+      .click();
+    await history
+      .getByRole("button", { name: "Open design", exact: true })
+      .click();
+    await expect(
+      review.getByText("Refining: Root proposal", { exact: true })
+    ).toBeVisible();
+    await expect(
+      review.getByRole("button", { name: "Generate revision" })
+    ).toBeDisabled();
+    const refine = async (
+      baseId: string,
+      instruction: string,
+      call: number
+    ) => {
+      await review
+        .getByRole("textbox", { name: "Design change" })
+        .fill(instruction);
+      const response = page.waitForResponse(
+        (r) =>
+          r.request().method() === "POST" &&
+          r.url().endsWith(`/${baseId}/refinements`)
+      );
+      const button = review.getByRole("button", { name: "Generate revision" });
+      await button.evaluate((element: HTMLButtonElement) => {
+        element.click();
+        element.click();
+      });
+      await expect
+        .poll(async () => (await state()).calls.length)
+        .toBe(initial.calls.length + call);
+      await expect(button).toBeDisabled();
+      await expect(
+        review.locator(`img[data-proposal-id="${baseId}"]`)
+      ).toBeVisible();
+      await expect(review.getByRole("progressbar")).not.toHaveAttribute(
+        "aria-valuenow",
+        /.+/
+      );
+      await expect(
+        review.getByText(
+          "Closing Review does not cancel generation. The result will be saved in Room history."
+        )
+      ).toBeVisible();
+      const calls = (await state()).calls;
+      expect(calls.at(-1).operation).toBe("refine");
+      expect(calls.at(-1).baseProposalId).toBe(baseId);
+      expect((await request.post(`${api}/__ai-b5/complete`)).status()).toBe(
+        204
+      );
+      const result = await response;
+      expect(result.ok(), await result.text()).toBe(true);
+      const child = (await result.json()) as DurableDesignProposal;
+      expect(child.lineage!.parentProposalId).toBe(baseId);
+      await expect(
+        review.locator(`img[data-proposal-id="${child.id}"]`)
+      ).toBeVisible();
+      await expect(
+        review.getByRole("textbox", { name: "Design change" })
+      ).toHaveValue("");
+      return child;
+    };
+    const p2 = await refine(root.id, "Change only the sofa", 2);
+    await expect(path.getByRole("button")).toHaveCount(2);
+    await review.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(
+      history.getByRole("button", { name: "Open design", exact: true })
+    ).toBeFocused();
+    await history
+      .getByRole("button", { name: "Open design", exact: true })
+      .click();
+    await expect(path.getByRole("button")).toHaveCount(2);
+    expect((await state()).calls.length).toBe(initial.calls.length + 2);
+    await path
+      .getByRole("button", { name: "Root proposal", exact: true })
+      .click();
+    const p3 = await refine(root.id, "Use darker wood", 3);
+    await path
+      .getByRole("button", { name: "Root proposal", exact: true })
+      .click();
+    await expect(children.getByRole("button")).toHaveCount(2);
+    await children
+      .getByRole("button", { name: /Change only the sofa/ })
+      .focus();
+    await page.keyboard.press("Enter");
+    await expect(
+      review.locator(`img[data-proposal-id="${p2.id}"]`)
+    ).toBeVisible();
+    const p4 = await refine(p2.id, "Make the lighting warmer", 4);
+    await expect(path.getByRole("button")).toHaveCount(3);
+    await expect(path).not.toContainText("Use darker wood");
+    await expect(path.getByRole("button").last()).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(posts).toHaveLength(4);
+    await page.reload();
+    await enterRoom();
+    await designer.getByRole("button", { name: "View history" }).click();
+    await history
+      .getByRole("group", { name: "Saved designs" })
+      .getByRole("button", { name: /Make the lighting warmer/ })
+      .click();
+    await history
+      .getByRole("button", { name: "Open design", exact: true })
+      .click();
+    await expect(path.getByRole("button")).toHaveCount(3);
+    await expect(
+      review.locator(`img[data-proposal-id="${p4.id}"]`)
+    ).toBeVisible();
+    await page.setViewportSize({ width: 1050, height: 800 });
+    // The existing responsive shell remounts Inspector at this breakpoint.
+    // Durable selection is reconstructed through history after that remount.
+    await page.getByRole("tab", { name: "Designer", exact: true }).click();
+    await designer.getByRole("button", { name: "View history" }).click();
+    await history
+      .getByRole("group", { name: "Saved designs" })
+      .getByRole("button", { name: /Make the lighting warmer/ })
+      .click();
+    await history
+      .getByRole("button", { name: "Open design", exact: true })
+      .click();
+    await expect(path.getByRole("button")).toHaveCount(3);
+    await review
+      .getByRole("textbox", { name: "Design change" })
+      .fill("A long design instruction ".repeat(65));
+    await expect(
+      review.getByRole("textbox", { name: "Design change" })
+    ).toBeVisible();
+    await path
+      .getByRole("button", { name: "Root proposal", exact: true })
+      .click();
+    await expect(
+      review.getByRole("textbox", { name: "Design change" })
+    ).toHaveValue("");
+    await expect(children.getByRole("button")).toHaveCount(2);
+    await expect(
+      review.getByRole("button", { name: "Delete saved design" })
+    ).toBeDisabled();
+    await children.getByRole("button", { name: /Use darker wood/ }).click();
+    await expect(
+      review.locator(`img[data-proposal-id="${p3.id}"]`)
+    ).toBeVisible();
+    await review.getByRole("button", { name: "Delete saved design" }).click();
+    const confirmation = page.getByRole("dialog", {
+      name: "Delete this saved design?",
+      exact: true
+    });
+    await expect(
+      confirmation.getByRole("button", { name: "Cancel", exact: true })
+    ).toBeFocused();
+    await confirmation
+      .getByRole("button", { name: "Delete design", exact: true })
+      .click();
+    await expect(review).toBeHidden();
+    await history
+      .getByRole("group", { name: "Saved designs" })
+      .getByRole("button", { name: /Quiet natural materials/ })
+      .click();
+    await history
+      .getByRole("button", { name: "Open design", exact: true })
+      .click();
+    await expect(children.getByRole("button")).toHaveCount(1);
+    expect((await state()).calls.length).toBe(initial.calls.length + 4);
+    expect(
+      await (
+        await request.get(`${api}/api/v1/projects/${projectId}`, {
+          headers: headers()
+        })
+      ).json()
+    ).toEqual(canonical);
+    expect(errors).toEqual([]);
+  } finally {
+    if (projectId && authorization)
+      expect(
+        (
+          await request.delete(`${api}/api/v1/projects/${projectId}`, {
+            headers: headers()
+          })
+        ).status()
+      ).toBe(204);
+  }
+});

@@ -109,7 +109,7 @@ Run `pnpm lint`, `pnpm test`, `pnpm build`, `git diff --check`, `pnpm db:validat
 MVP limits: trusted single filesystem root/volume; bounded in-process binary delivery; no cloud/CDN/thumbnails; no crash-orphan collector; no idempotency/recovery job for ambiguous paid requests; no Project-level gallery for deleted Rooms; snapshot pagination without a long-lived database snapshot; revision provenance does not model unsaved geometry; structural image validation is not subjective/content acceptance. Retention configuration and an S3-compatible adapter can be added later at the artifact boundary.
 
 AI-C1 now owns durable follow-up/branch lineage and provider-neutral refinement.
-AI-C2 owns conversational design UX; AI-C3 owns multi-turn quality validation. AI-D
+[AI-C2](conversational-design-ux.md) implements the revision workspace, pending owner acceptance; AI-C3 owns multi-turn quality validation and is not started. AI-D
 will own typed Furniture operations, canonical accept/reject and Apply to Project.
 None of that later scope is implemented by C1.
 

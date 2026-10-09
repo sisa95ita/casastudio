@@ -1,3 +1,5 @@
+import { ProposalRevisions, ProposalRefinement } from "./ProposalRevisions";
+import type { ProposalLineage } from "./useProposalLineage";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import {
   Accordion,
@@ -37,7 +39,14 @@ export function ProposalReview({
   projectRevision,
   onSelect,
   onClose,
-  onDelete
+  onDelete,
+  lineage,
+  onNavigate,
+  onRefine,
+  refinementPending,
+  refinementError,
+  refinementBlocked,
+  referencesReady
 }: {
   readonly open: boolean;
   readonly proposal?: DesignProposal;
@@ -51,6 +60,13 @@ export function ProposalReview({
   readonly onSelect: (number: number) => void;
   readonly onClose: () => void;
   readonly onDelete: (proposal: DurableDesignProposal) => void;
+  readonly lineage?: ProposalLineage;
+  readonly onNavigate?: (proposal: DurableDesignProposal) => void;
+  readonly onRefine?: (instructions: string) => Promise<boolean>;
+  readonly refinementPending?: string;
+  readonly refinementError?: string;
+  readonly refinementBlocked?: string;
+  readonly referencesReady?: boolean;
 }) {
   const { t } = useCasaTranslation("project-viewer");
   const [detailsExpanded, setDetailsExpanded] = useState(false);
@@ -58,6 +74,17 @@ export function ProposalReview({
     proposal && "projectRevision" in proposal
       ? (proposal as DurableDesignProposal)
       : undefined;
+  const stale =
+    saved &&
+    projectRevision !== undefined &&
+    (saved.projectRevision !== projectRevision ||
+      refinementBlocked === t("threeD.ai.revisions.stale"));
+  const blocked = stale
+    ? t("threeD.ai.revisions.stale")
+    : (refinementBlocked ??
+      (projectRevision === undefined || !referencesReady
+        ? t("threeD.ai.revisions.references")
+        : undefined));
   return (
     <Dialog
       open={open}
@@ -92,13 +119,32 @@ export function ProposalReview({
               gap: 2
             }}
           >
-            <ProposalArtifactView
-              proposal={proposal}
-              uri={uri}
-              error={error}
-              retry={retry}
-              review
-            />
+            <Box sx={{ minWidth: 0 }}>
+              <ProposalArtifactView
+                proposal={proposal}
+                uri={uri}
+                error={error}
+                retry={retry}
+                review
+              />
+              {saved && lineage && onNavigate ? (
+                <ProposalRevisions
+                  proposal={saved}
+                  lineage={lineage}
+                  onSelect={onNavigate}
+                />
+              ) : null}
+              {open && saved && onRefine ? (
+                <ProposalRefinement
+                  key={saved.id}
+                  proposal={saved}
+                  blocked={blocked}
+                  pending={refinementPending}
+                  failure={refinementError}
+                  onRefine={onRefine}
+                />
+              ) : null}
+            </Box>
             <Stack spacing={1} sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
               <Typography variant="subtitle2">
                 {t("threeD.ai.proposalDetails")}
@@ -107,7 +153,11 @@ export function ProposalReview({
                 {new Date(proposal.createdAt).toLocaleString()}
               </Typography>
               <Typography variant="subtitle2">
-                {t("threeD.ai.instructions")}
+                {t(
+                  saved?.lineage
+                    ? "threeD.ai.revisions.change"
+                    : "threeD.ai.instructions"
+                )}
               </Typography>
               <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
                 {saved?.instructions ?? direction}
@@ -121,8 +171,7 @@ export function ProposalReview({
                   </Typography>
                   <Alert severity="info">
                     {t(
-                      projectRevision !== undefined &&
-                        saved.projectRevision !== projectRevision
+                      stale
                         ? "threeD.ai.history.historical"
                         : "threeD.ai.history.current",
                       { revision: saved.projectRevision }
@@ -241,9 +290,18 @@ export function ProposalReview({
           </Stack>
         ) : null}
       </DialogContent>
+      {lineage?.children.length ? (
+        <Typography role="status" variant="caption" sx={{ px: 3, pt: 1 }}>
+          {t("threeD.ai.revisions.deleteConflict")}
+        </Typography>
+      ) : null}
       <DialogActions>
         {saved ? (
-          <Button color="error" onClick={() => onDelete(saved)}>
+          <Button
+            color="error"
+            disabled={!!refinementPending || !!lineage?.children.length}
+            onClick={() => onDelete(saved)}
+          >
             {t("threeD.ai.history.delete")}
           </Button>
         ) : null}
