@@ -5,6 +5,11 @@ The complete AI-B lifecycle is covered by the zero-cost integrated validation in
 boundaries, records milestone invariants, and includes the owner final acceptance
 procedure. No live provider generation is part of automated validation.
 
+AI-C has exactly three phases: C1 (Conversation & Proposal Lineage), C2
+(Conversational Design UX), and C3 (Conversational Quality & Validation). See
+[Conversation & Proposal Lineage](ai/conversation-proposal-lineage.md) for the C1
+model, provider-neutral refinement, continuation strategy and C2 API seams.
+
 ## Truth boundaries
 
 CasaStudio keeps three deliberately separate truths:
@@ -231,7 +236,7 @@ The panel behavior suite mocks the CasaStudio API boundary; it never needs a liv
 6. With a local mocked API boundary or provider disabled, exercise later failure after success, safe 429 delay/exhausted-allowance messages, timeout ambiguity, and explicit retry only. Do not deliberately spend credits to force a failure. For any real timeout inspect provider usage/billing before choosing another paid action.
 7. Repeat layout/keyboard checks at a smaller viewport with long direction/error text and expanded details. Record usability and your own visual acceptance separately; this phase makes no claim of accepted visual quality.
 
-**Subsequent phases:** [AI-B4 now implements durable application artifacts and Room history](ai/durable-design-proposals.md). AI-C still owns conversation, prior-response continuation, and scoped follow-up editing. Neither was part of the original AI-B3 scope.
+**Subsequent phases:** [AI-B4 implements durable application artifacts and Room history](ai/durable-design-proposals.md). [AI-C1](ai/conversation-proposal-lineage.md) adds durable conversation/branch lineage and scoped refinement through saved-image replay. C2 owns conversational design UX; C3 owns multi-turn quality validation. These were outside the original AI-B3 scope.
 
 ## AI-B2.2 primary-reference editing
 
@@ -360,7 +365,9 @@ live provider calls or manual visual acceptance. Owners can evaluate it as follo
 
 ## Evolution
 
-- **AI-C:** conversational iteration, prior-response continuation, and scoped follow-up changes.
+- **AI-C1 (implemented):** durable conversation/Proposal lineage, structural branches and provider-neutral refinement with optional provider state.
+- **AI-C2:** Conversational Design UX.
+- **AI-C3:** Conversational Quality & Validation.
 - **AI-B4 (implemented):** [durable application artifacts and Room history](ai/durable-design-proposals.md), separate from ProjectSchema.
 - **Later product work:** genuine provider/job progress if supported, richer style and explicit Furniture-preservation controls, and quality/cost experiments approved from manual results.
 - **Gemini/other providers:** implement `InteriorDesignProvider`; reuse target, context, reference, request, proposal, and failure contracts. Provider choice can later be resolved per user/tenant without changing these contracts.

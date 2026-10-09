@@ -2,7 +2,8 @@ import type {
   DesignProposal,
   DesignReferenceView,
   DurableDesignProposal,
-  DesignProposalHistory
+  DesignProposalHistory,
+  DesignConversationPage
 } from "@casastudio/ai";
 import { ProjectSchema, type Project } from "@casastudio/schema";
 
@@ -79,6 +80,10 @@ export type GenerateRoomDesignRequest = {
   readonly referenceViews: readonly DesignReferenceView[];
 };
 
+export type RefineRoomDesignRequest = GenerateRoomDesignRequest;
+export type DesignLineageConflictCode =
+  "AI_STALE_CONTEXT" | "AI_PROPOSAL_HAS_DESCENDANTS";
+
 /** Defensively validates the provider-neutral proposal returned by the API. */
 export function parseDesignProposal(value: unknown): DesignProposal {
   const proposal = requireRecord(value, "Design proposal");
@@ -121,6 +126,17 @@ export function parseDurableDesignProposal(
   )
     throw new Error("Invalid saved design provenance");
   requireString(record.instructions, "Saved design direction");
+  if (record.lineage !== undefined) {
+    const lineage = requireRecord(record.lineage, "Design lineage");
+    requireString(lineage.conversationId, "Conversation identity");
+    if (
+      requireString(lineage.parentProposalId, "Parent proposal") === p.id ||
+      !Number.isInteger(lineage.turnNumber) ||
+      Number(lineage.turnNumber) < 1
+    ) {
+      throw new Error("Invalid design lineage");
+    }
+  }
   if (
     !/^[a-f0-9]{64}$/.test(
       requireString(record.referenceFingerprint, "Reference fingerprint")
@@ -153,6 +169,53 @@ export function parseDesignProposalHistory(
     proposals: proposals.map(parseDurableDesignProposal),
     nextCursor: optionalString(record.nextCursor, "History cursor")
   };
+}
+
+export function parseDesignConversationPage(
+  value: unknown
+): DesignConversationPage | null {
+  const envelope = requireRecord(value, "Design conversation response");
+  if (envelope.page === null) return null;
+  const page = requireRecord(envelope.page, "Design conversation page");
+  const conversation = requireRecord(page.conversation, "Design conversation");
+  const target = requireRecord(conversation.target, "Conversation target");
+  const rootProposal = parseDurableDesignProposal(page.rootProposal);
+  const id = requireString(conversation.id, "Conversation id");
+  if (
+    target.kind !== "room" ||
+    target.projectId !== rootProposal.target.projectId ||
+    target.levelId !== rootProposal.target.levelId ||
+    target.roomId !== rootProposal.target.roomId ||
+    conversation.rootProposalId !== rootProposal.id ||
+    rootProposal.lineage ||
+    !Number.isFinite(Date.parse(String(conversation.createdAt))) ||
+    !Number.isFinite(Date.parse(String(conversation.updatedAt)))
+  ) {
+    throw new Error("Invalid conversation scope");
+  }
+  const iterations = requireArray(page.iterations, "Design iterations").map(
+    parseDurableDesignProposal
+  );
+  if (
+    iterations.length > 20 ||
+    iterations.some(
+      (p, i) =>
+        p.lineage?.conversationId !== id ||
+        p.target.projectId !== target.projectId ||
+        p.target.levelId !== target.levelId ||
+        p.target.roomId !== target.roomId ||
+        (i > 0 &&
+          p.lineage!.turnNumber <= iterations[i - 1]!.lineage!.turnNumber)
+    )
+  )
+    throw new Error("Invalid conversation turns");
+  if (
+    page.nextAfterTurn !== undefined &&
+    (!Number.isInteger(page.nextAfterTurn) ||
+      page.nextAfterTurn !== iterations.at(-1)?.lineage?.turnNumber)
+  )
+    throw new Error("Invalid turn cursor");
+  return page as DesignConversationPage;
 }
 
 /** Two-dimensional coordinate in a geometry snapshot. */

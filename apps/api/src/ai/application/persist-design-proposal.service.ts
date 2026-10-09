@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import {
   DesignGenerationError,
-  type DesignProposal,
+  type GeneratedDesignProposal,
   type DesignReferenceView,
   type DesignGenerationUsage
 } from "@casastudio/ai";
@@ -28,11 +28,12 @@ export class PersistDesignProposalService {
   ) {}
 
   async persist(
-    proposal: DesignProposal,
+    proposal: GeneratedDesignProposal,
     projectRevision: number,
     instructions: string,
     context: unknown,
-    references: readonly DesignReferenceView[]
+    references: readonly DesignReferenceView[],
+    baseProposalId?: string
   ) {
     let artifact;
     try {
@@ -73,51 +74,59 @@ export class PersistDesignProposalService {
           })
         )
         .digest("hex");
-      const record = await this.proposals.create({
-        artifact,
-        proposal: {
-          id: proposal.id,
-          target: proposal.target,
-          status: "succeeded",
-          createdAt: t?.generatedAt ?? proposal.createdAt,
-          projectRevision,
-          instructions,
-          referenceFingerprint,
-          artifact: {
-            kind: "image",
-            uri: "",
-            mimeType: artifact.mimeType,
-            width: artifact.width,
-            height: artifact.height,
-            byteSize: artifact.byteSize,
-            sha256: artifact.sha256
-          },
-          telemetry: {
-            provider:
-              proposal.providerMetadata?.provider ?? t?.provider ?? "unknown",
-            durationMs: Math.min(
-              2_147_483_647,
-              Math.max(
-                0,
-                Math.round(Number.isFinite(t?.durationMs) ? t!.durationMs : 0)
-              )
-            ),
-            generatedAt: t?.generatedAt ?? proposal.createdAt,
-            ...(t?.orchestrationModel
-              ? { orchestrationModel: t.orchestrationModel }
-              : {}),
-            ...(t?.imageModel ? { imageModel: t.imageModel } : {}),
-            ...(t?.generationMode ? { generationMode: t.generationMode } : {}),
-            image: {
+      const record = await this.proposals.create(
+        {
+          artifact,
+          ...(proposal.providerMetadata?.continuation
+            ? { providerContinuation: proposal.providerMetadata.continuation }
+            : {}),
+          proposal: {
+            id: proposal.id,
+            target: proposal.target,
+            status: "succeeded",
+            createdAt: t?.generatedAt ?? proposal.createdAt,
+            projectRevision,
+            instructions,
+            referenceFingerprint,
+            artifact: {
+              kind: "image",
+              uri: "",
+              mimeType: artifact.mimeType,
               width: artifact.width,
               height: artifact.height,
-              format: artifact.mimeType.slice(6) as "png" | "jpeg" | "webp",
-              ...(t?.image.quality ? { quality: t.image.quality } : {})
+              byteSize: artifact.byteSize,
+              sha256: artifact.sha256
             },
-            ...(t?.usage ? { usage: normalizeUsage(t.usage) } : {})
+            telemetry: {
+              provider:
+                proposal.providerMetadata?.provider ?? t?.provider ?? "unknown",
+              durationMs: Math.min(
+                2_147_483_647,
+                Math.max(
+                  0,
+                  Math.round(Number.isFinite(t?.durationMs) ? t!.durationMs : 0)
+                )
+              ),
+              generatedAt: t?.generatedAt ?? proposal.createdAt,
+              ...(t?.orchestrationModel
+                ? { orchestrationModel: t.orchestrationModel }
+                : {}),
+              ...(t?.imageModel ? { imageModel: t.imageModel } : {}),
+              ...(t?.generationMode
+                ? { generationMode: t.generationMode }
+                : {}),
+              image: {
+                width: artifact.width,
+                height: artifact.height,
+                format: artifact.mimeType.slice(6) as "png" | "jpeg" | "webp",
+                ...(t?.image.quality ? { quality: t.image.quality } : {})
+              },
+              ...(t?.usage ? { usage: normalizeUsage(t.usage) } : {})
+            }
           }
-        }
-      });
+        },
+        baseProposalId
+      );
       return record.proposal;
     } catch (error) {
       if (artifact)
@@ -128,6 +137,7 @@ export class PersistDesignProposalService {
           );
         });
       if (error instanceof DesignGenerationError) throw error;
+      if (error instanceof ApiProblemError) throw error;
       throw new ApiProblemError({
         type: "/problems/ai-proposal-persistence-failed",
         title: "Design proposal could not be saved",

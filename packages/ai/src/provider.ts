@@ -1,8 +1,19 @@
 import type {
   DesignArtifact,
   DesignGenerationTelemetry,
-  DesignRequest
+  DesignRequest,
+  DesignRefinementRequest,
+  DesignProposal
 } from "./contracts.js";
+
+/** Server-side transient result. Continuation is excluded from public Proposal contracts. */
+export type GeneratedDesignProposal = Omit<DesignProposal, "providerMetadata"> &
+  Readonly<{
+    providerMetadata?: Readonly<{
+      provider: string;
+      continuation?: Readonly<Record<string, string>>;
+    }>;
+  }>;
 
 export type InteriorDesignProviderResult = Readonly<{
   artifact: DesignArtifact;
@@ -14,4 +25,7 @@ export type InteriorDesignProviderResult = Readonly<{
 export interface InteriorDesignProvider {
   readonly name: string;
   generateDesign(request: DesignRequest): Promise<InteriorDesignProviderResult>;
+  refineDesign(
+    request: DesignRefinementRequest
+  ): Promise<InteriorDesignProviderResult>;
 }

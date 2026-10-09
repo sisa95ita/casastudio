@@ -1,4 +1,8 @@
-import type { DurableDesignProposal, DesignTarget } from "@casastudio/ai";
+import type {
+  DurableDesignProposal,
+  DesignTarget,
+  DesignConversationPage
+} from "@casastudio/ai";
 import type { ArtifactMetadata } from "../artifacts/design-artifact.store";
 
 export const DESIGN_PROPOSALS_REPOSITORY = Symbol(
@@ -7,10 +11,20 @@ export const DESIGN_PROPOSALS_REPOSITORY = Symbol(
 export type StoredDesignProposal = Readonly<{
   proposal: DurableDesignProposal;
   artifact: ArtifactMetadata;
+  /** Server-only, provider-namespaced continuation data. Never a public DTO. */
+  providerContinuation?: Readonly<Record<string, string>>;
 }>;
 
 export interface DesignProposalsRepository {
-  create(record: StoredDesignProposal): Promise<StoredDesignProposal>;
+  create(
+    record: StoredDesignProposal,
+    baseProposalId?: string
+  ): Promise<StoredDesignProposal>;
+  conversation(
+    projectId: string,
+    proposalId: string,
+    afterTurn: number
+  ): Promise<DesignConversationPage | null>;
   find(
     projectId: string,
     proposalId: string

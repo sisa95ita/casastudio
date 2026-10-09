@@ -1,10 +1,13 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { DesignProposal as PrismaProposal, Prisma } from "@prisma/client";
 import type {
   DesignGenerationUsage,
   DesignTarget,
   DurableDesignProposal
 } from "@casastudio/ai";
+import { DesignGenerationError } from "@casastudio/ai";
+import { descendantsConflict } from "../application/lineage-problem";
 import { PrismaService } from "../../persistence/prisma.service";
 import type {
   DesignProposalsRepository,
@@ -15,38 +18,166 @@ import type {
 export class PrismaDesignProposalsRepository implements DesignProposalsRepository {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async create({
-    proposal: p,
-    artifact: a
-  }: StoredDesignProposal): Promise<StoredDesignProposal> {
+  async create(
+    { proposal: p, artifact: a, providerContinuation }: StoredDesignProposal,
+    baseProposalId?: string
+  ): Promise<StoredDesignProposal> {
     const t = p.telemetry!;
-    const row = await this.prisma.designProposal.create({
-      data: {
-        id: p.id,
-        project: { connect: { domainId: p.target.projectId } },
-        levelDomainId: p.target.levelId,
-        roomDomainId: p.target.roomId,
-        projectRevision: p.projectRevision,
-        createdAt: new Date(p.createdAt),
-        instructions: p.instructions,
-        referenceFingerprint: p.referenceFingerprint,
-        artifactKey: a.key,
-        mimeType: a.mimeType,
-        width: a.width,
-        height: a.height,
-        byteSize: a.byteSize,
-        sha256: a.sha256,
-        provider: t.provider,
-        orchestrationModel: t.orchestrationModel,
-        imageModel: t.imageModel,
-        generationMode: t.generationMode,
-        durationMs: t.durationMs,
-        outputFormat: t.image.format,
-        outputQuality: t.image.quality,
-        ...(t.usage ? { usage: t.usage as Prisma.InputJsonObject } : {})
-      }
-    });
+    const data = {
+      id: p.id,
+      levelDomainId: p.target.levelId,
+      roomDomainId: p.target.roomId,
+      projectRevision: p.projectRevision,
+      createdAt: new Date(p.createdAt),
+      instructions: p.instructions,
+      referenceFingerprint: p.referenceFingerprint,
+      artifactKey: a.key,
+      mimeType: a.mimeType,
+      width: a.width,
+      height: a.height,
+      byteSize: a.byteSize,
+      sha256: a.sha256,
+      provider: t.provider,
+      orchestrationModel: t.orchestrationModel,
+      imageModel: t.imageModel,
+      generationMode: t.generationMode,
+      durationMs: t.durationMs,
+      outputFormat: t.image.format,
+      outputQuality: t.image.quality,
+      ...(providerContinuation
+        ? {
+            providerContinuation: providerContinuation as Prisma.InputJsonObject
+          }
+        : {}),
+      ...(t.usage ? { usage: t.usage as Prisma.InputJsonObject } : {})
+    };
+    const row = baseProposalId
+      ? await this.prisma.$transaction(async (tx) => {
+          // Same Project lock as canonical replacement/deletion. No lock held during provider work.
+          const [project] = await tx.$queryRaw<
+            { id: string; revision: number }[]
+          >`
+        SELECT "id", "revision" FROM "Project" WHERE "domainId" = ${p.target.projectId} FOR UPDATE`;
+          if (!project)
+            throw new NotFoundException("Design proposal not found.");
+          const base = await tx.designProposal.findFirst({
+            where: {
+              id: baseProposalId,
+              projectId: project.id,
+              levelDomainId: p.target.levelId,
+              roomDomainId: p.target.roomId
+            }
+          });
+          if (!base) throw new NotFoundException("Design proposal not found.");
+          if (
+            project.revision !== p.projectRevision ||
+            base.projectRevision !== p.projectRevision
+          ) {
+            throw new DesignGenerationError(
+              "stale_context",
+              "Architecture changed before this refinement could be saved. Generate a new root design from the current Room."
+            );
+          }
+          const conversation = base.conversationId
+            ? await tx.designConversation.findUniqueOrThrow({
+                where: { id: base.conversationId }
+              })
+            : await tx.designConversation.upsert({
+                where: { rootProposalId: base.id },
+                update: {},
+                create: {
+                  id: `conversation-${randomUUID()}`,
+                  projectId: project.id,
+                  levelDomainId: base.levelDomainId,
+                  roomDomainId: base.roomDomainId,
+                  rootProposalId: base.id
+                }
+              });
+          if (
+            conversation.projectId !== project.id ||
+            conversation.levelDomainId !== p.target.levelId ||
+            conversation.roomDomainId !== p.target.roomId
+          ) {
+            throw new DesignGenerationError(
+              "unsupported_target",
+              "Conversation scope does not match the requested Room."
+            );
+          }
+          const updated = await tx.designConversation.update({
+            where: { id: conversation.id },
+            data: { lastTurnNumber: { increment: 1 } }
+          });
+          return tx.designProposal.create({
+            data: {
+              ...data,
+              parentProposalId: base.id,
+              turnNumber: updated.lastTurnNumber,
+              conversationId: conversation.id,
+              projectId: project.id
+            }
+          });
+        })
+      : await this.prisma.designProposal.create({
+          data: {
+            ...data,
+            projectId: (
+              await this.prisma.project.findUniqueOrThrow({
+                where: { domainId: p.target.projectId },
+                select: { id: true }
+              })
+            ).id
+          }
+        });
     return mapRecord(row, p.target.projectId);
+  }
+
+  async conversation(projectId: string, proposalId: string, afterTurn: number) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const base = await tx.designProposal.findFirst({
+          where: { id: proposalId, project: { domainId: projectId } }
+        });
+        if (!base) return null;
+        const conversation = await tx.designConversation.findFirst({
+          where: {
+            projectId: base.projectId,
+            ...(base.conversationId
+              ? { id: base.conversationId }
+              : { rootProposalId: base.id })
+          }
+        });
+        if (!conversation) return null;
+        const root = await tx.designProposal.findUniqueOrThrow({
+          where: { id: conversation.rootProposalId }
+        });
+        const rows = await tx.designProposal.findMany({
+          where: {
+            conversationId: conversation.id,
+            turnNumber: { gt: afterTurn }
+          },
+          orderBy: { turnNumber: "asc" },
+          take: 21
+        });
+        const iterations = rows
+          .slice(0, 20)
+          .map((row) => mapRecord(row, projectId).proposal);
+        return {
+          conversation: {
+            id: conversation.id,
+            target: mapRecord(root, projectId).proposal.target,
+            rootProposalId: root.id,
+            createdAt: conversation.createdAt.toISOString(),
+            updatedAt: conversation.updatedAt.toISOString()
+          },
+          rootProposal: mapRecord(root, projectId).proposal,
+          iterations,
+          ...(rows.length > 20
+            ? { nextAfterTurn: iterations.at(-1)!.lineage!.turnNumber }
+            : {})
+        };
+      },
+      { isolationLevel: "RepeatableRead" }
+    );
   }
 
   async find(projectId: string, id: string) {
@@ -84,13 +215,31 @@ export class PrismaDesignProposalsRepository implements DesignProposalsRepositor
   async delete(projectId: string, id: string) {
     // RETURNING through deleteMany is unavailable; the transaction preserves identity.
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "domainId" = ${projectId} FOR UPDATE`;
       const row = await tx.designProposal.findFirst({
         where: { id, project: { domainId: projectId } }
       });
       if (!row) return null;
+      if (
+        await tx.designProposal.findFirst({
+          where: { parentProposalId: id },
+          select: { id: true }
+        })
+      ) {
+        throw descendantsConflict();
+      }
+      await tx.designConversation.deleteMany({
+        where: { rootProposalId: id, proposals: { none: {} } }
+      });
       const result = await tx.designProposal.deleteMany({
         where: { id, projectId: row.projectId }
       });
+      if (result.count && row.conversationId) {
+        await tx.designConversation.update({
+          where: { id: row.conversationId },
+          data: { updatedAt: new Date() }
+        });
+      }
       return result.count ? mapRecord(row, projectId) : null;
     });
   }
@@ -122,6 +271,15 @@ function mapRecord(
     instructions: row.instructions,
     projectRevision: row.projectRevision,
     referenceFingerprint: row.referenceFingerprint,
+    ...(row.conversationId && row.parentProposalId && row.turnNumber !== null
+      ? {
+          lineage: {
+            conversationId: row.conversationId,
+            parentProposalId: row.parentProposalId,
+            turnNumber: row.turnNumber
+          }
+        }
+      : {}),
     artifact: {
       kind: "image",
       uri: `/api/v1/projects/${encodeURIComponent(projectId)}/design-proposals/${encodeURIComponent(row.id)}/artifact`,
@@ -154,5 +312,15 @@ function mapRecord(
         : {})
     }
   };
-  return { proposal, artifact };
+  return {
+    proposal,
+    artifact,
+    ...(row.providerContinuation
+      ? {
+          providerContinuation: row.providerContinuation as Readonly<
+            Record<string, string>
+          >
+        }
+      : {})
+  };
 }

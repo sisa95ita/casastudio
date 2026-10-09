@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DesignGenerationError,
   InteriorDesignService,
+  type DesignRefinementRequest,
   type DesignRequest,
   type InteriorDesignProvider
 } from "./index.js";
@@ -64,9 +65,100 @@ const request = {
 } as unknown as DesignRequest;
 
 describe("InteriorDesignService", () => {
+  function refinement(): DesignRefinementRequest {
+    return {
+      ...request,
+      context: {
+        project: { id: "p", revision: 2 },
+        level: { id: "l" },
+        room: { id: "r" }
+      } as DesignRequest["context"],
+      preservation: "preserve-unrequested-design",
+      baseProposal: {
+        id: "base",
+        target: request.target,
+        projectRevision: 2,
+        artifact: {
+          kind: "image",
+          mimeType: "image/png",
+          uri: "data:image/png;base64,YmFzZQ=="
+        }
+      }
+    };
+  }
+
+  it("uses a distinct refinement operation exactly once without initial generation", async () => {
+    const input = refinement();
+    const provider: InteriorDesignProvider = {
+      name: "fake",
+      generateDesign: vi.fn(),
+      refineDesign: vi
+        .fn()
+        .mockResolvedValue({ artifact: input.baseProposal.artifact })
+    };
+    const service = new InteriorDesignService(provider, {
+      createId: () => "child",
+      now: () => new Date()
+    });
+    expect((await service.refine(input)).id).toBe("child");
+    expect(provider.refineDesign).toHaveBeenCalledExactlyOnceWith(input);
+    expect(provider.generateDesign).not.toHaveBeenCalled();
+  });
+
+  it("rejects stale and cross-scope base/context combinations before any provider operation", async () => {
+    const input = refinement();
+    const provider: InteriorDesignProvider = {
+      name: "fake",
+      generateDesign: vi.fn(),
+      refineDesign: vi.fn()
+    };
+    const service = new InteriorDesignService(provider, {
+      createId: () => "unused",
+      now: () => new Date()
+    });
+    await expect(
+      service.refine({
+        ...input,
+        baseProposal: { ...input.baseProposal, projectRevision: 1 }
+      })
+    ).rejects.toMatchObject({ code: "stale_context" });
+    for (const key of ["projectId", "levelId", "roomId"] as const) {
+      await expect(
+        service.refine({
+          ...input,
+          baseProposal: {
+            ...input.baseProposal,
+            target: { ...input.target, [key]: "wrong" }
+          }
+        })
+      ).rejects.toMatchObject({ code: "unsupported_target" });
+    }
+    await expect(
+      service.refine({
+        ...input,
+        context: {
+          ...input.context,
+          room: { ...input.context.room, id: "wrong" }
+        }
+      })
+    ).rejects.toMatchObject({ code: "unsupported_target" });
+    await expect(
+      service.refine({
+        ...input,
+        baseProposal: {
+          ...input.baseProposal,
+          artifact: { ...input.baseProposal.artifact, uri: "" }
+        }
+      })
+    ).rejects.toMatchObject({ code: "missing_reference" });
+    expect(provider.refineDesign).not.toHaveBeenCalled();
+    expect(provider.generateDesign).not.toHaveBeenCalled();
+  });
+
   it("normalizes a provider result into a transient proposal", async () => {
     const provider: InteriorDesignProvider = {
       name: "fake",
+      refineDesign: vi.fn(),
       generateDesign: vi.fn().mockResolvedValue({
         artifact: {
           kind: "image",
@@ -104,6 +196,7 @@ describe("InteriorDesignService", () => {
   it("requires exactly one of each automatic Room reference", async () => {
     const provider: InteriorDesignProvider = {
       name: "fake",
+      refineDesign: vi.fn(),
       generateDesign: vi.fn()
     };
     const service = new InteriorDesignService(provider, {
@@ -123,6 +216,7 @@ describe("InteriorDesignService", () => {
   it("rejects a missing visual reference before calling the provider", async () => {
     const provider: InteriorDesignProvider = {
       name: "fake",
+      refineDesign: vi.fn(),
       generateDesign: vi.fn()
     };
     const service = new InteriorDesignService(provider, {

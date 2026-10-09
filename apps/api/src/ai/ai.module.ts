@@ -16,12 +16,14 @@ import { PersistDesignProposalService } from "./application/persist-design-propo
 import { DesignProposalHistoryService } from "./application/design-proposal-history.service";
 import { PrismaDesignProposalsRepository } from "./persistence/prisma-design-proposal.repository";
 import { DESIGN_PROPOSALS_REPOSITORY } from "./persistence/design-proposal.repository";
+import { RefineDesignProposalService } from "./application/refine-design-proposal.service";
 
 @Module({
   imports: [ProjectsModule, PersistenceModule, DesignArtifactsModule],
   controllers: [DesignProposalsController],
   providers: [
     GenerateDesignProposalService,
+    RefineDesignProposalService,
     PersistDesignProposalService,
     DesignProposalHistoryService,
     PrismaDesignProposalsRepository,

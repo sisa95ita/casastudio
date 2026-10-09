@@ -175,6 +175,41 @@ export type DesignArtifact = Readonly<{
   height?: number;
 }>;
 
+/** Saved visual design state is never canonical geometry. Bytes are loaded server-side. */
+export type DesignRefinementRequest = Omit<DesignRequest, "iteration"> &
+  Readonly<{
+    baseProposal: Readonly<{
+      id: string;
+      target: DesignTarget;
+      projectRevision: number;
+      artifact: DesignArtifact;
+    }>;
+    preservation: "preserve-unrequested-design";
+    providerContinuation?: Readonly<Record<string, string>>;
+  }>;
+
+export type DesignConversation = Readonly<{
+  id: string;
+  target: DesignTarget;
+  rootProposalId: string;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+/** A child Proposal is also the durable design turn; no duplicate image or instruction. */
+export type DesignProposalLineage = Readonly<{
+  conversationId: string;
+  parentProposalId: string;
+  turnNumber: number;
+}>;
+
+export type DesignConversationPage = Readonly<{
+  conversation: DesignConversation;
+  rootProposal: DurableDesignProposal;
+  iterations: readonly DurableDesignProposal[];
+  nextAfterTurn?: number;
+}>;
+
 /** Provider-neutral usage reported by one generation request. */
 export type DesignGenerationUsage = Readonly<{
   inputTokens: number;
@@ -219,19 +254,20 @@ export type DesignProposal = Readonly<{
   }>;
   providerMetadata?: Readonly<{
     provider: string;
-    continuation?: Readonly<Record<string, string>>;
   }>;
   telemetry?: DesignGenerationTelemetry;
   structuredSuggestions?: readonly unknown[];
 }>;
 
 /** Application-owned history; never part of canonical ProjectSchema. */
-export type DurableDesignProposal = DesignProposal & Readonly<{
-  projectRevision: number;
-  instructions: string;
-  referenceFingerprint: string;
-  artifact: DesignArtifact & Readonly<{ byteSize: number; sha256: string }>;
-}>;
+export type DurableDesignProposal = DesignProposal &
+  Readonly<{
+    projectRevision: number;
+    instructions: string;
+    referenceFingerprint: string;
+    artifact: DesignArtifact & Readonly<{ byteSize: number; sha256: string }>;
+    lineage?: DesignProposalLineage;
+  }>;
 
 export type DesignProposalHistory = Readonly<{
   proposals: readonly DurableDesignProposal[];

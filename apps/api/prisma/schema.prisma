@@ -88,6 +88,7 @@ model Project {
   renderRequests RenderRequest[]
   renderResults  RenderResult[]
   designProposals DesignProposal[]
+  designConversations DesignConversation[]
 
   levels                    Level[]
   furniture                 FurnitureItem[]
@@ -132,10 +133,42 @@ model DesignProposal {
   outputFormat         String
   outputQuality        String?
   usage                Json?
+  providerContinuation Json?
+  conversationId       String?
+  parentProposalId     String?
+  turnNumber           Int?
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  conversation DesignConversation? @relation("ConversationTurns", fields: [conversationId, projectId, levelDomainId, roomDomainId], references: [id, projectId, levelDomainId, roomDomainId], onDelete: Cascade, onUpdate: NoAction)
+  rootedConversation DesignConversation? @relation("ConversationRoot")
+  parent DesignProposal? @relation("ProposalChildren", fields: [parentProposalId, projectId, levelDomainId, roomDomainId], references: [id, projectId, levelDomainId, roomDomainId], onDelete: NoAction, onUpdate: NoAction)
+  children DesignProposal[] @relation("ProposalChildren")
+
+  @@unique([id, projectId, levelDomainId, roomDomainId])
+  @@unique([conversationId, turnNumber])
+  @@index([parentProposalId])
   @@index([projectId, levelDomainId, roomDomainId, createdAt(sort: Desc), id(sort: Desc)], map: "DesignProposal_room_history_idx")
+}
+
+// CasaStudio-owned identity; only successful refinements create a conversation.
+model DesignConversation {
+  id             String @id
+  projectId      String @db.Uuid
+  levelDomainId  String
+  roomDomainId   String
+  rootProposalId String @unique
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  lastTurnNumber Int @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rootProposal DesignProposal @relation("ConversationRoot", fields: [rootProposalId, projectId, levelDomainId, roomDomainId], references: [id, projectId, levelDomainId, roomDomainId], onDelete: NoAction, onUpdate: NoAction)
+  proposals DesignProposal[] @relation("ConversationTurns")
+
+  @@unique([rootProposalId, projectId, levelDomainId, roomDomainId])
+  @@unique([id, projectId, levelDomainId, roomDomainId])
+  @@index([projectId, levelDomainId, roomDomainId, createdAt, id])
 }
 
 model Building {

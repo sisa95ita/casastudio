@@ -96,6 +96,25 @@ export const input = {
 export function fixtureProvider(): InteriorDesignProvider {
   return {
     name: "fake",
+    refineDesign: vi.fn().mockImplementation(async (request) => {
+      if (
+        !request.baseProposal?.artifact.uri ||
+        request.preservation !== "preserve-unrequested-design" ||
+        !request.instructions.trim() ||
+        request.referenceViews.length < 3 ||
+        !request.context.spatialContext
+      )
+        throw new Error("Invalid refinement fixture input");
+      return {
+        artifact: fixtureArtifact,
+        telemetry: {
+          durationMs: 1,
+          generatedAt: new Date().toISOString(),
+          generationMode: "edit",
+          image: { format: "png", width: 1, height: 1 }
+        }
+      };
+    }),
     generateDesign: vi.fn().mockResolvedValue({
       artifact: fixtureArtifact,
       telemetry: {
@@ -119,6 +138,7 @@ export function fixtureProvider(): InteriorDesignProvider {
 export function memoryProposals() {
   const records = new Map<string, StoredDesignProposal>();
   const repository: DesignProposalsRepository = {
+    conversation: vi.fn().mockResolvedValue(null),
     create: vi.fn(async (record) => {
       const p = record.proposal;
       const stored = {

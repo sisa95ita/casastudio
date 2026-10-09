@@ -128,6 +128,7 @@ describe("GenerateDesignProposalService", () => {
     const before = structuredClone(project);
     const provider: InteriorDesignProvider = {
       name: "fake",
+      refineDesign: vi.fn(),
       generateDesign: vi.fn().mockResolvedValue({
         artifact: {
           kind: "image",
@@ -181,6 +182,7 @@ describe("GenerateDesignProposalService", () => {
     const before = structuredClone(project);
     const provider: InteriorDesignProvider = {
       name: "fake",
+      refineDesign: vi.fn(),
       generateDesign: vi
         .fn()
         .mockRejectedValue(

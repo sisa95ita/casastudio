@@ -22,6 +22,7 @@ import { DESIGN_PROPOSALS_REPOSITORY } from "../persistence/design-proposal.repo
 import { INTERIOR_DESIGN_PROVIDER } from "../interior-design-provider.token";
 import { DesignProposalHistoryService } from "../application/design-proposal-history.service";
 import { PersistDesignProposalService } from "../application/persist-design-proposal.service";
+import { RefineDesignProposalService } from "../application/refine-design-proposal.service";
 import { GenerateDesignProposalService } from "../application/generate-design-proposal.service";
 import {
   fixtureArtifact,
@@ -48,6 +49,7 @@ describe("authenticated design history API (fake provider and principal)", () =>
         AuthorizedProjectLoader,
         ProjectReadAuthorizationPolicy,
         GenerateDesignProposalService,
+        RefineDesignProposalService,
         PersistDesignProposalService,
         DesignProposalHistoryService,
         {

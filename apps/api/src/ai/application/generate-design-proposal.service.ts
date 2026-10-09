@@ -89,7 +89,7 @@ export class GenerateDesignProposalService {
   }
 }
 
-function validateReferenceImage(
+export function validateReferenceImage(
   image: GenerateRoomDesignRequestDto["referenceViews"][number]["image"]
 ): void {
   const prefix = `data:${image.mimeType};base64,`;
@@ -101,8 +101,13 @@ function validateReferenceImage(
   }
 }
 
-function toApiProblem(error: DesignGenerationError): ApiProblemError {
+export function toApiProblem(error: DesignGenerationError): ApiProblemError {
   const mapping = {
+    stale_context: [
+      HttpStatus.CONFLICT,
+      ApiErrorCode.AiStaleContext,
+      "Historical design context"
+    ],
     provider_not_configured: [
       HttpStatus.SERVICE_UNAVAILABLE,
       ApiErrorCode.AiProviderNotConfigured,

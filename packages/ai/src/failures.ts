@@ -8,6 +8,7 @@ export type DesignFailureCode =
   | "invalid_provider_response"
   | "generation_failed"
   | "missing_reference"
+  | "stale_context"
   | "unsupported_target";
 
 /** Safe provider-neutral failure. Provider details remain in `cause` for server logs. */

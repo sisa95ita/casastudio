@@ -231,6 +231,124 @@ withDatabase(
       expect(provider.generateDesign).toHaveBeenCalledTimes(1);
     });
 
+    it("AI-C1 refines one saved root twice, reloads branches, normalizes conflicts and authorizes each operation", async () => {
+      const before = await prisma.project.findUniqueOrThrow({
+        where: { domainId: projectId }
+      });
+      const invoke = (id: string, instructions: string) =>
+        request(app.getHttpServer())
+          .post(`${path()}/${id}/refinements`)
+          .set("authorization", owner)
+          .send({ ...payload, instructions });
+      const beforeCalls = vi.mocked(provider.refineDesign).mock.calls.length;
+      await request(app.getHttpServer())
+        .get(`${path()}/${savedId}/conversation`)
+        .set("authorization", owner)
+        .expect(200, { page: null });
+      const p2 = (await invoke(savedId, "Change only the sofa").expect(201))
+        .body;
+      expect(provider.refineDesign).toHaveBeenCalledTimes(beforeCalls + 1);
+      expect(p2.lineage.parentProposalId).toBe(savedId);
+      const reload = await request(app.getHttpServer())
+        .get(`${path()}/${p2.id}/conversation`)
+        .set("authorization", owner)
+        .expect(200);
+      expect(reload.body.page.rootProposal.id).toBe(savedId);
+      expect(reload.body.page.iterations[0].instructions).toBe(
+        "Change only the sofa"
+      );
+      const p3 = (await invoke(savedId, "Try darker wood").expect(201)).body;
+      expect(p3.lineage.parentProposalId).toBe(savedId);
+      expect(p3.lineage.conversationId).toBe(p2.lineage.conversationId);
+      const branches = await request(app.getHttpServer())
+        .get(`${path()}/${savedId}/conversation`)
+        .set("authorization", owner)
+        .expect(200);
+      expect(
+        branches.body.page.iterations.map((p: { id: string }) => p.id)
+      ).toEqual([p2.id, p3.id]);
+      expect(JSON.stringify(branches.body)).not.toMatch(
+        /base64|artifactKey|providerContinuation/
+      );
+      const conflict = await request(app.getHttpServer())
+        .delete(`${path()}/${savedId}`)
+        .set("authorization", owner)
+        .expect(409);
+      expect(conflict.body.code).toBe("AI_PROPOSAL_HAS_DESCENDANTS");
+      for (const authorization of [undefined, other]) {
+        for (const id of [savedId, p2.id, "missing"]) {
+          let refine = request(app.getHttpServer())
+            .post(`${path()}/${id}/refinements`)
+            .send(payload);
+          if (authorization)
+            refine = refine.set("authorization", authorization);
+          await refine.expect(authorization ? 403 : 401);
+          let read = request(app.getHttpServer()).get(
+            `${path()}/${id}/conversation`
+          );
+          if (authorization) read = read.set("authorization", authorization);
+          await read.expect(authorization ? 403 : 401);
+        }
+      }
+      await request(app.getHttpServer())
+        .get(
+          `/api/v1/projects/${otherProjectId}/design-proposals/${savedId}/conversation`
+        )
+        .set("authorization", other)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(
+          `/api/v1/projects/${otherProjectId}/design-proposals/${savedId}/refinements`
+        )
+        .set("authorization", other)
+        .send(payload)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`${path()}/${savedId}/conversation?afterTurn=-1`)
+        .set("authorization", owner)
+        .expect(400);
+      await invoke(savedId, "").expect(400);
+      await invoke(savedId, "   ").expect(400);
+      await invoke(savedId, "x".repeat(2_001)).expect(400);
+      await request(app.getHttpServer())
+        .post(`${path()}/${savedId}/refinements`)
+        .set("authorization", owner)
+        .send({
+          ...payload,
+          providerContinuation: { responseId: "client-injected" }
+        })
+        .expect(400);
+      await prisma.project.update({
+        where: { domainId: projectId },
+        data: { revision: { increment: 1 } }
+      });
+      const stale = await invoke(savedId, "Change the sofa").expect(409);
+      expect(stale.body.code).toBe("AI_STALE_CONTEXT");
+      await prisma.project.update({
+        where: { domainId: projectId },
+        data: { revision: before.revision }
+      });
+      expect(provider.refineDesign).toHaveBeenCalledTimes(beforeCalls + 2);
+      await request(app.getHttpServer())
+        .delete(`${path()}/${p2.id}`)
+        .set("authorization", owner)
+        .expect(204);
+      await request(app.getHttpServer())
+        .delete(`${path()}/${p3.id}`)
+        .set("authorization", owner)
+        .expect(204);
+      // Timestamp is intentionally changed by the fixture's direct revision update;
+      // no refinement touched canonical data/revision.
+      expect(
+        (
+          await prisma.project.findUniqueOrThrow({
+            where: { domainId: projectId }
+          })
+        ).revision
+      ).toBe(before.revision);
+      expect(await readdir(root)).toHaveLength(1);
+    });
+
     it.each([
       ["provider_not_configured", 503],
       ["authentication_failed", 503],

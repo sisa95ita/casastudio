@@ -34,5 +34,7 @@ export enum ApiErrorCode {
   AiGenerationFailed = "AI_GENERATION_FAILED",
   AiMissingReference = "AI_MISSING_REFERENCE",
   AiUnsupportedTarget = "AI_UNSUPPORTED_TARGET",
-  AiProposalPersistenceFailed = "AI_PROPOSAL_PERSISTENCE_FAILED"
+  AiProposalPersistenceFailed = "AI_PROPOSAL_PERSISTENCE_FAILED",
+  AiStaleContext = "AI_STALE_CONTEXT",
+  AiProposalHasDescendants = "AI_PROPOSAL_HAS_DESCENDANTS"
 }

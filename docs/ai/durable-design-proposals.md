@@ -1,5 +1,11 @@
 # AI-B4 — Durable proposal artifacts and Room design history
 
+AI-B is closed. [AI-C1](conversation-proposal-lineage.md) extends these records
+with lazy conversations, child Proposal lineage and refinement. The B4 flow below
+remains the initial-generation baseline; C1 adds server-only optional continuation
+metadata and prevents direct deletion of Proposals with descendants. Public history
+still excludes provider IDs, and ProjectSchema remains unchanged.
+
 ## Architecture and product policy
 
 Every successfully completed design generation is saved automatically on the server before the successful response is finalized. There is no Save action. A failed generation creates no durable record. History, image retrieval, preview, refresh, pagination, fixture seeding, and deletion perform zero provider calls. Generate/Try another retain the AI-B3 single-flight guard, one intended paid request per explicit action, and disabled SDK retries. A persistence failure never calls the provider again.
@@ -102,7 +108,10 @@ Run `pnpm lint`, `pnpm test`, `pnpm build`, `git diff --check`, `pnpm db:validat
 
 MVP limits: trusted single filesystem root/volume; bounded in-process binary delivery; no cloud/CDN/thumbnails; no crash-orphan collector; no idempotency/recovery job for ambiguous paid requests; no Project-level gallery for deleted Rooms; snapshot pagination without a long-lived database snapshot; revision provenance does not model unsaved geometry; structural image validation is not subjective/content acceptance. Retention configuration and an S3-compatible adapter can be added later at the artifact boundary.
 
-AI-C still owns chat/follow-up, scoped natural-language edits, provider continuation and conversational history. Later structured AI editing owns typed Furniture suggestions, canonical accept/reject, Apply to Project and architectural mutation. None are implemented here.
+AI-C1 now owns durable follow-up/branch lineage and provider-neutral refinement.
+AI-C2 owns conversational design UX; AI-C3 owns multi-turn quality validation. AI-D
+will own typed Furniture operations, canonical accept/reject and Apply to Project.
+None of that later scope is implemented by C1.
 
 ## AI-B4.1 presentation update
 

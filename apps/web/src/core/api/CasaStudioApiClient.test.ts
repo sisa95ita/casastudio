@@ -98,6 +98,143 @@ describe("authenticated durable proposal delivery", () => {
     }
   };
 
+  it("refines a specific base and loads typed lineage separately from initial generation", async () => {
+    const child = {
+      ...saved,
+      id: "design-child",
+      instructions: "Change only the sofa",
+      lineage: {
+        conversationId: "conversation",
+        parentProposalId: saved.id,
+        turnNumber: 1
+      },
+      artifact: {
+        ...saved.artifact,
+        uri: "/api/v1/projects/project/design-proposals/design-child/artifact"
+      }
+    };
+    const page = {
+      conversation: {
+        id: "conversation",
+        target: saved.target,
+        rootProposalId: saved.id,
+        createdAt: saved.createdAt,
+        updatedAt: saved.createdAt
+      },
+      rootProposal: saved,
+      iterations: [child]
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(child)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ page })));
+    const client = createClient(fetch);
+    const input = {
+      levelId: "level",
+      roomId: "room",
+      instructions: "Change only the sofa",
+      referenceViews: []
+    };
+    expect(await client.refineRoomDesign("project", saved.id, input)).toEqual(
+      child
+    );
+    expect(fetch.mock.calls[0]![0]).toContain(
+      `/design-proposals/${saved.id}/refinements`
+    );
+    expect(fetch.mock.calls[0]![1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify(input),
+      headers: { Authorization: "Bearer access-token" }
+    });
+    expect(await client.getDesignConversation("project", child.id)).toEqual(
+      page
+    );
+    expect(fetch.mock.calls[1]![0]).toContain(
+      `/design-proposals/${child.id}/conversation?afterTurn=0`
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("supports roots without conversations and rejects malformed/cross-scope lineage", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ page: null })));
+    const client = createClient(fetch);
+    expect(await client.getDesignConversation("project", saved.id)).toBeNull();
+    for (const lineage of [
+      { conversationId: "c", parentProposalId: saved.id, turnNumber: 1 },
+      { conversationId: "c", parentProposalId: "base", turnNumber: 0 }
+    ]) {
+      fetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...saved, lineage }))
+      );
+      await expect(
+        client.refineRoomDesign("project", "base", {
+          levelId: "level",
+          roomId: "room",
+          instructions: "change",
+          referenceViews: []
+        })
+      ).rejects.toMatchObject({ kind: "invalid-response" });
+    }
+    fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          page: {
+            conversation: {
+              id: "c",
+              target: { ...saved.target, projectId: "other" },
+              rootProposalId: saved.id,
+              createdAt: saved.createdAt,
+              updatedAt: saved.createdAt
+            },
+            rootProposal: saved,
+            iterations: []
+          }
+        })
+      )
+    );
+    await expect(
+      client.getDesignConversation("project", saved.id)
+    ).rejects.toMatchObject({ kind: "invalid-response" });
+  });
+
+  it.each(["AI_STALE_CONTEXT", "AI_PROPOSAL_HAS_DESCENDANTS"])(
+    "retains typed lineage conflict %s without resubmission",
+    async (code) => {
+      const fetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            type: "/problems/lineage",
+            title: "Lineage conflict",
+            status: 409,
+            detail: "Fixture conflict",
+            code
+          }),
+          {
+            status: 409,
+            headers: { "Content-Type": "application/problem+json" }
+          }
+        )
+      );
+      const client = createClient(fetch);
+      const operation =
+        code === "AI_STALE_CONTEXT"
+          ? client.refineRoomDesign("project", saved.id, {
+              levelId: "level",
+              roomId: "room",
+              instructions: "change",
+              referenceViews: []
+            })
+          : client.deleteDesignProposal("project", saved.id);
+      await expect(operation).rejects.toMatchObject({
+        status: 409,
+        problem: { code }
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it("lists normalized metadata with encoded scope/cursor and a Bearer token, without fetching any image", async () => {
     const fetch = vi
       .fn()

@@ -1,6 +1,7 @@
 import {
   DesignGenerationError,
   type DesignRequest,
+  type DesignRefinementRequest,
   type InteriorDesignProvider,
   type InteriorDesignProviderResult
 } from "@casastudio/ai";
@@ -8,7 +9,10 @@ import {
 import {
   buildOpenAIInteriorDesignInstructions,
   buildOpenAIInteriorDesignPrompt,
-  describeOpenAIReferenceRole
+  describeOpenAIReferenceRole,
+  buildOpenAIRefinementInstructions,
+  buildOpenAIRefinementPrompt,
+  describeOpenAIRefinementReference
 } from "./openai-prompt-builder";
 
 export type OpenAIInteriorDesignConfiguration = Readonly<{
@@ -29,6 +33,7 @@ type OpenAIImageGenerationCall = Readonly<{
   id?: string;
   result?: string | null;
   status?: string;
+  action?: "edit" | "generate" | "auto" | null;
   output_format?: "png" | "jpeg" | "webp" | null;
   quality?: string | null;
   size?: string | null;
@@ -69,25 +74,76 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
   async generateDesign(
     request: DesignRequest
   ): Promise<InteriorDesignProviderResult> {
+    return this.edit(request);
+  }
+
+  async refineDesign(
+    request: DesignRefinementRequest
+  ): Promise<InteriorDesignProviderResult> {
+    if (
+      request.baseProposal.target.projectId !== request.target.projectId ||
+      request.baseProposal.target.levelId !== request.target.levelId ||
+      request.baseProposal.target.roomId !== request.target.roomId ||
+      request.baseProposal.projectRevision !==
+        request.context.project.revision ||
+      !request.baseProposal.artifact.uri.startsWith(
+        `data:${request.baseProposal.artifact.mimeType};base64,`
+      ) ||
+      !request.baseProposal.artifact.uri.split(",")[1]
+    ) {
+      throw new DesignGenerationError(
+        "missing_reference",
+        "Refinement requires a matching current persisted base Proposal image."
+      );
+    }
+    return this.edit(request, request);
+  }
+
+  private async edit(
+    request: DesignRequest,
+    refinement?: DesignRefinementRequest
+  ): Promise<InteriorDesignProviderResult> {
     let response: OpenAIResponseLike;
     const startedAt = this.clock.monotonicNow();
     try {
-      const references = orderedReferences(request);
+      const references = orderedReferences(request, Boolean(refinement));
       response = await this.client.create({
         model: this.configuration.reasoningModel,
-        instructions: buildOpenAIInteriorDesignInstructions(),
+        instructions: refinement
+          ? buildOpenAIRefinementInstructions()
+          : buildOpenAIInteriorDesignInstructions(),
+        // Explicit local artifact replay is the continuation strategy. Provider IDs,
+        // including expired ones, cannot affect availability or cause a second call.
+        ...(refinement ? { store: false } : {}),
         input: [
           {
             role: "user",
             content: [
               {
                 type: "input_text",
-                text: buildOpenAIInteriorDesignPrompt(request)
+                text: refinement
+                  ? buildOpenAIRefinementPrompt(refinement)
+                  : buildOpenAIInteriorDesignPrompt(request)
               },
+              ...(refinement
+                ? [
+                    {
+                      type: "input_text",
+                      text: "REFERENCE 1 — PREVIOUS PROPOSAL — PRIMARY BASE IMAGE TO EDIT. Current visual design state, not canonical geometry."
+                    },
+                    {
+                      type: "input_image",
+                      image_url: refinement.baseProposal.artifact.uri,
+                      detail: "high"
+                    }
+                  ]
+                : []),
               ...references.flatMap((reference) => [
                 {
                   type: "input_text",
-                  text: describeOpenAIReferenceRole(reference.kind)
+                  text: refinement
+                    ? describeOpenAIRefinementReference(reference.kind)
+                    : describeOpenAIReferenceRole(reference.kind)
                 },
                 {
                   type: "input_image",
@@ -128,6 +184,12 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
       );
     }
     const imageCall = imageCalls[0]!;
+    if (refinement && imageCall.action === "generate") {
+      throw new DesignGenerationError(
+        "invalid_provider_response",
+        "The AI provider returned a new generation instead of editing the saved design."
+      );
+    }
     if (
       !imageCall.result ||
       (imageCall.status && imageCall.status !== "completed")
@@ -173,7 +235,7 @@ export class OpenAIInteriorDesignProvider implements InteriorDesignProvider {
   }
 }
 
-function orderedReferences(request: DesignRequest) {
+function orderedReferences(request: DesignRequest, refine = false) {
   // Edit mode must never silently substitute another view for the base image.
   const required = ["room-interior-a", "room-axonometric", "room-interior-b"];
   if (
@@ -196,8 +258,8 @@ function orderedReferences(request: DesignRequest) {
     );
   }
   const priority = new Map([
-    ["room-interior-a", 0],
-    ["room-axonometric", 1],
+    ["room-interior-a", refine ? 1 : 0],
+    ["room-axonometric", refine ? 0 : 1],
     ["room-interior-b", 2],
     ["current-user-view", 3]
   ]);

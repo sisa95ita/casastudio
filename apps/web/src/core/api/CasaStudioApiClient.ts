@@ -1,4 +1,9 @@
-import type { DesignProposal, DesignProposalHistory } from "@casastudio/ai";
+import type {
+  DesignProposal,
+  DesignProposalHistory,
+  DurableDesignProposal,
+  DesignConversationPage
+} from "@casastudio/ai";
 
 import {
   isApiProblem,
@@ -7,6 +12,9 @@ import {
   parseProjectResponse,
   parseDesignProposal,
   parseDesignProposalHistory,
+  parseDurableDesignProposal,
+  parseDesignConversationPage,
+  type RefineRoomDesignRequest,
   type ApiProblem,
   type CreateProjectRequest,
   type ProjectListResponse,
@@ -284,6 +292,67 @@ export class CasaStudioApiClient {
       throw new ApiRequestError(
         "invalid-response",
         "The API returned invalid design history.",
+        undefined,
+        undefined,
+        { cause: error }
+      );
+    }
+  }
+
+  async refineRoomDesign(
+    projectId: string,
+    baseProposalId: string,
+    input: RefineRoomDesignRequest,
+    signal?: AbortSignal
+  ): Promise<DurableDesignProposal> {
+    const body = await this.requestJson(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/design-proposals/${encodeURIComponent(baseProposalId)}/refinements`,
+      { method: "POST", body: input, signal }
+    );
+    try {
+      const proposal = parseDurableDesignProposal(body);
+      if (
+        proposal.lineage?.parentProposalId !== baseProposalId ||
+        proposal.target.projectId !== projectId ||
+        proposal.target.levelId !== input.levelId ||
+        proposal.target.roomId !== input.roomId
+      )
+        throw new Error("Mismatched refinement scope");
+      return proposal;
+    } catch (error) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid refined design.",
+        undefined,
+        undefined,
+        { cause: error }
+      );
+    }
+  }
+
+  async getDesignConversation(
+    projectId: string,
+    proposalId: string,
+    afterTurn = 0,
+    signal?: AbortSignal
+  ): Promise<DesignConversationPage | null> {
+    const body = await this.requestJson(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/design-proposals/${encodeURIComponent(proposalId)}/conversation?afterTurn=${afterTurn}`,
+      { method: "GET", signal }
+    );
+    try {
+      const page = parseDesignConversationPage(body);
+      if (
+        page &&
+        (page.conversation.target.projectId !== projectId ||
+          page.iterations.some((p) => p.lineage!.turnNumber <= afterTurn))
+      )
+        throw new Error("Mismatched conversation scope");
+      return page;
+    } catch (error) {
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned invalid design lineage.",
         undefined,
         undefined,
         { cause: error }

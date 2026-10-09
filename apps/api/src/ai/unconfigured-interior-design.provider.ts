@@ -8,6 +8,10 @@ import {
 export class UnconfiguredInteriorDesignProvider implements InteriorDesignProvider {
   readonly name = "unconfigured";
 
+  async refineDesign(): Promise<InteriorDesignProviderResult> {
+    return this.generateDesign();
+  }
+
   async generateDesign(): Promise<InteriorDesignProviderResult> {
     throw new DesignGenerationError(
       "provider_not_configured",

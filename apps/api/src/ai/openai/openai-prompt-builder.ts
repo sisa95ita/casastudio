@@ -1,7 +1,8 @@
 import type {
   DesignContext,
   DesignReferenceViewKind,
-  DesignRequest
+  DesignRequest,
+  DesignRefinementRequest
 } from "@casastudio/ai";
 
 const referenceRoles: Readonly<
@@ -28,6 +29,70 @@ const referenceRoles: Readonly<
     role: "Use this only as additional evidence; it does not override the primary output view or canonical architecture."
   }
 });
+
+export function buildOpenAIRefinementInstructions(): string {
+  return [
+    "DESIGN REFINEMENT EDIT CONTRACT",
+    "EDIT THE FIRST IMAGE, the previous Proposal, as the PRIMARY BASE IMAGE TO EDIT. Never generate from scratch or replace its camera/composition with a supporting view.",
+    "BASE DESIGN: previous Proposal pixels describe current visual design state, never canonical geometry.",
+    "ARCHITECTURE: CasaStudio ProjectSchema, current DesignContext and Room references are immutable architectural truth. Re-anchor EVERY turn to this evidence, including Room shape, Walls, internal/non-boundary partitions, Doors, Windows, Wall Openings, Stairs, dimensions, elevations and direct Room adjacency. If base pixels conflict with canonical architecture, canonical architecture takes precedence.",
+    "USER CHANGE: interpret the follow-up instruction as a delta to the base design in this same image edit.",
+    "DEFAULT RULE: preserve everything not requested to change. Keep unrelated furniture, arrangement, materials, finishes, lighting and decoration stable. Change only the requested design elements. A broader request such as a more minimal arrangement permits broader design/layout changes, while architecture always remains fixed.",
+    "Design only the selected Room; adjacent spaces are context only. Preserve their connecting geometry. Do not redesign or merge adjacent Rooms.",
+    "Use all four intended images in ONE edit. Return ONE final image; no variants, retries or alternative compositions."
+  ].join("\n");
+}
+
+export function buildOpenAIRefinementPrompt(
+  request: DesignRefinementRequest
+): string {
+  return [
+    "BASE DESIGN: first image is the persisted previous Proposal, not architectural truth.",
+    "CURRENT CANONICAL ROOM ARCHITECTURE",
+    describeContext(request.context),
+    // Include precise evidence every turn, without canonical Project serialization.
+    JSON.stringify({
+      boundary: request.context.room.boundary,
+      walls: request.context.walls,
+      stairs: request.context.stairs,
+      floorElevation: request.context.room.floorElevation,
+      units: request.context.units,
+      coordinateSystem: request.context.coordinateSystem
+    }),
+    "LOCAL SPATIAL CONTEXT",
+    describeSpatialContext(request.context).replaceAll(
+      "Interior A",
+      "the base Proposal"
+    ),
+    "USER CHANGE — FOLLOW-UP DELTA",
+    request.instructions.trim(),
+    "PRESERVE BY DEFAULT: everything not requested to change remains stable; architecture remains fixed.",
+    ...(request.constraints?.length
+      ? [`Additional design constraints: ${request.constraints.join("; ")}`]
+      : []),
+    ...(request.elementsToPreserve?.length
+      ? [
+          `Design elements to preserve: ${request.elementsToPreserve.join("; ")}`
+        ]
+      : []),
+    "Image order: previous Proposal (primary edit); axonometric (layout); Interior A (canonical camera evidence); Interior B (complementary architecture). Supporting references never replace the base design."
+  ].join("\n\n");
+}
+
+export function describeOpenAIRefinementReference(
+  kind: DesignReferenceViewKind
+): string {
+  const roles: Record<DesignReferenceViewKind, string> = {
+    "room-axonometric":
+      "REFERENCE 2 — AXONOMETRIC — CANONICAL STRUCTURAL / LAYOUT EVIDENCE",
+    "room-interior-a":
+      "REFERENCE 3 — INTERIOR A — CANONICAL CAMERA / ARCHITECTURAL EVIDENCE",
+    "room-interior-b":
+      "REFERENCE 4 — INTERIOR B — COMPLEMENTARY ARCHITECTURAL EVIDENCE",
+    "current-user-view": "OPTIONAL SUPPORTING VIEW — CURRENT USER VIEW"
+  };
+  return `${roles[kind]}\nSupporting immutable architecture only; do not substitute this image for the base Proposal or copy its viewpoint.`;
+}
 
 /** Stable architectural contract owned by the OpenAI adapter. */
 export function buildOpenAIInteriorDesignInstructions(): string {

@@ -1,4 +1,8 @@
-import type { DesignReferenceViewKind, DesignRequest } from "@casastudio/ai";
+import type {
+  DesignReferenceViewKind,
+  DesignRequest,
+  DesignRefinementRequest
+} from "@casastudio/ai";
 import { describe, expect, it, vi } from "vitest";
 
 import { UnconfiguredInteriorDesignProvider } from "../unconfigured-interior-design.provider";
@@ -146,6 +150,192 @@ const configuration = {
 };
 
 describe("OpenAIInteriorDesignProvider", () => {
+  it.each([
+    undefined,
+    {
+      responseId: "expired-response",
+      imageId: "expired-image",
+      conversationId: "expired-conversation"
+    }
+  ])(
+    "refines via persisted-artifact replay regardless of optional provider state: %j",
+    async (providerContinuation) => {
+      const client = {
+        create: vi.fn().mockResolvedValue({
+          output: [
+            {
+              type: "image_generation_call",
+              status: "completed",
+              result: "Zml4dHVyZQ=="
+            }
+          ]
+        })
+      };
+      const refinement: DesignRefinementRequest = {
+        ...spatialRequest,
+        instructions: "Change only the sofa.",
+        preservation: "preserve-unrequested-design",
+        baseProposal: {
+          id: "base",
+          target,
+          projectRevision: spatialRequest.context.project.revision,
+          artifact: {
+            kind: "image",
+            mimeType: "image/png",
+            uri: "data:image/png;base64,YmFzZQ=="
+          }
+        },
+        providerContinuation
+      };
+      const provider = new OpenAIInteriorDesignProvider(configuration, client);
+      await provider.refineDesign(refinement);
+      expect(client.create).toHaveBeenCalledTimes(1);
+      const sent = client.create.mock.calls[0]![0] as unknown as {
+        instructions: string;
+        input: { content: Record<string, unknown>[] }[];
+        tools: Record<string, unknown>[];
+      };
+      expect(sent).toMatchObject({
+        store: false,
+        max_tool_calls: 1,
+        parallel_tool_calls: false,
+        tools: [
+          {
+            action: "edit",
+            model: configuration.imageModel,
+            quality: configuration.imageQuality
+          }
+        ]
+      });
+      expect(sent).not.toHaveProperty("previous_response_id");
+      expect(sent).not.toHaveProperty("conversation");
+      const content = sent.input[0]!.content;
+      expect(
+        content
+          .filter((item) => item.type === "input_image")
+          .map((item) => item.image_url)
+      ).toEqual([
+        refinement.baseProposal.artifact.uri,
+        request.referenceViews[0]!.image.dataUrl,
+        request.referenceViews[2]!.image.dataUrl,
+        request.referenceViews[1]!.image.dataUrl
+      ]);
+      expect(sent.instructions).toContain(
+        "preserve everything not requested to change"
+      );
+      expect(sent.instructions).toContain("never canonical geometry");
+      expect(sent.instructions).toContain("internal/non-boundary partitions");
+      const prompt = String(content[0]!.text);
+      expect(prompt).toContain("USER CHANGE — FOLLOW-UP DELTA");
+      expect(prompt).toContain("Change only the sofa.");
+      expect(prompt).toContain("LOCAL SPATIAL CONTEXT");
+      expect(prompt).toContain("Guest suite");
+      expect(prompt).toContain("floorElevation");
+      expect(JSON.stringify(sent)).not.toContain("expired-response");
+    }
+  );
+
+  it.each([429, 404, 500, 408])(
+    "never retries or switches edit/model/quality when refinement fails (%s)",
+    async (status) => {
+      const client = { create: vi.fn().mockRejectedValue({ status }) };
+      await expect(
+        new OpenAIInteriorDesignProvider(configuration, client).refineDesign({
+          ...request,
+          preservation: "preserve-unrequested-design",
+          providerContinuation: { responseId: "expired" },
+          baseProposal: {
+            id: "base",
+            target,
+            projectRevision: request.context.project.revision,
+            artifact: {
+              kind: "image",
+              mimeType: "image/png",
+              uri: "data:image/png;base64,YmFzZQ=="
+            }
+          }
+        })
+      ).rejects.toBeDefined();
+      expect(client.create).toHaveBeenCalledTimes(1);
+      expect(client.create.mock.calls[0]![0]).toMatchObject({
+        model: configuration.reasoningModel,
+        tools: [
+          {
+            action: "edit",
+            model: configuration.imageModel,
+            quality: configuration.imageQuality
+          }
+        ]
+      });
+    }
+  );
+
+  it("refuses missing base pixels and duplicate canonical references without calling the SDK", async () => {
+    const client = { create: vi.fn() };
+    const provider = new OpenAIInteriorDesignProvider(configuration, client);
+    const refinement: DesignRefinementRequest = {
+      ...request,
+      preservation: "preserve-unrequested-design",
+      baseProposal: {
+        id: "base",
+        target,
+        projectRevision: request.context.project.revision,
+        artifact: { kind: "image", mimeType: "image/png", uri: "" }
+      }
+    };
+    await expect(provider.refineDesign(refinement)).rejects.toMatchObject({
+      code: "missing_reference"
+    });
+    await expect(
+      provider.refineDesign({
+        ...refinement,
+        baseProposal: {
+          ...refinement.baseProposal,
+          artifact: {
+            ...refinement.baseProposal.artifact,
+            uri: "data:image/png;base64,YmFzZQ=="
+          }
+        },
+        referenceViews: [...request.referenceViews, request.referenceViews[0]!]
+      })
+    ).rejects.toMatchObject({ code: "missing_reference" });
+    expect(client.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an explicitly reported generate result for refinement without a fallback call", async () => {
+    const client = {
+      create: vi
+        .fn()
+        .mockResolvedValue({
+          output: [
+            {
+              type: "image_generation_call",
+              action: "generate",
+              status: "completed",
+              result: "Zml4dHVyZQ=="
+            }
+          ]
+        })
+    };
+    await expect(
+      new OpenAIInteriorDesignProvider(configuration, client).refineDesign({
+        ...request,
+        preservation: "preserve-unrequested-design",
+        baseProposal: {
+          id: "base",
+          target,
+          projectRevision: request.context.project.revision,
+          artifact: {
+            kind: "image",
+            mimeType: "image/png",
+            uri: "data:image/png;base64,YmFzZQ=="
+          }
+        }
+      })
+    ).rejects.toMatchObject({ code: "invalid_provider_response" });
+    expect(client.create).toHaveBeenCalledTimes(1);
+  });
+
   it("labels all references by role, prioritizes interior A, and uses configured output settings", async () => {
     const client: OpenAIResponsesClient = {
       create: vi.fn().mockResolvedValue({
@@ -594,12 +784,10 @@ describe("OpenAI prompt builder", () => {
     expect(
       buildOpenAIInteriorDesignPrompt(
         withSpaces(
-          [...adjacentSpaces]
-            .reverse()
-            .map((space) => ({
-              ...space,
-              connections: [...space.connections].reverse()
-            }))
+          [...adjacentSpaces].reverse().map((space) => ({
+            ...space,
+            connections: [...space.connections].reverse()
+          }))
         )
       )
     ).toBe(prompt);

@@ -11,7 +11,8 @@ import {
   HttpCode,
   Header,
   StreamableFile,
-  UseGuards
+  UseGuards,
+  ValidationPipe
 } from "@nestjs/common";
 import {
   ApiBadGatewayResponse,
@@ -32,6 +33,11 @@ import { GenerateDesignProposalService } from "../application/generate-design-pr
 import { GenerateRoomDesignRequestDto } from "./design-proposal.dto";
 import { DesignProposalHistoryService } from "../application/design-proposal-history.service";
 import { DesignProposalHistoryQueryDto } from "./design-proposal.dto";
+import {
+  DesignConversationQueryDto,
+  RefineRoomDesignRequestDto
+} from "./design-proposal.dto";
+import { RefineDesignProposalService } from "../application/refine-design-proposal.service";
 
 @ApiTags("ai-design")
 @ApiBearerAuth("bearer")
@@ -42,8 +48,62 @@ export class DesignProposalsController {
     @Inject(GenerateDesignProposalService)
     private readonly service: GenerateDesignProposalService,
     @Inject(DesignProposalHistoryService)
-    private readonly history: DesignProposalHistoryService
+    private readonly history: DesignProposalHistoryService,
+    @Inject(RefineDesignProposalService)
+    private readonly refinement: RefineDesignProposalService
   ) {}
+
+  @Post(":proposalId/refinements")
+  @ApiOperation({
+    summary:
+      "Edit one saved proposal with a new delta instruction and persist one child."
+  })
+  refine(
+    @Param("id", ProjectIdPipe) projectId: string,
+    @Param("proposalId") proposalId: string,
+    @Body(
+      new ValidationPipe({
+        expectedType: RefineRoomDesignRequestDto,
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true
+      })
+    )
+    input: RefineRoomDesignRequestDto,
+    @CurrentPrincipal() principal: AuthenticatedPrincipal
+  ) {
+    return this.refinement.refine(projectId, proposalId, input, principal);
+  }
+
+  @Get(":proposalId/conversation")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({
+    summary:
+      "Load root and chronological design turns (20 per page); null for an ordinary root."
+  })
+  async conversation(
+    @Param("id", ProjectIdPipe) projectId: string,
+    @Param("proposalId") proposalId: string,
+    @Query(
+      new ValidationPipe({
+        expectedType: DesignConversationQueryDto,
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true
+      })
+    )
+    query: DesignConversationQueryDto,
+    @CurrentPrincipal() principal: AuthenticatedPrincipal
+  ) {
+    return {
+      page: await this.refinement.conversation(
+        projectId,
+        proposalId,
+        principal,
+        query.afterTurn
+      )
+    };
+  }
 
   @Post()
   @ApiOperation({ summary: "Generate and persist one Room design proposal." })

@@ -148,3 +148,21 @@ export class DesignProposalHistoryQueryDto {
   @MaxLength(1024)
   cursor?: string;
 }
+
+/** Separate operation from Generate/Try another; the path identifies the base. */
+export class RefineRoomDesignRequestDto extends GenerateRoomDesignRequestDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2_000)
+  @Matches(/\S/)
+  declare instructions: string;
+}
+
+export class DesignConversationQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  afterTurn?: number;
+}
