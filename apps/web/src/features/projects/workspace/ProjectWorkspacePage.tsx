@@ -69,6 +69,8 @@ import {
   zoomViewportState
 } from "../../geometry-2d/viewport/viewport-transform-2d";
 import { useCasaTranslation } from "../../../core/i18n";
+import { useDesignGeneration } from "../../project-3d/useDesignGeneration";
+import type { DesignReferenceViewCapture } from "../../project-3d/AiRoomDesignPanel";
 import { Project3DInspector } from "../../project-3d/Project3DInspector";
 import {
   isArchitecturalSelectionVisible3D,
@@ -251,6 +253,15 @@ export function ProjectWorkspacePage() {
   );
   const [workspaceRepresentation, setWorkspaceRepresentation] =
     useState<ProjectWorkspaceRepresentation>("2d");
+  const designGeneration = useDesignGeneration();
+  const [referenceCapture, setReferenceCapture] =
+    useState<DesignReferenceViewCapture>();
+  const handleReferenceCaptureChange = useCallback(
+    (capture?: DesignReferenceViewCapture) => {
+      setReferenceCapture(() => capture);
+    },
+    []
+  );
   const [levelVisibility3D, setLevelVisibility3D] =
     useState<LevelVisibility3D>("all");
   const [selection3D, setSelection3D] =
@@ -2367,6 +2378,8 @@ export function ProjectWorkspacePage() {
     ) {
       return (
         <Project3DInspector
+          referenceCapture={referenceCapture}
+          generation={designGeneration}
           mode={workspaceMode}
           projectName={activeProject.name}
           model={scene3DResult.model}
@@ -2537,6 +2550,8 @@ export function ProjectWorkspacePage() {
       />
     );
   }, [
+    designGeneration,
+    referenceCapture,
     furniture,
     resolvedDisplayOptions,
     editor.baseRevision,
@@ -2749,6 +2764,7 @@ export function ProjectWorkspacePage() {
         selection3D={selection3D}
         onSelection3DChange={handleSelection3DChange}
         furnitureManipulation3D={furnitureManipulation3D}
+        onReferenceCaptureChange={handleReferenceCaptureChange}
         editBuildFailed={Boolean(editBuildFailed)}
         presentationFailed={Boolean(presentationFailed)}
         presentationError={

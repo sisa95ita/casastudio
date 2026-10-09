@@ -41,6 +41,9 @@ type ProjectWorkspaceCanvasProps = {
     selection?: ArchitecturalEntityIdentity3D
   ) => void;
   readonly furnitureManipulation3D?: FurnitureManipulation3D;
+  readonly onReferenceCaptureChange?: ComponentProps<
+    typeof Project3DViewer
+  >["onReferenceCaptureChange"];
   readonly editBuildFailed: boolean;
   readonly presentationFailed: boolean;
   readonly presentationError?: unknown;
@@ -62,6 +65,7 @@ export function ProjectWorkspaceCanvas({
   selection3D,
   onSelection3DChange,
   furnitureManipulation3D,
+  onReferenceCaptureChange,
   editBuildFailed,
   presentationFailed,
   presentationError,
@@ -97,6 +101,7 @@ export function ProjectWorkspaceCanvas({
               selection={selection3D}
               onSelectionChange={onSelection3DChange}
               furnitureManipulation={furnitureManipulation3D}
+              onReferenceCaptureChange={onReferenceCaptureChange}
             />
           </Suspense>
         ) : (

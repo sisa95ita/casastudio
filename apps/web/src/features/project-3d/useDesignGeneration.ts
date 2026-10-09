@@ -1,5 +1,5 @@
 import type { DesignProposal } from "@casastudio/ai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type GenerationState =
   | { readonly status: "idle" }
@@ -34,7 +34,7 @@ export function useDesignGeneration() {
     },
     []
   );
-  return { state, run };
+  return useMemo(() => ({ state, run }), [state, run]);
 }
 
 export type DesignGeneration = ReturnType<typeof useDesignGeneration>;

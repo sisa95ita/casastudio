@@ -661,7 +661,12 @@ describe("ProjectViewerPage", () => {
       screen.queryByRole("img", { name: /interactive 2d geometry viewer/i })
     ).toBeNull();
     expect(screen.queryByRole("toolbar", { name: "Editing tools" })).toBeNull();
-    expect(screen.queryByRole("tab", { name: "Properties" })).toBeNull();
+    expect(
+      screen
+        .getByRole("tab", { name: "Properties" })
+        .getAttribute("aria-selected")
+    ).toBe("true");
+    expect(screen.getByRole("tab", { name: "Designer" })).toBeTruthy();
     expect(store.getState().projectEditor.dirty).toBe(false);
     expect(store.getState().projectEditor.history).toEqual({
       past: [],

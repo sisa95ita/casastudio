@@ -50,16 +50,12 @@ import {
   type WebGLRenderer
 } from "three";
 
-import {
-  AiRoomDesignPanel,
-  type DesignReferenceViewCapture
-} from "./AiRoomDesignPanel";
+import type { DesignReferenceViewCapture } from "./AiRoomDesignPanel";
 
 import {
   createFloorSolid3D,
   floorSurfaceMaterialRoles3D
 } from "./model/floor-solid-3d";
-import { useDesignGeneration } from "./useDesignGeneration";
 import { createGroundReference3D } from "./model/ground-reference-3d";
 import type { ArchitecturalSolid3D } from "./model/architectural-solid-3d";
 import type { Staircase3D } from "./model/staircase-3d-model";
@@ -142,6 +138,9 @@ export type Project3DViewerProps = {
     selection?: ArchitecturalEntityIdentity3D
   ) => void;
   readonly furnitureManipulation?: FurnitureManipulation3D;
+  readonly onReferenceCaptureChange?: (
+    capture?: DesignReferenceViewCapture
+  ) => void;
 };
 
 /** Renderer telemetry exposed for deterministic browser-level viewport checks. */
@@ -170,10 +169,10 @@ export function Project3DViewer({
   onVisibilityChange,
   selection,
   onSelectionChange,
-  furnitureManipulation
+  furnitureManipulation,
+  onReferenceCaptureChange
 }: Project3DViewerProps) {
   const { t } = useCasaTranslation("project-viewer");
-  const designGeneration = useDesignGeneration();
   const [fitRequest, setFitRequest] = useState(0);
   const [resetRequest, setResetRequest] = useState(0);
   const [rendererStatus, setRendererStatus] = useState<
@@ -186,8 +185,6 @@ export function Project3DViewer({
     useState<ArchitecturalEntityIdentity3D>();
   const [orbitDragging, setOrbitDragging] = useState(false);
   const [furnitureManipulating, setFurnitureManipulating] = useState(false);
-  const [referenceViewCapture, setReferenceViewCapture] =
-    useState<DesignReferenceViewCapture>();
   const [cancelManipulationRequest, setCancelManipulationRequest] = useState(0);
   const pointerGestureRef = useRef<PointerGesture3D | undefined>(undefined);
   const webGlSupported = useMemo(detectWebGLSupport, []);
@@ -218,8 +215,8 @@ export function Project3DViewer({
   );
   const handleReferenceViewCaptureChange = useCallback(
     (capture?: DesignReferenceViewCapture) =>
-      setReferenceViewCapture(() => capture),
-    []
+      onReferenceCaptureChange?.(capture),
+    [onReferenceCaptureChange]
   );
 
   useEffect(() => {
@@ -578,23 +575,6 @@ export function Project3DViewer({
               {t("threeD.empty.detail")}
             </Typography>
           </Box>
-        ) : null}
-        {webGlSupported && selection?.kind === "room" ? (
-          <AiRoomDesignPanel
-            projectId={model.sourceProjectId}
-            projectRevision={model.sourceProjectRevision}
-            levelId={selection.levelId}
-            roomId={selection.id}
-            capture={referenceViewCapture}
-            sceneContext={model}
-            generation={designGeneration}
-            roomName={
-              model.levels
-                .find((level) => level.id === selection.levelId)
-                ?.floors.find((floor) => floor.roomId === selection.id)
-                ?.roomName
-            }
-          />
         ) : null}
       </Box>
     </Paper>

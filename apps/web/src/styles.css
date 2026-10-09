@@ -434,7 +434,7 @@ img {
 }
 
 .app-shell--immersive .app-shell__layout {
-  grid-template-columns: minmax(0, 1fr) 390px;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 390px);
 }
 
 .app-shell--immersive .app-shell__navigation-slot {
@@ -447,7 +447,7 @@ img {
 }
 
 .app-shell--immersive .inspector-panel {
-  width: 390px;
+  width: auto;
 }
 
 .app-shell--immersive .inspector-panel__header {
@@ -1042,16 +1042,10 @@ img {
   transform: translate(-50%, -50%);
 }
 
-.project-3d-ai-panel {
-  max-height: calc(100% - 32px);
-  overflow: auto;
-  padding: 14px;
-  pointer-events: auto;
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  width: min(330px, calc(100% - 32px));
-  z-index: 4;
+.project-3d-designer {
+  padding: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .project-3d-inspector {

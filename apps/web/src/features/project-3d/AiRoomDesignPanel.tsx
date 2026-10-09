@@ -1,20 +1,18 @@
+import { RoomDesignHistory } from "./RoomDesignHistory";
+import { ProposalReview, type ProposalComparison } from "./ProposalReview";
+import { ProposalArtifactView } from "./ProposalArtifactView";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
-import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
-import OpenInFullRoundedIcon from "@mui/icons-material/OpenInFullRounded";
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Box,
   Button,
   ButtonBase,
+  Divider,
   LinearProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Paper,
   Stack,
   TextField,
   Typography
@@ -59,7 +57,7 @@ type ReferenceState =
   | { readonly status: "ready"; readonly views: readonly DesignReferenceView[] }
   | { readonly status: "failure" };
 
-type ProposalEntry = Readonly<{ number: number; proposal: DesignProposal }>;
+type ProposalEntry = ProposalComparison;
 type DesignContextIdentity = Readonly<{
   projectId: string;
   levelId: string;
@@ -125,8 +123,8 @@ export function AiRoomDesignPanel({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [referencePreview, setReferencePreview] =
     useState<DesignReferenceView>();
-  const [referencesExpanded, setReferencesExpanded] = useState(true);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [referencesOpen, setReferencesOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const epoch = useRef(0);
   const captureEpoch = useRef(0);
   const capturePending = useRef(false);
@@ -137,21 +135,12 @@ export function AiRoomDesignPanel({
   const active = current.proposals.find(
     (entry) => entry.number === current.activeNumber
   );
-  const proposal =
-    (historicalId
-      ? history.proposals.find((p) => p.id === historicalId)
-      : undefined) ?? active?.proposal;
+  const proposal = historicalId
+    ? history.proposals.find((p) => p.id === historicalId)
+    : active?.proposal;
   const selectedProposal = useRef(proposal);
   selectedProposal.current = proposal;
-  const saved =
-    proposal && "projectRevision" in proposal
-      ? (proposal as DurableDesignProposal)
-      : undefined;
   const image = useDesignArtifact(proposal);
-  const sessionIds = new Set(
-    current.proposals.map((entry) => entry.proposal.id)
-  );
-  const historyOnly = history.proposals.filter((p) => !sessionIds.has(p.id));
   const phase = generating
     ? "generating"
     : referencePreparing
@@ -220,8 +209,8 @@ export function AiRoomDesignPanel({
     setDeleteTarget(undefined);
     setDeleteError(false);
     setReferencePreview(undefined);
-    setReferencesExpanded(true);
-    setDetailsExpanded(false);
+    setReferencesOpen(false);
+    setHistoryOpen(false);
     void prepareReferences(context, ticket);
     return () => {
       mounted.current = false;
@@ -237,8 +226,7 @@ export function AiRoomDesignPanel({
     setSession(emptySession(context));
     setPreviewOpen(false);
     setReferencePreview(undefined);
-    setReferencesExpanded(true);
-    setDetailsExpanded(false);
+
     void prepareReferences(context, ticket);
   };
 
@@ -256,7 +244,6 @@ export function AiRoomDesignPanel({
         error: undefined
       }));
       setPreviewOpen(false);
-      setDetailsExpanded(false);
     }
     setInstructions(value);
   };
@@ -290,7 +277,11 @@ export function AiRoomDesignPanel({
               ...value,
               proposals: [
                 ...value.proposals,
-                { number: value.nextNumber, proposal: result }
+                {
+                  number: value.nextNumber,
+                  proposal: result,
+                  direction: instructions.trim()
+                }
               ].slice(-3),
               activeNumber: value.nextNumber,
               nextNumber: value.nextNumber + 1,
@@ -298,8 +289,6 @@ export function AiRoomDesignPanel({
             }
           : value
       );
-      setReferencesExpanded(false);
-      setDetailsExpanded(false);
     } catch (cause) {
       if (!mounted.current || ticket !== epoch.current) return;
       let message = t("threeD.ai.failure");
@@ -367,109 +356,45 @@ export function AiRoomDesignPanel({
     }
   };
 
+  const selectSessionProposal = (number: number) => {
+    setHistoricalId(undefined);
+    setSession((value) => ({ ...value, activeNumber: number }));
+  };
+  const closeReview = () => {
+    setPreviewOpen(false);
+    if (!historyOpen) setHistoricalId(undefined);
+  };
+  const showDelete = (target: DurableDesignProposal) => {
+    setDeleteTarget(target);
+    setDeleteError(false);
+  };
+
   return (
-    <Paper
-      className="project-3d-ai-panel"
-      elevation={6}
+    <Box
+      className="project-3d-designer"
       role="region"
       aria-label={t("threeD.ai.title")}
       data-generation-state={phase}
       data-editor-shortcut-scope="true"
-      onPointerDown={(event) => event.stopPropagation()}
     >
-      <Stack spacing={1.25}>
+      <Stack spacing={1.5}>
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <AutoAwesomeRoundedIcon color="primary" fontSize="small" />
           <Box>
-            <Typography variant="subtitle2">{t("threeD.ai.title")}</Typography>
+            <Typography component="h2" variant="h3">
+              {t("threeD.ai.title")}
+            </Typography>
             <Typography variant="caption" color="text.secondary">
               {t("threeD.ai.roomTarget", { room: roomLabel })}
             </Typography>
           </Box>
         </Stack>
-        <Accordion
-          disableGutters
-          expanded={referencesExpanded}
-          onChange={(_, expanded) => setReferencesExpanded(expanded)}
-          sx={{
-            boxShadow: "none",
-            border: "1px solid",
-            borderColor: "divider",
-            "&:before": { display: "none" }
-          }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreRoundedIcon />}
-            aria-controls="ai-reference-content"
-            id="ai-reference-summary"
-          >
-            <Typography variant="caption">
-              {t("threeD.ai.references")}
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails id="ai-reference-content" sx={{ p: 1, pt: 0 }}>
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: "center", justifyContent: "space-between" }}
-            >
-              <Typography
-                id="ai-reference-refresh-hint"
-                variant="caption"
-                color="text.secondary"
-              >
-                {t("threeD.ai.refreshHint")}
-              </Typography>
-              <Button
-                size="small"
-                disabled={!capture || referencePreparing || generating}
-                aria-describedby="ai-reference-refresh-hint"
-                onClick={refreshReferences}
-              >
-                {t("threeD.ai.refreshReferences")}
-              </Button>
-            </Stack>
-            <Stack direction="row" spacing={0.75}>
-              {referenceViews.map((reference) => (
-                <ButtonBase
-                  key={reference.kind}
-                  aria-label={t(`threeD.ai.referenceKinds.${reference.kind}`)}
-                  onClick={() => setReferencePreview(reference)}
-                  sx={{
-                    border: "1px solid",
-                    borderColor: "divider",
-                    borderRadius: 1,
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    "&.Mui-focusVisible": {
-                      outline: "3px solid",
-                      outlineColor: "primary.main",
-                      outlineOffset: 2
-                    }
-                  }}
-                >
-                  <Box
-                    component="img"
-                    src={reference.image.dataUrl}
-                    alt={t(`threeD.ai.referenceKinds.${reference.kind}`)}
-                    sx={{
-                      aspectRatio: "4 / 3",
-                      display: "block",
-                      objectFit: "cover",
-                      width: "100%"
-                    }}
-                  />
-                </ButtonBase>
-              ))}
-            </Stack>
-          </AccordionDetails>
-        </Accordion>
         <TextField
           size="small"
+          fullWidth
           multiline
-          minRows={2}
-          maxRows={4}
+          minRows={3}
+          maxRows={6}
           value={instructions}
           label={t("threeD.ai.instructions")}
           placeholder={t("threeD.ai.placeholder")}
@@ -479,7 +404,6 @@ export function AiRoomDesignPanel({
         />
         <Button
           variant="contained"
-          size="small"
           startIcon={<AutoAwesomeRoundedIcon />}
           disabled={
             current.references.status !== "ready" ||
@@ -489,26 +413,25 @@ export function AiRoomDesignPanel({
           aria-describedby="ai-generation-semantics"
           onClick={() => void generate()}
         >
-          {proposal ? t("threeD.ai.tryAnother") : t("threeD.ai.generate")}
+          {active ? t("threeD.ai.tryAnother") : t("threeD.ai.generate")}
         </Button>
         <Typography
           id="ai-generation-semantics"
           variant="caption"
           color="text.secondary"
         >
-          {t(proposal ? "threeD.ai.tryAnotherHint" : "threeD.ai.generateHint")}
+          {t(active ? "threeD.ai.tryAnotherHint" : "threeD.ai.generateHint")}
         </Typography>
         <Box
           role="status"
           aria-label={t("threeD.ai.title")}
           aria-live="polite"
           aria-atomic="true"
-          sx={{ minHeight: 44 }}
         >
           {generating ? (
             <LinearProgress
               aria-label={t("threeD.ai.generating")}
-              sx={{ mb: 0.75 }}
+              sx={{ mb: 1 }}
             />
           ) : null}
           <Typography variant="caption" color="text.secondary">
@@ -520,102 +443,15 @@ export function AiRoomDesignPanel({
         {current.references.status === "failure" ? (
           <Alert severity="error">{t("threeD.ai.referenceFailure")}</Alert>
         ) : null}
-        {current.error ? (
-          <Alert severity="error" sx={{ overflowWrap: "anywhere" }}>
-            {current.error}
-          </Alert>
-        ) : null}
-        <Box>
-          <Typography variant="subtitle2">
-            {t("threeD.ai.history.title")}
-          </Typography>
-          <Typography variant="caption" component="div">
-            {t("threeD.ai.history.hint")}
-          </Typography>
-          {history.loading ? (
-            <Typography variant="caption" role="status">
-              {t("threeD.ai.history.loading")}
-            </Typography>
-          ) : null}
-          {history.error ? (
-            <Alert severity="error">{t("threeD.ai.history.failed")}</Alert>
-          ) : null}
-          {!history.loading &&
-          !history.error &&
-          history.proposals.length === 0 ? (
+        {current.error ? <Alert severity="error">{current.error}</Alert> : null}
+        <Divider />
+        <Typography variant="subtitle2">
+          {t("threeD.ai.currentProposal")}
+        </Typography>
+        {active ? (
+          <>
             <Typography variant="caption">
-              {t("threeD.ai.history.empty")}
-            </Typography>
-          ) : null}
-          <Stack
-            spacing={0.5}
-            sx={{ maxHeight: 160, overflowY: "auto", mt: 0.5 }}
-          >
-            {historyOnly.map((p) => (
-              <Button
-                key={p.id}
-                size="small"
-                variant={historicalId === p.id ? "contained" : "outlined"}
-                aria-pressed={historicalId === p.id}
-                onClick={() => {
-                  setHistoricalId(p.id);
-                  setPreviewOpen(false);
-                  setDetailsExpanded(false);
-                }}
-                sx={{
-                  justifyContent: "flex-start",
-                  textAlign: "left",
-                  textTransform: "none"
-                }}
-              >
-                <Box>
-                  <Typography variant="caption" component="div">
-                    {new Date(p.createdAt).toLocaleString()}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    component="div"
-                    sx={{ overflowWrap: "anywhere" }}
-                  >
-                    {p.instructions}
-                  </Typography>
-                  {projectRevision !== undefined &&
-                  p.projectRevision !== projectRevision ? (
-                    <Typography variant="caption" component="div">
-                      {t("threeD.ai.history.historical", {
-                        revision: p.projectRevision
-                      })}
-                    </Typography>
-                  ) : null}
-                </Box>
-              </Button>
-            ))}
-          </Stack>
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              disabled={history.loading}
-              onClick={() => void history.load()}
-            >
-              {t("threeD.ai.history.refresh")}
-            </Button>
-            {history.nextCursor ? (
-              <Button
-                size="small"
-                disabled={history.loading}
-                onClick={() => void history.load(history.nextCursor)}
-              >
-                {t("threeD.ai.history.older")}
-              </Button>
-            ) : null}
-          </Stack>
-        </Box>
-        {proposal ? (
-          <Box>
-            <Typography variant="caption" color="text.secondary">
-              {historicalId
-                ? t("threeD.ai.history.selected")
-                : t("threeD.ai.proposalNumber", { number: active?.number })}
+              {t("threeD.ai.proposalNumber", { number: active.number })}
             </Typography>
             {current.proposals.length > 1 ? (
               <Stack
@@ -623,106 +459,36 @@ export function AiRoomDesignPanel({
                 spacing={0.5}
                 role="group"
                 aria-label={t("threeD.ai.compare")}
-                sx={{ mt: 0.5 }}
               >
                 {current.proposals.map((entry) => (
                   <Button
-                    key={entry.number}
+                    key={entry.proposal.id}
                     size="small"
                     sx={{ flex: 1, minWidth: 0 }}
                     variant={
-                      entry.number === active?.number ? "contained" : "outlined"
+                      entry.number === active.number ? "contained" : "outlined"
                     }
-                    aria-pressed={entry.number === active?.number}
-                    onClick={() => {
-                      setHistoricalId(undefined);
-                      setSession((value) => ({
-                        ...value,
-                        activeNumber: entry.number
-                      }));
-                      setDetailsExpanded(false);
-                    }}
+                    aria-pressed={entry.number === active.number}
+                    onClick={() => selectSessionProposal(entry.number)}
                   >
                     {t("threeD.ai.proposalNumber", { number: entry.number })}
                   </Button>
                 ))}
               </Stack>
             ) : null}
-            <Typography
-              variant="caption"
-              component="div"
-              color="text.secondary"
-              sx={{ mt: 0.5 }}
-            >
-              {historicalId
-                ? t("threeD.ai.history.saved")
-                : t("threeD.ai.transientHint")}
-            </Typography>
-            {saved ? (
-              <Box sx={{ my: 0.5 }}>
-                <Typography variant="caption" component="div">
-                  {new Date(saved.createdAt).toLocaleString()} ·{" "}
-                  {t("threeD.ai.history.revision", {
-                    revision: saved.projectRevision
-                  })}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  component="div"
-                  sx={{ overflowWrap: "anywhere" }}
-                >
-                  {saved.instructions}
-                </Typography>
-                {projectRevision !== undefined &&
-                saved.projectRevision !== projectRevision ? (
-                  <Alert severity="info">
-                    {t("threeD.ai.history.historical", {
-                      revision: saved.projectRevision
-                    })}
-                  </Alert>
-                ) : null}
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={() => {
-                    setDeleteTarget(saved);
-                    setDeleteError(false);
-                  }}
-                >
-                  {t("threeD.ai.history.delete")}
-                </Button>
-              </Box>
-            ) : null}
-            {image.error ? (
-              <Alert
-                severity="error"
-                action={
-                  <Button size="small" onClick={image.retry}>
-                    {t("threeD.ai.history.retryImage")}
-                  </Button>
-                }
-              >
-                {t("threeD.ai.history.imageFailed")}
-              </Alert>
-            ) : null}
-            {!image.uri && !image.error ? (
-              <Typography variant="caption" role="status">
-                {t("threeD.ai.history.imageLoading")}
-              </Typography>
-            ) : null}
             <ButtonBase
-              disabled={!image.uri}
               aria-label={t("threeD.ai.openPreview")}
-              onClick={() => setPreviewOpen(true)}
+              onClick={() => {
+                setHistoricalId(undefined);
+                setPreviewOpen(true);
+              }}
               sx={{
+                display: "block",
+                width: "100%",
+                borderRadius: 1,
                 border: "1px solid",
                 borderColor: "divider",
-                borderRadius: 1,
-                display: "block",
-                mt: 0.5,
-                overflow: "hidden",
-                position: "relative",
-                width: "100%",
+                p: 1,
                 "&.Mui-focusVisible": {
                   outline: "3px solid",
                   outlineColor: "primary.main",
@@ -730,183 +496,176 @@ export function AiRoomDesignPanel({
                 }
               }}
             >
-              <Box
-                component="img"
-                src={image.uri}
-                alt={t("threeD.ai.proposalAlt")}
-                sx={{
-                  display: "block",
-                  width: "100%",
-                  maxHeight: "35dvh",
-                  objectFit: "contain"
-                }}
+              <ProposalArtifactView
+                proposal={active.proposal}
+                uri={
+                  proposal?.id === active.proposal.id ? image.uri : undefined
+                }
+                retry={image.retry}
               />
-              <Box
-                sx={{
-                  alignItems: "center",
-                  backgroundColor: "rgba(17, 24, 39, 0.82)",
-                  borderRadius: 0.75,
-                  bottom: 8,
-                  color: "common.white",
-                  display: "flex",
-                  gap: 0.5,
-                  px: 1,
-                  py: 0.5,
-                  position: "absolute",
-                  right: 8
-                }}
-              >
-                <OpenInFullRoundedIcon sx={{ fontSize: 15 }} />
-                <Typography component="span" variant="caption">
-                  {t("threeD.ai.openPreview")}
-                </Typography>
-              </Box>
+              <Typography variant="caption">
+                {t("threeD.ai.openPreview")}
+              </Typography>
             </ButtonBase>
-            {proposal.telemetry ? (
-              <Accordion
-                disableGutters
-                expanded={detailsExpanded}
-                onChange={(_, expanded) => setDetailsExpanded(expanded)}
-                aria-label={t("threeD.ai.telemetry.title")}
-                sx={{
-                  bgcolor: "action.hover",
-                  borderRadius: 1,
-                  mt: 0.75,
-                  px: 1,
-                  py: 0.75
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<ExpandMoreRoundedIcon />}
-                  aria-controls="ai-telemetry-content"
-                  id="ai-telemetry-summary"
-                  sx={{ px: 0 }}
-                >
-                  <Typography variant="caption">
-                    {t("threeD.ai.telemetry.title")}
-                  </Typography>
-                </AccordionSummary>
-                <AccordionDetails
-                  id="ai-telemetry-content"
-                  sx={{ p: 0, overflowWrap: "anywhere" }}
-                >
-                  <Typography variant="caption" component="div">
-                    {t("threeD.ai.telemetry.generatedAt", {
-                      timestamp: proposal.telemetry.generatedAt
-                    })}
-                  </Typography>
-                  {proposal.telemetry.generationMode ? (
-                    <Typography variant="caption" component="div">
-                      {t("threeD.ai.telemetry.mode", {
-                        mode: proposal.telemetry.generationMode
-                      })}
-                    </Typography>
-                  ) : null}
-                  <Typography variant="caption" component="div">
-                    {t("threeD.ai.telemetry.models", {
-                      provider: proposal.telemetry.provider,
-                      model: proposal.telemetry.orchestrationModel ?? "—",
-                      imageModel: proposal.telemetry.imageModel ?? "—"
-                    })}
-                  </Typography>
-                  <Typography variant="caption" component="div">
-                    {t("threeD.ai.telemetry.output", {
-                      duration: formatDuration(proposal.telemetry.durationMs),
-                      dimensions:
-                        proposal.telemetry.image.width &&
-                        proposal.telemetry.image.height
-                          ? `${proposal.telemetry.image.width}×${proposal.telemetry.image.height}`
-                          : "—",
-                      format: proposal.telemetry.image.format.toUpperCase(),
-                      quality: proposal.telemetry.image.quality ?? "—"
-                    })}
-                  </Typography>
-                  {proposal.telemetry.usage ? (
-                    <Typography variant="caption" component="div">
-                      {t("threeD.ai.telemetry.usage", {
-                        input: proposal.telemetry.usage.inputTokens,
-                        output: proposal.telemetry.usage.outputTokens,
-                        cached: proposal.telemetry.usage.cachedInputTokens ?? 0,
-                        total: proposal.telemetry.usage.totalTokens
-                      })}
-                    </Typography>
-                  ) : null}
-                  {proposal.telemetry.estimatedCost ? (
-                    <Typography variant="caption" component="div">
-                      {t("threeD.ai.telemetry.estimatedCost", {
-                        amount:
-                          proposal.telemetry.estimatedCost.amount.toFixed(4),
-                        currency: proposal.telemetry.estimatedCost.currency
-                      })}
-                    </Typography>
-                  ) : null}
-                </AccordionDetails>
-              </Accordion>
+            {image.error && !historicalId ? (
+              <ProposalArtifactView
+                proposal={active.proposal}
+                error
+                retry={image.retry}
+              />
             ) : null}
-          </Box>
-        ) : null}
+          </>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {t("threeD.ai.noProposal")}
+          </Typography>
+        )}
+        <Divider />
+        <Box>
+          <Typography variant="subtitle2">
+            {t("threeD.ai.history.title")}
+          </Typography>
+          <Typography variant="caption" component="div" role="status">
+            {history.loading
+              ? t("threeD.ai.history.loading")
+              : history.error
+                ? t("threeD.ai.history.failed")
+                : t("threeD.ai.history.count", {
+                    count: history.proposals.length
+                  })}
+            {history.nextCursor ? ` · ${t("threeD.ai.history.more")}` : ""}
+          </Typography>
+          <Button size="small" onClick={() => setHistoryOpen(true)}>
+            {t("threeD.ai.history.open")}
+          </Button>
+        </Box>
+        <Divider />
+        <Box>
+          <Typography variant="caption" component="div">
+            {t(
+              current.references.status === "ready"
+                ? "threeD.ai.referencesReady"
+                : referencePreparing
+                  ? "threeD.ai.referencePreparing"
+                  : "threeD.ai.referencesUnavailable"
+            )}
+          </Typography>
+          <Button size="small" onClick={() => setReferencesOpen(true)}>
+            {t("threeD.ai.inspectReferences")}
+          </Button>
+        </Box>
       </Stack>
       <Dialog
+        open={referencesOpen}
+        onClose={() => setReferencesOpen(false)}
+        fullWidth
+        maxWidth="md"
         data-editor-shortcut-scope="true"
-        open={previewOpen && Boolean(proposal)}
-        onClose={() => setPreviewOpen(false)}
-        aria-labelledby="ai-design-preview-title"
-        maxWidth={false}
-        sx={{
-          "& .MuiDialog-paper": {
-            maxHeight: "calc(100dvh - 32px)",
-            maxWidth: "calc(100vw - 32px)",
-            width: "auto"
-          }
-        }}
+        aria-labelledby="reference-inspection-title"
       >
-        <DialogTitle id="ai-design-preview-title">
-          {t("threeD.ai.previewTitle")}
+        <DialogTitle id="reference-inspection-title">
+          {t("threeD.ai.references")}
         </DialogTitle>
-        <DialogContent
-          dividers
-          sx={{
-            alignItems: "center",
-            display: "flex",
-            justifyContent: "center",
-            p: 1
-          }}
-        >
-          {proposal ? (
-            <Box
-              component="img"
-              src={image.uri}
-              alt={t("threeD.ai.proposalAlt")}
-              style={{
-                maxHeight: "calc(100dvh - 160px)",
-                maxWidth: "calc(100vw - 64px)",
-                objectFit: "contain"
-              }}
-              sx={{
-                display: "block",
-                height: "auto",
-                width: "auto"
-              }}
-            />
+        <DialogContent dividers>
+          {referencePreparing ? (
+            <Typography role="status">
+              {t("threeD.ai.referencePreparing")}
+            </Typography>
           ) : null}
+          {current.references.status === "failure" ? (
+            <Alert severity="error">{t("threeD.ai.referenceFailure")}</Alert>
+          ) : null}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: "center", justifyContent: "space-between" }}
+          >
+            <Typography
+              id="ai-reference-refresh-hint"
+              variant="caption"
+              color="text.secondary"
+            >
+              {t("threeD.ai.refreshHint")}
+            </Typography>
+            <Button
+              size="small"
+              disabled={!capture || referencePreparing || generating}
+              aria-describedby="ai-reference-refresh-hint"
+              onClick={refreshReferences}
+            >
+              {t("threeD.ai.refreshReferences")}
+            </Button>
+          </Stack>
+          <Stack direction="row" spacing={0.75}>
+            {referenceViews.map((reference) => (
+              <ButtonBase
+                key={reference.kind}
+                aria-label={t(`threeD.ai.referenceKinds.${reference.kind}`)}
+                onClick={() => setReferencePreview(reference)}
+                sx={{
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 1,
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  "&.Mui-focusVisible": {
+                    outline: "3px solid",
+                    outlineColor: "primary.main",
+                    outlineOffset: 2
+                  }
+                }}
+              >
+                <Box
+                  component="img"
+                  src={reference.image.dataUrl}
+                  alt={t(`threeD.ai.referenceKinds.${reference.kind}`)}
+                  sx={{
+                    aspectRatio: "4 / 3",
+                    display: "block",
+                    objectFit: "contain",
+                    width: "100%"
+                  }}
+                />
+              </ButtonBase>
+            ))}
+          </Stack>
         </DialogContent>
         <DialogActions>
-          {saved ? (
-            <Button
-              color="error"
-              onClick={() => {
-                setDeleteTarget(saved);
-                setDeleteError(false);
-              }}
-            >
-              {t("threeD.ai.history.delete")}
-            </Button>
-          ) : null}
-          <Button autoFocus onClick={() => setPreviewOpen(false)}>
+          <Button autoFocus onClick={() => setReferencesOpen(false)}>
             {t("threeD.ai.closePreview")}
           </Button>
         </DialogActions>
       </Dialog>
+      <RoomDesignHistory
+        open={historyOpen}
+        roomLabel={roomLabel}
+        history={history}
+        proposal={proposal}
+        image={image}
+        projectRevision={projectRevision}
+        onClose={() => {
+          setHistoryOpen(false);
+          setHistoricalId(undefined);
+        }}
+        onSelect={setHistoricalId}
+        onReview={() => setPreviewOpen(true)}
+        onDelete={showDelete}
+      />
+      <ProposalReview
+        open={previewOpen}
+        proposal={proposal}
+        uri={image.uri}
+        error={image.error}
+        retry={image.retry}
+        entries={current.proposals}
+        activeNumber={historicalId ? undefined : active?.number}
+        direction={active?.direction}
+        projectRevision={projectRevision}
+        onSelect={selectSessionProposal}
+        onClose={closeReview}
+        onDelete={showDelete}
+      />
       <Dialog
         open={Boolean(deleteTarget)}
         onClose={() => {
@@ -986,14 +745,8 @@ export function AiRoomDesignPanel({
           </Button>
         </DialogActions>
       </Dialog>
-    </Paper>
+    </Box>
   );
-}
-
-function formatDuration(durationMs: number): string {
-  return durationMs < 1_000
-    ? `${durationMs} ms`
-    : `${(durationMs / 1_000).toFixed(1)} s`;
 }
 
 // Stable normalized categories only; unknown/raw failures never reach the UI.

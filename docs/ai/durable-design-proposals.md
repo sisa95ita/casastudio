@@ -103,3 +103,12 @@ Run `pnpm lint`, `pnpm test`, `pnpm build`, `git diff --check`, `pnpm db:validat
 MVP limits: trusted single filesystem root/volume; bounded in-process binary delivery; no cloud/CDN/thumbnails; no crash-orphan collector; no idempotency/recovery job for ambiguous paid requests; no Project-level gallery for deleted Rooms; snapshot pagination without a long-lived database snapshot; revision provenance does not model unsaved geometry; structural image validation is not subjective/content acceptance. Retention configuration and an S3-compatible adapter can be added later at the artifact boundary.
 
 AI-C still owns chat/follow-up, scoped natural-language edits, provider continuation and conversational history. Later structured AI editing owns typed Furniture suggestions, canonical accept/reject, Apply to Project and architectural mutation. None are implemented here.
+
+## AI-B4.1 presentation update
+
+The original compact history/full-size-preview presentation above has been replaced
+by Inspector modes, a dedicated Room Design History dialog and Proposal Review.
+History includes the same durable IDs surfaced in session comparisons, while loading
+one selected artifact. Existing metadata paging, authorization, storage and object-URL
+cleanup remain unchanged. Follow the current [Design Studio owner acceptance procedure](design-studio-workspace.md)
+for UI validation.

@@ -1,3 +1,9 @@
+import { ProposalReview } from "./ProposalReview";
+import { Project3DInspector } from "./Project3DInspector";
+import { Project3DViewer } from "./Project3DViewer";
+import { createArchitecturalScene3DModel } from "./model/architectural-scene-3d-model";
+import { resolveArchitecturalSelection3D } from "./interaction/architectural-selection-3d";
+import { demoProjectFixture } from "../../test/demo-project-fixture";
 import {
   act,
   cleanup,
@@ -67,6 +73,30 @@ const proposal = {
   }
 } satisfies DesignProposal;
 
+const inspectorModel = createArchitecturalScene3DModel(demoProjectFixture);
+const inspectorLevel = inspectorModel.levels.find(
+  (level) => level.floors.length
+)!;
+const inspectorRoom = resolveArchitecturalSelection3D(inspectorModel, {
+  kind: "room",
+  levelId: inspectorLevel.id,
+  id: inspectorLevel.floors[0]!.roomId
+});
+const inspectorProps = {
+  projectName: "Fixture house",
+  model: inspectorModel,
+  visibility: "all" as const
+};
+const inspectorReferences = references().map((reference) => ({
+  ...reference,
+  target: {
+    ...reference.target,
+    projectId: inspectorModel.sourceProjectId,
+    levelId: inspectorRoom!.levelId,
+    roomId: inspectorRoom!.id
+  }
+}));
+
 const instructions = "Warm minimal living room";
 
 function references(roomId = "room-1"): readonly DesignReferenceView[] {
@@ -128,8 +158,11 @@ function direction(value = instructions) {
 const generateButton = () =>
   screen.getByRole("button", { name: "Generate design" });
 const anotherButton = () => screen.getByRole("button", { name: "Try another" });
-const previewButton = () =>
-  screen.getByRole("button", { name: "Open full-size preview" });
+const previewButton = () => screen.getByRole("button", { name: "Open design" });
+async function openReferences() {
+  fireEvent.click(screen.getByRole("button", { name: "Inspect references" }));
+  return screen.findByRole("dialog", { name: "Reference views" });
+}
 const activeImage = () => within(previewButton()).getByRole("img");
 const disabled = (button: HTMLElement) =>
   (button as HTMLButtonElement).disabled;
@@ -156,7 +189,13 @@ function problem(code: string, detail: string, status = 503) {
 
 async function renderReadyPanel() {
   const rendered = render(<AiRoomDesignPanel {...panelProps} />);
-  await screen.findByRole("button", { name: "Room axonometric" });
+  await waitFor(() =>
+    expect(
+      document
+        .querySelector("[data-generation-state]")
+        ?.getAttribute("data-generation-state")
+    ).not.toBe("preparing")
+  );
   direction();
   return rendered;
 }
@@ -164,7 +203,7 @@ async function renderReadyPanel() {
 async function renderGeneratedProposal() {
   await renderReadyPanel();
   fireEvent.click(screen.getByRole("button", { name: "Generate design" }));
-  return screen.findByRole("button", { name: "Open full-size preview" });
+  return screen.findByRole("button", { name: "Open design" });
 }
 
 beforeEach(() => {
@@ -200,69 +239,94 @@ describe("durable Room history", () => {
     );
     apiMocks.deleteDesignProposal.mockResolvedValue(undefined);
   });
-  const selectSaved = () =>
-    screen.findByRole("button", { name: new RegExp(instructions) });
-
-  it("survives remount, lazily loads only the selected artifact, exposes provenance and historical revision, and revokes each URL", async () => {
+  async function openHistory() {
+    fireEvent.click(screen.getByRole("button", { name: "View history" }));
+    return screen.findByRole("dialog", { name: /Room design history/ });
+  }
+  async function selectSaved() {
+    const dialog = await openHistory();
+    fireEvent.click(
+      await within(dialog).findByRole("button", {
+        name: new RegExp(instructions)
+      })
+    );
+    await within(dialog).findByRole("img");
+    return dialog;
+  }
+  it("keeps history secondary, loads only the selected artifact, and shares its URL with Review", async () => {
     apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [durable] });
-    const first = render(
+    const view = render(
       <AiRoomDesignPanel {...panelProps} projectRevision={2} />
     );
-    const savedButton = await selectSaved();
+    await screen.findByText("1 saved proposal");
+    expect(screen.queryByText(instructions)).toBeNull();
     expect(apiMocks.getDesignArtifact).not.toHaveBeenCalled();
-    fireEvent.click(savedButton);
-    await waitFor(() =>
-      expect(activeImage().getAttribute("src")).toBe("blob:fixture-1")
+    const dialog = await selectSaved();
+    expect(within(dialog).getByRole("img").getAttribute("src")).toBe(
+      "blob:fixture-1"
     );
     expect(
-      screen.getAllByText(/Historical design · revision 1/).length
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getByText("Project revision 1", { exact: false })
+      within(dialog).getByText(/Historical design · revision 1/)
     ).toBeTruthy();
-    fireEvent.click(previewButton());
-    expect(
-      within(screen.getByRole("dialog", { name: "Design proposal preview" }))
-        .getByRole("img")
-        .getAttribute("src")
-    ).toBe("blob:fixture-1");
-    first.unmount();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Open design" })
+    );
+    const review = screen.getByRole("dialog", { name: /Proposal review/ });
+    expect(within(review).getByRole("img").getAttribute("src")).toBe(
+      "blob:fixture-1"
+    );
+    expect(within(review).getByText("Project revision 1")).toBeTruthy();
+    expect(within(review).getByText(instructions)).toBeTruthy();
+    expect(apiMocks.getDesignArtifact).toHaveBeenCalledTimes(1);
+    view.unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:fixture-1");
-    const second = render(
-      <AiRoomDesignPanel {...panelProps} projectRevision={1} />
-    );
-    fireEvent.click(await selectSaved());
-    await waitFor(() =>
-      expect(activeImage().getAttribute("src")).toBe("blob:fixture-2")
-    );
-    expect(screen.queryByText(/Historical design/)).toBeNull();
-    second.unmount();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:fixture-2");
+    render(<AiRoomDesignPanel {...panelProps} projectRevision={1} />);
+    const reloaded = await selectSaved();
+    expect(
+      within(reloaded).getByText("Current Project revision 1")
+    ).toBeTruthy();
     expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
-    expect(apiMocks.replaceProject).not.toHaveBeenCalled();
   });
-
-  it("reconciles a persisted generation by ID and deletes from session/history while closing preview without regeneration", async () => {
+  it("reconciles one stable persisted/session ID and confirms deletion without Project mutation or generation", async () => {
     apiMocks.generateRoomDesign.mockResolvedValue(durable);
-    await renderReadyPanel();
-    direction();
-    fireEvent.click(generateButton());
+    await renderGeneratedProposal();
     await waitFor(() =>
       expect(activeImage().getAttribute("src")).toBe("blob:fixture-1")
     );
+    await screen.findByText("1 saved proposal");
+    const history = await openHistory();
     expect(
-      screen.queryByRole("button", { name: new RegExp(instructions) })
-    ).toBeNull();
-    expect(screen.getAllByText(instructions, { selector: "div" })).toHaveLength(
-      1
-    );
-    fireEvent.click(previewButton());
-    fireEvent.click(screen.getByRole("button", { name: "Close preview" }));
+      within(history).getAllByRole("button", { name: new RegExp(instructions) })
+    ).toHaveLength(1);
     fireEvent.click(
-      screen.getByRole("button", { name: "Delete saved design" })
+      within(history).getByRole("button", { name: "Open design" })
+    );
+    const review = screen.getByRole("dialog", { name: /Proposal review/ });
+    fireEvent.click(
+      within(review).getByRole("button", { name: "Delete saved design" })
+    );
+    const confirmation = screen.getByRole("dialog", {
+      name: "Delete this saved design?"
+    });
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(confirmation).getByRole("button", { name: "Cancel" })
+      )
+    );
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Cancel" })
+    );
+    expect(apiMocks.deleteDesignProposal).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Delete this saved design?" })
+      ).toBeNull()
+    );
+    fireEvent.click(
+      within(review).getByRole("button", { name: "Delete saved design" })
     );
     const pending = deferred<void>();
-    apiMocks.deleteDesignProposal.mockReturnValue(pending.promise);
+    apiMocks.deleteDesignProposal.mockReturnValueOnce(pending.promise);
     const confirm = screen.getByRole("button", { name: "Delete design" });
     act(() => {
       confirm.click();
@@ -272,54 +336,38 @@ describe("durable Room history", () => {
     await act(async () => pending.resolve());
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: "Open full-size preview" })
+        screen.queryByRole("dialog", { name: /Proposal review/ })
       ).toBeNull()
     );
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(
-      screen.getByText("No saved designs for this Room yet.")
+      within(history).getByText("No saved designs for this Room yet.")
     ).toBeTruthy();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:fixture-1");
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
   });
-
-  it("closes a selected historical preview on confirmed deletion and permits accessible cancellation", async () => {
+  it("aborts old Room artifacts, suppresses late completions and closes old Room surfaces", async () => {
     apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [durable] });
-    render(<AiRoomDesignPanel {...panelProps} />);
-    fireEvent.click(await selectSaved());
-    await waitFor(() => expect(disabled(previewButton())).toBe(false));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Delete saved design" })
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(apiMocks.deleteDesignProposal).not.toHaveBeenCalled();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open full-size preview" })
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Delete saved design" })
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Delete design" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(apiMocks.deleteDesignProposal).toHaveBeenCalledWith(
-      "project-1",
-      "proposal-1"
-    );
-    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
-  });
-
-  it("discards late Room image/list completions and scopes Room switching", async () => {
-    apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [durable] });
-    const image = deferred<Blob>();
-    apiMocks.getDesignArtifact.mockReturnValue(image.promise);
+    const pending = deferred<Blob>();
+    apiMocks.getDesignArtifact.mockReturnValueOnce(pending.promise);
     const view = render(<AiRoomDesignPanel {...panelProps} />);
-    fireEvent.click(await selectSaved());
+    const dialog = await openHistory();
+    fireEvent.click(
+      await within(dialog).findByRole("button", {
+        name: new RegExp(instructions)
+      })
+    );
     await waitFor(() =>
       expect(apiMocks.getDesignArtifact).toHaveBeenCalledTimes(1)
     );
     const signal = apiMocks.getDesignArtifact.mock.calls[0]![2] as AbortSignal;
     apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [] });
-    view.rerender(<AiRoomDesignPanel {...panelProps} roomId="room-2" />);
+    view.rerender(
+      <AiRoomDesignPanel
+        {...panelProps}
+        roomId="room-2"
+        capture={() => Promise.resolve(references("room-2"))}
+      />
+    );
     await waitFor(() =>
       expect(apiMocks.listRoomDesigns).toHaveBeenLastCalledWith(
         "project-1",
@@ -330,52 +378,55 @@ describe("durable Room history", () => {
       )
     );
     expect(signal.aborted).toBe(true);
-    await act(async () =>
-      image.resolve(new Blob(["obsolete"], { type: "image/png" }))
-    );
+    await act(async () => pending.resolve(new Blob(["obsolete"])));
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.queryByText(instructions)).toBeNull();
     expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
   });
-
-  it("does not let a list started before generation hide the persisted result", async () => {
-    const old = deferred<{ proposals: readonly DurableDesignProposal[] }>();
-    apiMocks.listRoomDesigns.mockReturnValue(old.promise);
+  it("retains persisted results over late lists and direction changes, with explicit history refresh", async () => {
+    const pending = deferred<{ proposals: readonly DurableDesignProposal[] }>();
+    apiMocks.listRoomDesigns.mockReturnValueOnce(pending.promise);
     apiMocks.generateRoomDesign.mockResolvedValue(durable);
-    await renderReadyPanel();
-    direction();
-    fireEvent.click(generateButton());
-    await waitFor(() =>
-      expect(activeImage().getAttribute("src")).toBe("blob:fixture-1")
-    );
-    await act(async () => old.resolve({ proposals: [] }));
-    expect(screen.getByText(instructions, { selector: "div" })).toBeTruthy();
-    expect(
-      screen.queryByText("No saved designs for this Room yet.")
-    ).toBeNull();
-    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps saved history when the direction/session changes and refreshes without invoking generation", async () => {
-    apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [durable] });
-    await renderReadyPanel();
-    await selectSaved();
+    await renderGeneratedProposal();
+    await screen.findByText("1 saved proposal");
+    await act(async () => pending.resolve({ proposals: [] }));
     direction("New direction");
-    expect(await selectSaved()).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
+    expect(screen.getByText("1 saved proposal")).toBeTruthy();
+    const dialog = await openHistory();
+    expect(
+      within(dialog).getByRole("button", { name: new RegExp(instructions) })
+    ).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Refresh history" })
+    );
     await waitFor(() =>
       expect(apiMocks.listRoomDesigns).toHaveBeenCalledTimes(2)
     );
-    expect(apiMocks.getDesignArtifact).not.toHaveBeenCalled();
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+  });
+  it("retries only selected artifact retrieval after an error", async () => {
+    apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [durable] });
+    apiMocks.getDesignArtifact.mockRejectedValueOnce(new Error("offline"));
+    render(<AiRoomDesignPanel {...panelProps} />);
+    const dialog = await openHistory();
+    fireEvent.click(
+      await within(dialog).findByRole("button", {
+        name: new RegExp(instructions)
+      })
+    );
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: "Retry image" })
+    );
+    expect(await within(dialog).findByRole("img")).toBeTruthy();
+    expect(apiMocks.getDesignArtifact).toHaveBeenCalledTimes(2);
     expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
   });
-
-  it("reports persistence failure as a completed but unsaved generation and never retries", async () => {
-    apiMocks.generateRoomDesign.mockRejectedValue(
-      problem("AI_PROPOSAL_PERSISTENCE_FAILED", "safe persistence failure")
+  it("reports persistence failure without retrying", async () => {
+    apiMocks.generateRoomDesign.mockRejectedValueOnce(
+      problem("AI_PROPOSAL_PERSISTENCE_FAILED", "safe failure")
     );
     await renderReadyPanel();
-    direction();
     fireEvent.click(generateButton());
     expect(
       await screen.findByText(
@@ -384,19 +435,6 @@ describe("durable Room history", () => {
     ).toBeTruthy();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
     expect(apiMocks.getDesignArtifact).not.toHaveBeenCalled();
-  });
-
-  it("retries only artifact retrieval after an image failure", async () => {
-    apiMocks.listRoomDesigns.mockResolvedValue({ proposals: [durable] });
-    apiMocks.getDesignArtifact.mockRejectedValueOnce(new Error("offline"));
-    render(<AiRoomDesignPanel {...panelProps} />);
-    fireEvent.click(await selectSaved());
-    fireEvent.click(await screen.findByRole("button", { name: "Retry image" }));
-    await waitFor(() =>
-      expect(activeImage().getAttribute("src")).toBe("blob:fixture-1")
-    );
-    expect(apiMocks.getDesignArtifact).toHaveBeenCalledTimes(2);
-    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
   });
 });
 
@@ -447,13 +485,16 @@ describe("AiRoomDesignPanel proposal preview", () => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
     fireEvent.click(button);
-    await screen.findByRole("button", { name: "Open full-size preview" });
+    await screen.findByRole("button", { name: "Open design" });
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(2);
   });
 
   it("shows normalized generation telemetry without provider internals", async () => {
     await renderGeneratedProposal();
-
+    expect(
+      screen.queryByRole("button", { name: "Generation details" })
+    ).toBeNull();
+    fireEvent.click(previewButton());
     fireEvent.click(screen.getByRole("button", { name: "Generation details" }));
     const telemetry = screen.getByRole("region", {
       name: "Generation details"
@@ -471,6 +512,7 @@ describe("AiRoomDesignPanel proposal preview", () => {
 
   it("opens and closes the automatic reference preview accessibly without generating", async () => {
     render(<AiRoomDesignPanel {...panelProps} />);
+    await openReferences();
     const trigger = await screen.findByRole("button", {
       name: "Room axonometric"
     });
@@ -486,7 +528,11 @@ describe("AiRoomDesignPanel proposal preview", () => {
     expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Room axonometric" })
+      ).toBeNull()
+    );
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -496,7 +542,7 @@ describe("AiRoomDesignPanel proposal preview", () => {
     fireEvent.click(previewTrigger);
 
     const dialog = await screen.findByRole("dialog", {
-      name: "Design proposal preview"
+      name: /Proposal review/
     });
     const previewImage = within(dialog).getByRole("img", {
       name: "AI-generated interior design proposal for the selected Room"
@@ -506,12 +552,10 @@ describe("AiRoomDesignPanel proposal preview", () => {
       previewImage.closest('[data-editor-shortcut-scope="true"]')
     ).toBeTruthy();
     expect(previewImage.style.objectFit).toBe("contain");
-    expect(previewImage.style.maxWidth).toBe("calc(100vw - 64px)");
-    expect(previewImage.style.maxHeight).toBe("calc(100dvh - 160px)");
+    expect(previewImage.style.maxWidth).toBe("100%");
+    expect(previewImage.style.maxHeight).toBe("calc(100dvh - 240px)");
 
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Close preview" })
-    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.activeElement).toBe(previewTrigger);
@@ -523,7 +567,7 @@ describe("AiRoomDesignPanel proposal preview", () => {
     fireEvent.click(previewTrigger);
 
     const dialog = await screen.findByRole("dialog", {
-      name: "Design proposal preview"
+      name: /Proposal review/
     });
     fireEvent.keyDown(dialog, { key: "Escape" });
 
@@ -576,11 +620,16 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
         .mockResolvedValue(references());
       render(<AiRoomDesignPanel {...panelProps} capture={captureMock} />);
       direction();
+      await openReferences();
       expect((await screen.findByRole("alert")).textContent).toContain(
         "Refresh"
       );
-      expect(disabled(generateButton())).toBe(true);
+      expect(disabled(screen.getByRole("button", { name: "Refresh" }))).toBe(
+        false
+      );
       fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      await screen.findByRole("button", { name: "Room axonometric" });
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() => expect(disabled(generateButton())).toBe(false));
       expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
     }
@@ -595,17 +644,18 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     expect(progress.hasAttribute("aria-valuenow")).toBe(false);
     const status = screen.getByRole("status", { name: "AI Interior Designer" });
     expect(status.getAttribute("aria-live")).toBe("polite");
-    expect(status.textContent).toContain(
-      "Waiting for the AI provider for Living room"
-    );
+    expect(status.textContent).toContain("Generating design for Living room");
     expect(status.textContent).toContain("few minutes");
     expect(status.textContent).not.toMatch(/\d+%/);
     expect(
       screen.queryByRole("button", { name: /Cancel generation/i })
     ).toBeNull();
+    await openReferences();
     expect(disabled(screen.getByRole("button", { name: "Refresh" }))).toBe(
       true
     );
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await act(async () => pending.resolve(proposal));
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(
@@ -650,18 +700,14 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     await renderGeneratedProposal();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
     expect(
-      screen.queryByRole("group", { name: "Compare transient proposals" })
+      screen.queryByRole("group", { name: "Compare proposals" })
     ).toBeNull();
     expect(
-      screen
-        .getByRole("button", { name: "Reference views" })
-        .getAttribute("aria-expanded")
-    ).toBe("false");
+      screen.queryByRole("button", { name: "Room axonometric" })
+    ).toBeNull();
     expect(
-      screen
-        .getByRole("button", { name: "Generation details" })
-        .getAttribute("aria-expanded")
-    ).toBe("false");
+      screen.queryByRole("button", { name: "Generation details" })
+    ).toBeNull();
     for (let number = 2; number <= 4; number++) {
       fireEvent.click(anotherButton());
       await waitFor(() =>
@@ -672,7 +718,7 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
       expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(number);
     }
     const selectors = within(
-      screen.getByRole("group", { name: "Compare transient proposals" })
+      screen.getByRole("group", { name: "Compare proposals" })
     );
     expect(selectors.getAllByRole("button")).toHaveLength(3);
     expect(selectors.queryByRole("button", { name: "Proposal 1" })).toBeNull();
@@ -689,6 +735,9 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     expect(document.activeElement).toBe(selectSecond);
     expect(selectSecond.getAttribute("aria-pressed")).toBe("true");
     expect(activeImage().getAttribute("src")).toBe(variants[1]!.artifact.uri);
+    const trigger = previewButton();
+    trigger.focus();
+    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "Generation details" }));
     const telemetry = screen.getByRole("region", {
       name: "Generation details"
@@ -696,15 +745,19 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     expect(telemetry.textContent).toContain("mock-model-2");
     expect(telemetry.textContent).toContain("2.0 s");
     expect(telemetry.textContent).not.toContain("mock-model-4");
-    const trigger = previewButton();
-    trigger.focus();
-    fireEvent.click(trigger);
     const dialog = await screen.findByRole("dialog", {
-      name: "Design proposal preview"
+      name: /Proposal review/
     });
     expect(within(dialog).getByRole("img").getAttribute("src")).toBe(
       variants[1]!.artifact.uri
     );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Proposal 4" }));
+    expect(within(dialog).getByRole("img").getAttribute("src")).toBe(
+      variants[3]!.artifact.uri
+    );
+    expect(telemetry.textContent).toContain("mock-model-4");
+    expect(telemetry.textContent).not.toContain("mock-model-2");
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(4);
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.activeElement).toBe(trigger);
@@ -728,7 +781,7 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
         }) as HTMLTextAreaElement
       ).value
     ).toBe(instructions);
-    fireEvent.click(screen.getByRole("button", { name: "Reference views" }));
+    await openReferences();
     expect(
       await screen.findByRole("button", { name: "Interior perspective A" })
     ).toBeTruthy();
@@ -736,8 +789,10 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
       screen.getByRole("button", { name: "Interior perspective B" })
     ).toBeTruthy();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     fireEvent.click(anotherButton());
-    await screen.findByRole("group", { name: "Compare transient proposals" });
+    await screen.findByRole("group", { name: "Compare proposals" });
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(3);
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -825,12 +880,10 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
   it("clears comparisons on direction changes but preserves reference evidence and uses the new text only on click", async () => {
     await renderGeneratedProposal();
     direction("New direction");
-    expect(
-      screen.queryByRole("button", { name: "Open full-size preview" })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
     fireEvent.click(generateButton());
-    await screen.findByRole("button", { name: "Open full-size preview" });
+    await screen.findByRole("button", { name: "Open design" });
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(2);
     expect(apiMocks.generateRoomDesign.mock.calls[1]![1].instructions).toBe(
       "New direction"
@@ -849,12 +902,12 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
 
   it("refreshes local references and clears proposals without any provider request", async () => {
     await renderGeneratedProposal();
-    fireEvent.click(screen.getByRole("button", { name: "Reference views" }));
+    await openReferences();
     fireEvent.click(await screen.findByRole("button", { name: "Refresh" }));
+    await screen.findByRole("button", { name: "Room axonometric" });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(disabled(generateButton())).toBe(false));
-    expect(
-      screen.queryByRole("button", { name: "Open full-size preview" })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
   });
 
@@ -863,7 +916,7 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     async (kind) => {
       const { rerender } = await renderReadyPanel();
       fireEvent.click(generateButton());
-      await screen.findByRole("button", { name: "Open full-size preview" });
+      await screen.findByRole("button", { name: "Open design" });
       const nextProps = {
         ...panelProps,
         ...(kind === "project" ? { projectId: "project-2" } : {}),
@@ -873,9 +926,7 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
         ...(kind === "capture" ? { capture: async () => references() } : {})
       };
       rerender(<AiRoomDesignPanel {...nextProps} />);
-      expect(
-        screen.queryByRole("button", { name: "Open full-size preview" })
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
       expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
     }
   );
@@ -896,7 +947,7 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     await waitFor(() => expect(disabled(generateButton())).toBe(false));
     await act(async () => old.resolve(references()));
     fireEvent.click(generateButton());
-    await screen.findByRole("button", { name: "Open full-size preview" });
+    await screen.findByRole("button", { name: "Open design" });
     expect(
       apiMocks.generateRoomDesign.mock.calls[0]![1].referenceViews
     ).toEqual(references("room-2"));
@@ -931,7 +982,13 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
           capture={async () => references("room-2")}
         />
       );
-      await screen.findByRole("button", { name: "Room axonometric" });
+      await waitFor(() =>
+        expect(
+          document
+            .querySelector("[data-generation-state]")
+            ?.getAttribute("data-generation-state")
+        ).not.toBe("preparing")
+      );
       expect(disabled(generateButton())).toBe(true);
       expect(
         screen.getByRole("status", { name: "AI Interior Designer" }).textContent
@@ -944,9 +1001,7 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
           : pending.reject(new Error("stale failure"))
       );
       expect(disabled(generateButton())).toBe(false);
-      expect(
-        screen.queryByRole("button", { name: "Open full-size preview" })
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
       expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
     }
@@ -955,12 +1010,10 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
   it("releases transient proposals on unmount/reload", async () => {
     const { unmount } = await renderReadyPanel();
     fireEvent.click(generateButton());
-    await screen.findByRole("button", { name: "Open full-size preview" });
+    await screen.findByRole("button", { name: "Open design" });
     unmount();
     await renderReadyPanel();
-    expect(
-      screen.queryByRole("button", { name: "Open full-size preview" })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
   });
 
@@ -974,20 +1027,167 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     const pending = deferred<DesignProposal>();
     apiMocks.generateRoomDesign.mockReturnValueOnce(pending.promise);
     const { rerender } = render(<ViewerHarness selected />);
-    await screen.findByRole("button", { name: "Room axonometric" });
+    await waitFor(() =>
+      expect(
+        document
+          .querySelector("[data-generation-state]")
+          ?.getAttribute("data-generation-state")
+      ).not.toBe("preparing")
+    );
     direction();
     fireEvent.click(generateButton());
     rerender(<ViewerHarness selected={false} />);
     rerender(<ViewerHarness selected />);
-    await screen.findByRole("button", { name: "Room axonometric" });
+    await waitFor(() =>
+      expect(
+        document
+          .querySelector("[data-generation-state]")
+          ?.getAttribute("data-generation-state")
+      ).not.toBe("preparing")
+    );
     direction();
     expect(disabled(generateButton())).toBe(true);
     fireEvent.click(generateButton());
     await act(async () => pending.resolve(proposal));
     expect(disabled(generateButton())).toBe(false);
-    expect(
-      screen.queryByRole("button", { name: "Open full-size preview" })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
   });
+});
+
+// Exercise the real Inspector container and renderer boundary, not a second AI workspace.
+describe("Design Studio Inspector", () => {
+  it("offers accessible modes, preserves Properties, and gives Designer a deliberate empty state", async () => {
+    const view = render(<Project3DInspector {...inspectorProps} />);
+    const properties = screen.getByRole("tab", { name: "Properties" });
+    const designer = screen.getByRole("tab", { name: "Designer" });
+    expect(properties.getAttribute("aria-selected")).toBe("true");
+    properties.focus();
+    fireEvent.keyDown(properties, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(designer);
+    expect(screen.getByRole("heading", { name: "3D Properties" })).toBeTruthy();
+    fireEvent.click(designer);
+    expect(designer.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Select a Room to start designing.")).toBeTruthy();
+    fireEvent.click(properties);
+    expect(screen.getByRole("heading", { name: "3D Properties" })).toBeTruthy();
+    expect(apiMocks.listRoomDesigns).not.toHaveBeenCalled();
+    expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("shares workspace space, targets the selected Room, and preserves session and references across modes", async () => {
+    const captureMock = vi.fn(async () => inspectorReferences);
+    render(
+      <>
+        <Project3DViewer
+          mode="view"
+          model={inspectorModel}
+          visibility="all"
+          onVisibilityChange={vi.fn()}
+          onSelectionChange={vi.fn()}
+        />
+        <Project3DInspector
+          {...inspectorProps}
+          selection={inspectorRoom}
+          referenceCapture={captureMock}
+        />
+      </>
+    );
+    expect(
+      screen
+        .getByTestId("project-3d-canvas")
+        .querySelector(".project-3d-designer")
+    ).toBeNull();
+    await waitFor(() => expect(captureMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("tab", { name: "Designer" }));
+    expect(
+      screen.getByText(
+        `Room: ${inspectorRoom?.floor?.roomName || inspectorRoom?.id}`
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+    direction("x".repeat(2000));
+    apiMocks.generateRoomDesign.mockResolvedValueOnce({
+      ...proposal,
+      target: inspectorReferences[0]!.target
+    });
+    fireEvent.click(generateButton());
+    await screen.findByRole("button", { name: "Open design" });
+    fireEvent.click(screen.getByRole("tab", { name: "Properties" }));
+    expect(screen.getByTestId("project-3d-selection-details")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Designer" }));
+    expect(activeImage().getAttribute("src")).toBe(proposal.artifact.uri);
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+    expect(apiMocks.listRoomDesigns).toHaveBeenCalledTimes(1);
+    expect(captureMock).toHaveBeenCalledTimes(1);
+    const reviewTrigger = previewButton();
+    reviewTrigger.focus();
+    fireEvent.click(reviewTrigger);
+    const review = screen.getByRole("dialog", { name: /Proposal review/ });
+    fireEvent.keyDown(review, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(reviewTrigger));
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the generation lock across modes and deselection, ignores the obsolete completion", async () => {
+    const captureMock = vi.fn(async () => inspectorReferences);
+    const pending = deferred<DesignProposal>();
+    apiMocks.generateRoomDesign.mockReturnValueOnce(pending.promise);
+    const view = render(
+      <Project3DInspector
+        {...inspectorProps}
+        selection={inspectorRoom}
+        referenceCapture={captureMock}
+      />
+    );
+    await waitFor(() => expect(captureMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("tab", { name: "Designer" }));
+    direction();
+    fireEvent.click(generateButton());
+    fireEvent.click(screen.getByRole("tab", { name: "Properties" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Designer" }));
+    expect(disabled(generateButton())).toBe(true);
+    view.rerender(
+      <Project3DInspector {...inspectorProps} referenceCapture={captureMock} />
+    );
+    expect(screen.getByText("Select a Room to start designing.")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain(
+      "Generating design"
+    );
+    view.rerender(
+      <Project3DInspector
+        {...inspectorProps}
+        selection={inspectorRoom}
+        referenceCapture={captureMock}
+      />
+    );
+    await waitFor(() => expect(captureMock).toHaveBeenCalledTimes(2));
+    direction();
+    expect(disabled(generateButton())).toBe(true);
+    fireEvent.click(generateButton());
+    await act(async () => pending.resolve(proposal));
+    expect(disabled(generateButton())).toBe(false);
+    expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
+    expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("gives a stale Proposal Review an accessible empty state without fetching or generation", () => {
+  render(
+    <ProposalReview
+      open
+      retry={vi.fn()}
+      entries={[]}
+      onSelect={vi.fn()}
+      onClose={vi.fn()}
+      onDelete={vi.fn()}
+    />
+  );
+  const review = screen.getByRole("dialog", { name: "Proposal review" });
+  expect(
+    within(review).getByText(/This proposal is no longer available/)
+  ).toBeTruthy();
+  expect(apiMocks.getDesignArtifact).not.toHaveBeenCalled();
+  expect(apiMocks.generateRoomDesign).not.toHaveBeenCalled();
 });

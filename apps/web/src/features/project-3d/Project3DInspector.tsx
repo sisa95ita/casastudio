@@ -1,6 +1,23 @@
+import { useState } from "react";
+import {
+  AiRoomDesignPanel,
+  type DesignReferenceViewCapture
+} from "./AiRoomDesignPanel";
+import {
+  useDesignGeneration,
+  type DesignGeneration
+} from "./useDesignGeneration";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import ViewInArRoundedIcon from "@mui/icons-material/ViewInArRounded";
-import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Chip,
+  Divider,
+  Stack,
+  Tab,
+  Tabs,
+  Typography
+} from "@mui/material";
 import type { Project } from "@casastudio/schema";
 
 import { useCasaTranslation } from "../../core/i18n";
@@ -15,6 +32,8 @@ import type { FurnitureEditorController } from "../editor-2d/tools/furniture/use
 
 /** Inputs for the read-only 3D Project inspector summary. */
 export type Project3DInspectorProps = {
+  readonly referenceCapture?: DesignReferenceViewCapture;
+  readonly generation?: DesignGeneration;
   readonly mode?: "view" | "edit";
   readonly projectName: string;
   readonly model: ArchitecturalScene3DModel;
@@ -28,6 +47,8 @@ export type Project3DInspectorProps = {
 
 /** Renders coherent Project and Level status without exposing 2D edit controls. */
 export function Project3DInspector({
+  referenceCapture,
+  generation: sharedGeneration,
   mode = "view",
   projectName,
   model,
@@ -39,6 +60,9 @@ export function Project3DInspector({
   editable = false
 }: Project3DInspectorProps) {
   const { t } = useCasaTranslation("project-viewer");
+  const [inspectorMode, setInspectorMode] = useState("properties");
+  const localGeneration = useDesignGeneration();
+  const generation = sharedGeneration ?? localGeneration;
   const visibleLevels = getVisibleLevelReferences3D(
     model,
     visibility,
@@ -46,89 +70,150 @@ export function Project3DInspector({
   );
 
   return (
-    <Stack className="project-3d-inspector" spacing={2.25} sx={{ p: 2.5 }}>
-      <Box>
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: "center", mb: 0.5 }}
-        >
-          <ViewInArRoundedIcon color="primary" fontSize="small" />
-          <Typography component="h2" variant="h3">
-            {t("threeD.inspector.title")}
-          </Typography>
-        </Stack>
-      </Box>
-      <Divider />
-      {editable && selection?.kind === "furniture" && furniture && units ? (
-        <ProjectFurnitureProperties
-          controller={furniture}
-          units={units}
-          editable
+    <Box className="project-3d-inspector" data-editor-shortcut-scope="true">
+      <Tabs
+        value={inspectorMode}
+        onChange={(_, value: string) => setInspectorMode(value)}
+        variant="fullWidth"
+        aria-label={t("threeD.inspector.modes")}
+      >
+        <Tab
+          value="properties"
+          label={t("threeD.inspector.properties")}
+          id="inspector-properties-tab"
+          aria-controls="inspector-properties-panel"
         />
-      ) : selection ? (
-        <SelectionDetails3D
-          selection={selection}
-          showReadOnly={mode === "edit" && selection.kind !== "furniture"}
+        <Tab
+          value="designer"
+          label={t("threeD.inspector.designer")}
+          id="inspector-designer-tab"
+          aria-controls="inspector-designer-panel"
         />
-      ) : (
-        <Stack spacing={1} data-testid="project-3d-empty-selection">
-          <Typography variant="overline" color="text.secondary">
-            {t("threeD.inspector.selection")}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {t(
-              mode === "edit"
-                ? "threeD.inspector.emptySelectionEdit"
-                : "threeD.inspector.emptySelectionView"
-            )}
-          </Typography>
-        </Stack>
-      )}
-      <Divider />
-      <Stack spacing={1}>
-        <Typography variant="overline" color="text.secondary">
-          {t("threeD.inspector.project")}
-        </Typography>
-        <Typography variant="body2">{projectName}</Typography>
-        <Chip
-          size="small"
-          variant="outlined"
-          label={
-            model.hasArchitecturalGeometry
-              ? t("threeD.inspector.referenceReady")
-              : t("threeD.inspector.empty")
-          }
-        />
-      </Stack>
-      <Divider />
-      <Stack spacing={1}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <LayersOutlinedIcon fontSize="small" color="action" />
-          <Typography variant="overline" color="text.secondary">
-            {t("threeD.inspector.visibleLevels")}
-          </Typography>
-        </Stack>
-        {visibleLevels.length > 0 ? (
-          visibleLevels.map((level) => (
+      </Tabs>
+      <Box
+        role="tabpanel"
+        id="inspector-properties-panel"
+        aria-labelledby="inspector-properties-tab"
+        hidden={inspectorMode !== "properties"}
+      >
+        <Stack spacing={2.25} sx={{ p: 2.5 }}>
+          <Box>
             <Stack
-              key={level.id}
               direction="row"
-              sx={{ justifyContent: "space-between" }}
+              spacing={1}
+              sx={{ alignItems: "center", mb: 0.5 }}
             >
-              <Typography variant="body2">{level.name}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {level.y.toFixed(2)} m
+              <ViewInArRoundedIcon color="primary" fontSize="small" />
+              <Typography component="h2" variant="h3">
+                {t("threeD.inspector.title")}
               </Typography>
             </Stack>
-          ))
+          </Box>
+          <Divider />
+          {editable && selection?.kind === "furniture" && furniture && units ? (
+            <ProjectFurnitureProperties
+              controller={furniture}
+              units={units}
+              editable
+            />
+          ) : selection ? (
+            <SelectionDetails3D
+              selection={selection}
+              showReadOnly={mode === "edit" && selection.kind !== "furniture"}
+            />
+          ) : (
+            <Stack spacing={1} data-testid="project-3d-empty-selection">
+              <Typography variant="overline" color="text.secondary">
+                {t("threeD.inspector.selection")}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {t(
+                  mode === "edit"
+                    ? "threeD.inspector.emptySelectionEdit"
+                    : "threeD.inspector.emptySelectionView"
+                )}
+              </Typography>
+            </Stack>
+          )}
+          <Divider />
+          <Stack spacing={1}>
+            <Typography variant="overline" color="text.secondary">
+              {t("threeD.inspector.project")}
+            </Typography>
+            <Typography variant="body2">{projectName}</Typography>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={
+                model.hasArchitecturalGeometry
+                  ? t("threeD.inspector.referenceReady")
+                  : t("threeD.inspector.empty")
+              }
+            />
+          </Stack>
+          <Divider />
+          <Stack spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <LayersOutlinedIcon fontSize="small" color="action" />
+              <Typography variant="overline" color="text.secondary">
+                {t("threeD.inspector.visibleLevels")}
+              </Typography>
+            </Stack>
+            {visibleLevels.length > 0 ? (
+              visibleLevels.map((level) => (
+                <Stack
+                  key={level.id}
+                  direction="row"
+                  sx={{ justifyContent: "space-between" }}
+                >
+                  <Typography variant="body2">{level.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {level.y.toFixed(2)} m
+                  </Typography>
+                </Stack>
+              ))
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                {t("threeD.inspector.noVisibleLevels")}
+              </Typography>
+            )}
+          </Stack>
+        </Stack>
+      </Box>
+      <Box
+        role="tabpanel"
+        id="inspector-designer-panel"
+        aria-labelledby="inspector-designer-tab"
+        hidden={inspectorMode !== "designer"}
+      >
+        {selection?.kind === "room" ? (
+          <AiRoomDesignPanel
+            projectId={model.sourceProjectId}
+            projectRevision={model.sourceProjectRevision}
+            levelId={selection.levelId}
+            roomId={selection.id}
+            roomName={selection.floor?.roomName}
+            capture={referenceCapture}
+            sceneContext={model}
+            generation={generation}
+          />
         ) : (
-          <Typography variant="body2" color="text.secondary">
-            {t("threeD.inspector.noVisibleLevels")}
-          </Typography>
+          <Stack spacing={1} sx={{ p: 2.5 }}>
+            <Typography component="h2" variant="h3">
+              {t("threeD.ai.title")}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {t("threeD.ai.selectRoom")}
+            </Typography>
+            {generation.state.status === "generating" ? (
+              <Typography role="status" variant="caption">
+                {t("threeD.ai.waiting", { room: generation.state.roomLabel })}
+              </Typography>
+            ) : null}
+          </Stack>
         )}
-      </Stack>
-    </Stack>
+      </Box>
+    </Box>
   );
 }
 

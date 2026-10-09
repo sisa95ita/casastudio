@@ -1,4 +1,4 @@
-import { Box, Drawer, Stack } from "@mui/material";
+import { Box, Drawer, Stack, useMediaQuery, useTheme } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
@@ -19,6 +19,7 @@ import { StatusBar } from "./StatusBar";
 export function AppShell() {
   const { t } = useCasaTranslation("common");
   const location = useLocation();
+  const compactInspector = useMediaQuery(useTheme().breakpoints.down("lg"));
   const localizedDefaultContent = useMemo(
     () => ({
       title: t("shell.defaultTitle"),
@@ -81,7 +82,7 @@ export function AppShell() {
           <MainWorkspace>
             <Outlet />
           </MainWorkspace>
-          {content.inspector ? (
+          {content.inspector && !compactInspector ? (
             <InspectorPanel>{content.inspector}</InspectorPanel>
           ) : null}
         </Box>
@@ -91,7 +92,7 @@ export function AppShell() {
         </StatusBar>
       </Box>
 
-      {content.inspector ? (
+      {content.inspector && compactInspector ? (
         <Drawer
           anchor="right"
           open={inspectorOpen}

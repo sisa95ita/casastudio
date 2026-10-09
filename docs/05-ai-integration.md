@@ -186,7 +186,7 @@ One Generate design action requests at most one intended provider image generati
 
 Waiting uses MUI's accessible **indeterminate** LinearProgress plus a polite status region. It names the Room belonging to the pending request and says generation may take a few minutes. There are no invented percentages, countdowns, or simulated stages. The previous active proposal stays inspectable during an alternative request; direction text and references stay available. Refresh is disabled during a paid request. Users may edit direction, but that neither cancels nor resubmits the pending request.
 
-The synchronous single-flight guard lives in the 3D viewer, outlasting Room panel deselection/reselection. It releases only when the actual API promise settles, including failures and obsolete completions. A stale result/error cannot unlock early or enter a new context. This is a workspace UI guard, not a server-side idempotency mechanism: independent tabs or leaving/reopening the entire workspace are outside its lifetime.
+The synchronous single-flight guard now lives in the Project workspace page, outlasting Room panel deselection/reselection. It releases only when the actual API promise settles, including failures and obsolete completions. A stale result/error cannot unlock early or enter a new context. This is a workspace UI guard, not a server-side idempotency mechanism: independent tabs or leaving/reopening the entire workspace are outside its lifetime.
 
 **No Cancel generation button:** the browser client accepts an AbortSignal, but the controller/service does not propagate browser disconnection into a provider cancellation operation. Aborting fetch, closing a preview, or hiding/unmounting the panel cannot establish that provider work or billing stopped. Obsolete results are ignored; already accepted work is allowed to settle.
 
@@ -362,3 +362,16 @@ live provider calls or manual visual acceptance. Owners can evaluate it as follo
 - **User-configured providers:** keep credentials in a future server-side secret facility above the provider factory. Never put keys in `ProjectSchema` or browser state.
 - **AI Editing Assistant:** translate future proposals into reviewed, typed CasaStudio editing operations. Never allow an LLM to mutate raw Project JSON.
 - **Structured 3D:** later suggestions may select `FurnitureDefinition`s and place canonical `FurnitureItem`s through typed operations. Arbitrary mesh/GLB generation remains post-MVP and is not implied by the image artifact contract.
+
+## AI-B4.1 — Design Studio workspace UX
+
+The floating Designer card has been retired. The existing 3D Inspector now exposes
+Properties and Designer tabs. Reference inspection, Proposal Review with normalized
+details, and Room Design History are focused dialogs. The sidebar keeps the target,
+direction, explicit generation action, current proposal, history summary and reference
+readiness. The original B3 presentation descriptions above are superseded by this
+phase; generation, budgets, durable IDs and storage contracts are unchanged.
+
+See [Design Studio architecture, limitations and exact owner-only zero-cost acceptance](ai/design-studio-workspace.md).
+The artifact viewer is a presentation seam for richer future proposals; no generative
+3D or canonical Apply capability is implemented.

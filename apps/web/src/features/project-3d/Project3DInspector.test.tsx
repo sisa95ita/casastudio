@@ -1,12 +1,19 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import type { Project } from "@casastudio/schema";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createVerticalArchitectureFixture } from "../../test/vertical-architecture-fixture";
 import { demoProjectFixture } from "../../test/demo-project-fixture";
 import { createArchitecturalScene3DModel } from "./model/architectural-scene-3d-model";
 import { resolveArchitecturalSelection3D } from "./interaction/architectural-selection-3d";
 import { Project3DInspector } from "./Project3DInspector";
+
+const inspectorApi = vi.hoisted(() => ({
+  listRoomDesigns: vi.fn(async () => ({ proposals: [] }))
+}));
+vi.mock("../../core/api/ApiProvider", () => ({
+  useCasaStudioApi: () => inspectorApi
+}));
 
 afterEach(cleanup);
 
