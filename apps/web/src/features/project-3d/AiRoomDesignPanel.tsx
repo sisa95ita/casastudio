@@ -102,6 +102,7 @@ export function AiRoomDesignPanel({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
   const deletePending = useRef(false);
+  const deleteCancelButton = useRef<HTMLButtonElement>(null);
   const { t } = useCasaTranslation("project-viewer");
   const localGeneration = useDesignGeneration();
   // The viewer owns the guard so deselecting/reselecting a Room cannot overlap requests.
@@ -674,6 +675,13 @@ export function AiRoomDesignPanel({
         data-editor-shortcut-scope="true"
         aria-labelledby="delete-design-title"
         aria-describedby="delete-design-description"
+        slotProps={{
+          // Parent modal focus enforcement can intercept React's mount-time
+          // autoFocus. Wait until this modal is entered and owns the focus trap.
+          transition: {
+            onEntered: () => deleteCancelButton.current?.focus()
+          }
+        }}
         maxWidth="xs"
         fullWidth
       >
@@ -692,6 +700,7 @@ export function AiRoomDesignPanel({
         </DialogContent>
         <DialogActions>
           <Button
+            ref={deleteCancelButton}
             autoFocus
             disabled={deleting}
             onClick={() => setDeleteTarget(undefined)}

@@ -1,5 +1,25 @@
 # 06 — Roadmap
 
+## AI milestone status
+
+- AI-A — AI / Interior Designer Foundation ✅
+- AI-B1 — Room-aware Design References ✅
+- AI-B2 — Design Generation Quality ✅
+- AI-B3 — Proposal UX ✅
+- AI-B4 — Durable Proposal Artifacts & History ✅
+- AI-B4.1 — Design Studio Workspace UX ✅
+- AI-B5 — Complete AI Interior Design Workflow Validation ✅
+
+**AI-B — Generative Interior Design Image ✅**
+
+The [AI-B5 closure report](ai/ai-b5-validation-report.md) records the real
+authenticated browser/API/fake-provider/database/artifact lifecycle, validation
+results, one accessibility fix, known limits and owner final manual acceptance.
+No live provider generation was performed. The declared version remains
+`0.4.0-SNAPSHOT`.
+
+Next milestone: **AI-C — Conversational Design Iteration** (not started).
+
 ## Sprint 0 — Project setup and documentation
 
 Goal: create the repository foundation.

@@ -1,5 +1,10 @@
 # 05 — AI Interior Design Foundation
 
+The complete AI-B lifecycle is covered by the zero-cost integrated validation in
+[AI-B5 closure report](ai/ai-b5-validation-report.md). It traces the implemented
+boundaries, records milestone invariants, and includes the owner final acceptance
+procedure. No live provider generation is part of automated validation.
+
 ## Truth boundaries
 
 CasaStudio keeps three deliberately separate truths:

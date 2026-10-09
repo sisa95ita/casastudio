@@ -325,6 +325,13 @@ describe("durable Room history", () => {
     fireEvent.click(
       within(review).getByRole("button", { name: "Delete saved design" })
     );
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen
+          .getByRole("dialog", { name: "Delete this saved design?" })
+          .querySelector("button")
+      )
+    );
     const pending = deferred<void>();
     apiMocks.deleteDesignProposal.mockReturnValueOnce(pending.promise);
     const confirm = screen.getByRole("button", { name: "Delete design" });
@@ -820,7 +827,9 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     ["AI_MODEL_ACCESS_FAILED", "model"],
     ["AI_PROVIDER_UNAVAILABLE", "temporarily unavailable"],
     ["AI_GENERATION_FAILED", "could not complete"],
-    ["AI_INVALID_PROVIDER_RESPONSE", "unusable design result"]
+    ["AI_INVALID_PROVIDER_RESPONSE", "unusable design result"],
+    ["AI_MISSING_REFERENCE", "Refresh the reference views"],
+    ["AI_UNSUPPORTED_TARGET", "Select the Room again"]
   ])(
     "renders actionable normalized %s errors without raw details",
     async (code, expected) => {
@@ -899,6 +908,32 @@ describe("AiRoomDesignPanel transient proposal workflow", () => {
     expect(previewButton()).toBeTruthy();
     expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
   });
+
+  it.each(["success", "failure"])(
+    "discards obsolete generation %s after a direction edit while retaining the lock until settlement",
+    async (outcome) => {
+      const pending = deferred<DesignProposal>();
+      apiMocks.generateRoomDesign.mockReturnValueOnce(pending.promise);
+      await renderReadyPanel();
+      fireEvent.click(generateButton());
+      direction("Changed while generation is pending");
+      expect(disabled(generateButton())).toBe(true);
+      fireEvent.click(generateButton());
+      expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+      await act(async () =>
+        outcome === "success"
+          ? pending.resolve(durable)
+          : pending.reject(problem("AI_GENERATION_FAILED", "obsolete"))
+      );
+      expect(disabled(generateButton())).toBe(false);
+      expect(screen.queryByRole("button", { name: "Open design" })).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      // A stale success is already durable, but never becomes a comparison for
+      // the new direction. A stale failure must not displace the new context.
+      if (outcome === "success") await screen.findByText("1 saved proposal");
+      expect(apiMocks.generateRoomDesign).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it("refreshes local references and clears proposals without any provider request", async () => {
     await renderGeneratedProposal();

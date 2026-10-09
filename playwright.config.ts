@@ -15,6 +15,8 @@ const apiHealthUrl =
 
 export default defineConfig({
   testDir: "./e2e",
+  // This journey requires the isolated, zero-cost server in its own config.
+  testIgnore: "ai-b5-workflow.spec.ts",
   outputDir: "test-results",
   timeout: 60_000,
   expect: {

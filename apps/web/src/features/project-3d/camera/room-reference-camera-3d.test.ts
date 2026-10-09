@@ -24,6 +24,118 @@ const target = Object.freeze({
 });
 
 describe("Room-aware reference cameras", () => {
+  it.each([
+    [
+      "rectangle",
+      [
+        [0, 0],
+        [6, 0],
+        [6, 4],
+        [0, 4]
+      ]
+    ],
+    [
+      "L",
+      [
+        [0, 0],
+        [6, 0],
+        [6, 2],
+        [2, 2],
+        [2, 5],
+        [0, 5]
+      ]
+    ],
+    [
+      "U",
+      [
+        [0, 0],
+        [6, 0],
+        [6, 5],
+        [4, 5],
+        [4, 2],
+        [2, 2],
+        [2, 5],
+        [0, 5]
+      ]
+    ],
+    [
+      "T",
+      [
+        [0, 0],
+        [6, 0],
+        [6, 2],
+        [4, 2],
+        [4, 5],
+        [2, 5],
+        [2, 2],
+        [0, 2]
+      ]
+    ],
+    [
+      "free polygon",
+      [
+        [0, 0],
+        [5, 0],
+        [6, 3],
+        [3, 5],
+        [-1, 3]
+      ]
+    ]
+  ])(
+    "keeps both interior eyes inside an elevated, rotated %s footprint",
+    (_name, coordinates) => {
+      const angle = Math.PI / 5;
+      const contour = (coordinates as number[][]).map(([x, z]) => ({
+        x: x! * Math.cos(angle) - z! * Math.sin(angle) + 8,
+        z: x! * Math.sin(angle) + z! * Math.cos(angle) - 3
+      }));
+      const floor = {
+        ...createFloor("concave", contour, 4.2, []),
+        boundaryKinds: contour.map(() => "FREE" as const)
+      };
+      const base = createSyntheticModel();
+      const model = {
+        ...base,
+        levels: base.levels.map((level) =>
+          level.id === "upper"
+            ? {
+                ...level,
+                floors: [floor],
+                walls: [],
+                staircases: [],
+                furniture: []
+              }
+            : level
+        )
+      };
+      const before = structuredClone(model);
+      const plans = createRoomReferencePlans3D(model, target);
+      expect(plans).toHaveLength(3);
+      expect(createRoomReferencePlans3D(model, target)).toEqual(plans);
+      for (const plan of plans.slice(1)) {
+        const eye = plan.pose.position;
+        // Independent ray crossing check: a camera must not sit in a concave void.
+        let inside = false;
+        for (let i = 0, j = contour.length - 1; i < contour.length; j = i++) {
+          const a = contour[i]!;
+          const b = contour[j]!;
+          if (
+            a.z > eye.z !== b.z > eye.z &&
+            eye.x < ((b.x - a.x) * (eye.z - a.z)) / (b.z - a.z) + a.x
+          )
+            inside = !inside;
+        }
+        expect(inside).toBe(true);
+        // Wall-free contours use the conservative default ceiling. Assert a
+        // human-height eye above the elevated floor without assuming Wall height.
+        expect(eye.y - floor.y).toBeGreaterThan(1.2);
+        expect(eye.y - floor.y).toBeLessThanOrEqual(1.7);
+        expect(Object.values(eye).every(Number.isFinite)).toBe(true);
+      }
+      expect(model).toEqual(before);
+    }
+  );
+
   it("derives three deterministic provider-neutral views without a user camera", () => {
     const model = createSyntheticModel();
     const before = structuredClone(model);
@@ -89,14 +201,16 @@ describe("Room-aware reference cameras", () => {
       height: 300,
       thickness: 20,
       roomIds: [],
-      openings: [{
-        id: "independent-window",
-        type: "WINDOW",
-        offsetFromStart: 50,
-        width: 100,
-        elevation: 100,
-        height: 100
-      }]
+      openings: [
+        {
+          id: "independent-window",
+          type: "WINDOW",
+          offsetFromStart: 50,
+          width: 100,
+          elevation: 100,
+          height: 100
+        }
+      ]
     });
     const before = structuredClone(project);
     const model = createArchitecturalScene3DModel(project);
@@ -109,8 +223,9 @@ describe("Room-aware reference cameras", () => {
     });
 
     expect(plans).toHaveLength(3);
-    expect(plans.every((plan) => plan.wallIds.includes("independent-interior-wall")))
-      .toBe(true);
+    expect(
+      plans.every((plan) => plan.wallIds.includes("independent-interior-wall"))
+    ).toBe(true);
     expect(project).toEqual(before);
   });
 });
@@ -183,12 +298,14 @@ function createSyntheticModel(): ArchitecturalScene3DModel {
 function createFloorWalls(floor: Floor3D): Wall3D[] {
   return floor.boundaryWallIds.flatMap((id, index) => {
     if (!id) return [];
-    return [createTestWall(
-      id,
-      floor.contour[index]!,
-      floor.contour[(index + 1) % floor.contour.length]!,
-      floor.y
-    )];
+    return [
+      createTestWall(
+        id,
+        floor.contour[index]!,
+        floor.contour[(index + 1) % floor.contour.length]!,
+        floor.y
+      )
+    ];
   });
 }
 
@@ -198,15 +315,19 @@ function createTestWall(
   end: ScenePlanVector3D,
   y: number
 ): Wall3D {
-  return createWall3D({
-    id,
-    start: { x: start.x, z: -start.z },
-    end: { x: end.x, z: -end.z },
-    height: 3,
-    thickness: 0.2,
-    roomIds: [],
-    openings: []
-  }, y, "m");
+  return createWall3D(
+    {
+      id,
+      start: { x: start.x, z: -start.z },
+      end: { x: end.x, z: -end.z },
+      height: 3,
+      thickness: 0.2,
+      roomIds: [],
+      openings: []
+    },
+    y,
+    "m"
+  );
 }
 
 function createFloor(

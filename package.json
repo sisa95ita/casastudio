@@ -19,6 +19,7 @@
     "e2e:infra:down": "docker compose stop postgres keycloak",
     "e2e:prepare": "pnpm db:migrate:deploy && pnpm db:seed",
     "test:e2e": "playwright test",
+    "test:e2e:ai-b5": "playwright test --config playwright.ai-b5.config.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",

@@ -58,6 +58,30 @@ pnpm test:e2e:report
 
 Stop the prerequisite containers when finished with `pnpm e2e:infra:down`.
 
+## AI-B5 zero-cost milestone workflow
+
+Run `pnpm test:e2e:ai-b5` for the complete Interior Designer lifecycle. Its separate
+configuration starts an isolated API at port 3105 and web at the existing allowed
+Keycloak origin `http://localhost:8081`, with server reuse and retries disabled.
+It uses real Keycloak authentication, API services, PostgreSQL and filesystem
+artifacts, replacing only the provider with a deterministic local fake. Provider
+credentials are removed; the default E2E configuration excludes this test.
+
+Create the dedicated `casastudio_ai_b5` database once, apply normal migrations via
+`node tools/ai-b5-validation.mjs db:migrate:deploy`, and run the database-backed
+API suite with `node tools/ai-b5-validation.mjs --filter @casastudio/api test`
+before the browser journey. The harness always uses a temporary artifact root;
+it never uses the configured production/development artifact directory. Keep the
+database suite and milestone browser run sequential.
+
+The generic browser Project is disposable and cleaned after the test. It covers
+Active Level Room targeting, reference inspection, explicit generation/pending
+states, stable persisted/session identity, comparison, Review, reload/history,
+historical revisions, Room/Level switching and deletion. It does not bypass
+application persistence through browser route interception and does not perform
+visual image-quality acceptance. See the [AI-B5 closure report](ai/ai-b5-validation-report.md)
+for setup, invariants, results, known limits and the owner manual checklist.
+
 ## Smoke coverage and failure artifacts
 
 The Project editor smoke tests authenticate through Keycloak and cover Project creation/deletion, viewport input, responsive layouts, Room shapes, elevated Rooms, Stairs, Openings, and architectural presentation. Unexpected console errors and uncaught page errors fail the instrumented workflows, including the native wheel check.
