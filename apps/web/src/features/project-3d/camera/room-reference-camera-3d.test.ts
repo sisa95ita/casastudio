@@ -129,7 +129,7 @@ describe("Room-aware reference cameras", () => {
         // Wall-free contours use the conservative default ceiling. Assert a
         // human-height eye above the elevated floor without assuming Wall height.
         expect(eye.y - floor.y).toBeGreaterThan(1.2);
-        expect(eye.y - floor.y).toBeLessThanOrEqual(1.7);
+        expect(eye.y - floor.y).toBeLessThanOrEqual(1.7 + 1e-9);
         expect(Object.values(eye).every(Number.isFinite)).toBe(true);
       }
       expect(model).toEqual(before);
@@ -158,8 +158,8 @@ describe("Room-aware reference cameras", () => {
     const views = createRoomReferencePlans3D(createSyntheticModel(), target);
 
     expect(views).toHaveLength(3);
-    expect(views[1]!.pose.position.y).toBeCloseTo(4.65);
-    expect(views[2]!.pose.position.y).toBeCloseTo(4.65);
+    expect(views[1]!.pose.position.y).toBeCloseTo(4.7);
+    expect(views[2]!.pose.position.y).toBeCloseTo(4.7);
     expect(views[0]!.bounds.min.y).toBeCloseTo(2.82);
     expect(views[0]!.bounds.max.y).toBe(6);
   });
@@ -175,6 +175,8 @@ describe("Room-aware reference cameras", () => {
     expect(views[0]!.wallIds).not.toContain("unrelated-wall");
     expect(views[0]!.staircaseIds).not.toContain("unrelated-stair");
     expect(views[0]!.furnitureIds).not.toContain("other-chair");
+    for (const view of views)
+      expect(view.furnitureIds).toEqual(["target-chair"]);
   });
 
   it("changes camera target when a different Room is selected", () => {
@@ -360,6 +362,17 @@ function furniture(
   return {
     id,
     roomId,
+    levelId: "upper",
+    definitionId: "generic",
+    name: "Generic",
+    roomName: roomId,
+    category: "GENERIC",
+    position: { x, y, z },
+    width: 0.6,
+    depth: 0.6,
+    height: 0.8,
+    rotation: 0,
+    yaw: 0,
     bounds: {
       min: { x: x - 0.3, y, z: z - 0.3 },
       max: { x: x + 0.3, y: y + 0.8, z: z + 0.3 }

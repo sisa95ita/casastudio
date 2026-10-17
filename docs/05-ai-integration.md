@@ -9,9 +9,13 @@ AI-C has exactly three phases: C1 (Conversation & Proposal Lineage), C2
 (Conversational Design UX), and C3 (Conversational Quality & Validation). See
 [Conversation & Proposal Lineage](ai/conversation-proposal-lineage.md) for the C1
 model, provider-neutral refinement, continuation strategy and C2 API seams.
-[AI-C2 revision workspace](ai/conversational-design-ux.md) is implemented, pending
-owner acceptance. Proposal Review owns refinement and parent-linked branch navigation;
-Try another remains an independent root alternative. C3 is not started.
+[AI-C2 revision workspace](ai/conversational-design-ux.md) passed owner functional
+acceptance. Proposal Review owns refinement and parent-linked branch navigation;
+Try another remains an independent root alternative. [AI-C3 quality/validation](ai/conversational-quality-validation.md)
+is implemented and zero-cost validated, pending owner visual quality acceptance.
+The [reference-camera recovery](ai/ai-c3-reference-camera-recovery-report.md) improves
+Interior A overview selection and Interior B complementarity within AI-C3; owner
+reference inspection remains pending.
 
 ## Truth boundaries
 
@@ -22,6 +26,16 @@ CasaStudio keeps three deliberately separate truths:
 3. The existing structured 3D scene is derived from canonical Project data. Later phases may approximate a proposal with typed canonical Furniture operations, but an object visible in generated pixels is not automatically Furniture.
 
 The AI-A generation path is read-only with respect to `Project`. It does not send raw Project JSON to a model and it does not put image bytes into `ProjectSchema`.
+
+Existing canonical Furniture is intentional layout. Root generation and every
+refinement preserve category/definition role, center position, rotation, approximate
+footprint and spatial arrangement by default, while visual styling may change.
+An explicit instruction may override requested Furniture layout in Proposal pixels;
+it never changes canonical Furniture or Project revision. Architecture always remains
+immutable. During refinement, current canonical layout wins over conflicting base
+pixels, and the requested target must visibly change while unrelated design stays
+close to the base. See the [AI-C report](ai/ai-c3-milestone-report.md) for evidence,
+limits, and the owner-only acceptance worksheet.
 
 ## Architecture
 
@@ -255,9 +269,9 @@ Labels are interleaved immediately before the corresponding image. All three des
 
 The deterministic provider instruction starts with **EDIT THE FIRST IMAGE** and explicitly forbids recreating the Room from scratch. It preserves camera position as closely as possible, camera direction, framing, perspective, Room silhouette/footprint, Wall positions/intersections, relevant internal/non-boundary Walls, Doors, Windows, Wall Openings, Stairs, visible floor boundaries, architectural proportions and ceiling/floor relationship/elevations. Only Furniture/appearance, movable objects, materials, finishes, colors, textiles, lighting fixtures, decorative objects and styling may change. Architecture is immutable.
 
-CasaStudio owns this contract automatically. Users can write normal design directions such as “Create a warm contemporary guest bedroom with a desk.” User direction and non-architectural constraints remain separate from the architectural instruction and concise supporting DesignContext. The translator emits Room facts, relevant Wall/Opening/Stair dimensions, movable Furniture and units; it does not dump arbitrary Project JSON, IDs or unrelated Rooms/Levels.
+CasaStudio owns this contract automatically. Users can write normal design directions such as “Create a warm contemporary guest bedroom with a desk.” User direction and non-architectural constraints remain separate from the architectural instruction and concise supporting DesignContext. The C3 translator emits Room facts, relevant Wall/Opening/Stair dimensions, Furniture definition roles, centers, yaw, dimensions and bounded spatial relations in an explained Room-local plan frame; it does not dump arbitrary Project JSON or unrelated Rooms/Levels.
 
-The current [OpenAI image prompting guide](https://developers.openai.com/api/docs/guides/image-prompting) recommends naming the edited image, specifying what changes and what stays fixed, using image 1 as the scene for multi-reference edits, and preserving layout/proportions/perspective when turning a drawing into a realistic image. This is a prompt-and-edit strategy, not a CAD constraint system. No mask is introduced; the documented first-image mask rule does not imply that an unmasked edit mechanically locks every pixel. AI-B1 cameras, reference resolution, Room isolation, Wall relevance and Level isolation are unchanged.
+The current [OpenAI image prompting guide](https://developers.openai.com/api/docs/guides/image-prompting) recommends naming the edited image, specifying what changes and what stays fixed, using image 1 as the scene for multi-reference edits, and preserving layout/proportions/perspective when turning a drawing into a realistic image. This is a prompt-and-edit strategy, not a CAD constraint system. No mask is introduced; the documented first-image mask rule does not imply that an unmasked edit mechanically locks every pixel. Reference resolution, Room isolation, Wall relevance and Level isolation are unchanged. Within AI-C3, [bounded layout-aware interior planning](ai/ai-c3-reference-camera-recovery-report.md) replaces the original deterministic Interior A/B placement; Axonometric remains unchanged.
 
 Generative editing cannot guarantee pixel-identical geometry, CAD-level dimensional accuracy, mathematically exact projection preservation, or perfect retention of every architectural detail. The goal is to reduce drift; automated tests cannot establish that it does. `ProjectSchema` remains the source of truth. Generated pixels remain visual proposals only: no Room-boundary changes, canonical Furniture creation from pixels, architectural edits, or canonical persistence of generated interpretation. AI-B4 persists visual evidence separately as application history.
 
@@ -369,14 +383,15 @@ live provider calls or manual visual acceptance. Owners can evaluate it as follo
 ## Evolution
 
 - **AI-C1 (implemented):** durable conversation/Proposal lineage, structural branches and provider-neutral refinement with optional provider state.
-- **AI-C2 (implemented / pending owner acceptance):** [Conversational Design UX](ai/conversational-design-ux.md).
-- **AI-C3 (not started):** Conversational Quality & Validation.
+- **AI-C2 (owner functional acceptance passed):** [Conversational Design UX](ai/conversational-design-ux.md).
+- **AI-C3 (implemented / zero-cost validated / pending owner quality acceptance):** [Conversational Quality & Validation](ai/conversational-quality-validation.md).
 - **AI-B4 (implemented):** [durable application artifacts and Room history](ai/durable-design-proposals.md), separate from ProjectSchema.
 - **Later product work:** genuine provider/job progress if supported, richer style and explicit Furniture-preservation controls, and quality/cost experiments approved from manual results.
 - **Gemini/other providers:** implement `InteriorDesignProvider`; reuse target, context, reference, request, proposal, and failure contracts. Provider choice can later be resolved per user/tenant without changing these contracts.
 - **User-configured providers:** keep credentials in a future server-side secret facility above the provider factory. Never put keys in `ProjectSchema` or browser state.
 - **AI Editing Assistant:** translate future proposals into reviewed, typed CasaStudio editing operations. Never allow an LLM to mutate raw Project JSON.
 - **Structured 3D:** later suggestions may select `FurnitureDefinition`s and place canonical `FurnitureItem`s through typed operations. Arbitrary mesh/GLB generation remains post-MVP and is not implied by the image artifact contract.
+- **Furniture/geometry conditioning research:** current image editing remains probabilistic; exact layout and “change only X” pixel preservation cannot be guaranteed. If owner acceptance still shows drift, investigate visual evidence, structured conditioning and provider/API behavior before adding more prompt wording. Depth, normals, semantic segmentation, object masks, explicit Furniture-layout conditioning and CasaStudio adapters/fine-tuning are post-MVP directions only; none is implemented in AI-C3. Reviewed canonical application belongs to AI-D.
 
 ## AI-B4.1 — Design Studio workspace UX
 

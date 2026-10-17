@@ -21,12 +21,19 @@ No live provider generation was performed. The declared version remains
 **AI-C — Conversational Design Iteration** has exactly three phases:
 
 - AI-C1 — Conversation & Proposal Lineage ✅
-- AI-C2 — Conversational Design UX — implemented / pending owner acceptance
-- AI-C3 — Conversational Quality & Validation — not started
+- AI-C2 — Conversational Design UX ✅ (owner functional acceptance passed)
+- AI-C3 — Conversational Quality & Validation ✅ automated validation / pending owner quality acceptance
 
 See the [revision workspace UX](ai/conversational-design-ux.md) and
-[AI-C2 implementation report](ai/ai-c2-implementation-report.md). No live provider
-calls or owner visual acceptance occurred; multi-turn image quality remains C3.
+[AI-C2 implementation report](ai/ai-c2-implementation-report.md), and
+[AI-C milestone report](ai/ai-c3-milestone-report.md). Canonical Furniture is now
+layout intent for roots and every refinement. AI-C is ready for owner quality
+acceptance; visual fidelity is not yet accepted. No live provider calls occurred in
+C3. Follow the [owner benchmark](ai/conversational-quality-validation.md).
+The interrupted [reference-camera work](ai/ai-c3-reference-camera-recovery-report.md)
+was recovered within AI-C3: Interior A selects an informative overview and Interior B
+rewards complementary layout evidence. Owner reference/quality acceptance is still
+pending; automated validation does not close AI-C3.
 
 ## Sprint 0 — Project setup and documentation
 

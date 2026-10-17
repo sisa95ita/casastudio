@@ -5,79 +5,94 @@ import type { RoomReferencePlan3D } from "../camera/room-reference-camera-3d";
 import { applyRoomReferenceVisibility3D } from "./room-reference-visibility-3d";
 
 describe("Room reference presentation isolation", () => {
-  it("keeps target architecture and restores visibility and the user camera exactly", () => {
-    const scene = new Group();
-    const targetLevel = namedGroup("architectural-level:level-a");
-    const otherLevel = namedGroup("architectural-level:level-b");
-    otherLevel.visible = false;
-    const targetFloor = namedGroup("architectural-floor:room-a");
-    const otherFloor = namedGroup("architectural-floor:room-b");
-    const targetWall = namedGroup("architectural-wall:wall-a");
-    const opening = namedGroup("architectural-window:window-a");
-    targetWall.add(opening);
-    const relevantNonBoundaryWall = namedGroup("architectural-wall:wall-internal");
-    const relevantDoor = namedGroup("architectural-door:door-internal");
-    const relevantWindow = namedGroup("architectural-window:window-internal");
-    const relevantWallOpening = namedGroup("architectural-wall-opening:opening-internal");
-    relevantNonBoundaryWall.add(relevantDoor, relevantWindow, relevantWallOpening);
-    const otherWall = namedGroup("architectural-wall:wall-b");
-    const excludedOpening = namedGroup("architectural-window:window-b");
-    otherWall.add(excludedOpening);
-    const stair = namedGroup("architectural-staircase:stair-a");
-    const otherStair = namedGroup("architectural-staircase:stair-b");
-    const furniture = namedGroup("furniture:chair-a");
-    const otherFurniture = namedGroup("furniture:chair-b");
-    const outline = new LineSegments();
-    targetFloor.add(outline);
-    targetLevel.add(
-      targetFloor,
-      otherFloor,
-      targetWall,
-      relevantNonBoundaryWall,
-      otherWall,
-      stair,
-      otherStair,
-      furniture,
-      otherFurniture
-    );
-    scene.add(targetLevel, otherLevel);
-    const userCamera = new PerspectiveCamera();
-    userCamera.position.set(17, 8, -4);
-    scene.add(userCamera);
-    const originalPosition = userCamera.position.clone();
+  it.each(["room-axonometric", "room-interior-a", "room-interior-b"] as const)(
+    "keeps target Furniture/architecture and restores visibility in %s",
+    (kind) => {
+      const scene = new Group();
+      const targetLevel = namedGroup("architectural-level:level-a");
+      const otherLevel = namedGroup("architectural-level:level-b");
+      otherLevel.visible = false;
+      const targetFloor = namedGroup("architectural-floor:room-a");
+      const otherFloor = namedGroup("architectural-floor:room-b");
+      const targetWall = namedGroup("architectural-wall:wall-a");
+      const opening = namedGroup("architectural-window:window-a");
+      targetWall.add(opening);
+      const relevantNonBoundaryWall = namedGroup(
+        "architectural-wall:wall-internal"
+      );
+      const relevantDoor = namedGroup("architectural-door:door-internal");
+      const relevantWindow = namedGroup("architectural-window:window-internal");
+      const relevantWallOpening = namedGroup(
+        "architectural-wall-opening:opening-internal"
+      );
+      relevantNonBoundaryWall.add(
+        relevantDoor,
+        relevantWindow,
+        relevantWallOpening
+      );
+      const otherWall = namedGroup("architectural-wall:wall-b");
+      const excludedOpening = namedGroup("architectural-window:window-b");
+      otherWall.add(excludedOpening);
+      const stair = namedGroup("architectural-staircase:stair-a");
+      const otherStair = namedGroup("architectural-staircase:stair-b");
+      const furniture = namedGroup("furniture:chair-a");
+      const otherFurniture = namedGroup("furniture:chair-b");
+      const outline = new LineSegments();
+      targetFloor.add(outline);
+      targetLevel.add(
+        targetFloor,
+        otherFloor,
+        targetWall,
+        relevantNonBoundaryWall,
+        otherWall,
+        stair,
+        otherStair,
+        furniture,
+        otherFurniture
+      );
+      scene.add(targetLevel, otherLevel);
+      const userCamera = new PerspectiveCamera();
+      userCamera.position.set(17, 8, -4);
+      scene.add(userCamera);
+      const originalPosition = userCamera.position.clone();
 
-    const restore = applyRoomReferenceVisibility3D(scene, createPlan());
+      const restore = applyRoomReferenceVisibility3D(scene, {
+        ...createPlan(),
+        kind
+      });
 
-    expect(targetLevel.visible).toBe(true);
-    expect(otherLevel.visible).toBe(false);
-    expect(targetFloor.visible).toBe(true);
-    expect(otherFloor.visible).toBe(false);
-    expect(targetWall.visible).toBe(true);
-    expect(opening.visible).toBe(true);
-    expect(relevantNonBoundaryWall.visible).toBe(true);
-    expect(relevantDoor.visible).toBe(true);
-    expect(relevantWindow.visible).toBe(true);
-    expect(relevantWallOpening.visible).toBe(true);
-    expect(otherWall.visible).toBe(false);
-    expect(isEffectivelyVisible(excludedOpening)).toBe(false);
-    expect(stair.visible).toBe(true);
-    expect(otherStair.visible).toBe(false);
-    expect(furniture.visible).toBe(true);
-    expect(otherFurniture.visible).toBe(false);
-    expect(outline.visible).toBe(false);
-    expect(userCamera.position).toEqual(originalPosition);
+      expect(targetLevel.visible).toBe(true);
+      expect(otherLevel.visible).toBe(false);
+      expect(targetFloor.visible).toBe(true);
+      expect(otherFloor.visible).toBe(false);
+      expect(targetWall.visible).toBe(true);
+      expect(opening.visible).toBe(true);
+      expect(relevantNonBoundaryWall.visible).toBe(true);
+      expect(relevantDoor.visible).toBe(true);
+      expect(relevantWindow.visible).toBe(true);
+      expect(relevantWallOpening.visible).toBe(true);
+      expect(otherWall.visible).toBe(false);
+      expect(isEffectivelyVisible(excludedOpening)).toBe(false);
+      expect(stair.visible).toBe(true);
+      expect(otherStair.visible).toBe(false);
+      expect(furniture.visible).toBe(true);
+      expect(isEffectivelyVisible(furniture)).toBe(true);
+      expect(otherFurniture.visible).toBe(false);
+      expect(outline.visible).toBe(false);
+      expect(userCamera.position).toEqual(originalPosition);
 
-    restore();
+      restore();
 
-    expect(otherLevel.visible).toBe(false);
-    expect(otherFloor.visible).toBe(true);
-    expect(otherWall.visible).toBe(true);
-    expect(excludedOpening.visible).toBe(true);
-    expect(otherStair.visible).toBe(true);
-    expect(otherFurniture.visible).toBe(true);
-    expect(outline.visible).toBe(true);
-    expect(userCamera.position).toEqual(originalPosition);
-  });
+      expect(otherLevel.visible).toBe(false);
+      expect(otherFloor.visible).toBe(true);
+      expect(otherWall.visible).toBe(true);
+      expect(excludedOpening.visible).toBe(true);
+      expect(otherStair.visible).toBe(true);
+      expect(otherFurniture.visible).toBe(true);
+      expect(outline.visible).toBe(true);
+      expect(userCamera.position).toEqual(originalPosition);
+    }
+  );
 });
 
 function namedGroup(name: string): Group {

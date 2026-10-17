@@ -9,6 +9,8 @@ import { UnconfiguredInteriorDesignProvider } from "../unconfigured-interior-des
 import {
   buildOpenAIInteriorDesignInstructions,
   buildOpenAIInteriorDesignPrompt,
+  buildOpenAIRefinementInstructions,
+  buildOpenAIRefinementPrompt,
   describeOpenAIReferenceRole
 } from "./openai-prompt-builder";
 import {
@@ -150,6 +152,120 @@ const configuration = {
 };
 
 describe("OpenAIInteriorDesignProvider", () => {
+  it.each(["root", "refinement"] as const)(
+    "communicates the architecture/Furniture/style hierarchy for %s without optional-inspiration semantics",
+    (kind) => {
+      const instructions =
+        kind === "root"
+          ? buildOpenAIInteriorDesignInstructions()
+          : buildOpenAIRefinementInstructions();
+      for (const concept of [
+        "LEVEL 1 — ARCHITECTURE",
+        "Architecture",
+        "LEVEL 2 — CANONICAL FURNITURE LAYOUT",
+        "intentional spatial layout",
+        "canonical position",
+        "orientation/rotation",
+        "approximate footprint/dimensions",
+        "semantic category/definition role",
+        "relative arrangement",
+        "LEVEL 3 — VISUAL DESIGN",
+        "upholstery",
+        "FURNITURE OVERRIDES",
+        "requested items/relationships visually",
+        "Styling requests",
+        "do not authorize rearrangement",
+        "Never mutate canonical Furniture.position"
+      ])
+        expect(instructions.toLowerCase()).toContain(concept.toLowerCase());
+      expect(instructions).not.toContain(
+        "Unless the user explicitly asks to preserve it"
+      );
+    }
+  );
+
+  it("translates definition, position, rotation and footprint in a defined frame for root and every refinement", () => {
+    const context: DesignRequest["context"] = {
+      ...request.context,
+      furniture: [
+        {
+          id: "bed",
+          definitionId: "generic-double-bed",
+          category: "BED",
+          definitionName: "Double bed",
+          position: { x: 160, z: 220 },
+          rotationDegrees: 90,
+          width: 170,
+          depth: 210,
+          height: 60,
+          roomLocalPosition: { x: 60, z: 20 },
+          nearestBoundary: {
+            boundaryIndex: 0,
+            centerDistance: 20,
+            widthAxisRelation: "perpendicular"
+          }
+        }
+      ],
+      furnitureLayout: {
+        intent: "preserve-by-default",
+        origin: { x: 100, z: 200 },
+        nearbyPairs: []
+      }
+    };
+    const input = { ...request, context };
+    const refinement: DesignRefinementRequest = {
+      ...input,
+      instructions: "Change only the bed.",
+      preservation: "preserve-unrequested-design",
+      baseProposal: {
+        id: "p1",
+        target,
+        projectRevision: 2,
+        artifact: {
+          kind: "image",
+          uri: "data:image/png;base64,YmFzZQ==",
+          mimeType: "image/png"
+        }
+      }
+    };
+    const before = structuredClone(refinement);
+    for (const prompt of [
+      buildOpenAIInteriorDesignPrompt(input),
+      buildOpenAIRefinementPrompt(refinement)
+    ]) {
+      for (const fact of [
+        "INTENTIONAL LAYOUT",
+        "translation only",
+        "footprint center",
+        "+90 turns width toward -Z",
+        "definition generic-double-bed, category BED",
+        "center (60, 20)",
+        "rotation 90 deg",
+        "footprint width 170 × depth 210, height 60 cm",
+        "Nearest boundary B1",
+        "width axis perpendicular"
+      ])
+        expect(prompt).toContain(fact);
+    }
+    const instructions = buildOpenAIRefinementInstructions();
+    for (const contract of [
+      "previous Proposal pixels describe current visual design state",
+      "canonical Furniture layout wins",
+      "Re-anchor EVERY turn",
+      "requested target must change visibly",
+      "clearly different bed design",
+      "preserve everything not requested to change",
+      "Narrow deltas",
+      "broad design deltas",
+      "Architecture always remains fixed"
+    ])
+      expect(instructions).toContain(contract);
+    expect(buildOpenAIRefinementPrompt(refinement)).toContain(
+      "USER CHANGE — FOLLOW-UP DELTA\n\nChange only the bed."
+    );
+    expect(refinement).toEqual(before);
+  });
+
   it.each([
     undefined,
     {
@@ -304,18 +420,16 @@ describe("OpenAIInteriorDesignProvider", () => {
 
   it("rejects an explicitly reported generate result for refinement without a fallback call", async () => {
     const client = {
-      create: vi
-        .fn()
-        .mockResolvedValue({
-          output: [
-            {
-              type: "image_generation_call",
-              action: "generate",
-              status: "completed",
-              result: "Zml4dHVyZQ=="
-            }
-          ]
-        })
+      create: vi.fn().mockResolvedValue({
+        output: [
+          {
+            type: "image_generation_call",
+            action: "generate",
+            status: "completed",
+            result: "Zml4dHVyZQ=="
+          }
+        ]
+      })
     };
     await expect(
       new OpenAIInteriorDesignProvider(configuration, client).refineDesign({
@@ -801,13 +915,13 @@ describe("OpenAI prompt builder", () => {
       "composition and camera are authoritative"
     );
     expect(describeOpenAIReferenceRole("room-axonometric")).toContain(
-      "verify Room footprint, partitions, Walls and Openings"
+      "verify canonical Room footprint, partitions, Walls, Openings and Furniture placement/orientation"
     );
     expect(describeOpenAIReferenceRole("room-axonometric")).toContain(
       "Do NOT copy its camera or viewpoint"
     );
     expect(describeOpenAIReferenceRole("room-interior-b")).toContain(
-      "architecture not visible in Interior A"
+      "architecture and canonical Furniture layout not visible in Interior A"
     );
     expect(describeOpenAIReferenceRole("room-interior-b")).toContain(
       "Do NOT switch the final viewpoint"

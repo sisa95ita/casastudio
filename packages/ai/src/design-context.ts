@@ -14,6 +14,7 @@ import type {
   DesignTarget
 } from "./contracts.js";
 import { DesignGenerationError } from "./failures.js";
+import { deriveFurnitureLayout } from "./furniture-layout.js";
 
 /** Derives a Room-specific semantic snapshot without mutating the Project. */
 export function deriveDesignContext(
@@ -169,21 +170,9 @@ export function deriveDesignContext(
           })
         )
     ),
-    furniture: Object.freeze(
-      project.building.furniture
-        .filter((item) => item.roomId === room.id)
-        .map((item) =>
-          Object.freeze({
-            id: item.id,
-            ...(item.name ? { name: item.name } : {}),
-            definitionId: item.definitionId,
-            position: Object.freeze({ ...item.position }),
-            rotationDegrees: item.rotation,
-            width: item.width,
-            depth: item.depth,
-            height: item.height
-          })
-        )
+    ...deriveFurnitureLayout(
+      project.building.furniture.filter((item) => item.roomId === room.id),
+      boundary
     ),
     spatialContext: Object.freeze({
       adjacentSpaces: Object.freeze(

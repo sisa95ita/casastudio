@@ -6,6 +6,7 @@ import type {
   DurableDesignProposal
 } from "@casastudio/ai";
 import { rectangleRoom } from "../apps/web/src/test/vertical-architecture-fixture";
+import { projectScenePointToArchitecturalScreen3D } from "../apps/web/src/features/project-3d/camera/architectural-camera-3d";
 
 const api = "http://localhost:3105";
 type State = {
@@ -558,7 +559,8 @@ async function selectRoom(
   page: Page,
   scene: Locator,
   levelId: string,
-  roomId: string
+  roomId: string,
+  exposedPlanPoint?: { x: number; z: number }
 ) {
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const key = `${levelId}:room:${roomId}`;
@@ -570,11 +572,35 @@ async function selectRoom(
         )[key]
     )
     .toBeTruthy();
-  const point = JSON.parse(
+  let point = JSON.parse(
     (await scene.getAttribute("data-projected-selection-targets")) || "{}"
   )[key];
   const bounds = await scene.locator("canvas").boundingBox();
   if (!bounds) throw new Error("3D canvas has no bounds");
+  if (exposedPlanPoint) {
+    // Fixture floor point clear of Furniture, projected through the actual user camera.
+    const position = (await scene.getAttribute("data-camera-position"))!
+      .split(",")
+      .map(Number);
+    const direction = (await scene.getAttribute("data-camera-view-direction"))!
+      .split(",")
+      .map(Number);
+    point = projectScenePointToArchitecturalScreen3D(
+      { x: exposedPlanPoint.x / 100, y: 0, z: -exposedPlanPoint.z / 100 },
+      {
+        position: { x: position[0]!, y: position[1]!, z: position[2]! },
+        target: {
+          x: position[0]! - direction[0]!,
+          y: position[1]! - direction[1]!,
+          z: position[2]! - direction[2]!
+        },
+        near: 0.01,
+        far: 1000
+      },
+      bounds.width / bounds.height
+    );
+    if (!point) throw new Error("Fixture floor point is not projectable");
+  }
   // Locator input waits for closing dialog backdrops to stop intercepting clicks.
   await scene.locator("canvas").click({
     position: {
@@ -599,9 +625,28 @@ async function orbit(page: Page, canvas: Locator) {
     { steps: 8 }
   );
   await page.mouse.up();
+  // OrbitControls damping continues after pointer-up; compare captures only once
+  // the normal camera settles, rather than treating that animation as a mutation.
+  let previous = "";
+  let stableSamples = 0;
+  await expect
+    .poll(
+      async () => {
+        const current = await canvas.evaluate((element) =>
+          element
+            .closest('[data-testid="project-3d-workspace"]')
+            ?.getAttribute("data-camera-position")
+        );
+        stableSamples = current && current === previous ? stableSamples + 1 : 0;
+        previous = current ?? "";
+        return stableSamples;
+      },
+      { intervals: [100] }
+    )
+    .toBeGreaterThanOrEqual(3);
 }
 
-test("AI-C2 durable revision branches through Review with one fake call per explicit change", async ({
+test("AI-C3 canonical Furniture → root → refinements → branch → reload → safe deletion → stale blocking with fake provider", async ({
   page,
   request
 }) => {
@@ -610,12 +655,15 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
   let projectId = "";
   const errors: string[] = [];
   const posts: string[] = [];
+  let refinementPayload: Record<string, unknown> = {};
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (r) => {
     if (!r.url().startsWith(api)) return;
     authorization ||= r.headers().authorization ?? "";
     if (r.method() === "POST" && r.url().includes("design-proposals"))
       posts.push(r.url());
+    if (r.method() === "POST" && r.url().endsWith("/refinements"))
+      refinementPayload = r.postDataJSON();
   });
   const headers = () => ({ Authorization: authorization });
   const state = async () => (await request.get(`${api}/__ai-b5/state`)).json();
@@ -638,7 +686,7 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
     ).toBeVisible();
     const created = await request.post(`${api}/api/v1/projects`, {
       headers: headers(),
-      data: { name: `AI-C2 synthetic ${Date.now()}` }
+      data: { name: `AI-C3 synthetic ${Date.now()}` }
     });
     expect(created.status()).toBe(201);
     const base = await created.json();
@@ -649,7 +697,7 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
           headers: headers(),
           data: {
             baseRevision: base.sourceRevision,
-            project: createFixture(base.project)
+            project: createFurnitureFixture(base.project)
           }
         })
       ).ok()
@@ -665,7 +713,8 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
         page,
         page.getByTestId("project-3d-workspace"),
         "lower",
-        "target"
+        "target",
+        { x: 420, z: 300 }
       );
       await page.getByRole("tab", { name: "Designer", exact: true }).click();
     };
@@ -691,6 +740,39 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
     await expect(
       designer.locator(`img[data-proposal-id="${root.id}"]`)
     ).toBeVisible();
+    // Re-plan furnished references after moving only the normal OrbitControls camera.
+    const viewer = page.getByTestId("project-3d-workspace");
+    const initialCamera = await viewer.getAttribute("data-camera-position");
+    await orbit(page, viewer.locator("canvas"));
+    await expect(viewer).not.toHaveAttribute(
+      "data-camera-position",
+      initialCamera!
+    );
+    const userCamera = await viewer.getAttribute("data-camera-position");
+    const userDirection = await viewer.getAttribute(
+      "data-camera-view-direction"
+    );
+    await designer.getByRole("button", { name: "Inspect references" }).click();
+    const referenceDialog = page.getByRole("dialog", {
+      name: "Reference views",
+      exact: true
+    });
+    await expect(referenceDialog.getByRole("img")).toHaveCount(3);
+    await referenceDialog
+      .getByRole("button", { name: "Refresh", exact: true })
+      .click();
+    await expect(
+      referenceDialog.getByRole("button", { name: "Refresh", exact: true })
+    ).toBeEnabled();
+    await referenceDialog
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await expect(viewer).toHaveAttribute("data-camera-position", userCamera!);
+    await expect(viewer).toHaveAttribute(
+      "data-camera-view-direction",
+      userDirection!
+    );
+    expect((await state()).calls.length).toBe(initial.calls.length + 1);
     // Open the saved root, rather than relying on transient session state.
     await designer.getByRole("button", { name: "View history" }).click();
     const history = page.getByRole("dialog", { name: /Room design history/ });
@@ -760,7 +842,7 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
       ).toHaveValue("");
       return child;
     };
-    const p2 = await refine(root.id, "Change only the sofa", 2);
+    const p2 = await refine(root.id, "Change only the bed", 2);
     await expect(path.getByRole("button")).toHaveCount(2);
     await review.getByRole("button", { name: "Close", exact: true }).click();
     await expect(
@@ -779,9 +861,7 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
       .getByRole("button", { name: "Root proposal", exact: true })
       .click();
     await expect(children.getByRole("button")).toHaveCount(2);
-    await children
-      .getByRole("button", { name: /Change only the sofa/ })
-      .focus();
+    await children.getByRole("button", { name: /Change only the bed/ }).focus();
     await page.keyboard.press("Enter");
     await expect(
       review.locator(`img[data-proposal-id="${p2.id}"]`)
@@ -862,6 +942,31 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
       .click();
     await expect(children.getByRole("button")).toHaveCount(1);
     expect((await state()).calls.length).toBe(initial.calls.length + 4);
+    const turns = (await state()).calls.slice(initial.calls.length);
+    const cameraMetadata = (turn: { references: DesignReferenceView[] }) =>
+      turn.references.map(({ kind, camera }) => ({ kind, camera }));
+    for (const turn of turns)
+      expect(cameraMetadata(turn)).toEqual(cameraMetadata(turns[0]));
+    expect(
+      turns.map((turn: { baseProposalId?: string }) => turn.baseProposalId)
+    ).toEqual([undefined, root.id, root.id, p2.id]);
+    for (const turn of turns) {
+      expect(turn.furniture.map((item: { id: string }) => item.id)).toEqual([
+        "bed",
+        "chair",
+        "desk"
+      ]);
+      expect(turn.furniture[0]).toMatchObject({
+        definitionId: "generic-double-bed",
+        category: "BED",
+        position: { x: 130, z: 100 },
+        rotationDegrees: 90
+      });
+      expect(turn.furnitureLayout.intent).toBe("preserve-by-default");
+      expect(turn.editInstructions).toContain("intentional spatial layout");
+      expect(turn.editPrompt).toContain("center (130, 100); rotation 90 deg");
+      expect(turn.revision).toBe(canonical.sourceRevision);
+    }
     expect(
       await (
         await request.get(`${api}/api/v1/projects/${projectId}`, {
@@ -869,6 +974,57 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
         })
       ).json()
     ).toEqual(canonical);
+    const parentDeletion = await request.delete(
+      `${api}/api/v1/projects/${projectId}/design-proposals/${root.id}`,
+      { headers: headers() }
+    );
+    expect(parentDeletion.status()).toBe(409);
+    expect((await parentDeletion.json()).code).toBe(
+      "AI_PROPOSAL_HAS_DESCENDANTS"
+    );
+    await review.getByRole("button", { name: "Close", exact: true }).click();
+    await history.getByRole("button", { name: "Close", exact: true }).click();
+    const edited = structuredClone(canonical.project);
+    edited.building.furniture.find(
+      (item: { id: string }) => item.id === "desk"
+    )!.position.x += 25;
+    const save = await request.put(`${api}/api/v1/projects/${projectId}`, {
+      headers: headers(),
+      data: { baseRevision: canonical.sourceRevision, project: edited }
+    });
+    expect(save.ok()).toBe(true);
+    await page.reload();
+    await enterRoom();
+    await designer.getByRole("button", { name: "View history" }).click();
+    await history
+      .getByRole("group", { name: "Saved designs" })
+      .getByRole("button", { name: /Quiet natural materials/ })
+      .click();
+    await history
+      .getByRole("button", { name: "Open design", exact: true })
+      .click();
+    await expect(
+      review.getByRole("textbox", { name: "Design change" })
+    ).toBeDisabled();
+    await expect(
+      review.getByRole("button", { name: "Generate revision" })
+    ).toBeDisabled();
+    await expect(
+      review.getByRole("alert").filter({ hasText: "Historical design" })
+    ).toBeVisible();
+    const stale = await request.post(
+      `${api}/api/v1/projects/${projectId}/design-proposals/${root.id}/refinements`,
+      {
+        headers: headers(),
+        data: {
+          ...refinementPayload,
+          instructions: "Change only the bed"
+        }
+      }
+    );
+    expect(stale.status()).toBe(409);
+    expect((await stale.json()).code).toBe("AI_STALE_CONTEXT");
+    expect((await state()).calls.length).toBe(initial.calls.length + 4);
     expect(errors).toEqual([]);
   } finally {
     if (projectId && authorization)
@@ -881,3 +1037,60 @@ test("AI-C2 durable revision branches through Review with one fake call per expl
       ).toBe(204);
   }
 });
+
+function createFurnitureFixture(base: Project): Project {
+  const project = createFixture(base);
+  project.building.furniture = [
+    {
+      id: "bed",
+      roomId: "target",
+      definitionId: "generic-double-bed",
+      position: { x: 130, z: 100 },
+      rotation: 90,
+      width: 160,
+      depth: 200,
+      height: 60
+    },
+    {
+      id: "desk",
+      roomId: "target",
+      definitionId: "generic-desk",
+      position: { x: 350, z: 60 },
+      rotation: 0,
+      width: 120,
+      depth: 60,
+      height: 75
+    },
+    {
+      id: "chair",
+      roomId: "target",
+      definitionId: "generic-chair",
+      position: { x: 350, z: 140 },
+      rotation: 37,
+      width: 45,
+      depth: 50,
+      height: 85
+    },
+    {
+      id: "other",
+      roomId: "neighbor",
+      definitionId: "generic-chair",
+      position: { x: 800, z: 180 },
+      rotation: 0,
+      width: 45,
+      depth: 50,
+      height: 85
+    },
+    {
+      id: "upstairs",
+      roomId: "overlap",
+      definitionId: "generic-chair",
+      position: { x: 130, z: 100 },
+      rotation: 0,
+      width: 45,
+      depth: 50,
+      height: 85
+    }
+  ];
+  return project;
+}

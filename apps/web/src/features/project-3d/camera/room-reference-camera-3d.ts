@@ -10,10 +10,11 @@ import {
   type ScenePlanVector3D
 } from "../model/architectural-scene-3d-model";
 import {
-  createArchitecturalCameraClippingPlanes3D,
   createArchitecturalCameraPose3D,
   type ArchitecturalCameraPose3D
 } from "./architectural-camera-3d";
+import { planRoomInteriors3D } from "./room-interior-planner-3d";
+import type { InteriorCandidate3D } from "./room-interior-visibility-3d";
 import { deriveRoomReferenceWallIds3D } from "../presentation/room-reference-relevance-3d";
 
 export const automaticRoomReferenceKinds = Object.freeze([
@@ -67,13 +68,21 @@ export function createRoomReferencePlans3D(
     stairs,
     furniture
   );
-  const wallHeight = Math.max(2.4, ...relevantWalls.map((wall) => wall.height));
-  const targetPoint = Object.freeze({
-    x: bounds.center.x,
-    y: floor.y + Math.min(wallHeight * 0.48, 1.35),
-    z: bounds.center.z
-  });
-  const interiorEyes = deriveInteriorEyes(floor, targetPoint, wallHeight);
+  const wallHeight = relevantWalls.length
+    ? Math.max(...relevantWalls.map((wall) => wall.height))
+    : 2.4;
+  const interiors = planRoomInteriors3D(
+    floor,
+    relevantWalls,
+    furniture,
+    stairs,
+    bounds,
+    aspect,
+    wallHeight
+  );
+  // No safe candidate was found within the bounded photography policy.
+  // Fail reference preparation rather than fabricate an eye inside canonical solids.
+  if (!interiors) return Object.freeze([]);
   const axonometricPose = createArchitecturalCameraPose3D(
     bounds,
     aspect,
@@ -93,16 +102,14 @@ export function createRoomReferencePlans3D(
     createInteriorPlan(
       "room-interior-a",
       common,
-      interiorEyes[0],
-      targetPoint,
+      interiors.first.candidate,
       stairs.map((stair) => stair.id),
       furniture.map((item) => item.id)
     ),
     createInteriorPlan(
       "room-interior-b",
       common,
-      interiorEyes[1],
-      targetPoint,
+      interiors.second.candidate,
       stairs.map((stair) => stair.id),
       furniture.map((item) => item.id)
     )
@@ -112,82 +119,22 @@ export function createRoomReferencePlans3D(
 function createInteriorPlan(
   kind: "room-interior-a" | "room-interior-b",
   common: Pick<RoomReferencePlan3D, "target" | "bounds" | "wallIds">,
-  position: ScenePoint3D,
-  target: ScenePoint3D,
+  candidate: InteriorCandidate3D,
   staircaseIds: readonly string[],
   furnitureIds: readonly string[]
 ): RoomReferencePlan3D {
-  const distance = Math.hypot(
-    position.x - target.x,
-    position.y - target.y,
-    position.z - target.z
-  );
   return Object.freeze({
     ...common,
     kind,
     pose: Object.freeze({
-      position,
-      target,
-      ...createArchitecturalCameraClippingPlanes3D(common.bounds, distance)
+      ...candidate.pose,
+      position: Object.freeze(candidate.pose.position),
+      target: Object.freeze(candidate.pose.target)
     }),
-    verticalFovDegrees: 58,
+    verticalFovDegrees: candidate.verticalFovDegrees,
     staircaseIds: Object.freeze([...staircaseIds]),
     furnitureIds: Object.freeze([...furnitureIds])
   });
-}
-
-function deriveInteriorEyes(
-  floor: Floor3D,
-  target: ScenePoint3D,
-  wallHeight: number
-): readonly [ScenePoint3D, ScenePoint3D] {
-  const candidates = floor.triangles.flatMap((triangle) => {
-    const points = triangle.map((index) => floor.contour[index]!);
-    const centroid = averagePlanPoints(points);
-    return [
-      centroid,
-      ...points.map((vertex) => ({
-        x: vertex.x * 0.55 + centroid.x * 0.45,
-        z: vertex.z * 0.55 + centroid.z * 0.45
-      }))
-    ];
-  });
-  const unique = [
-    ...new Map(
-      candidates.map((point) => [
-        `${point.x.toFixed(8)}:${point.z.toFixed(8)}`,
-        point
-      ])
-    ).values()
-  ];
-  let first = unique[0] ?? floor.contour[0]!;
-  let second = unique[1] ?? floor.contour[1] ?? first;
-  let maximumDistance = -1;
-  for (const left of unique) {
-    for (const right of unique) {
-      const distance = Math.hypot(left.x - right.x, left.z - right.z);
-      if (distance > maximumDistance) {
-        maximumDistance = distance;
-        first = left;
-        second = right;
-      }
-    }
-  }
-  const eyeY = floor.y + Math.max(1.2, Math.min(1.65, wallHeight * 0.58));
-  const toEye = (point: ScenePlanVector3D): ScenePoint3D =>
-    Object.freeze({
-      x: point.x,
-      y: eyeY,
-      z: point.z
-    });
-  const eyes = [toEye(first), toEye(second)] as const;
-  // Stable ordering is independent of polygon start vertex and edit history.
-  return [...eyes].sort(
-    (left, right) =>
-      left.x - right.x ||
-      left.z - right.z ||
-      distance3D(left, target) - distance3D(right, target)
-  ) as unknown as readonly [ScenePoint3D, ScenePoint3D];
 }
 
 function dominantContourDirection(
@@ -234,17 +181,4 @@ function collectRoomReferenceBounds3D(
   });
   furniture.forEach((item) => points.push(item.bounds.min, item.bounds.max));
   return createBoundsFromPoints(points)!;
-}
-
-function averagePlanPoints(
-  points: readonly ScenePlanVector3D[]
-): ScenePlanVector3D {
-  return Object.freeze({
-    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
-    z: points.reduce((sum, point) => sum + point.z, 0) / points.length
-  });
-}
-
-function distance3D(left: ScenePoint3D, right: ScenePoint3D): number {
-  return Math.hypot(left.x - right.x, left.y - right.y, left.z - right.z);
 }

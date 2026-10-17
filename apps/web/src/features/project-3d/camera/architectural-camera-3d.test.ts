@@ -1,14 +1,48 @@
 import { describe, expect, it } from "vitest";
+import { PerspectiveCamera, Vector3 } from "three";
 
 import {
   createArchitecturalCameraPose3D,
   createArchitecturalOrbitLimits3D,
   createArchitecturalScreenParityLandmarks3D,
+  createArchitecturalScreenProjector3D,
   projectScenePointToArchitecturalScreen3D
 } from "./architectural-camera-3d";
 import { projectPointToThree } from "../model/architectural-scene-3d-model";
 
 describe("architectural 3D camera", () => {
+  it.each([54, 62])(
+    "matches the Three capture camera for a reused %s° interior projection",
+    (fov) => {
+      const pose = {
+        position: { x: 1.1, y: 4.7, z: -0.8 },
+        target: { x: 4, y: 4.05, z: -4 },
+        near: 0.01,
+        far: 100
+      };
+      const project = createArchitecturalScreenProjector3D(pose, 4 / 3, fov);
+      const camera = new PerspectiveCamera(fov, 4 / 3, pose.near, pose.far);
+      camera.position.set(pose.position.x, pose.position.y, pose.position.z);
+      camera.lookAt(pose.target.x, pose.target.y, pose.target.z);
+      camera.updateMatrixWorld();
+      for (const point of [
+        { x: 4, y: 3, z: -4 },
+        { x: 2.5, y: 4, z: -3 },
+        { x: 5, y: 5.5, z: -3 }
+      ]) {
+        const actual = project(point)!;
+        const native = new Vector3(point.x, point.y, point.z);
+        const expectedDepth = -native
+          .clone()
+          .applyMatrix4(camera.matrixWorldInverse).z;
+        native.project(camera);
+        expect(actual.x).toBeCloseTo(native.x, 10);
+        expect(actual.y).toBeCloseTo(-native.y, 10);
+        expect(actual.depth).toBeCloseTo(expectedDepth, 10);
+      }
+      expect(project({ x: -2, y: 4.7, z: 2 })).toBeUndefined();
+    }
+  );
   it("creates a finite deterministic oblique pose for empty scenes", () => {
     const first = createArchitecturalCameraPose3D(undefined, 16 / 9);
     const second = createArchitecturalCameraPose3D(undefined, 16 / 9);
@@ -22,21 +56,48 @@ describe("architectural 3D camera", () => {
   });
 
   it.each([
-    ["small", { min: { x: 0, y: 0, z: 0 }, max: { x: 0.4, y: 0.3, z: 0.5 }, center: { x: 0.2, y: 0.15, z: 0.25 }, size: { x: 0.4, y: 0.3, z: 0.5 } }],
-    ["wide with Furniture", { min: { x: -25, y: -0.18, z: -3 }, max: { x: 42, y: 3, z: 5 }, center: { x: 8.5, y: 1.41, z: 1 }, size: { x: 67, y: 3.18, z: 8 } }],
-    ["tall with elevated Room and Stair", { min: { x: -4, y: -0.18, z: -5 }, max: { x: 7, y: 22, z: 8 }, center: { x: 1.5, y: 10.91, z: 1.5 }, size: { x: 11, y: 22.18, z: 13 } }]
-  ] as const)("frames finite %s bounds with practical clipping", (_name, bounds) => {
-    const pose = createArchitecturalCameraPose3D(bounds, 16 / 9);
-    const limits = createArchitecturalOrbitLimits3D(bounds);
+    [
+      "small",
+      {
+        min: { x: 0, y: 0, z: 0 },
+        max: { x: 0.4, y: 0.3, z: 0.5 },
+        center: { x: 0.2, y: 0.15, z: 0.25 },
+        size: { x: 0.4, y: 0.3, z: 0.5 }
+      }
+    ],
+    [
+      "wide with Furniture",
+      {
+        min: { x: -25, y: -0.18, z: -3 },
+        max: { x: 42, y: 3, z: 5 },
+        center: { x: 8.5, y: 1.41, z: 1 },
+        size: { x: 67, y: 3.18, z: 8 }
+      }
+    ],
+    [
+      "tall with elevated Room and Stair",
+      {
+        min: { x: -4, y: -0.18, z: -5 },
+        max: { x: 7, y: 22, z: 8 },
+        center: { x: 1.5, y: 10.91, z: 1.5 },
+        size: { x: 11, y: 22.18, z: 13 }
+      }
+    ]
+  ] as const)(
+    "frames finite %s bounds with practical clipping",
+    (_name, bounds) => {
+      const pose = createArchitecturalCameraPose3D(bounds, 16 / 9);
+      const limits = createArchitecturalOrbitLimits3D(bounds);
 
-    expect(Object.values(pose.position).every(Number.isFinite)).toBe(true);
-    expect(Object.values(pose.target).every(Number.isFinite)).toBe(true);
-    expect(pose.target).toEqual(bounds.center);
-    expect(pose.near).toBeGreaterThan(0);
-    expect(pose.far).toBeGreaterThan(pose.near);
-    expect(limits.minDistance).toBeGreaterThan(0);
-    expect(limits.maxDistance).toBeGreaterThan(limits.minDistance);
-  });
+      expect(Object.values(pose.position).every(Number.isFinite)).toBe(true);
+      expect(Object.values(pose.target).every(Number.isFinite)).toBe(true);
+      expect(pose.target).toEqual(bounds.center);
+      expect(pose.near).toBeGreaterThan(0);
+      expect(pose.far).toBeGreaterThan(pose.near);
+      expect(limits.minDistance).toBeGreaterThan(0);
+      expect(limits.maxDistance).toBeGreaterThan(limits.minDistance);
+    }
+  );
 
   it("matches the authoritative 2D screen ordering for asymmetric landmarks", () => {
     const bounds = {
@@ -59,8 +120,9 @@ describe("architectural 3D camera", () => {
       ])
     );
 
-    expect(projected.leftIrregularFacade!.x)
-      .toBeLessThan(projected.rightRoomSequence!.x);
+    expect(projected.leftIrregularFacade!.x).toBeLessThan(
+      projected.rightRoomSequence!.x
+    );
     expect(projected.topRoom!.y).toBeLessThan(projected.bottomEntrance!.y);
     expect(projected.leftIrregularFacade!.x).toBeLessThan(0);
     expect(projected.rightRoomSequence!.x).toBeGreaterThan(0);

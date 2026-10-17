@@ -31,6 +31,12 @@ const {
   FilesystemDesignArtifactStore
 } = require("./dist/ai/artifacts/filesystem-design-artifact.store.js");
 const { PrismaService } = require("./dist/persistence/prisma.service.js");
+const {
+  buildOpenAIInteriorDesignInstructions,
+  buildOpenAIInteriorDesignPrompt,
+  buildOpenAIRefinementInstructions,
+  buildOpenAIRefinementPrompt
+} = require("./dist/ai/openai/openai-prompt-builder.js");
 const root = await mkdtemp(join(tmpdir(), "casastudio-ai-b5-"));
 const store = new FilesystemDesignArtifactStore(root, 20_000_000);
 const calls = [];
@@ -49,6 +55,15 @@ const provider = {
       target: input.target,
       instructions: input.instructions,
       revision: input.context.project.revision,
+      // Test-only diagnostics prove that each explicit turn receives canonical layout.
+      furniture: input.context.furniture,
+      furnitureLayout: input.context.furnitureLayout,
+      editInstructions: input.baseProposal
+        ? buildOpenAIRefinementInstructions()
+        : buildOpenAIInteriorDesignInstructions(),
+      editPrompt: input.baseProposal
+        ? buildOpenAIRefinementPrompt(input)
+        : buildOpenAIInteriorDesignPrompt(input),
       references: input.referenceViews.map(
         ({ kind, target, camera, image }) => ({
           kind,

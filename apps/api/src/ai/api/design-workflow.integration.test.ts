@@ -8,12 +8,27 @@ import { Test } from "@nestjs/testing";
 import { sign } from "jsonwebtoken";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { DesignGenerationError, type DesignFailureCode } from "@casastudio/ai";
+import {
+  DesignGenerationError,
+  deriveDesignContext,
+  type DesignFailureCode
+} from "@casastudio/ai";
+import {
+  buildOpenAIInteriorDesignInstructions,
+  buildOpenAIInteriorDesignPrompt,
+  buildOpenAIRefinementInstructions,
+  buildOpenAIRefinementPrompt
+} from "../openai/openai-prompt-builder";
 import type { PrismaService } from "../../persistence/prisma.service";
 import { FilesystemDesignArtifactStore } from "../artifacts/filesystem-design-artifact.store";
 import { DESIGN_ARTIFACT_STORE } from "../artifacts/design-artifact.store";
 import { INTERIOR_DESIGN_PROVIDER } from "../interior-design-provider.token";
-import { fixtureProvider, input } from "../test/design-fixture";
+import {
+  fixtureProvider,
+  input,
+  fixtureArtifact,
+  jpegArtifact
+} from "../test/design-fixture";
 import { PrismaDesignProposalsRepository } from "../persistence/prisma-design-proposal.repository";
 
 const withDatabase = process.env.DATABASE_URL ? describe : describe.skip;
@@ -116,6 +131,38 @@ withDatabase(
           { x: 0, z: 300 }
         ];
         const project = structuredClone(created.body.project);
+        project.building.furniture = [
+          {
+            id: "bed",
+            roomId: "living",
+            definitionId: "generic-double-bed",
+            position: { x: 110, z: 140 },
+            rotation: 90,
+            width: 160,
+            depth: 200,
+            height: 60
+          },
+          {
+            id: "desk",
+            roomId: "living",
+            definitionId: "generic-desk",
+            position: { x: 300, z: 70 },
+            rotation: 0,
+            width: 120,
+            depth: 60,
+            height: 75
+          },
+          {
+            id: "chair",
+            roomId: "living",
+            definitionId: "generic-chair",
+            position: { x: 300, z: 140 },
+            rotation: 37,
+            width: 45,
+            depth: 50,
+            height: 85
+          }
+        ];
         project.building.levels = [
           {
             id: "ground",
@@ -229,9 +276,18 @@ withDatabase(
         })
       ).toEqual(before);
       expect(provider.generateDesign).toHaveBeenCalledTimes(1);
+      const sent = vi.mocked(provider.generateDesign).mock.calls[0]![0];
+      expect(sent.context.furniture).toHaveLength(3);
+      expect(sent.context.furnitureLayout!.intent).toBe("preserve-by-default");
+      expect(buildOpenAIInteriorDesignInstructions()).toContain(
+        "canonical position"
+      );
+      expect(buildOpenAIInteriorDesignPrompt(sent)).toContain(
+        "definition generic-double-bed, category BED"
+      );
     });
 
-    it("AI-C1 refines one saved root twice, reloads branches, normalizes conflicts and authorizes each operation", async () => {
+    it("AI-C3 P1 → P2 → P3 → P4 plus root sibling re-anchors fresh Furniture layout, reloads lineage, blocks stale work and authorizes every operation", async () => {
       const before = await prisma.project.findUniqueOrThrow({
         where: { domainId: projectId }
       });
@@ -241,11 +297,27 @@ withDatabase(
           .set("authorization", owner)
           .send({ ...payload, instructions });
       const beforeCalls = vi.mocked(provider.refineDesign).mock.calls.length;
+      const canonical = (
+        await request(app.getHttpServer())
+          .get(`/api/v1/projects/${projectId}`)
+          .set("authorization", owner)
+          .expect(200)
+      ).body;
+      const target = {
+        kind: "room" as const,
+        projectId,
+        levelId: "ground",
+        roomId: "living"
+      };
+      const expectedContext = deriveDesignContext(canonical.project, target);
       await request(app.getHttpServer())
         .get(`${path()}/${savedId}/conversation`)
         .set("authorization", owner)
         .expect(200, { page: null });
-      const p2 = (await invoke(savedId, "Change only the sofa").expect(201))
+      vi.mocked(provider.refineDesign).mockResolvedValueOnce({
+        artifact: jpegArtifact
+      });
+      const p2 = (await invoke(savedId, "Change only the bed").expect(201))
         .body;
       expect(provider.refineDesign).toHaveBeenCalledTimes(beforeCalls + 1);
       expect(p2.lineage.parentProposalId).toBe(savedId);
@@ -255,18 +327,100 @@ withDatabase(
         .expect(200);
       expect(reload.body.page.rootProposal.id).toBe(savedId);
       expect(reload.body.page.iterations[0].instructions).toBe(
-        "Change only the sofa"
+        "Change only the bed"
       );
-      const p3 = (await invoke(savedId, "Try darker wood").expect(201)).body;
-      expect(p3.lineage.parentProposalId).toBe(savedId);
+      const p3 = (await invoke(p2.id, "Use beige bed upholstery").expect(201))
+        .body;
+      expect(p3.lineage.parentProposalId).toBe(p2.id);
       expect(p3.lineage.conversationId).toBe(p2.lineage.conversationId);
+      const p4 = (
+        await invoke(p3.id, "Make only the bed headboard simpler").expect(201)
+      ).body;
+      expect(p4.lineage.parentProposalId).toBe(p3.id);
+      const sibling = (
+        await invoke(savedId, "Move only the desk closer to the bed").expect(
+          201
+        )
+      ).body;
+      expect(sibling.lineage.parentProposalId).toBe(savedId);
+      expect(sibling.lineage.conversationId).toBe(p2.lineage.conversationId);
+      const turns = vi
+        .mocked(provider.refineDesign)
+        .mock.calls.slice(beforeCalls)
+        .map(([sent]) => sent);
+      expect(turns.map((sent) => sent.baseProposal.id)).toEqual([
+        savedId,
+        p2.id,
+        p3.id,
+        savedId
+      ]);
+      expect(turns.map((sent) => sent.baseProposal.artifact.uri)).toEqual([
+        fixtureArtifact.uri,
+        jpegArtifact.uri,
+        fixtureArtifact.uri,
+        fixtureArtifact.uri
+      ]);
+      expect(turns[3]!.instructions).toBe(
+        "Move only the desk closer to the bed"
+      );
+      expect(turns[3]!.instructions).not.toContain("beige");
+      expect(new Set(turns.map((sent) => sent.context)).size).toBe(4);
+      expect(turns[0]!.context).not.toBe(
+        vi.mocked(provider.generateDesign).mock.calls[0]![0].context
+      );
+      for (const sent of turns) {
+        expect(sent.context).toEqual(expectedContext);
+        expect(buildOpenAIRefinementInstructions()).toContain(
+          "canonical Furniture layout wins"
+        );
+        expect(buildOpenAIRefinementPrompt(sent)).toContain(
+          "center (110, 140); rotation 90 deg"
+        );
+        expect(sent.baseProposal.target).toEqual(target);
+      }
+      expect(
+        (
+          await request(app.getHttpServer())
+            .get(`/api/v1/projects/${projectId}`)
+            .set("authorization", owner)
+            .expect(200)
+        ).body
+      ).toEqual(canonical);
+      expect(
+        await prisma.project.findUniqueOrThrow({
+          where: { domainId: projectId }
+        })
+      ).toEqual(before);
       const branches = await request(app.getHttpServer())
         .get(`${path()}/${savedId}/conversation`)
         .set("authorization", owner)
         .expect(200);
       expect(
         branches.body.page.iterations.map((p: { id: string }) => p.id)
-      ).toEqual([p2.id, p3.id]);
+      ).toEqual([p2.id, p3.id, p4.id, sibling.id]);
+      expect(
+        branches.body.page.iterations.map(
+          (p: { lineage: { parentProposalId: string } }) =>
+            p.lineage.parentProposalId
+        )
+      ).toEqual([savedId, p2.id, p3.id, savedId]);
+      const history = await request(app.getHttpServer())
+        .get(path())
+        .set("authorization", owner)
+        .query({ levelId: "ground", roomId: "living" })
+        .expect(200);
+      expect(
+        new Set(history.body.proposals.map((p: { id: string }) => p.id))
+      ).toEqual(new Set([savedId, p2.id, p3.id, p4.id, sibling.id]));
+      // Durable identity is conversation/parent lineage; transient session fields are not persisted.
+      expect(
+        history.body.proposals.find((p: { id: string }) => p.id === p4.id)
+          .lineage
+      ).toEqual(p4.lineage);
+      expect(
+        history.body.proposals.find((p: { id: string }) => p.id === sibling.id)
+          .lineage
+      ).toEqual(sibling.lineage);
       expect(JSON.stringify(branches.body)).not.toMatch(
         /base64|artifactKey|providerContinuation/
       );
@@ -275,6 +429,10 @@ withDatabase(
         .set("authorization", owner)
         .expect(409);
       expect(conflict.body.code).toBe("AI_PROPOSAL_HAS_DESCENDANTS");
+      await request(app.getHttpServer())
+        .delete(`${path()}/${p2.id}`)
+        .set("authorization", owner)
+        .expect(409);
       for (const authorization of [undefined, other]) {
         for (const id of [savedId, p2.id, "missing"]) {
           let refine = request(app.getHttpServer())
@@ -328,13 +486,21 @@ withDatabase(
         where: { domainId: projectId },
         data: { revision: before.revision }
       });
-      expect(provider.refineDesign).toHaveBeenCalledTimes(beforeCalls + 2);
+      expect(provider.refineDesign).toHaveBeenCalledTimes(beforeCalls + 4);
       await request(app.getHttpServer())
-        .delete(`${path()}/${p2.id}`)
+        .delete(`${path()}/${p4.id}`)
+        .set("authorization", owner)
+        .expect(204);
+      await request(app.getHttpServer())
+        .delete(`${path()}/${sibling.id}`)
         .set("authorization", owner)
         .expect(204);
       await request(app.getHttpServer())
         .delete(`${path()}/${p3.id}`)
+        .set("authorization", owner)
+        .expect(204);
+      await request(app.getHttpServer())
+        .delete(`${path()}/${p2.id}`)
         .set("authorization", owner)
         .expect(204);
       // Timestamp is intentionally changed by the fixture's direct revision update;

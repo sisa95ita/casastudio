@@ -709,28 +709,22 @@ function ArchitecturalFoundationScene({
   );
   manipulationSessionRef.current = manipulationSession;
   furnitureManipulationRef.current = furnitureManipulation;
-  const referencePlans = useMemo(
-    () =>
-      referenceTarget
-        ? createRoomReferencePlans3D(
-            {
-              sourceProjectId: referenceTarget.projectId,
-              levels
-            },
-            referenceTarget
-          )
-        : [],
-    [bounds, levels, referenceTarget]
-  );
   const captureReferenceView = useCallback(async (): Promise<
     readonly DesignReferenceView[]
   > => {
-    if (!referenceTarget || referencePlans.length === 0)
+    if (!referenceTarget)
+      throw new Error("Room reference image capture is unavailable.");
+    // Layout analysis belongs to preparation/refresh, never interactive rendering.
+    const referencePlans = createRoomReferencePlans3D(
+      { sourceProjectId: referenceTarget.projectId, levels },
+      referenceTarget
+    );
+    if (referencePlans.length === 0)
       throw new Error("Room reference image capture is unavailable.");
     return Object.freeze(
       referencePlans.map((plan) => captureRoomReference(gl, scene, plan))
     );
-  }, [gl, referencePlans, referenceTarget, scene]);
+  }, [gl, levels, referenceTarget, scene]);
   useEffect(() => {
     onReferenceViewCaptureChange(captureReferenceView);
     return () => onReferenceViewCaptureChange(undefined);

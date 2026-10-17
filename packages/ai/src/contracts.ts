@@ -65,11 +65,19 @@ export type DesignFurnitureContext = Readonly<{
   id: string;
   name?: string;
   definitionId: string;
+  definitionName?: string;
+  category?: string;
   position: DesignPoint2D;
   rotationDegrees: number;
   width: number;
   depth: number;
   height: number;
+  roomLocalPosition?: DesignPoint2D;
+  nearestBoundary?: Readonly<{
+    boundaryIndex: number;
+    centerDistance: number;
+    widthAxisRelation: "parallel" | "perpendicular" | "oblique";
+  }>;
 }>;
 
 /** Neighbors explain passages from the target; they are not design targets. */
@@ -118,6 +126,17 @@ export type DesignContext = Readonly<{
   walls: readonly DesignWallContext[];
   stairs: readonly DesignStairContext[];
   furniture: readonly DesignFurnitureContext[];
+  /** Translation only: canonical axes/rotation are retained, with no rectangular-room assumption. */
+  furnitureLayout?: Readonly<{
+    intent: "preserve-by-default";
+    origin?: DesignPoint2D;
+    nearbyPairs: readonly Readonly<{
+      firstId: string;
+      secondId: string;
+      centerDistance: number;
+      widthAxisRelation: "parallel" | "perpendicular" | "oblique";
+    }>[];
+  }>;
   spatialContext: Readonly<{ adjacentSpaces: readonly DesignAdjacentSpace[] }>;
   units: Readonly<{ length: "cm"; angle: "deg" }>;
   coordinateSystem: Readonly<{

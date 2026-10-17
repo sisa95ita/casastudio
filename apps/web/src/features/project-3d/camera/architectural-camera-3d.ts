@@ -1,4 +1,7 @@
-import type { SceneBounds3D, ScenePoint3D } from "../model/architectural-scene-3d-model";
+import type {
+  SceneBounds3D,
+  ScenePoint3D
+} from "../model/architectural-scene-3d-model";
 
 /** Deterministic perspective-camera placement for an architectural scene. */
 export type ArchitecturalCameraPose3D = Readonly<{
@@ -56,29 +59,28 @@ export function createArchitecturalCameraPose3D(
 ): ArchitecturalCameraPose3D {
   const framingBounds = bounds ?? emptyArchitecturalSceneBounds3D;
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
-  const verticalFov = verticalFieldOfViewDegrees * Math.PI / 180;
+  const verticalFov = (verticalFieldOfViewDegrees * Math.PI) / 180;
   const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * safeAspect);
   const sceneRadius = getArchitecturalSceneRadius3D(framingBounds);
   const limitingFov = Math.min(verticalFov, horizontalFov);
   const distance = Math.max(
     3,
-    sceneRadius / Math.sin(limitingFov / 2) * architecturalCameraFramingPadding3D
+    (sceneRadius / Math.sin(limitingFov / 2)) *
+      architecturalCameraFramingPadding3D
   );
   const directionLength = Math.hypot(
     viewingDirection.x,
     viewingDirection.y,
     viewingDirection.z
   );
-  const safeDirection = directionLength > 0 && Number.isFinite(directionLength)
-    ? viewingDirection
-    : architecturalPlanAlignedDirection3D;
-  const safeDirectionLength = safeDirection === viewingDirection
-    ? directionLength
-    : Math.hypot(
-        safeDirection.x,
-        safeDirection.y,
-        safeDirection.z
-      );
+  const safeDirection =
+    directionLength > 0 && Number.isFinite(directionLength)
+      ? viewingDirection
+      : architecturalPlanAlignedDirection3D;
+  const safeDirectionLength =
+    safeDirection === viewingDirection
+      ? directionLength
+      : Math.hypot(safeDirection.x, safeDirection.y, safeDirection.z);
   const direction = {
     x: safeDirection.x / safeDirectionLength,
     y: safeDirection.y / safeDirectionLength,
@@ -105,10 +107,13 @@ export function createArchitecturalCameraClippingPlanes3D(
   bounds: SceneBounds3D | undefined,
   cameraDistance: number
 ): Readonly<{ near: number; far: number }> {
-  const radius = getArchitecturalSceneRadius3D(bounds ?? emptyArchitecturalSceneBounds3D);
-  const safeDistance = Number.isFinite(cameraDistance) && cameraDistance > 0
-    ? cameraDistance
-    : radius * 3;
+  const radius = getArchitecturalSceneRadius3D(
+    bounds ?? emptyArchitecturalSceneBounds3D
+  );
+  const safeDistance =
+    Number.isFinite(cameraDistance) && cameraDistance > 0
+      ? cameraDistance
+      : radius * 3;
   return Object.freeze({
     near: Math.max(0.01, Math.min(0.1, radius / 1000)),
     far: Math.max(100, safeDistance + radius * 6)
@@ -119,7 +124,9 @@ export function createArchitecturalCameraClippingPlanes3D(
 export function createArchitecturalOrbitLimits3D(
   bounds: SceneBounds3D | undefined
 ): ArchitecturalOrbitLimits3D {
-  const radius = getArchitecturalSceneRadius3D(bounds ?? emptyArchitecturalSceneBounds3D);
+  const radius = getArchitecturalSceneRadius3D(
+    bounds ?? emptyArchitecturalSceneBounds3D
+  );
   return Object.freeze({
     minDistance: Math.max(0.08, Math.min(0.5, radius * 0.02)),
     maxDistance: Math.max(25, radius * 10)
@@ -128,7 +135,10 @@ export function createArchitecturalOrbitLimits3D(
 
 /** Returns a nonzero radius that contains every corner of the given bounds. */
 function getArchitecturalSceneRadius3D(bounds: SceneBounds3D): number {
-  return Math.max(Math.hypot(bounds.size.x, bounds.size.y, bounds.size.z) / 2, 1);
+  return Math.max(
+    Math.hypot(bounds.size.x, bounds.size.y, bounds.size.z) / 2,
+    1
+  );
 }
 
 /**
@@ -159,6 +169,19 @@ export function projectScenePointToArchitecturalScreen3D(
   aspect: number,
   verticalFieldOfViewDegrees = 45
 ): ArchitecturalScreenPoint3D | undefined {
+  return createArchitecturalScreenProjector3D(
+    pose,
+    aspect,
+    verticalFieldOfViewDegrees
+  )(point);
+}
+
+/** Reuses the same camera basis/FOV across bounded reference-visibility samples. */
+export function createArchitecturalScreenProjector3D(
+  pose: ArchitecturalCameraPose3D,
+  aspect: number,
+  verticalFieldOfViewDegrees = 45
+): (point: ScenePoint3D) => ArchitecturalScreenPoint3D | undefined {
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   const forwardVector = {
     x: pose.target.x - pose.position.x,
@@ -170,14 +193,16 @@ export function projectScenePointToArchitecturalScreen3D(
     forwardVector.y,
     forwardVector.z
   );
-  if (!Number.isFinite(forwardLength) || forwardLength === 0) return undefined;
+  if (!Number.isFinite(forwardLength) || forwardLength === 0)
+    return () => undefined;
   const forward = {
     x: forwardVector.x / forwardLength,
     y: forwardVector.y / forwardLength,
     z: forwardVector.z / forwardLength
   };
   const rightLength = Math.hypot(forward.x, forward.z);
-  if (!Number.isFinite(rightLength) || rightLength === 0) return undefined;
+  if (!Number.isFinite(rightLength) || rightLength === 0)
+    return () => undefined;
   const right = {
     x: -forward.z / rightLength,
     y: 0,
@@ -188,21 +213,24 @@ export function projectScenePointToArchitecturalScreen3D(
     y: right.z * forward.x - right.x * forward.z,
     z: right.x * forward.y - right.y * forward.x
   };
-  const relative = {
-    x: point.x - pose.position.x,
-    y: point.y - pose.position.y,
-    z: point.z - pose.position.z
+  const verticalFov = (verticalFieldOfViewDegrees * Math.PI) / 180;
+  const fovScale = Math.tan(verticalFov / 2);
+  return (point) => {
+    const relative = {
+      x: point.x - pose.position.x,
+      y: point.y - pose.position.y,
+      z: point.z - pose.position.z
+    };
+    const depth = dot3D(relative, forward);
+    if (!Number.isFinite(depth) || depth <= 0) return undefined;
+    const verticalScale = depth * fovScale;
+    const horizontalScale = verticalScale * safeAspect;
+    return Object.freeze({
+      x: dot3D(relative, right) / horizontalScale,
+      y: -dot3D(relative, up) / verticalScale,
+      depth
+    });
   };
-  const depth = dot3D(relative, forward);
-  if (!Number.isFinite(depth) || depth <= 0) return undefined;
-  const verticalFov = verticalFieldOfViewDegrees * Math.PI / 180;
-  const verticalScale = depth * Math.tan(verticalFov / 2);
-  const horizontalScale = verticalScale * safeAspect;
-  return Object.freeze({
-    x: dot3D(relative, right) / horizontalScale,
-    y: -dot3D(relative, up) / verticalScale,
-    depth
-  });
 }
 
 /** Computes a scalar product for renderer-neutral scene vectors. */

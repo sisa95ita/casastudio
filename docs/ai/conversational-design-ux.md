@@ -1,8 +1,9 @@
 # AI-C2 — Conversational Design UX
 
-Implemented, pending owner acceptance. AI-C has exactly C1 (Conversation & Proposal
+Implemented; owner functional acceptance passed. AI-C has exactly C1 (Conversation & Proposal
 Lineage), C2 (Conversational Design UX), and C3 (Conversational Quality & Validation).
-C1 is complete; C3 has not started.
+C1 is complete; [C3 quality/validation](conversational-quality-validation.md) is
+zero-cost validated, pending owner visual quality acceptance.
 
 ## Proposal Review is the revision workspace
 

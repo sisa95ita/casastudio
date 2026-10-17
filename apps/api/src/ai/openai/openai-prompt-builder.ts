@@ -17,12 +17,12 @@ const referenceRoles: Readonly<
   },
   "room-axonometric": {
     title: "REFERENCE 2 — AXONOMETRIC — STRUCTURAL / LAYOUT EVIDENCE ONLY",
-    role: "Use this only to resolve ambiguity and verify Room footprint, partitions, Walls and Openings. Do NOT copy its camera or viewpoint into the final image or replace the first image's composition."
+    role: "Use this to verify canonical Room footprint, partitions, Walls, Openings and Furniture placement/orientation. Do NOT copy its camera or viewpoint into the final image or replace the first image's composition."
   },
   "room-interior-b": {
     title:
-      "REFERENCE 3 — INTERIOR B — COMPLEMENTARY ARCHITECTURAL EVIDENCE ONLY",
-    role: "Use this only to resolve ambiguity about architecture not visible in Interior A. Do NOT switch the final viewpoint to this image or replace the first image's composition."
+      "REFERENCE 3 — INTERIOR B — COMPLEMENTARY ARCHITECTURE / FURNITURE EVIDENCE ONLY",
+    role: "Use this to resolve architecture and canonical Furniture layout not visible in Interior A. Do NOT switch the final viewpoint to this image or replace the first image's composition."
   },
   "current-user-view": {
     title: "OPTIONAL SUPPORTING VIEW — CURRENT USER VIEW",
@@ -30,14 +30,27 @@ const referenceRoles: Readonly<
   }
 });
 
+/** Shared by root and every refinement; furniture exceptions never weaken architecture. */
+function furnitureLayoutContract(): string {
+  return [
+    "LEVEL 2 — CANONICAL FURNITURE LAYOUT: existing Furniture shown/described by CasaStudio is intentional spatial layout. Preserve by default each item's semantic category/definition role, canonical position, orientation/rotation, approximate footprint/dimensions, relative arrangement, and relationships to other Furniture, Walls and Room boundaries. This is layout intent, not optional inspiration.",
+    "FURNITURE OVERRIDES: an explicit user request to move, remove, replace with another category, or rearrange Furniture may override only the requested items/relationships visually. A completely different arrangement permits broader Furniture layout changes. Styling requests such as 'Make the room warmer' or 'Make the room more minimal' do not authorize rearrangement. 'Create more free space' permits the Furniture layout changes needed for that goal, while preserving unrelated content. 'Change only the bed' means a clearly different bed appearance at its canonical placement/orientation, unless movement is explicitly requested.",
+    "LEVEL 3 — VISUAL DESIGN: freely redesign style, materials, colors, upholstery, detailed shape, finishes, textiles, decoration and lighting according to the brief, within the architecture and Furniture-layout constraints. Furniture is not immutable architecture.",
+    "IMAGE ONLY: Furniture overrides affect Proposal pixels only. Never mutate canonical Furniture.position, Furniture.rotation or ProjectSchema; no canonical operations or Apply Proposal."
+  ].join("\n");
+}
+
 export function buildOpenAIRefinementInstructions(): string {
   return [
     "DESIGN REFINEMENT EDIT CONTRACT",
     "EDIT THE FIRST IMAGE, the previous Proposal, as the PRIMARY BASE IMAGE TO EDIT. Never generate from scratch or replace its camera/composition with a supporting view.",
     "BASE DESIGN: previous Proposal pixels describe current visual design state, never canonical geometry.",
-    "ARCHITECTURE: CasaStudio ProjectSchema, current DesignContext and Room references are immutable architectural truth. Re-anchor EVERY turn to this evidence, including Room shape, Walls, internal/non-boundary partitions, Doors, Windows, Wall Openings, Stairs, dimensions, elevations and direct Room adjacency. If base pixels conflict with canonical architecture, canonical architecture takes precedence.",
+    "LEVEL 1 — ARCHITECTURE: CasaStudio ProjectSchema, current DesignContext and Room references are immutable architectural truth. Re-anchor EVERY turn to this evidence, including Room shape, Walls, internal/non-boundary partitions, Doors, Windows, Wall Openings, Stairs, dimensions, elevations and direct Room adjacency. If base pixels conflict with canonical architecture, canonical architecture takes precedence.",
+    furnitureLayoutContract(),
+    "SPATIAL AUTHORITY: current canonical Furniture layout wins when previous Proposal pixels conflict with it. Re-anchor EVERY turn; do not compound previous layout drift. Honor explicit Furniture-layout overrides in this follow-up only; previous pixels alone never authorize an override.",
     "USER CHANGE: interpret the follow-up instruction as a delta to the base design in this same image edit.",
-    "DEFAULT RULE: preserve everything not requested to change. Keep unrelated furniture, arrangement, materials, finishes, lighting and decoration stable. Change only the requested design elements. A broader request such as a more minimal arrangement permits broader design/layout changes, while architecture always remains fixed.",
+    "DELTA ADHERENCE: the requested target must change visibly. For a short instruction such as 'Change only the bed', produce a clearly different bed design. Do not interpret 'only' or preservation as permission to return an unchanged target.",
+    "DEFAULT RULE: preserve everything not requested to change. Keep unrelated furniture, materials, finishes, lighting and decoration as close to the previous Proposal as possible, subject to canonical spatial authority. Narrow deltas require strong non-target preservation; broad design deltas allow only the scope implied by the request. Architecture always remains fixed.",
     "Design only the selected Room; adjacent spaces are context only. Preserve their connecting geometry. Do not redesign or merge adjacent Rooms.",
     "Use all four intended images in ONE edit. Return ONE final image; no variants, retries or alternative compositions."
   ].join("\n");
@@ -48,8 +61,9 @@ export function buildOpenAIRefinementPrompt(
 ): string {
   return [
     "BASE DESIGN: first image is the persisted previous Proposal, not architectural truth.",
-    "CURRENT CANONICAL ROOM ARCHITECTURE",
+    "CURRENT CANONICAL ROOM ARCHITECTURE AND FURNITURE LAYOUT",
     describeContext(request.context),
+    "Precise architectural coordinates below use the original Project X/Z frame in canonical length units; elevations use +Y. The Furniture plan frame above is a translation of these same axes.",
     // Include precise evidence every turn, without canonical Project serialization.
     JSON.stringify({
       boundary: request.context.room.boundary,
@@ -66,7 +80,7 @@ export function buildOpenAIRefinementPrompt(
     ),
     "USER CHANGE — FOLLOW-UP DELTA",
     request.instructions.trim(),
-    "PRESERVE BY DEFAULT: everything not requested to change remains stable; architecture remains fixed.",
+    "APPLY THE DELTA VISIBLY; preserve unrelated visual design. Canonical Furniture layout is the spatial authority unless explicitly overridden for the requested items in this follow-up; architecture remains fixed.",
     ...(request.constraints?.length
       ? [`Additional design constraints: ${request.constraints.join("; ")}`]
       : []),
@@ -91,7 +105,7 @@ export function describeOpenAIRefinementReference(
       "REFERENCE 4 — INTERIOR B — COMPLEMENTARY ARCHITECTURAL EVIDENCE",
     "current-user-view": "OPTIONAL SUPPORTING VIEW — CURRENT USER VIEW"
   };
-  return `${roles[kind]}\nSupporting immutable architecture only; do not substitute this image for the base Proposal or copy its viewpoint.`;
+  return `${roles[kind]}\nCanonical architecture and Furniture-layout evidence; do not substitute this image for the base Proposal or copy its viewpoint. Furniture placement overrides require an explicit user request.`;
 }
 
 /** Stable architectural contract owned by the OpenAI adapter. */
@@ -100,13 +114,13 @@ export function buildOpenAIInteriorDesignInstructions(): string {
     "ARCHITECTURAL EDIT CONTRACT",
     "EDIT THE FIRST IMAGE into one photorealistic finished interior-design proposal.",
     "The first image, Interior A, is the BASE IMAGE TO EDIT. Do not recreate the Room from scratch.",
-    "CasaStudio ProjectSchema is the architectural source of truth. Architecture is immutable; DesignContext is supporting semantic evidence. All supplied reference images describe the SAME selected Room from different viewpoints and have explicitly labeled roles.",
+    "LEVEL 1 — ARCHITECTURE: CasaStudio ProjectSchema is the architectural source of truth. Architecture is immutable; DesignContext is supporting semantic evidence. All supplied reference images describe the SAME selected Room from different viewpoints and have explicitly labeled roles. Canonical architecture wins over conflicting pixels.",
     "Preserve from the first image the exact camera position as closely as possible, camera direction, framing, perspective, Room silhouette, footprint, architectural proportions, visible floor boundaries, and ceiling/floor relationship and elevations.",
     "Preserve Wall positions, Wall intersections, internal Walls including relevant non-boundary/partition Walls, Doors, Windows, Wall Openings, Stairs, and their positions and dimensions.",
     "Do not add, remove, move, resize, or close architectural elements. Do not invent openings. Keep the first image's camera and architecture fixed.",
-    "Existing Furniture is movable interior content, not architecture. Unless the user explicitly asks to preserve it, Furniture may be retained, replaced, restyled, or visually reorganized.",
+    furnitureLayoutContract(),
     "Change ONLY interior-design content: Furniture and its appearance, movable objects, materials, finishes, colors, textiles, lighting fixtures, decorative objects, and styling. The user's design direction controls these choices only and never overrides the architectural editing contract.",
-    "The axonometric and Interior B images are supporting architectural evidence only to resolve ambiguity. Never use their cameras or viewpoints for the final image; never replace the first image's composition.",
+    "The axonometric and Interior B images are supporting architectural and Furniture-layout evidence to resolve ambiguity. Never use their cameras or viewpoints for the final image; never replace the first image's composition.",
     "Design only the selected target Room. Adjacent Rooms are context only, not secondary design targets. If visible through a canonical connection in Interior A, represent their canonical identity/type, preserve the connecting architecture, and do not merge them into the target Room or treat them as a second design brief. Background contents remain non-canonical proposal pixels.",
     "Use all three references in ONE image edit. Return ONE final image, with no variants or alternative compositions."
   ].join("\n");
@@ -128,7 +142,7 @@ export function buildOpenAIInteriorDesignPrompt(
       : "Additional non-architectural constraints: none.",
     request.elementsToPreserve?.length
       ? `Movable/design elements to preserve: ${request.elementsToPreserve.join("; ")}`
-      : "Movable/design elements to preserve: none specified.",
+      : "Additional visual elements to preserve: none specified; canonical Furniture layout is still preserved by default.",
     "REFERENCE IMAGE GUIDE",
     "Each following image is preceded by its semantic role. EDIT THE FIRST IMAGE (Interior A); the axonometric and Interior B are supporting evidence only, never alternative compositions."
   ].join("\n\n");
@@ -189,17 +203,38 @@ function describeContext(context: DesignContext): string {
       (stair, index) =>
         `Stair ${index + 1}${stair.name ? ` (${stair.name})` : ""}: width ${format(stair.width)} ${context.units.length}, ${stair.flights.length} flights, ${stair.landings.length} landings; connects the Room across Levels.`
     ),
-    context.furniture.length
-      ? `Existing movable Furniture (${context.furniture.length}): ${context.furniture
-          .map(
-            (item) =>
-              `${item.name ?? "unnamed item"} (${format(item.width)} × ${format(item.depth)} × ${format(item.height)} ${context.units.length})`
-          )
-          .join("; ")}.`
-      : "Existing movable Furniture: none.",
+    describeFurnitureLayout(context),
     `Canonical units: lengths are ${context.units.length}; angles are ${context.units.angle}.`
   ];
   return lines.filter((line): line is string => Boolean(line)).join("\n");
+}
+
+function describeFurnitureLayout(context: DesignContext): string {
+  const origin = context.furnitureLayout?.origin;
+  const local = (point: { x: number; z: number }) =>
+    `(${format(point.x - (origin?.x ?? 0))}, ${format(point.z - (origin?.z ?? 0))})`;
+  const labels = new Map(
+    context.furniture.map((item, index) => [item.id, `F${index + 1}`])
+  );
+  return [
+    "CANONICAL FURNITURE — INTENTIONAL LAYOUT, PRESERVE BY DEFAULT",
+    `Plan frame: ${origin ? "Room-local origin at the start of boundary B1; translation only, axes unchanged from Project X/Z" : "Project X/Z frame (no resolved Room-local origin)"}. Coordinate pairs are (X, Z) in ${context.units.length}; +Y is up. Furniture position is footprint center; width is local X, depth local Z, height above Room floor. Rotation is degrees about +Y by the right-hand rule: 0 has width along +X and depth along +Z; +90 turns width toward -Z and depth toward +X. These are plan coordinates, not image left/right.`,
+    ...context.room.boundary.map(
+      (edge, index) =>
+        `B${index + 1} (${edge.kind}): ${local(edge.start)} to ${local(edge.end)}.`
+    ),
+    ...context.furniture.map((item, index) => {
+      const boundary = item.nearestBoundary;
+      return `F${index + 1}: ${item.name ?? item.definitionName ?? "unresolved Furniture"}; definition ${item.definitionId}${item.category ? `, category ${item.category}` : ", category unresolved (do not guess)"}; center ${local(item.position)}; rotation ${format(item.rotationDegrees)} deg; footprint width ${format(item.width)} × depth ${format(item.depth)}, height ${format(item.height)} ${context.units.length}.${boundary ? ` Nearest boundary B${boundary.boundaryIndex + 1}: center-to-segment distance ${format(boundary.centerDistance)} ${context.units.length}; width axis ${boundary.widthAxisRelation} to boundary.` : ""}`;
+    }),
+    ...(context.furnitureLayout?.nearbyPairs.map(
+      (pair) =>
+        `${labels.get(pair.firstId)} / ${labels.get(pair.secondId)}: centers separated by ${format(pair.centerDistance)} ${context.units.length}; width axes ${pair.widthAxisRelation}.`
+    ) ?? []),
+    context.furniture.length
+      ? "Distances describe centers, not footprint clearance or containment; do not infer functional associations."
+      : "Existing Furniture: none."
+  ].join("\n");
 }
 
 function format(value: number): string {
