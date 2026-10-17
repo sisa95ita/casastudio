@@ -4,6 +4,8 @@ import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it, vi } from "vitest";
 
+import { FURNITURE_EDIT_PROVIDER } from "./furniture-edit-provider.token";
+import { OpenAIFurnitureEditProvider } from "./openai/openai-furniture-edit.provider";
 import { AiModule } from "./ai.module";
 import { INTERIOR_DESIGN_PROVIDER } from "./interior-design-provider.token";
 import { OpenAIInteriorDesignProvider } from "./openai/openai-interior-design.provider";
@@ -75,6 +77,40 @@ describe("AI provider factory budget policy", () => {
       UnconfiguredInteriorDesignProvider
     );
     expect(sdk.constructor).not.toHaveBeenCalled();
+    expect(sdk.create).not.toHaveBeenCalled();
+    await module.close();
+  });
+});
+
+describe("Furniture provider budget policy", () => {
+  it("uses a distinct text capability with zero retries and makes no call at construction", async () => {
+    sdk.create.mockClear();
+    sdk.constructor.mockClear();
+    const module = await Test.createTestingModule({
+      providers: [
+        ...Reflect.getMetadata("providers", AiModule).filter(
+          (provider: { provide?: unknown }) =>
+            provider.provide === FURNITURE_EDIT_PROVIDER
+        ),
+        {
+          provide: ConfigService,
+          useValue: {
+            get: () => ({
+              provider: "openai",
+              openai: { apiKey: "mock-only", reasoningModel: "fixture-model" }
+            })
+          }
+        }
+      ]
+    }).compile();
+    expect(module.get(FURNITURE_EDIT_PROVIDER)).toBeInstanceOf(
+      OpenAIFurnitureEditProvider
+    );
+    expect(sdk.constructor).toHaveBeenCalledWith({
+      apiKey: "mock-only",
+      timeout: 60_000,
+      maxRetries: 0
+    });
     expect(sdk.create).not.toHaveBeenCalled();
     await module.close();
   });

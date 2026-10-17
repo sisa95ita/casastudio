@@ -197,6 +197,7 @@ export type GeometrySvgViewerProps = {
   readonly onViewportChange?: (viewport: ViewportState) => void;
   readonly interaction?: ProjectEditorInteraction;
   readonly editorOverlay?: GeometryEditorOverlay;
+  readonly onCanonicalPointPick?: (pointer: SvgViewportPointer) => void;
   readonly onEditorCanvasClick?: (pointer: SvgViewportPointer) => void;
   readonly onEditorPointerMove?: (
     pointer: SvgViewportPointer,
@@ -415,6 +416,7 @@ export function GeometrySvgViewer({
   onViewportChange,
   interaction = defaultViewerInteraction,
   editorOverlay,
+  onCanonicalPointPick,
   onEditorCanvasClick,
   onEditorPointerMove,
   onWallEndpointPointerDown,
@@ -1238,6 +1240,20 @@ export function GeometrySvgViewer({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onLostPointerCapture={handleLostPointerCapture}
+      onPointerDownCapture={
+        onCanonicalPointPick ? (event) => event.stopPropagation() : undefined
+      }
+      onPointerUpCapture={
+        onCanonicalPointPick ? (event) => event.stopPropagation() : undefined
+      }
+      onClickCapture={
+        onCanonicalPointPick
+          ? (event) => {
+              event.stopPropagation();
+              onCanonicalPointPick(getEventPointer(event));
+            }
+          : undefined
+      }
       onClick={handleSvgClick}
     >
       <title id="geometry-svg-title">{t("viewer.svgTitle")}</title>

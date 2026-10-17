@@ -1,3 +1,11 @@
+import {
+  DesignGenerationError,
+  type FurnitureEditProvider
+} from "@casastudio/ai";
+import { FurnitureEditsController } from "./api/furniture-edits.controller";
+import { ProposeFurnitureEditService } from "./application/propose-furniture-edit.service";
+import { FURNITURE_EDIT_PROVIDER } from "./furniture-edit-provider.token";
+import { OpenAIFurnitureEditProvider } from "./openai/openai-furniture-edit.provider";
 import type { InteriorDesignProvider } from "@casastudio/ai";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -20,9 +28,47 @@ import { RefineDesignProposalService } from "./application/refine-design-proposa
 
 @Module({
   imports: [ProjectsModule, PersistenceModule, DesignArtifactsModule],
-  controllers: [DesignProposalsController],
+  controllers: [DesignProposalsController, FurnitureEditsController],
   providers: [
     GenerateDesignProposalService,
+    ProposeFurnitureEditService,
+    {
+      provide: FURNITURE_EDIT_PROVIDER,
+      inject: [ConfigService],
+      useFactory: (
+        config: ConfigService<AppConfiguration, true>
+      ): FurnitureEditProvider => {
+        const configuration = config.get("ai", { infer: true });
+        if (
+          configuration.provider !== "openai" ||
+          !configuration.openai.apiKey
+        ) {
+          return {
+            name: "unconfigured",
+            interpretFurnitureEdit: async () => {
+              throw new DesignGenerationError(
+                "provider_not_configured",
+                "AI Furniture editing is not configured."
+              );
+            }
+          };
+        }
+        const client = new OpenAI({
+          apiKey: configuration.openai.apiKey,
+          timeout: 60_000,
+          maxRetries: 0
+        });
+        return new OpenAIFurnitureEditProvider(
+          configuration.openai.reasoningModel,
+          {
+            create: async (input) =>
+              (await client.responses.create(
+                input as never
+              )) as unknown as import("./openai/openai-interior-design.provider").OpenAIResponseLike
+          }
+        );
+      }
+    },
     RefineDesignProposalService,
     PersistDesignProposalService,
     DesignProposalHistoryService,

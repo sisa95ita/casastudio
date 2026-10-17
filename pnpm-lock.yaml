@@ -241,9 +241,15 @@ importers:
 
   packages/ai:
     dependencies:
+      '@casastudio/geometry':
+        specifier: workspace:*
+        version: link:../geometry
       '@casastudio/schema':
         specifier: workspace:*
         version: link:../schema
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
 
   packages/geometry:
     dependencies:

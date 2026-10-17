@@ -6,6 +6,9 @@ import {
   type InteriorDesignProviderResult
 } from "@casastudio/ai";
 
+import { normalizeOpenAIError } from "./openai-error";
+export { normalizeOpenAIError } from "./openai-error";
+
 import {
   buildOpenAIInteriorDesignInstructions,
   buildOpenAIInteriorDesignPrompt,
@@ -40,6 +43,7 @@ type OpenAIImageGenerationCall = Readonly<{
 }>;
 
 export type OpenAIResponseLike = Readonly<{
+  _request_id?: string | null;
   model?: string;
   output?: readonly Readonly<{ type: string; [key: string]: unknown }>[];
   usage?: Readonly<{
@@ -305,123 +309,4 @@ function normalizeUsage(usage: OpenAIResponseLike["usage"]):
         : {})
     })
   };
-}
-
-function normalizeOpenAIError(
-  error: unknown,
-  now: Date
-): DesignGenerationError {
-  if (error instanceof DesignGenerationError) return error;
-  const record =
-    typeof error === "object" && error !== null
-      ? (error as Record<string, unknown>)
-      : {};
-  const status = typeof record.status === "number" ? record.status : undefined;
-  const code = typeof record.code === "string" ? record.code : undefined;
-  const name = typeof record.name === "string" ? record.name : undefined;
-
-  if (
-    status === 404 ||
-    code === "model_not_found" ||
-    code === "model_access_denied"
-  ) {
-    return new DesignGenerationError(
-      "model_access_failed",
-      "The configured AI model is unavailable to this server.",
-      { cause: error }
-    );
-  }
-
-  if (status === 401 || status === 403) {
-    return new DesignGenerationError(
-      "authentication_failed",
-      "The AI provider rejected the server configuration.",
-      { cause: error }
-    );
-  }
-  if (status === 429) {
-    const retryAfterSeconds = readRetryAfterSeconds(record.headers, now);
-    const allowanceExhausted =
-      record.type === "insufficient_quota" ||
-      [
-        "insufficient_quota",
-        "credit_balance_exhausted",
-        "organization_spend_limit_exceeded",
-        "project_spend_limit_exceeded",
-        "organization_usage_limit_exceeded"
-      ].includes(code ?? "");
-    return new DesignGenerationError(
-      "rate_limited",
-      allowanceExhausted
-        ? "The AI provider's usage allowance is exhausted. Check the server's provider budget before trying again."
-        : retryAfterSeconds !== undefined
-          ? `The AI provider is rate limited. Try again in ${retryAfterSeconds} seconds.`
-          : "The AI provider is rate limited. Try again later.",
-      { cause: error }
-    );
-  }
-  if (
-    status === 408 ||
-    code === "ETIMEDOUT" ||
-    name === "AbortError" ||
-    name === "APIConnectionTimeoutError"
-  ) {
-    return new DesignGenerationError(
-      "generation_timeout",
-      "The AI image generation timed out.",
-      { cause: error }
-    );
-  }
-  if (status !== undefined && status >= 500) {
-    return new DesignGenerationError(
-      "provider_unavailable",
-      "The AI provider is temporarily unavailable.",
-      { cause: error }
-    );
-  }
-  if (name === "APIConnectionError") {
-    return new DesignGenerationError(
-      "provider_unavailable",
-      "The AI provider is temporarily unavailable.",
-      { cause: error }
-    );
-  }
-  return new DesignGenerationError(
-    "generation_failed",
-    "The AI provider could not generate the design.",
-    { cause: error }
-  );
-}
-
-/** Read only a validated delay; raw headers and upstream messages stay server-side. */
-function readRetryAfterSeconds(
-  headers: unknown,
-  now: Date
-): number | undefined {
-  if (!headers || typeof headers !== "object") return undefined;
-  const values = headers as {
-    get?: (name: string) => unknown;
-    [key: string]: unknown;
-  };
-  const read = (name: string) => {
-    const value =
-      typeof values.get === "function" ? values.get(name) : values[name];
-    return typeof value === "string" && value.length <= 100
-      ? value.trim()
-      : undefined;
-  };
-  const milliseconds = read("retry-after-ms");
-  const retryAfter = read("retry-after");
-  const numeric = /^\d+(?:\.\d+)?$/;
-  const seconds =
-    milliseconds && numeric.test(milliseconds)
-      ? Number(milliseconds) / 1000
-      : retryAfter && numeric.test(retryAfter)
-        ? Number(retryAfter)
-        : retryAfter && /^[A-Za-z]{3},/.test(retryAfter)
-          ? (Date.parse(retryAfter) - now.getTime()) / 1000
-          : undefined;
-  return seconds !== undefined && Number.isFinite(seconds) && seconds >= 0
-    ? Math.ceil(seconds)
-    : undefined;
 }

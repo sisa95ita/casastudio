@@ -32,6 +32,11 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
   const signingKeys = createSigningKeys();
   let app: INestApplication;
   let prisma: PrismaClient;
+  let furnitureProviderResult: unknown;
+  const furnitureProvider = {
+    name: "integration-fixture",
+    interpretFurnitureEdit: vi.fn(async () => furnitureProviderResult)
+  };
 
   beforeAll(async () => {
     for (const [key, value] of Object.entries(environment)) {
@@ -56,9 +61,13 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     const { PrismaService } = await import("../../persistence/prisma.service");
     const { configureApiApplication } =
       await import("../../bootstrap/create-api-application");
+    const { FURNITURE_EDIT_PROVIDER } =
+      await import("../../ai/furniture-edit-provider.token");
     const moduleReference = await Test.createTestingModule({
       imports: [AppModule]
     })
+      .overrideProvider(FURNITURE_EDIT_PROVIDER)
+      .useValue(furnitureProvider)
       .overrideProvider(OidcHealthService)
       .useValue({ verifyReady: vi.fn(async () => undefined) })
       .compile();
@@ -79,6 +88,84 @@ describeWithDatabase("authenticated Project write API with PostgreSQL", () => {
     }
     vi.doUnmock("jwks-rsa");
     vi.unstubAllEnvs();
+  });
+
+  it("authorizes Furniture interpretation against PostgreSQL ownership and revision without persisting provider output", async () => {
+    const { furnitureEditFixture } =
+      await import("../../ai/test/furniture-edit-fixture");
+    const owner = userAuthorization(ownerSubject);
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/projects")
+      .set("authorization", owner)
+      .send({ name: "Furniture command integration" })
+      .expect(201);
+    const base = created.body.project;
+    const project = { ...base, building: furnitureEditFixture().building };
+    const saved = await request(app.getHttpServer())
+      .put(`/api/v1/projects/${base.id}`)
+      .set("authorization", owner)
+      .send({ baseRevision: base.revision, project })
+      .expect(200);
+    const current = saved.body.project;
+    const url = `/api/v1/projects/${base.id}/furniture-edit-proposals`;
+    const input = {
+      instructions: "Rotate this Furniture 90 degrees",
+      baseRevision: current.revision,
+      levelId: "ground",
+      selectedFurnitureIds: ["item-a"]
+    };
+    furnitureProviderResult = {
+      kind: "EDIT_PROPOSAL",
+      operations: [
+        { type: "ROTATE_FURNITURE", furnitureId: "item-a", targetRotation: 120 }
+      ]
+    };
+    furnitureProvider.interpretFurnitureEdit.mockClear();
+    await request(app.getHttpServer()).post(url).send(input).expect(401);
+    await request(app.getHttpServer())
+      .post(url)
+      .set("authorization", userAuthorization(otherSubject))
+      .send(input)
+      .expect(403);
+    expect(furnitureProvider.interpretFurnitureEdit).not.toHaveBeenCalled();
+    const response = await request(app.getHttpServer())
+      .post(url)
+      .set("authorization", owner)
+      .send(input)
+      .expect(201);
+    expect(response.body).toMatchObject({
+      projectId: base.id,
+      projectRevision: current.revision,
+      result: furnitureProviderResult
+    });
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get(`/api/v1/projects/${base.id}`)
+          .set("authorization", owner)
+          .expect(200)
+      ).body.project
+    ).toEqual(current);
+    furnitureProviderResult = {
+      kind: "EDIT_PROPOSAL",
+      operations: [
+        {
+          type: "ROTATE_FURNITURE",
+          furnitureId: "foreign-item",
+          targetRotation: 90
+        }
+      ]
+    };
+    await request(app.getHttpServer())
+      .post(url)
+      .set("authorization", owner)
+      .send(input)
+      .expect(502);
+    await request(app.getHttpServer())
+      .post(url)
+      .set("authorization", owner)
+      .send({ ...input, baseRevision: current.revision - 1 })
+      .expect(409);
   });
 
   it("creates, lists, reads, saves, round-trips, and derives coherent geometry", async () => {

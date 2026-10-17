@@ -49,6 +49,7 @@ import {
 /** Props for the shared interactive 2D geometry viewer panel. */
 export type GeometryViewerPanelProps = Pick<
   GeometrySvgViewerProps,
+  | "onCanonicalPointPick"
   | "furnitureModel"
   | "selectionFootprints"
   | "onFurniturePointerDown"
@@ -130,6 +131,7 @@ export type GeometryViewerPanelProps = Pick<
 
 /** Renders professional canvas chrome around a source-independent 2D model. */
 export function GeometryViewerPanel({
+  onCanonicalPointPick,
   furnitureModel,
   selectionFootprints,
   onFurniturePointerDown,
@@ -245,6 +247,7 @@ export function GeometryViewerPanel({
       ) : null}
       <Box className="geometry-viewer-panel__canvas">
         <GeometrySvgViewer
+          onCanonicalPointPick={onCanonicalPointPick}
           furnitureModel={furnitureModel}
           selectionFootprints={selectionFootprints}
           onFurniturePointerDown={onFurniturePointerDown}

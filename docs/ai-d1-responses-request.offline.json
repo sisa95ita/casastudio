@@ -1,0 +1,243 @@
+{
+  "evidence": {
+    "source": "Production buildOpenAIFurnitureEditRequest with a synthetic Project; SDK 7.23.0; zero network calls",
+    "sanitization": "User instruction, system prompt and canonical context omitted. Full actual emitted schema retained.",
+    "contextCounts": {
+      "selectedFurniture": 1,
+      "relevantFurniture": 2,
+      "rooms": 2,
+      "catalog": 8
+    }
+  },
+  "client": {
+    "maxRetries": 0,
+    "timeout": 60000
+  },
+  "request": {
+    "model": "gpt-5.6-sol",
+    "store": false,
+    "instructions": "[Furniture-only system instructions omitted]",
+    "input": "[Serialized instructions and bounded authorized canonical context omitted]",
+    "text": {
+      "format": {
+        "type": "json_schema",
+        "name": "furniture_edit",
+        "strict": true,
+        "schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "result": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "EDIT_PROPOSAL"
+                    },
+                    "operations": {
+                      "minItems": 1,
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "MOVE_FURNITURE"
+                              },
+                              "furnitureId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "targetPosition": {
+                                "type": "object",
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "z": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "z"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "furnitureId",
+                              "targetPosition"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "ROTATE_FURNITURE"
+                              },
+                              "furnitureId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "targetRotation": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "furnitureId",
+                              "targetRotation"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "ADD_FURNITURE"
+                              },
+                              "definitionId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "pattern": "^\\S+$"
+                              },
+                              "roomId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "position": {
+                                "type": "object",
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "z": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "z"],
+                                "additionalProperties": false
+                              },
+                              "rotation": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "definitionId",
+                              "roomId",
+                              "position",
+                              "rotation"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "TRANSFER_FURNITURE"
+                              },
+                              "furnitureId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "targetRoomId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "targetPosition": {
+                                "type": "object",
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "z": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "z"],
+                                "additionalProperties": false
+                              },
+                              "targetRotation": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "furnitureId",
+                              "targetRoomId",
+                              "targetPosition",
+                              "targetRotation"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["kind", "operations"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "CLARIFICATION_REQUIRED"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": ["kind", "message"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "UNSUPPORTED_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": ["kind", "message"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": ["result"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "max_output_tokens": 4000
+  }
+}

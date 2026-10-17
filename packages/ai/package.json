@@ -18,6 +18,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@casastudio/schema": "workspace:*"
+    "@casastudio/schema": "workspace:*",
+    "@casastudio/geometry": "workspace:*",
+    "zod": "^4.0.0"
   }
 }

@@ -710,3 +710,66 @@ describe("CasaStudioApiClient", () => {
     });
   });
 });
+
+describe("Furniture edit proposal transport", () => {
+  const input = {
+    instructions: "Rotate this Furniture 90 degrees",
+    baseRevision: 3,
+    levelId: "ground",
+    selectedFurnitureIds: ["item-a"]
+  };
+  const result = {
+    kind: "EDIT_PROPOSAL",
+    operations: [
+      { type: "ROTATE_FURNITURE", furnitureId: "item-a", targetRotation: 90 }
+    ]
+  };
+  it("sends only explicit context selectors and validates the revision-associated response", async () => {
+    const fetchImplementation = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            projectId: "synthetic",
+            projectRevision: 3,
+            result
+          }),
+          { status: 201, headers: { "content-type": "application/json" } }
+        )
+    );
+    const client = new CasaStudioApiClient({
+      baseUrl: "http://api.test",
+      getAccessToken: async () => "test-token",
+      fetchImplementation
+    });
+    expect(await client.proposeFurnitureEdit("synthetic", input)).toMatchObject(
+      { projectId: "synthetic", projectRevision: 3, result }
+    );
+    const [url, options] = fetchImplementation.mock.calls[0] as unknown as [
+      string,
+      RequestInit
+    ];
+    expect(url).toBe(
+      "http://api.test/api/v1/projects/synthetic/furniture-edit-proposals"
+    );
+    expect(JSON.parse(options.body as string)).toEqual(input);
+  });
+  it.each([
+    { projectId: "foreign", projectRevision: 3, result },
+    { projectId: "synthetic", projectRevision: 4, result },
+    {
+      projectId: "synthetic",
+      projectRevision: 3,
+      result: { kind: "EDIT_PROPOSAL", operations: [{ type: "MOVE_WALL" }] }
+    }
+  ])("rejects foreign, stale or malformed responses", async (response) => {
+    const client = new CasaStudioApiClient({
+      baseUrl: "http://api.test",
+      getAccessToken: async () => "test-token",
+      fetchImplementation: async () =>
+        new Response(JSON.stringify(response), { status: 201 })
+    });
+    await expect(
+      client.proposeFurnitureEdit("synthetic", input)
+    ).rejects.toMatchObject({ kind: "invalid-response" });
+  });
+});

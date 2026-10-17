@@ -1,3 +1,8 @@
+import {
+  FurnitureEditResponseSchema,
+  type FurnitureEditRequest,
+  type FurnitureEditResponse
+} from "@casastudio/ai";
 import type {
   DesignProposal,
   DesignProposalHistory,
@@ -235,6 +240,32 @@ export class CasaStudioApiClient {
         { cause: error }
       );
     }
+  }
+
+  async proposeFurnitureEdit(
+    projectId: string,
+    request: FurnitureEditRequest,
+    signal?: AbortSignal
+  ): Promise<FurnitureEditResponse> {
+    const body = await this.requestJson(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/furniture-edit-proposals`,
+      {
+        method: "POST",
+        body: request,
+        signal
+      }
+    );
+    const parsed = FurnitureEditResponseSchema.safeParse(body);
+    if (
+      !parsed.success ||
+      parsed.data.projectId !== projectId ||
+      parsed.data.projectRevision !== request.baseRevision
+    )
+      throw new ApiRequestError(
+        "invalid-response",
+        "The API returned an invalid or stale Furniture edit."
+      );
+    return parsed.data;
   }
 
   /** Generates and persists one Room proposal without sending canonical Project JSON. */

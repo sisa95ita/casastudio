@@ -3,3 +3,4 @@ export * from "./design-context.js";
 export * from "./design-service.js";
 export * from "./failures.js";
 export * from "./provider.js";
+export * from "./furniture-edit.js";

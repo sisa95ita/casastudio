@@ -1,3 +1,4 @@
+import { AiFurnitureEditPanel } from "../../editor-2d/tools/furniture/AiFurnitureEditPanel";
 import { useFurnitureEditor } from "../../editor-2d/tools/furniture/useFurnitureEditor";
 import {
   GeometryEngine,
@@ -279,6 +280,12 @@ export function ProjectWorkspacePage() {
     "save" | "reload-latest"
   >();
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>();
+  const [aiAnchor, setAiAnchor] = useState<{
+    projectId: string;
+    levelId: string;
+    point: WorldPointXZ;
+  }>();
+  const [aiAnchorPicking, setAiAnchorPicking] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [editingError, setEditingError] = useState<EditingErrorKey>();
   const [levelBelowReferenceVisible, setLevelBelowReferenceVisible] =
@@ -313,6 +320,8 @@ export function ProjectWorkspacePage() {
     viewLevels[0];
   useEffect(() => {
     setSelection3D(undefined);
+    setAiAnchor(undefined);
+    setAiAnchorPicking(false);
   }, [projectId]);
   const safeViewSelection =
     geometryResponse && selectionOwnerSnapshot === geometryResponse.geometry
@@ -353,6 +362,9 @@ export function ProjectWorkspacePage() {
   const activeProjectLevel = activeProject?.building.levels.find(
     (level) => level.id === selectedLevel?.sourceLevelId
   );
+  useEffect(() => {
+    setAiAnchorPicking(false);
+  }, [workspaceMode, workspaceRepresentation, activeProjectLevel?.id]);
   const levelBelow =
     workspaceMode === "edit" && editor.draft
       ? findNearestLowerLevel(editor.draft, editor.activeLevelId)
@@ -2370,7 +2382,7 @@ export function ProjectWorkspacePage() {
     workspaceMode
   ]);
 
-  const inspector = useMemo(() => {
+  const baseInspector = useMemo(() => {
     if (
       workspaceRepresentation === "3d" &&
       activeProject &&
@@ -2624,6 +2636,50 @@ export function ProjectWorkspacePage() {
     saveInteractionBlocked
   ]);
 
+  const inspector =
+    workspaceMode === "edit" && activeProject && activeProjectLevel ? (
+      <>
+        <AiFurnitureEditPanel
+          key={activeProject.id}
+          levelId={selectionOperationLevel?.id ?? activeProjectLevel.id}
+          roomId={
+            workspaceRepresentation === "3d"
+              ? resolvedSelection3D?.kind === "room"
+                ? resolvedSelection3D.id
+                : undefined
+              : selectedRoom?.id
+          }
+          selectedFurnitureIds={
+            workspaceRepresentation === "3d"
+              ? resolvedSelection3D?.kind === "furniture"
+                ? [resolvedSelection3D.id]
+                : []
+              : selectionState.selected
+                  .filter((item) => item.kind === "FURNITURE")
+                  .map((item) => item.geometryId)
+          }
+          anchorPoint={
+            aiAnchor?.projectId === activeProject.id &&
+            aiAnchor?.levelId ===
+              (selectionOperationLevel?.id ?? activeProjectLevel.id)
+              ? aiAnchor.point
+              : undefined
+          }
+          picking={aiAnchorPicking && workspaceRepresentation === "2d"}
+          canPick={workspaceRepresentation === "2d"}
+          blocked={saveInteractionBlocked}
+          onPick={() => setAiAnchorPicking((value) => !value)}
+          onClearAnchor={() => {
+            setAiAnchor(undefined);
+            setAiAnchorPicking(false);
+          }}
+        />
+        {baseInspector}
+      </>
+    ) : (
+      baseInspector
+    );
+
   const handleViewLevelChange = useCallback(
     (levelId: string) =>
       setSelectedViewLevelId(
@@ -2831,6 +2887,21 @@ export function ProjectWorkspacePage() {
                 onFurniturePointerDown: furniture.beginGesture,
                 onFurniturePointerUp: furniture.endGesture,
                 onFurniturePointerCancel: furniture.cancel,
+                onCanonicalPointPick:
+                  aiAnchorPicking &&
+                  workspaceMode === "edit" &&
+                  !saveInteractionBlocked &&
+                  activeProject &&
+                  activeProjectLevel
+                    ? (pointer) => {
+                        setAiAnchor({
+                          projectId: activeProject.id,
+                          levelId: activeProjectLevel.id,
+                          point: pointer.worldPoint
+                        });
+                        setAiAnchorPicking(false);
+                      }
+                    : undefined,
                 onEditorCanvasClick: (pointer) => {
                   if (editor.activeTool === "furniture")
                     furniture.canvasClick(pointer);

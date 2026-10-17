@@ -1,4 +1,7 @@
-export { GeometryBuildErrorCode, type GeometryBuildError } from "./geometry-build-error.js";
+export {
+  GeometryBuildErrorCode,
+  type GeometryBuildError
+} from "./geometry-build-error.js";
 export type { GeometryBuildResult } from "./geometry-build-result.js";
 export { GeometryEngine } from "./geometry-engine.js";
 export * from "./architectural-plan.js";
@@ -22,3 +25,8 @@ export {
   type PolygonWinding
 } from "./model/index.js";
 export { calculatePolygonInteriorAnchor } from "./model/index.js";
+
+export * from "./plan-footprints.js";
+export * from "./stair-plan-geometry.js";
+export * from "./furniture-placement.js";
+export * from "./furniture-commands.js";
